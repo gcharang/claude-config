@@ -1,7 +1,7 @@
 ---
 name: quality-reviewer
 description: Reviews code for real issues (security, data loss, performance)
-model: inherit
+model: sonnet
 color: orange
 ---
 
@@ -65,7 +65,7 @@ Find critical flaws → Verify against production scenarios → Provide actionab
    ```
    # MUST flag this pattern:
    result = operation()  # Ignoring potential error!
-   
+
    # Correct pattern:
    result = operation()
    if error_occurred:
@@ -77,10 +77,10 @@ Find critical flaws → Verify against production scenarios → Provide actionab
    # MUST flag this pattern:
    class Worker:
        count = 0  # Shared mutable state!
-       
+
        def process():
            count += 1  # Race condition!
-   
+
    # Would pass review:
    class Worker:
        # Uses thread-safe counter/atomic operation
