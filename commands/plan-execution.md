@@ -212,7 +212,6 @@ staticcheck -checks=all
 #### PASS/FAIL Criteria
 ✅ PASS Requirements:
 - 100% existing tests pass - NO EXCEPTIONS
-- New code has >80% test coverage
 - Zero memory leaks (valgrind/sanitizers clean)
 - Performance within 5% of baseline
 - All linters pass with zero warnings
@@ -377,7 +376,6 @@ Focus: Explain WHY decisions were made, not just WHAT
 - [ ] Quality review score ≥ 95/100
 - [ ] Documentation review passed
 - [ ] Performance benchmarks documented
-- [ ] Test coverage ≥ 90%
 - [ ] Zero security warnings
 - [ ] Plan amendments documented
 
