@@ -194,7 +194,7 @@ CRITICAL: One task at a time. Mark in_progress → complete before next.
 ```bash
 # C/C++
 gcc -Wall -Werror -Wextra -pedantic -fsanitize=address,undefined
-clang-tidy --checks=* 
+clang-tidy --checks=*
 
 # Python
 pytest --strict-markers --strict-config --cov=100
