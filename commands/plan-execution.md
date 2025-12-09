@@ -38,7 +38,7 @@ Before ANY action, you MUST:
 **Violation**: Implementing fixes yourself = -$2000 penalty
 
 The plan has been carefully designed. Your role is execution, not redesign.
-Architecture is NON-NEGOTIABLE without consensus approval.
+Architecture is NON-NEGOTIABLE without human approval via clarifying questions tool.
 
 ---
 
@@ -251,33 +251,10 @@ Plan Reference: [relevant section describing expected behavior]
 
 - Algorithm tweaks, performance optimizations, error handling
 
-**Major** (consensus required):
+**Major** (clarification required):
 
 - Fundamental approach changes, architecture modifications, core algorithm replacements
-
-### STEP 4: Consensus Protocol (for Major Deviations)
-
-```
-Task for consensus:
-Models: gemini-pro (stance: against), o3 (stance: against)
-
-Original plan: [exact quote]
-Issue: [error with evidence]
-Proposed deviation: [specific change]
-Impact: [downstream effects]
-
-Question: Is this deviation justified?
-```
-
-If approved, document immediately:
-
-```markdown
-## Amendment [YYYY-MM-DD HH:MM]
-
-**Deviation**: [change made]
-**Rationale**: [evidence]
-**Consensus**: [summary]
-```
+- Use the clarifying questions tool: present the issue, two plausible solutions, and allow for a different answer
 
 ### Escalation Triggers
 
@@ -286,7 +263,7 @@ STOP and report when:
 - Fix would change fundamental approach
 - Three solutions failed
 - Performance/safety characteristics affected
-- Confidence < 80%
+- Confidence < 80% → use clarifying questions tool
 
 ---
 
@@ -320,7 +297,7 @@ go test -race -cover -vet=all
 ### FAIL Actions
 
 - Test failure → STOP, delegate to @agent-debugger
-- Performance regression > 5% → consensus required
+- Performance regression > 5% → clarification required
 - Memory leak → immediate @agent-debugger investigation
 
 ---
@@ -517,7 +494,7 @@ Plan Reference: Section "API Specifications" for expected interfaces
 
 ❌ Implementing code yourself
 ❌ Proceeding without error investigation
-❌ Changing architecture without consensus
+❌ Changing architecture without clarification
 ❌ Parallelizing dependent tasks
 ❌ Skipping sync point validation
 
@@ -540,7 +517,7 @@ If you find yourself:
 
 - Writing code → STOP, delegate to @agent-developer
 - Guessing solutions → STOP, delegate to @agent-debugger
-- Changing the plan → STOP, use consensus
+- Changing the plan → STOP, use clarifying questions tool
 - Parallelizing without analysis → STOP, check dependencies
 - Skipping sync points → STOP, validate all parallel work
 
