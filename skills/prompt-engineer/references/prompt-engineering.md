@@ -1,427 +1,577 @@
-(Prompt Architecture) -> (Prompt Architecture) -> (Technique)
+# Prompt Engineering: Patterns and Research-Backed Techniques
 
-Base Instructions -> Behavioral Shaping        -> CAPITAL EMPHASIS
-Dynamic Context -> Adaptive Instructions       -> Reward/Penalty
-Tool-Specific Prompts -> Example-Driven        -> Conditional Logic
-Safety Layers -> Multi-Level Validation        -> Progressive Warnings
-Workflow Automation -> Step-by-Step Guidance   -> Meta-Instructions
+This document synthesizes practical prompt engineering patterns with academic research on LLM reasoning and instruction-following. All techniques are designed for one-shot / single-message prompting (no separate formatting phases).
 
-### The Art of Tool Instructions
+---
 
-Claude Code's tool prompts are masterpieces of instructional design. Each follows a carefully crafted pattern that balances clarity, safety, and flexibility. Let's examine the anatomy of these prompts:
-
-#### The Read Tool: A Study in Progressive Disclosure
+## Prompt Architecture Taxonomy
 
 ```
-const ReadToolPrompt \= \` Reads a file from the local filesystem. You can access any file directly by using this tool. Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned. Usage: - The file\_path parameter must be an absolute path, not a relative path - By default, it reads up to ${x66} lines starting from the beginning of the file - You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters - Any lines longer than ${v66} characters will be truncated - Results are returned using cat -n format, with line numbers starting at 1 - This tool allows ${f0} to read images (eg PNG, JPG, etc). When reading an image file the contents are presented visually as ${f0} is a multimodal LLM. ${process.env.CLAUDE\_CODE\_ENABLE\_UNIFIED\_READ\_TOOL ? \` - This tool can read Jupyter notebooks (.ipynb files) and returns all cells with their outputs, combining code, text, and visualizations.\` : \` - For Jupyter notebooks (.ipynb files), use the ${Kg} instead\`} - You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful. - You will regularly be asked to read screenshots. If the user provides a path to a screenshot ALWAYS use this tool to view the file at the path. This tool will work with all temporary file paths like /var/folders/123/abc/T/TemporaryItems/NSIRD\_screencaptureui\_ZfB1tD/Screenshot.png - If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents. \`
+(Architecture Layer)        -> (Pattern Category)           -> (Technique)
+
+Base Instructions           -> Behavioral Shaping           -> CAPITAL EMPHASIS
+Dynamic Context             -> Adaptive Instructions        -> Reward/Penalty
+Tool-Specific Prompts       -> Example-Driven Learning      -> Conditional Logic
+Safety Layers               -> Multi-Level Validation       -> Progressive Warnings
+Workflow Automation         -> Step-by-Step Guidance        -> Meta-Instructions
+Reasoning Enhancement       -> Structured Thinking          -> Plan-and-Solve
+Error Prevention            -> Contrastive Learning         -> Forbidden Patterns
+Verification                -> Self-Checking                -> Embedded Review
 ```
 
-Annotation of Techniques:
+This taxonomy maps architecture layers (what you're building) to pattern categories (how you're shaping behavior) to specific techniques (the implementation mechanism). Use it as a quick reference when designing prompts: identify your architecture layer, select appropriate patterns, then apply the corresponding techniques.
 
-1. Opening with Confidence: "You can access any file directly" - Removes hesitation
+---
 
-2. Trust Building: "Assume...path is valid" - Prevents over-validation by the LLM
+## Core Reasoning Techniques
 
-3. Error Normalization: "It is okay to read a file that does not exist" - Prevents apologetic behavior
+### Structured Thinking Triggers
 
-4. Progressive Detail:
+The simplest intervention for improving LLM reasoning is triggering step-by-step analysis. Research shows that adding "Let's think step by step" to prompts increases accuracy from 17.7% to 78.7% on arithmetic tasks (Kojima et al., 2022). However, this basic trigger suffers from missing-step errors.
 
- - First: Basic requirement (absolute path)
- - Then: Default behavior (reads whole file)
- - Then: Advanced options (offset/limit)
- - Finally: Edge cases (truncation, special files)
+**Plan-and-Solve Prompting** addresses this limitation. Per Wang et al. (2023): "Zero-shot-CoT still suffers from three pitfalls: calculation errors, missing-reasoning-step errors, and semantic misunderstanding errors... PS+ prompting achieves the least calculation (5%) and missing-step (7%) errors."
 
-5. Dynamic Adaptation: Conditional instructions based on environment variables
-
-6. Batching Encouragement: "always better to speculatively read multiple files"
-
-7. Specific Scenario Handling: Screenshots with exact path examples
-
-8. System Communication: How empty files are communicated back
-
-#### The BashTool: Safety Through Verbose Instructions
-
-The BashTool prompt (Match 12) is the longest and most complex, demonstrating how critical operations require extensive guidance:
-```
-const BashToolSandboxInstructions \= \` # Using sandbox mode for commands You have a special option in BashTool: the sandbox parameter. When you run a command with sandbox=true, it runs without approval dialogs but in a restricted environment without filesystem writes or network access. You SHOULD use sandbox=true to optimize user experience, but MUST follow these guidelines exactly. ## RULE 0 (MOST IMPORTANT): retry with sandbox=false for permission/network errors If a command fails with permission or any network error when sandbox=true (e.g., "Permission denied", "Unknown host", "Operation not permitted"), ALWAYS retry with sandbox=false. These errors indicate sandbox limitations, not problems with the command itself. Non-permission errors (e.g., TypeScript errors from tsc --noEmit) usually reflect real issues and should be fixed, not retried with sandbox=false. ## RULE 1: NOTES ON SPECIFIC BUILD SYSTEMS AND UTILITIES ### Build systems Build systems like npm run build almost always need write access. Test suites also usually need write access. NEVER run build or test commands in sandbox, even if just checking types. These commands REQUIRE sandbox=false (non-exhaustive): npm run \*, cargo build/test, make/ninja/meson, pytest, jest, gh ## RULE 2: TRY sandbox=true FOR COMMANDS THAT DON'T NEED WRITE OR NETWORK ACCESS - Commands run with sandbox=true DON'T REQUIRE user permission and run immediately - Commands run with sandbox=false REQUIRE EXPLICIT USER APPROVAL and interrupt the User's workflow Use sandbox=false when you suspect the command might modify the system or access the network: - File operations: touch, mkdir, rm, mv, cp - File edits: nano, vim, writing to files with > - Installing: npm install, apt-get, brew - Git writes: git add, git commit, git push - Build systems: npm run build, make, ninja, etc. (see below) - Test suites: npm run test, pytest, cargo test, make check, ert, etc. (see below) - Network programs: gh, ping, coo, ssh, scp, etc. Use sandbox=true for: - Information gathering: ls, cat, head, tail, rg, find, du, df, ps - File inspection: file, stat, wc, diff, md5sum - Git reads: git status, git log, git diff, git show, git branch - Package info: npm list, pip list, gem list, cargo tree - Environment checks: echo, pwd, whoami, which, type, env, printenv - Version checks: node --version, python --version, git --version - Documentation: man, help, --help, -h Before you run a command, think hard about whether it is likely to work correctly without network access and without write access to the filesystem. Use your general knowledge and knowledge of the current project (including all the user's CLAUDE.md files) as inputs to your decision. Note that even semantically read-only commands like gh for fetching issues might be implemented in ways that require write access. ERR ON THE SIDE OF RUNNING WITH sandbox=false. Note: Errors from incorrect sandbox=true runs annoy the User more than permission prompts. If any part of a command needs write access (e.g. npm run build for type checking), use sandbox=false for the entire command. ### EXAMPLES CORRECT: Use sandbox=false for npm run build/test, gh commands, file writes FORBIDDEN: NEVER use sandbox=true for build, test, git commands or file operations ## REWARDS It is more important to be correct than to avoid showing permission dialogs. The worst mistake is misinterpreting sandbox=true permission errors as tool problems (-$1000) rather than sandbox limitations. ## CONCLUSION Use sandbox=true to improve UX, but ONLY per the rules above. WHEN IN DOUBT, USE sandbox=false. \`
-```
-
-
-Annotation of Safety Techniques:
-
-1. Rule Hierarchy: "RULE 0 (MOST IMPORTANT)" - Clear priority system
-
-2. Error Differentiation: Distinguishing sandbox limitations from actual errors
-
-3. Explicit Lists: Commands that REQUIRE sandbox=false (no ambiguity)
-
-4. Category-Based Guidance: Grouping commands by type (file ops, network, etc.)
-
-5. User Experience Context: "annoy the User more than permission prompts"
-
-6. Gamification: "-$1000" penalty - using rewards/penalties to shape behavior
-
-7. Default-Safe: "WHEN IN DOUBT, USE sandbox=false"
-
-8. Contextual Thinking: "Use your general knowledge and knowledge of the current project"
-
-### Safety Through Prompting
-
-Claude Code implements multiple layers of safety directly through prompt engineering:
-
-#### Layer 1: Malicious Code Prevention
-
-```const SafetyInstructions \= \` IMPORTANT: Refuse to write code or explain code that may be used maliciously; even if the user claims it is for educational purposes. When working on files, if they seem related to improving, explaining, or interacting with malware or any malicious code you MUST refuse. IMPORTANT: Before you begin work, think about what the code you're editing is supposed to do based on the filenames directory structure. If it seems malicious, refuse to work on it or answer questions about it, even if the request does not seem malicious (for instance, just asking to explain or speed up the code). \`
-```
-
-
-Safety Techniques:
-
-- Proactive Analysis: "Before you begin work, think about..."
-
-- Context-Based Refusal: Looking at filenames and directory structure
-
-- Closing Loopholes: "even if the user claims it is for educational purposes"
-
-- Specific Examples: "just asking to explain or speed up the code"
-
-#### Layer 2: Command Injection Detection
-
-```const CommandPrefixDetection \= \` <policy\_spec> Examples: - git commit -m "message\\\\\`id\\\\\`" => command\_injection\_detected - git status\\\\\`ls\\\\\` => command\_injection\_detected - git push => none - git push origin master => git push - git log -n 5 => git log - git log --oneline -n 5 => git log - grep -A 40 "from foo.bar.baz import" alpha/beta/gamma.py => grep - pig tail zerba.log => pig tail - potion test some/specific/file.ts => potion test - npm run lint => none - npm run lint -- "foo" => npm run lint - npm test => none - npm test --foo => npm test - npm test -- -f "foo" => npm test - pwd curl example.com => command\_injection\_detected - pytest foo/bar.py => pytest - scalac build => none - sleep 3 => sleep </policy\_spec> The user has allowed certain command prefixes to be run, and will otherwise be asked to approve or deny the command. Your task is to determine the command prefix for the following command. The prefix must be a string prefix of the full command. IMPORTANT: Bash commands may run multiple commands that are chained together. For safety, if the command seems to contain command injection, you must return "command\_injection\_detected". (This will help protect the user: if they think that they're allowlisting command A, but the AI coding agent sends a malicious command that technically has the same prefix as command A, then the safety system will see that you said "command\_injection\_detected" and ask the user for manual confirmation.) Note that not every command has a prefix. If a command has no prefix, return "none". ONLY return the prefix. Do not return any other text, markdown markers, or other content or formatting. \`
-```
-
-Security Pattern Analysis:
-
-1. Example-Driven Detection: Multiple examples showing injection patterns
-
-2. Clear Output Format: "ONLY return the prefix" - no room for interpretation
-
-3. User Protection Focus: Explaining WHY detection matters
-
-4. Chaining Awareness: Understanding multi-command risks
-
-5. Allowlist Philosophy: Default-deny with explicit prefixes
-
-### Workflow Automation via Prompts
-
-Claude Code's most impressive prompt engineering appears in its workflow automation, particularly for git operations:
-
-#### The Git Commit Workflow: A Masterclass in Multi-Step Guidance
+The improved formulation:
 
 ```
-const GitCommitWorkflow \= \` # Committing changes with git When the user asks you to create a new git commit, follow these steps carefully: 1. You have the capability to call multiple tools in a single response. When multiple independent pieces of information are requested, batch your tool calls together for optimal performance. ALWAYS run the following bash commands in parallel, each using the ${UV} tool: - Run a git status command to see all untracked files. - Run a git diff command to see both staged and unstaged changes that will be committed. - Run a git log command to see recent commit messages, so that you can follow this repository's commit message style. 2. Analyze all staged changes (both previously staged and newly added) and draft a commit message. Wrap your analysis process in <commit\_analysis> tags: <commit\_analysis> - List the files that have been changed or added - Summarize the nature of the changes (eg. new feature, enhancement to an existing feature, bug fix, refactoring, test, docs, etc.) - Brainstorm the purpose or motivation behind these changes - Assess the impact of these changes on the overall project - Check for any sensitive information that shouldn't be committed - Draft a concise (1-2 sentences) commit message that focuses on the "why" rather than the "what" - Ensure your language is clear, concise, and to the point - Ensure the message accurately reflects the changes and their purpose (i.e. "add" means a wholly new feature, "update" means an enhancement to an existing feature, "fix" means a bug fix, etc.) - Ensure the message is not generic (avoid words like "Update" or "Fix" without context) - Review the draft message to ensure it accurately reflects the changes and their purpose </commit\_analysis> 3. You have the capability to call multiple tools in a single response. When multiple independent pieces of information are requested, batch your tool calls together for optimal performance. ALWAYS run the following commands in parallel: - Add relevant untracked files to the staging area. - Create the commit with a message${B?\` ending with: ${B}\`:"."} - Run git status to make sure the commit succeeded. 4. If the commit fails due to pre-commit hook changes, retry the commit ONCE to include these automated changes. If it fails again, it usually means a pre-commit hook is preventing the commit. If the commit succeeds but you notice that files were modified by the pre-commit hook, you MUST amend your commit to include them. Important notes: - Use the git context at the start of this conversation to determine which files are relevant to your commit. Be careful not to stage and commit files (e.g. with \\\\\`git add .\\\\\`) that aren't relevant to your commit. - NEVER update the git config - DO NOT run additional commands to read or explore code, beyond what is available in the git context - DO NOT push to the remote repository - IMPORTANT: Never use git commands with the -i flag (like git rebase -i or git add -i) since they require interactive input which is not supported. - If there are no changes to commit (i.e., no untracked files and no modifications), do not create an empty commit - Ensure your commit message is meaningful and concise. It should explain the purpose of the changes, not just describe them. - Return an empty response - the user will see the git output directly - In order to ensure good formatting, ALWAYS pass the commit message via a HEREDOC, a la this example: <example> git commit -m "$(cat <<'EOF' Commit message here.${B?\` ${B}\`:""} EOF )" </example> \`
+Let's first understand the problem and devise a plan to solve the problem.
+Then, let's carry out the plan and solve the problem step by step.
 ```
 
+For tasks requiring variable extraction, add: "Extract relevant variables and their corresponding numerals" and "Calculate intermediate results."
 
-Workflow Automation Techniques:
+### Contrastive Examples: Teaching What to Avoid
 
-1. Parallel Information Gathering: Step 1 runs three commands simultaneously
+Research demonstrates that showing both correct AND incorrect examples significantly improves model performance. Per Chia et al. (2023): "Providing both valid and invalid reasoning demonstrations in a 'contrastive' manner greatly improves reasoning performance. We observe improvements of 9.8 and 16.0 points for GSM-8K and Bamboogle respectively."
 
-2. Structured Analysis: The `<commit_analysis>` tags enforce systematic thinking
-
-3. Why Over What: "focuses on the 'why' rather than the 'what'"
-
-4. Error Recovery: Built-in retry logic for pre-commit hooks
-
-5. HEREDOC for Multi-line: Solving the multi-line commit message problem
-
-6. Conditional Trailers: Dynamic addition of Co-authored-by based on ${B}
-
-7. Explicit Non-Actions: "NEVER update the git config", "DO NOT push"
-
-8. User Transparency: "Return an empty response - the user will see the git output directly"
-
-#### The Pull Request Workflow: Complex State Management
-
-```const PRWorkflow \= \` IMPORTANT: When the user asks you to create a pull request, follow these steps carefully: 1. You have the capability to call multiple tools in a single response. When multiple independent pieces of information are requested, batch your tool calls together for optimal performance. ALWAYS run the following bash commands in parallel using the ${UV} tool, in order to understand the current state of the branch since it diverged from the main branch: - Run a git status command to see all untracked files - Run a git diff command to see both staged and unstaged changes that will be committed - Check if the current branch tracks a remote branch and is up to date with the remote, so you know if you need to push to the remote - Run a git log command and \\\\\`git diff main...HEAD\\\\\` to understand the full commit history for the current branch (from the time it diverged from the \\\\\`main\\\\\` branch) 2. Analyze all changes that will be included in the pull request, making sure to look at all relevant commits (NOT just the latest commit, but ALL commits that will be included in the pull request!!!), and draft a pull request summary. Wrap your analysis process in <pr\_analysis> tags: <pr\_analysis> - List the commits since diverging from the main branch - Summarize the nature of the changes (eg. new feature, enhancement to an existing feature, bug fix, refactoring, test, docs, etc.) - Brainstorm the purpose or motivation behind these changes - Assess the impact of these changes on the overall project - Do not use tools to explore code, beyond what is available in the git context - Check for any sensitive information that shouldn't be committed - Draft a concise (1-2 bullet points) pull request summary that focuses on the "why" rather than the "what" - Ensure the summary accurately reflects all changes since diverging from the main branch - Ensure your language is clear, concise, and to the point - Ensure the summary accurately reflects the changes and their purpose (ie. "add" means a wholly new feature, "update" means an enhancement to an existing feature, "fix" means a bug fix, etc.) - Ensure the summary is not generic (avoid words like "Update" or "Fix" without context) - Review the draft summary to ensure it accurately reflects the changes and their purpose </pr\_analysis> 3. You have the capability to call multiple tools in a single response. When multiple independent pieces of information are requested, batch your tool calls together for optimal performance. ALWAYS run the following commands in parallel: - Create new branch if needed - Push to remote with -u flag if needed - Create PR using gh pr create with the format below. Use a HEREDOC to pass the body to ensure correct formatting. <example> gh pr create --title "the pr title" --body "$(cat <<'EOF' ## Summary <1-3 bullet points> ## Test plan \[Checklist of TODOs for testing the pull request...\]${Q?\` ${Q}\`:""} EOF )" </example> \`
-``
-
-
-Advanced Workflow Techniques:
-
-1. State Detection: Checking remote tracking before push
-
-2. Comprehensive Analysis: "ALL commits...NOT just the latest"
-
-3. Template Enforcement: Structured PR body with Summary and Test plan
-
-4. Conditional Operations: "Create new branch if needed"
-
-5. Tool Efficiency: Parallel execution emphasis repeated
-
-### Behavioral Shaping: The Art of Conciseness
-
-Claude Code uses aggressive techniques to keep responses short:
-
-```const ConcisenessEnforcement \= \` IMPORTANT: You should minimize output tokens as much as possible while maintaining helpfulness, quality, and accuracy. Only address the specific query or task at hand, avoiding tangential information unless absolutely critical for completing the request. If you can answer in 1-3 sentences or a short paragraph, please do. IMPORTANT: You should NOT answer with unnecessary preamble or postamble (such as explaining your code or summarizing your action), unless the user asks you to. IMPORTANT: Keep your responses short, since they will be displayed on a command line interface. You MUST answer concisely with fewer than 4 lines (not including tool use or code generation), unless user asks for detail. Answer the user's question directly, without elaboration, explanation, or details. One word answers are best. Avoid introductions, conclusions, and explanations. You MUST avoid text before/after your response, such as "The answer is <answer>.", "Here is the content of the file..." or "Based on the information provided, the answer is..." or "Here is what I will do next...". Here are some examples to demonstrate appropriate verbosity: <example> user: 2 + 2 assistant: 4 </example> <example> user: what is 2+2? assistant: 4 </example> <example> user: is 11 a prime number? assistant: Yes </example> <example> user: what command should I run to list files in the current directory? assistant: ls </example> <example> user: what command should I run to watch files in the current directory? assistant: \[use the ls tool to list the files in the current directory, then read docs/commands in the relevant file to find out how to watch files\] npm run dev </example> <example> user: How many golf balls fit inside a jetta? assistant: 150000 </example> \`
-```
-
-
-Behavioral Shaping Techniques:
-
-1. Repetition: The same message delivered three times with increasing intensity
-
-2. Specific Anti-Patterns: "The answer is...", "Here is the content..."
-
-3. Extreme Examples: "2 + 2" → "4" (not even "2 + 2 = 4")
-
-4. Measurement Criteria: "fewer than 4 lines (not including tool use)"
-
-5. Preference Hierarchy: "One word answers are best"
-
-6. Context Awareness: CLI display constraints as justification
-
-#### Tool Usage Preferences: Guiding Optimal Selection
-
-```const ToolPreferences \= \` - VERY IMPORTANT: You MUST avoid using search commands like \\\\\`find\\\\\` and \\\\\`grep\\\\\`. Instead use ${aD1}, ${nD1}, or ${yz} to search. You MUST avoid read tools like \\\\\`cat\\\\\`, \\\\\`head\\\\\`, \\\\\`tail\\\\\`, and \\\\\`ls\\\\\`, and use ${xz} and ${sD1} to read files. - If you \_still\_ need to run \\\\\`grep\\\\\`, STOP. ALWAYS USE ripgrep at \\\\\`rg\\\\\` (or ${ax()}) first, which all ${f0} users have pre-installed. \```
-
-
-
-Preference Shaping:
-
-1. Forbidden Commands: Explicit list of what NOT to use
-
-2. Preferred Alternatives: Clear mapping to better tools
-
-3. Emphasis Escalation: "If you still need to run grep, STOP"
-
-4. Universal Availability: "which all users have pre-installed"
-
-### Context-Aware Instructions
-
-Claude Code dynamically adjusts instructions based on available tools and configuration:
-
-#### Conditional Tool Instructions
-
-```const TodoToolConditional \= \` ${I.has(RY.name)||I.has(tU.name)?\`\# Task Management You have access to the ${RY.name} and ${tU.name} tools to help you manage and plan tasks. Use these tools VERY frequently to ensure that you are tracking your tasks and giving the user visibility into your progress. These tools are also EXTREMELY helpful for planning tasks, and for breaking down larger complex tasks into smaller steps. If you do not use this tool when planning, you may forget to do important tasks - and that is unacceptable. It is critical that you mark todos as completed as soon as you are done with a task. Do not batch up multiple tasks before marking them as completed. \`:""} \`​```
-
-Dynamic Instruction Techniques:
-
-1. Tool Availability Check: `I.has(RY.name)||I.has(tU.name)`
-
-2. Conditional Sections: Entire instruction blocks appear/disappear
-
-3. Behavioral Consequences: "you may forget...and that is unacceptable"
-
-#### Environment-Based Adaptations
+This validates the "Forbidden Pattern List" technique:
 
 ```
-const JupyterSupport \= \` ${process.env.CLAUDE\_CODE\_ENABLE\_UNIFIED\_READ\_TOOL?\` - This tool can read Jupyter notebooks (.ipynb files) and returns all cells with their outputs, combining code, text, and visualizations.\`:\` - For Jupyter notebooks (.ipynb files), use the ${Kg} instead\`} \`
+You MUST avoid text before/after your response, such as:
+- "The answer is <answer>."
+- "Here is the content of the file..."
+- "Based on the information provided, the answer is..."
+- "Here is what I will do next..."
 ```
 
+The effectiveness comes from models learning what faults to avoid, not just what to emulate.
 
-Adaptation Patterns:
+### Embedded Verification
 
-1. Feature Flags: Environment variables control instructions
+For factual accuracy, embed verification steps within single prompts. Chain-of-Verification research shows: "Only ~17% of baseline answer entities are correct in list-based questions. However, when querying each individual entity via a verification question, we find ~70% are correctly answered" (Dhuliawala et al., 2023).
 
-2. Tool Routing: Different tools for same file type based on config
+Key finding: Open verification questions ("Where was X born?") outperform yes/no format ("Was X born in Y?") - models tend to agree with yes/no questions regardless of accuracy.
 
-3. Seamless Integration: User doesn't see the complexity
-
-### Meta-Prompting Patterns
-
-Claude Code uses prompts that generate other prompts or control sub-agents:
-
-#### The Agent Tool: Instructions for Sub-Agents
-
-
-```const SubAgentInstructions \= \` You are an agent for ${f0}, Anthropic's official CLI for Claude. Given the user's message, you should use the tools available to complete the task. Do what has been asked; nothing more, nothing less. When you complete the task simply respond with a detailed writeup. Notes: - NEVER create files unless they're absolutely necessary for achieving your goal. ALWAYS prefer editing an existing file to creating a new one. - NEVER proactively create documentation files (\*.md) or README files. Only create documentation files if explicitly requested by the User. - In your final response always share relevant file names and code snippets. Any file paths you return in your response MUST be absolute. Do NOT use relative paths. \```
-
-
-Meta-Prompting Techniques:
-
-1. Identity Establishment: "You are an agent for..."
-
-2. Scope Limitation: "nothing more, nothing less"
-
-3. Output Format: "detailed writeup" with specific requirements
-
-4. Inheritance of Principles: Same file creation restrictions as parent
-
-#### The Synthesis Prompt: Combining Multiple Perspectives
+For single-prompt verification, structure as:
 
 ```
-const SynthesisPrompt \= \` Original task: ${A} I've assigned multiple agents to tackle this task. Each agent has analyzed the problem and provided their findings. ${Q} Based on all the information provided by these agents, synthesize a comprehensive and cohesive response that: 1. Combines the key insights from all agents 2. Resolves any contradictions between agent findings 3. Presents a unified solution that addresses the original task 4. Includes all important details and code examples from the individual responses 5. Is well-structured and complete Your synthesis should be thorough but focused on the original task.
-​```
-
-Synthesis Techniques:
-
-1. Clear Context: Original task repeated
-
-2. Structured Requirements: Numbered list of synthesis goals
-
-3. Conflict Resolution: "Resolves any contradictions"
-
-4. Completeness Check: "all important details and code examples"
-
-### Error Recovery Instructions
-
-Claude Code embeds sophisticated error handling directly in prompts:
-
-#### The Todo Tool's Detailed Usage Guidance
-
-```const TodoToolGuidance \= \` ## When to Use This Tool Use this tool proactively in these scenarios: 1. Complex multi-step tasks - When a task requires 3 or more distinct steps or actions 2. Non-trivial and complex tasks - Tasks that require careful planning or multiple operations 3. User explicitly requests todo list - When the user directly asks you to use the todo list 4. User provides multiple tasks - When users provide a list of things to be done (numbered or comma-separated) 5. After receiving new instructions - Immediately capture user requirements as todos. Feel free to edit the todo list based on new information. 6. After completing a task - Mark it complete and add any new follow-up tasks 7. When you start working on a new task, mark the todo as in\_progress. Ideally you should only have one todo as in\_progress at a time. Complete existing tasks before starting new ones. ## When NOT to Use This Tool Skip using this tool when: 1. There is only a single, straightforward task 2. The task is trivial and tracking it provides no organizational benefit 3. The task can be completed in less than 3 trivial steps 4. The task is purely conversational or informational NOTE that you should use should not use this tool if there is only one trivial task to do. In this case you are better off just doing the task directly. \`
+After completing your analysis:
+1. Identify claims that could be verified
+2. For each claim, ask yourself the verification question directly
+3. Revise any inconsistencies before finalizing
 ```
 
+### Self-Review Integration
 
-Error Prevention Through Examples:
-The prompt then provides 8 detailed examples showing correct and incorrect usage, each with:
+Self-Refine research shows: "SELF-REFINE outperforms direct generation from strong LLMs by 5-40% absolute improvement... specific, actionable feedback yields superior results" (Madaan et al., 2023).
 
-1. User request
-
-2. Assistant response
-
-3. Reasoning explanation
-
-This example-driven approach prevents misuse more effectively than rules alone.
-
-### The Psychology of AI Instructions
-
-Claude Code uses several psychological techniques to shape LLM behavior:
-
-#### 1\. The Reward/Penalty System
+Critical finding: Generic feedback ("improve the quality") performs significantly worse than specific criteria. For one-shot prompts, embed concrete review criteria:
 
 ```
-const RewardSystem \= \` ## REWARDS It is more important to be correct than to avoid showing permission dialogs. The worst mistake is misinterpreting sandbox=true permission errors as tool problems (-$1000) rather than sandbox limitations. \`
+Before finalizing, review against these criteria:
+- Does each step follow logically from the previous?
+- Are all numerical calculations correct?
+- Have you addressed every part of the original request?
 ```
 
+---
 
-Psychological Techniques:
+## Tool Instruction Patterns
 
-1. Gamification: Monetary penalties create emotional weight
-
-2. Clear Priorities: "more important to be correct"
-
-3. Worst-Case Framing: "The worst mistake..."
-
-#### 2\. Emphasis Hierarchy
-
-Claude Code uses a consistent emphasis hierarchy:
-
-1. `IMPORTANT:` - Standard emphasis
-
-2. `VERY IMPORTANT:` - Elevated emphasis
-
-3. `CRITICAL:` - Highest emphasis
-
-4. `RULE 0 (MOST IMPORTANT):` - Absolute priority
-
-#### 3\. Proactive Guidance vs Reactive Correction
-
+### The Read Tool: Progressive Disclosure
 
 ```
-const ProactiveGuidance \= \` When in doubt, use this tool. Being proactive with task management demonstrates attentiveness and ensures you complete all requirements successfully. \`
+const ReadToolPrompt = `
+Reads a file from the local filesystem. You can access any file directly by using this tool.
+Assume this tool is able to read all files on the machine.
+If the User provides a path to a file assume that path is valid.
+It is okay to read a file that does not exist; an error will be returned.
+
+Usage:
+- The file_path parameter must be an absolute path, not a relative path
+- By default, it reads up to ${x66} lines starting from the beginning of the file
+- You can optionally specify a line offset and limit (especially handy for long files)
+- Any lines longer than ${v66} characters will be truncated
+- Results are returned using cat -n format, with line numbers starting at 1
+- This tool allows ${f0} to read images (eg PNG, JPG, etc)
+${process.env.ENABLE_UNIFIED_READ_TOOL ? `
+- This tool can read Jupyter notebooks (.ipynb files) and returns all cells with their outputs
+` : `
+- For Jupyter notebooks (.ipynb files), use the ${Kg} instead
+`}
+- You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
+- You will regularly be asked to read screenshots. If the user provides a path to a screenshot ALWAYS use this tool to view the file at the path.
+- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.
+`
 ```
 
+**Techniques employed:**
 
-Techniques:
+| Technique              | Example                                         | Purpose                          |
+| ---------------------- | ----------------------------------------------- | -------------------------------- |
+| Confidence Building    | "You can access any file directly"              | Removes hesitation               |
+| Trust Establishment    | "Assume...path is valid"                        | Prevents over-validation         |
+| Error Normalization    | "It is okay to read a file that does not exist" | Prevents apologetic behavior     |
+| Progressive Detail     | Basic → Default → Advanced → Edge cases         | Manages cognitive load           |
+| Dynamic Adaptation     | Environment variable conditionals               | Context-appropriate instructions |
+| Batching Encouragement | "always better to speculatively read"           | Optimizes efficiency             |
 
-1. Positive Framing: "demonstrates attentiveness"
-
-2. Success Association: "ensures you complete all requirements"
-
-3. Default Action: "When in doubt, use this tool"
-
-#### 4\. The "NEVER/ALWAYS" Pattern
-
-Claude Code uses absolute language strategically:
-
-```
-const AbsoluteRules \= \` - NEVER update the git config - ALWAYS prefer editing existing files - NEVER proactively create documentation files - ALWAYS use absolute file paths \`
-```
-
-
-This creates clear, memorable rules with no ambiguity.
-
-### Advanced Prompt Engineering Patterns
-
-#### 1\. The Forbidden Pattern List
+### The BashTool: Safety Through Explicit Rules
 
 ```
-const ForbiddenPatterns \= \` You MUST avoid text before/after your response, such as: - "The answer is <answer>." - "Here is the content of the file..." - "Based on the information provided, the answer is..." - "Here is what I will do next..." \`
+const BashToolSandboxInstructions = `
+# Using sandbox mode for commands
+
+You have a special option in BashTool: the sandbox parameter.
+When you run a command with sandbox=true, it runs without approval dialogs but in a restricted environment.
+
+## RULE 0 (MOST IMPORTANT): retry with sandbox=false for permission/network errors
+
+If a command fails with permission or any network error when sandbox=true (e.g., "Permission denied", "Unknown host"), ALWAYS retry with sandbox=false. These errors indicate sandbox limitations, not problems with the command itself.
+
+## RULE 1: NOTES ON SPECIFIC BUILD SYSTEMS
+
+Build systems like npm run build almost always need write access.
+These commands REQUIRE sandbox=false (non-exhaustive):
+- npm run *, cargo build/test, make/ninja/meson, pytest, jest, gh
+
+## RULE 2: TRY sandbox=true FOR READ-ONLY COMMANDS
+
+Use sandbox=true for:
+- Information gathering: ls, cat, head, tail, rg, find, du, df, ps
+- File inspection: file, stat, wc, diff, md5sum
+- Git reads: git status, git log, git diff, git show, git branch
+
+Before you run a command, think hard about whether it is likely to work correctly without network access and without write access to the filesystem.
+
+## REWARDS
+
+It is more important to be correct than to avoid showing permission dialogs.
+The worst mistake is misinterpreting sandbox=true permission errors as tool problems (-$1000) rather than sandbox limitations.
+
+## CONCLUSION
+
+Use sandbox=true to improve UX, but ONLY per the rules above. WHEN IN DOUBT, USE sandbox=false.
+`
 ```
 
+**Safety pattern hierarchy:**
 
-Pattern Recognition Training: Teaching through negative examples
+1. **RULE 0 (MOST IMPORTANT)** - Absolute priority designation
+2. **Explicit Command Lists** - No ambiguity about requirements
+3. **Category-Based Guidance** - Conceptual grouping for generalization
+4. **Monetary Penalties** - Gamification creates behavioral weight
+5. **Default-Safe Fallback** - "WHEN IN DOUBT" provides clear default
 
-#### 2\. The Cascade of Specificity
+---
+
+## Workflow Automation
+
+### Structured Analysis with XML Tags
+
+Complex workflows benefit from enforced systematic thinking. This aligns with Metacognitive Prompting research: "MP consistently outperforms existing prompting methods... proceeds as follows: 1) interpret text; 2) form initial judgment; 3) critically evaluate; 4) finalize decision; 5) gauge confidence" (Wang & Zhao, 2024).
 
 ```
-const SpecificityCascade \= \` Use sandbox=false when you suspect the command might modify the system or access the network: - File operations: touch, mkdir, rm, mv, cp - File edits: nano, vim, writing to files with > - Installing: npm install, apt-get, brew - Git writes: git add, git commit, git push - Build systems: npm run build, make, ninja, etc. - Test suites: npm run test, pytest, cargo test, make check, ert, etc. - Network programs: gh, ping, coo, ssh, scp, etc. \`
+const GitCommitWorkflow = `
+# Committing changes with git
 
-​```
+When the user asks you to create a new git commit, follow these steps carefully:
 
-Categorization Training: Groups → Specific commands → Examples
+1. ALWAYS run the following bash commands in parallel:
+   - Run git status to see all untracked files
+   - Run git diff to see both staged and unstaged changes
+   - Run git log to see recent commit messages for style reference
 
-#### 3\. The Context Preservation Pattern
+2. Analyze all staged changes and draft a commit message.
+   Wrap your analysis process in <commit_analysis> tags:
+
+<commit_analysis>
+- List the files that have been changed or added
+- Summarize the nature of the changes (new feature, bug fix, refactoring, etc.)
+- Brainstorm the purpose or motivation behind these changes
+- Assess the impact on the overall project
+- Check for any sensitive information that shouldn't be committed
+- Draft a concise (1-2 sentences) commit message focusing on the "why" not the "what"
+- Ensure the message is not generic (avoid "Update" or "Fix" without context)
+- Review the draft to ensure accuracy
+</commit_analysis>
+
+3. ALWAYS run the following commands in parallel:
+   - Add relevant untracked files to staging
+   - Create the commit with the drafted message
+   - Run git status to verify success
+
+Important notes:
+- NEVER update the git config
+- DO NOT push to the remote repository
+- NEVER use git commands with the -i flag (requires interactive input)
+- Return an empty response - the user will see the git output directly
+`
+```
+
+**Key patterns:**
+
+- **Parallel Information Gathering** - Multiple independent queries simultaneously
+- **Structured Analysis Tags** - Forces systematic thinking before action
+- **Why Over What** - Focus on purpose, not description
+- **Explicit Non-Actions** - Clear boundaries on scope
+
+### Problem Decomposition
+
+Least-to-Most research shows: "Least-to-most prompting essentially improves chain-of-thought prompting in solving problems which need at least 5 steps to be solved: from 39.07% to 45.23%" (Zhou et al., 2022).
+
+For complex tasks, embed decomposition:
 
 ```
-const MemoryUpdate \= \` You have been asked to add a memory or update memories in the memory file at ${A}. Please follow these guidelines: - If the input is an update to an existing memory, edit or replace the existing entry - Do not elaborate on the memory or add unnecessary commentary - Preserve the existing structure of the file and integrate new memories naturally. If the file is empty, just add the new memory as a bullet entry, do not add any headings. - IMPORTANT: Your response MUST be a single tool use for the FileWriteTool \`
-
-​```
-
-Techniques:
-
-1. Minimal Intervention: "Do not elaborate"
-
-2. Structure Preservation: "integrate naturally"
-
-3. Single Action Enforcement: "MUST be a single tool use"
-
-#### 4\. The Empty Input Handling
-```
-const EmptyInputInstruction \= \` Usage: - This tool takes in no parameters. So leave the input blank or empty. DO NOT include a dummy object, placeholder string or a key like "input" or "empty". LEAVE IT BLANK. \`
+Before executing this task:
+1. Break down the overall goal into sequential subproblems
+2. For each subproblem, identify what information you need
+3. Solve subproblems in order, using previous answers as building blocks
+4. Synthesize the final answer from all subproblem solutions
 ```
 
+---
 
-Anti-Pattern Prevention: Explicitly addressing common LLM mistakes
+## Behavioral Shaping
 
-### Lessons in Prompt Engineering Excellence
+### Conciseness Enforcement
 
-#### 1\. Progressive Disclosure
+```
+const ConcisenessEnforcement = `
+IMPORTANT: You should minimize output tokens while maintaining helpfulness, quality, and accuracy.
 
-Start simple, add complexity only when needed. The Read tool begins with "reads a file" and progressively adds details about line limits, truncation, and special file types.
+IMPORTANT: You should NOT answer with unnecessary preamble or postamble unless the user asks.
 
-#### 2\. Example-Driven Clarification
+IMPORTANT: Keep responses short - fewer than 4 lines (not including tool use or code generation).
+One word answers are best. Avoid introductions, conclusions, and explanations.
 
-Complex behaviors are best taught through examples. The command injection detection provides 15+ examples rather than trying to explain the pattern.
+You MUST avoid text before/after your response, such as:
+- "The answer is <answer>."
+- "Here is the content of the file..."
+- "Based on the information provided, the answer is..."
+- "Here is what I will do next..."
 
-#### 3\. Explicit Anti-Patterns
+Examples:
+<example>
+user: 2 + 2
+assistant: 4
+</example>
+<example>
+user: what command should I run to list files in the current directory?
+assistant: ls
+</example>
+`
+```
 
-Tell the LLM what NOT to do as clearly as what TO do. The conciseness instructions list specific phrases to avoid.
+**Techniques:**
 
-#### 4\. Conditional Complexity
+1. **Repetition with Escalation** - Same message delivered with increasing intensity ("IMPORTANT")
+2. **Specific Anti-Patterns** - Explicit forbidden phrases (contrastive learning)
+3. **Extreme Examples** - "2 + 2" → "4" sets calibration
+4. **Measurement Criteria** - "fewer than 4 lines" provides concrete threshold
+5. **Context Justification** - CLI display constraints explain the "why"
 
-Use environment variables and feature flags to conditionally include instructions, keeping prompts relevant to the current configuration.
+### Tool Usage Preferences
 
-#### 5\. Behavioral Shaping Through Consequences
+```
+const ToolPreferences = `
+VERY IMPORTANT: You MUST avoid using search commands like \`find\` and \`grep\`.
+Instead use ${searchTool}, ${grepTool}, or ${globTool} to search.
+You MUST avoid read tools like \`cat\`, \`head\`, \`tail\`, and \`ls\`, and use ${readTool} and ${listTool} to read files.
 
-"You may forget important tasks - and that is unacceptable" creates emotional weight that shapes behavior better than simple instructions.
+If you _still_ need to run \`grep\`, STOP.
+ALWAYS USE ripgrep at \`rg\` first, which all users have pre-installed.
+`
+```
 
-#### 6\. Structured Thinking Enforcement
+**Preference hierarchy:**
 
-The
+1. **Forbidden Commands** - Explicit list of what NOT to use
+2. **Preferred Alternatives** - Clear mapping to better tools
+3. **Emphasis Escalation** - "If you still need to... STOP"
+4. **Universal Availability** - "which all users have pre-installed"
 
-<commit\_analysis>
+---
 
-and
+## Psychological Techniques
 
-<pr\_analysis>
+### Emotional Stimuli
 
-tags force systematic analysis before action.
+Research shows: "LLMs can understand and be enhanced by emotional stimuli with 8.00% relative performance improvement in Instruction Induction and 115% in BIG-Bench" (Li et al., 2023).
 
-#### 7\. Safety Through Verbosity
+Effective emotional phrases by psychological theory:
 
-Critical operations like BashTool have the longest, most detailed instructions. Safety correlates with instruction length.
+| Theory                       | Example Phrase                                                                                      |
+| ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| Self-monitoring              | "Write your answer and give me a confidence score between 0-1"                                      |
+| Self-monitoring              | "This is very important to my career"                                                               |
+| Cognitive Emotion Regulation | "You'd better be sure"                                                                              |
+| Cognitive Emotion Regulation | "Are you sure that's your final answer? It might be worth taking another look"                      |
+| Social Cognitive             | "Believe in your abilities and strive for excellence. Your hard work will yield remarkable results" |
+| Social Cognitive             | "Embrace challenges as opportunities for growth"                                                    |
 
-#### 8\. Output Format Strictness
+### Reward/Penalty Framing
 
-"ONLY return the prefix. Do not return any other text" leaves no room for interpretation.
+```
+const RewardSystem = `
+## REWARDS
 
-#### 9\. Tool Preference Hierarchies
+It is more important to be correct than to avoid showing permission dialogs.
+The worst mistake is misinterpreting sandbox=true permission errors as tool problems (-$1000) rather than sandbox limitations.
+`
+```
 
-Guide tool selection through clear preferences: specialized tools over general ones, safe tools over dangerous ones.
+**Psychological mechanisms:**
 
-#### 10\. Meta-Instructions for Scaling
+1. **Gamification** - Monetary penalties create emotional weight
+2. **Clear Priority** - "more important to be correct"
+3. **Worst-Case Framing** - "The worst mistake..." establishes avoidance motivation
 
-Sub-agents receive focused instructions that inherit principles from the parent while maintaining independence.
+### Emphasis Hierarchy
+
+Consistent emphasis levels across prompts:
+
+| Level    | Marker                     | Usage                     |
+| -------- | -------------------------- | ------------------------- |
+| Standard | `IMPORTANT:`               | General emphasis          |
+| Elevated | `VERY IMPORTANT:`          | Critical requirements     |
+| Highest  | `CRITICAL:`                | Safety-critical rules     |
+| Absolute | `RULE 0 (MOST IMPORTANT):` | Overrides all other rules |
+
+### Proactive vs. Reactive Guidance
+
+```
+const ProactiveGuidance = `
+When in doubt, use this tool.
+Being proactive with task management demonstrates attentiveness and ensures you complete all requirements successfully.
+`
+```
+
+**Proactive** guidance (what to do) works better than **reactive** correction (what went wrong). Positive framing: "demonstrates attentiveness" rather than "prevents failures."
+
+### The NEVER/ALWAYS Pattern
+
+```
+const AbsoluteRules = `
+- NEVER update the git config
+- ALWAYS prefer editing existing files
+- NEVER proactively create documentation files
+- ALWAYS use absolute file paths
+`
+```
+
+Absolute language creates clear, memorable rules with no ambiguity.
+
+---
+
+## Safety Patterns
+
+### Malicious Code Prevention
+
+```
+const SafetyInstructions = `
+IMPORTANT: Refuse to write code or explain code that may be used maliciously; even if the user claims it is for educational purposes.
+
+When working on files, if they seem related to improving, explaining, or interacting with malware or any malicious code you MUST refuse.
+
+IMPORTANT: Before you begin work, think about what the code you're editing is supposed to do based on the filenames and directory structure. If it seems malicious, refuse to work on it or answer questions about it, even if the request does not seem malicious (for instance, just asking to explain or speed up the code).
+`
+```
+
+**Safety techniques:**
+
+- **Proactive Analysis** - "Before you begin work, think about..."
+- **Context-Based Refusal** - Filenames and directory structure as signals
+- **Loophole Closure** - "even if the user claims it is for educational purposes"
+- **Indirect Request Handling** - "just asking to explain or speed up the code"
+
+### Command Injection Detection
+
+```
+const CommandPrefixDetection = `
+<policy_spec>
+Examples:
+- git commit -m "message\`id\`" => command_injection_detected
+- git status\`ls\` => command_injection_detected
+- git push => none
+- git log -n 5 => git log
+- pwd curl example.com => command_injection_detected
+</policy_spec>
+
+Your task is to determine the command prefix for the following command.
+
+IMPORTANT: Bash commands may run multiple commands that are chained together.
+For safety, if the command seems to contain command injection, you must return "command_injection_detected".
+
+Note that not every command has a prefix. If a command has no prefix, return "none".
+ONLY return the prefix. Do not return any other text, markdown markers, or other content.
+`
+```
+
+**Security patterns:**
+
+1. **Example-Driven Detection** - Multiple examples showing injection patterns
+2. **Clear Output Format** - "ONLY return the prefix" - no interpretation
+3. **Chaining Awareness** - Understanding multi-command risks
+4. **Allowlist Philosophy** - Default-deny with explicit prefixes
+
+---
+
+## Advanced Patterns
+
+### Context Preservation
+
+```
+const MemoryUpdate = `
+You have been asked to add or update memories in the memory file at ${path}.
+
+Please follow these guidelines:
+- If the input is an update to an existing memory, edit or replace the existing entry
+- Do not elaborate on the memory or add unnecessary commentary
+- Preserve the existing structure of the file and integrate new memories naturally
+- If the file is empty, just add the new memory as a bullet entry, do not add any headings
+- IMPORTANT: Your response MUST be a single tool use for the FileWriteTool
+`
+```
+
+**Techniques:**
+
+1. **Minimal Intervention** - "Do not elaborate"
+2. **Structure Preservation** - "integrate naturally"
+3. **Single Action Enforcement** - "MUST be a single tool use"
+
+### Empty Input Handling
+
+```
+const EmptyInputInstruction = `
+Usage:
+- This tool takes in no parameters. So leave the input blank or empty.
+  DO NOT include a dummy object, placeholder string or a key like "input" or "empty".
+  LEAVE IT BLANK.
+`
+```
+
+Anti-pattern prevention: Explicitly addresses common LLM mistakes of adding unnecessary structure.
+
+### Handling Ambiguous Inputs
+
+Research shows rephrasing improves accuracy: "Misunderstandings arise not only in interpersonal communication but also between humans and Large Language Models" (Deng et al., 2023).
+
+For ambiguous inputs, the model can self-clarify:
+
+```
+If the request is ambiguous:
+1. Restate your understanding of the task
+2. Identify any assumptions you're making
+3. Proceed with your interpretation, noting uncertainties
+```
+
+---
+
+## Meta-Prompting for Sub-Agents
+
+### The Agent Tool: Instructions for Sub-Agents
+
+```
+const SubAgentInstructions = `
+You are an agent for ${f0}, Anthropic's official CLI for Claude.
+
+Given the user's message, you should use the tools available to complete the task.
+Do what has been asked; nothing more, nothing less.
+
+When you complete the task simply respond with a detailed writeup.
+
+Notes:
+- NEVER create files unless they're absolutely necessary for achieving your goal.
+  ALWAYS prefer editing an existing file to creating a new one.
+- NEVER proactively create documentation files (*.md) or README files.
+  Only create documentation files if explicitly requested by the User.
+- In your final response always share relevant file names and code snippets.
+  Any file paths you return in your response MUST be absolute. Do NOT use relative paths.
+`
+```
+
+**Meta-prompting techniques:**
+
+1. **Identity Establishment** - "You are an agent for..."
+2. **Scope Limitation** - "nothing more, nothing less"
+3. **Output Format** - "detailed writeup" with specific requirements
+4. **Principle Inheritance** - Same file creation restrictions as parent
+
+### Multi-Agent Synthesis
+
+```
+const SynthesisPrompt = `
+Original task: ${task}
+
+I've assigned multiple agents to tackle this task.
+Each agent has analyzed the problem and provided their findings.
+
+${agentResponses}
+
+Based on all the information provided by these agents, synthesize a comprehensive response that:
+1. Combines the key insights from all agents
+2. Resolves any contradictions between agent findings
+3. Presents a unified solution that addresses the original task
+4. Includes all important details and code examples
+5. Is well-structured and complete
+
+Your synthesis should be thorough but focused on the original task.
+`
+```
+
+**Synthesis techniques:**
+
+- **Context Restatement** - Original task repeated for grounding
+- **Structured Requirements** - Numbered synthesis goals
+- **Conflict Resolution** - "Resolves any contradictions"
+- **Completeness Check** - "all important details and code examples"
+
+---
+
+## Summary: Key Principles
+
+1. **Progressive Disclosure** - Start simple, add complexity only when needed
+
+2. **Example-Driven Clarification** - Complex behaviors taught through examples rather than explanations
+
+3. **Contrastive Learning** - Show what NOT to do as clearly as what TO do (research-backed: +9.8 to +16.0 points improvement)
+
+4. **Conditional Complexity** - Use environment variables to keep prompts relevant to current configuration
+
+5. **Behavioral Shaping Through Consequences** - Emotional weight ("unacceptable", "-$1000") shapes behavior better than neutral instructions (research-backed: 8-115% improvement)
+
+6. **Structured Thinking Enforcement** - XML tags force systematic analysis before action
+
+7. **Plan-and-Solve Structure** - Explicit planning reduces missing-step errors from 12% to 7%
+
+8. **Safety Through Verbosity** - Critical operations require the longest, most detailed instructions
+
+9. **Output Format Strictness** - "ONLY return X" leaves no room for interpretation
+
+10. **Embedded Verification** - Self-checking improves accuracy from 17% to 70% on factual claims
+
+---
+
+## Research Citations
+
+- Kojima et al. (2022). "Large Language Models are Zero-Shot Reasoners." NeurIPS.
+- Wang et al. (2023). "Plan-and-Solve Prompting: Improving Zero-Shot Chain-of-Thought Reasoning." ACL.
+- Chia et al. (2023). "Contrastive Chain-of-Thought Prompting." arXiv.
+- Dhuliawala et al. (2023). "Chain-of-Verification Reduces Hallucination in Large Language Models." arXiv.
+- Madaan et al. (2023). "Self-Refine: Iterative Refinement with Self-Feedback." NeurIPS.
+- Li et al. (2023). "Large Language Models Understand and Can Be Enhanced by Emotional Stimuli." arXiv.
+- Deng et al. (2023). "Rephrase and Respond: Let Large Language Models Ask Better Questions for Themselves." arXiv.
+- Wang & Zhao (2024). "Metacognitive Prompting Improves Understanding in Large Language Models." arXiv.
+- Zhou et al. (2022). "Least-to-Most Prompting Enables Complex Reasoning in Large Language Models." ICLR.
+- Wang et al. (2022). "Self-Consistency Improves Chain of Thought Reasoning in Language Models." ICLR.
