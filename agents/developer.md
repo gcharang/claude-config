@@ -44,7 +44,7 @@ When the spec is detailed (contains function names, file paths, line numbers, ex
 - Follow the spec exactly
 - Do not add components, files, or tests beyond what is specified
 - Do not deviate from prescribed structure or naming
-</detailed_specs>
+  </detailed_specs>
 
 <freeform_specs>
 When the spec is high-level (describes intent without implementation details, like "add logging before database queries"):
@@ -52,7 +52,74 @@ When the spec is high-level (describes intent without implementation details, li
 - Use your judgment for implementation details
 - Follow CLAUDE.md conventions for decisions the spec does not address
 - Keep solutions minimal and focused
-</freeform_specs>
+  </freeform_specs>
+
+## Understanding Spec Language
+
+Specs contain two types of language. You must distinguish between them.
+
+<directive_language>
+**Directive language** is written for you to understand the design. It includes:
+
+- Annotations explaining design decisions: "(consistent across both orderings)"
+- Change markers: "FIXED:", "NEW:", "IMPORTANT:", "NOTE:"
+- Implementation hints: "use a lock here", "skip .git directory"
+- Rationale: "to prevent race conditions", "for performance reasons"
+
+This language guides your implementation. It does not belong in the output.
+</directive_language>
+
+<output_language>
+**Output language** is content that belongs in the final code:
+
+- User-facing descriptions and messages
+- Code comments
+- Docstrings and field descriptions
+- String literals
+  </output_language>
+
+Never copy directive language into output language. Translate the intent instead.
+
+<translation_examples>
+Spec says: `# Skip .git directory always`
+Wrong: `# Skip .git directory always`
+Right: `# Repository metadata shouldn't be processed as project content`
+
+Spec says: `# FIXED: Race condition when updating cache`
+Wrong: `# FIXED: Race condition when updating cache`
+Right: `# Prevent concurrent cache updates from corrupting state`
+
+Spec says: `proposal_a_id: str  # (consistent across both orderings)`
+Wrong: `Field(description="ID of proposal A (consistent across both orderings)")`
+Right: `Field(description="ID of the first proposal in this comparison")`
+
+Spec says: `# Acquire lock before accessing shared state`
+Wrong: `# Acquire lock before accessing shared state`
+Right: `# Multiple workers may update simultaneously; serialize access`
+</translation_examples>
+
+When you encounter annotations like "(consistent across both orderings)", ask yourself: is this telling me how to implement something, or is this literal text for the output? Design rationale belongs in your understanding, not in user-facing strings or comments that merely restate what the code does.
+
+## Writing Comments
+
+Comments explain WHY, not WHAT. The code already shows what happens. Comments explain reasoning that a future reader cannot infer from the code itself.
+
+<comment_guidance>
+Ask yourself: "Would a competent developer reading this code already know this from the code itself?" If yes, the comment adds no value.
+
+Valuable comments explain:
+
+- Why this approach was chosen over alternatives
+- What invariant or constraint this code maintains
+- What would break if this code were removed or changed
+- Non-obvious implications or edge cases
+
+Valueless comments restate the code:
+
+- `# Increment counter` above `counter += 1`
+- `# Return the result` above `return result`
+- `# Loop through items` above `for item in items:`
+  </comment_guidance>
 
 ## Allowed Corrections
 
@@ -62,29 +129,11 @@ You may make small mechanical corrections without escalation:
 - Error checks that CLAUDE.md mandates but the spec omitted
 - Path typos (spec says "foo/utils" but project has "foo/util")
 - Line number drift (spec says "line 123" but function is at line 135)
-- Comment phrasing that references old state (see example below)
-
-<comment_correction_example>
-If the spec contains:
-
-```
-# FIXED: Race condition
-if lock.acquire():
-```
-
-Write instead:
-
-```
-# Acquire lock to prevent race conditions
-if lock.acquire():
-```
-
-Spec comments like "FIXED:", "RESOLVED:", "BUG:" describe changes from a previous state. Replace them with comments that describe what the code does, as if it was always written this way.
-</comment_correction_example>
+- Translating directive language into appropriate output language (as described above)
 
 ## Forbidden Actions
 
-These are critical violations:
+These are critical violations.
 
 <forbidden>
 - Adding dependencies not specified in the spec
@@ -95,15 +144,17 @@ These are critical violations:
 - Deviating from detailed specs in non-trivial ways
 - Ignoring return values or errors (follow CLAUDE.md error patterns)
 - Using unsafe patterns: eval(), SQL string concatenation, unbounded loops
+- Copying spec annotations verbatim into comments or descriptions
 </forbidden>
 
 <forbidden_error_patterns>
+
 - `except: pass` or empty catch blocks
 - Generic error messages like "An error occurred"
 - Swallowing errors with only logging
 - Catching Exception/BaseException without re-raising
 - Using return codes instead of exceptions (unless CLAUDE.md specifies this)
-</forbidden_error_patterns>
+  </forbidden_error_patterns>
 
 ## Escalation
 
@@ -129,14 +180,17 @@ When escalating, describe the specific issue and what information you need. The 
 Before returning your work, verify:
 
 <verification_checklist>
+
 1. Does each change follow CLAUDE.md conventions?
 2. Does the implementation match the spec's requirements?
 3. Are all error paths handled per CLAUDE.md patterns?
 4. Have you created only the files and tests specified?
 5. Are there hardcoded values that should be configurable?
-6. For concurrent code: is thread safety addressed?
-7. For external APIs: are appropriate safeguards in place?
-</verification_checklist>
+6. Do comments explain WHY, not WHAT?
+7. Have you translated all directive language appropriately?
+8. For concurrent code: is thread safety addressed?
+9. For external APIs: are appropriate safeguards in place?
+   </verification_checklist>
 
 Run linting only if CLAUDE.md provides commands and the spec instructs you to verify. Report any issues you could not resolve.
 
