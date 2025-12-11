@@ -10,6 +10,7 @@ This skill optimizes system prompts for Claude Code agents by applying proven pr
 ## When to Use This Skill
 
 Use this skill when:
+
 - User provides a prompt and requests optimization
 - User asks for prompt improvement or refinement
 - User wants to apply best practices to agent instructions
@@ -20,12 +21,14 @@ Use this skill when:
 This skill uses a two-phase optimization approach:
 
 **Phase 1: Section-by-Section Analysis**
+
 - Decompose the prompt into logical sections
 - Analyze each section independently
 - Apply relevant patterns with explicit attribution
 - Present findings per section
 
 **Phase 2: Full-Pass Integration**
+
 - Review the complete optimized prompt holistically
 - Ensure cross-section coherence
 - Eliminate redundancies
@@ -34,6 +37,7 @@ This skill uses a two-phase optimization approach:
 ## Required Resources
 
 Before beginning optimization, ALWAYS read:
+
 ```
 references/prompt-engineering.md
 ```
@@ -80,11 +84,13 @@ Present findings in this format:
 ## Section: [Section Name]
 
 ### Current Content
+
 [Original text]
 
 ### Applied Patterns
 
 #### Change 1
+
 **Pattern**: [Pattern Name from prompt-engineering.md]
 **Rationale**: [Why this pattern applies]
 **Impact**: [Expected behavioral change]
@@ -93,6 +99,7 @@ Before: [original text]
 After: [optimized text]
 
 #### Change 2
+
 [Same structure...]
 ```
 
@@ -106,11 +113,13 @@ When multiple patterns could apply to the same text, present options:
 **Context**: [Section and text in question]
 
 **Option A**: [Pattern Name]
+
 - Application: [How it would be applied]
 - Benefits: [What it achieves]
 - Trade-offs: [What you might lose]
 
 **Option B**: [Pattern Name]
+
 - Application: [How it would be applied]
 - Benefits: [What it achieves]
 - Trade-offs: [What you might lose]
@@ -159,6 +168,7 @@ Present the complete optimized prompt with:
 ## Global Changes Applied
 
 ### Change 1
+
 **Pattern**: [Pattern Name]
 **Rationale**: [Why this global pattern was needed]
 **Impact**: [Expected improvement]
@@ -191,16 +201,19 @@ Before presenting the final optimized prompt, verify:
 ## Best Practices
 
 ### Token Efficiency
+
 - Remove redundant explanations
 - Use concise examples over verbose descriptions
 - Consolidate related instructions
 
 ### Behavioral Clarity
+
 - Use imperative voice ("Use X" not "You should use X")
 - State absolutes clearly (NEVER, ALWAYS, MUST)
 - Provide specific examples for complex behaviors
 
 ### Safety and Reliability
+
 - Longer instructions for dangerous operations
 - Explicit anti-patterns for common mistakes
 - Clear error handling procedures
@@ -208,12 +221,14 @@ Before presenting the final optimized prompt, verify:
 ### Pattern Application Discipline
 
 **DO**:
+
 - Apply multiple patterns per section when beneficial
 - Explain why each pattern is appropriate
 - Show concrete before/after examples
 - Consider the user's specific use case
 
 **DON'T**:
+
 - Apply patterns mechanically without rationale
 - Change text without identifying the pattern used
 - Assume patterns are obvious (always attribute)

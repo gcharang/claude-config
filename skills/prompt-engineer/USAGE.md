@@ -18,12 +18,14 @@ prompt-optimizer-skill/
 The skill implements a two-phase optimization process:
 
 ### Phase 1: Section-by-Section Analysis
+
 1. Decomposes your prompt into logical sections
-2. Analyzes each section independently 
+2. Analyzes each section independently
 3. Applies relevant patterns with explicit attribution
 4. Presents findings per section
 
 ### Phase 2: Full-Pass Integration
+
 1. Assembles the complete optimized prompt
 2. Reviews for global coherence
 3. Eliminates redundancies
@@ -34,6 +36,7 @@ The skill implements a two-phase optimization process:
 ### Mandatory Pattern Attribution
 
 **Every single change** requires:
+
 - Pattern name from prompt-engineering.md
 - Rationale for why it applies
 - Expected behavioral impact
@@ -44,6 +47,7 @@ This forces thoughtful application and creates an audit trail.
 ### Conflict Resolution
 
 When multiple patterns could apply, the skill:
+
 1. Identifies the conflict
 2. Shows examples of each option
 3. Explains trade-offs
@@ -53,6 +57,7 @@ When multiple patterns could apply, the skill:
 ### Quality Assurance
 
 Built-in checklist ensures:
+
 - No contradictory instructions
 - Proper emphasis hierarchy
 - Anti-patterns explicitly addressed
@@ -63,6 +68,7 @@ Built-in checklist ensures:
 ## Usage Example
 
 You would say:
+
 ```
 Here's my agent prompt for a database query assistant. Please optimize it using the prompt-optimizer skill:
 
@@ -70,6 +76,7 @@ Here's my agent prompt for a database query assistant. Please optimize it using 
 ```
 
 The skill will:
+
 1. Read the prompt engineering guide
 2. Break your prompt into sections
 3. Analyze each section with pattern attribution
@@ -83,6 +90,7 @@ The skill will:
 ### Pattern Attribution is Critical
 
 The skill will NOT make changes without attribution. This is intentional. It forces:
+
 - Thoughtful application of patterns
 - Accountability for each change
 - Learning what patterns do
@@ -91,6 +99,7 @@ The skill will NOT make changes without attribution. This is intentional. It for
 ### Hybrid Approach Implemented
 
 As you requested, attribution uses a hybrid approach:
+
 - **Major changes**: Individual attribution with full rationale
 - **Minor changes**: Grouped by section with shared rationale
 - **Global changes**: Separate attribution in Phase 2
@@ -102,6 +111,7 @@ The `prompt-engineering.md` file in `references/` is exactly as you provided it 
 ## Customization
 
 You can modify `SKILL.md` to:
+
 - Adjust the section decomposition logic
 - Change the attribution format
 - Add domain-specific patterns
@@ -112,6 +122,7 @@ But **do not modify** `references/prompt-engineering.md` - it should remain the 
 ## Packaging the Skill
 
 When ready to distribute, you would normally run:
+
 ```bash
 python3 /mnt/skills/scripts/package_skill.py /home/claude/prompt-optimizer-skill
 ```
