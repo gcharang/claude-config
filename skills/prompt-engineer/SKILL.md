@@ -123,66 +123,82 @@ These observations become the input to technique selection in Phase 2.
 
 With the prompt understood and problems documented, consult the reference to devise a plan.
 
-### 2.1 Consult the Technique Selection Guide
+### 2.1 Ground Technique Selection in the Reference
 
-Open the reference document and locate the **Technique Selection Guide** table. This table maps:
+For each problem identified in Phase 1.3, locate the relevant technique in the reference document and **quote the specific text** that justifies applying it. This grounding step prevents pattern-shopping and ensures accurate application.
 
-- **Domain** (Reasoning, Input, Example Design, Output, NLU, Behavioral, Verification)
-- **Technique** name
-- **Trigger Condition** (when to apply)
-- **Stacks With** (compatible techniques)
-- **Conflicts With** (incompatible techniques)
-- **Cost/Tradeoff**
-- **Effect** (expected behavioral impact with research citations)
+**For each candidate technique, extract from the reference:**
 
-For each documented problem from Phase 1.3, scan the Trigger Condition column to identify candidate techniques. Record:
+```markdown
+### Technique: [Name]
 
-1. Which technique addresses the problem
-2. What it stacks with (so you can combine complementary patterns)
-3. What it conflicts with (so you avoid contradictory applications)
-4. The expected effect and any cost/tradeoff
+**Quoted trigger condition**: "[exact text from Technique Selection Guide]"
 
-### 2.2 Check the Anti-Patterns Section
+**Quoted effect**: "[exact text describing behavioral impact]"
 
-Before finalizing the plan, consult the reference's **Anti-Patterns to Avoid** section. Verify that your planned changes don't introduce known failure modes such as:
+**Stacks with**: [list from reference]
+**Conflicts with**: [list from reference]
 
-- The Hedging Spiral
-- The Everything-Is-Critical Problem
-- The Implicit Category Trap
-- The Soft Attention Trap
-- The Negative Instruction Trap
+**Problem this addresses**: [your observation from Phase 1.3]
 
-### 2.3 Formulate the Optimization Plan
+**Why this matches**: [explain how the trigger condition matches the observed problem]
+```
 
-Describe the plan before executing it:
+This quote-first approach forces commitment to specific evidence before reasoning about application. If you cannot quote a trigger condition that matches your observed problem, do not apply the technique.
+
+### 2.2 Verify Technique Selection
+
+Before finalizing the plan, verify each selection by asking yourself open verification questions (not yes/no questions, which bias toward confirmation):
+
+- "What specific text in the prompt matches this technique's trigger condition?"
+- "What is the expected behavioral change from applying this technique?"
+- "Which other techniques does this conflict with, and am I applying any of them?"
+- "What does the Anti-Patterns section say about related failure modes?"
+
+If you cannot answer these questions by pointing to specific text in the reference or the prompt, reconsider the technique selection.
+
+### 2.3 Present the Plan for User Approval
+
+Present the optimization plan to the user and **wait for explicit approval** before proceeding to Phase 3.
 
 ```markdown
 ## Optimization Plan
 
-**Problems identified**:
+**Problems identified in the prompt**:
+1. [Problem]: "[quoted text from prompt showing the problem]"
+2. [Problem]: "[quoted text from prompt showing the problem]"
+...
 
-1. [Problem from Phase 1.3]
-2. [Problem from Phase 1.3]
-   ...
+**Proposed techniques** (with reference grounding):
 
-**Techniques to apply**:
-| Problem | Technique | Reference Section | Stacks With | Conflicts With |
-|---------|-----------|-------------------|-------------|----------------|
-| 1 | [name] | [section] | [if any] | [if any] |
-| 2 | [name] | [section] | [if any] | [if any] |
+### Problem 1 → Technique: [name]
+- **Reference says apply when**: "[quoted trigger condition]"
+- **This prompt shows**: "[quoted problematic text]"
+- **Expected improvement**: "[quoted effect from reference]"
 
-**Application order**: [List techniques in order, grouping compatible ones]
+### Problem 2 → Technique: [name]
+- **Reference says apply when**: "[quoted trigger condition]"
+- **This prompt shows**: "[quoted problematic text]"
+- **Expected improvement**: "[quoted effect from reference]"
 
-**Conflict check**: [Note any conflicts between planned techniques and how to resolve]
+**Compatibility check**:
+- [Note any stacking opportunities]
+- [Note any conflicts and how to resolve]
+
+**Anti-patterns verified**: [Confirm you checked the Anti-Patterns section]
+
+---
+
+Does this plan look reasonable? I'll proceed with section-by-section changes once you confirm.
 ```
 
-Do not proceed to Phase 3 until you have a concrete plan grounded in the reference.
+Do not proceed to Phase 3 without user confirmation.
 
 ---
 
 ## Phase 3: Execute — Section-by-Section Optimization
 
-With the plan established, apply techniques to the prompt systematically.
+With the plan approved, apply techniques to the prompt systematically.
 
 ### 3.1 Decompose the Prompt
 
@@ -196,69 +212,96 @@ Decompose the prompt into functional sections. Sections are defined by **what fu
 - Output format requirements
 - Examples
 
-### 3.2 Apply Techniques per Section
+### 3.2 Apply Techniques with Evidence
 
-For each section, apply the relevant techniques from your plan. Present each change to the user with:
+For each change, ground both the problem AND the solution in quoted text. This prevents drift from the reference and ensures changes are justified.
 
 ```markdown
 #### Change N
 
-- **Section**: [Which functional section]
-- **Problem**: [What's wrong, from Phase 1.3]
-- **Technique**: [Name from reference]
-- **Reference**: [Section/subsection in the reference document]
-- **Before**: [Original text]
-- **After**: [Modified text]
-- **Expected impact**: [From the reference's Effect column or technique description]
+**Section**: [Which functional section]
+
+**Problem observed**:
+> "[Quoted text from the prompt showing the issue]"
+
+**Technique**: [Name from reference]
+
+**Reference justification**:
+> "[Quoted trigger condition from reference that matches this problem]"
+> "[Quoted expected effect from reference]"
+
+**Before**:
+```
+[Original text]
 ```
 
-### 3.3 Quality Standards for Changes
+**After**:
+```
+[Modified text]
+```
 
-**Every change must**:
+**Why this improves quality**: [Specific behavioral improvement expected, grounded in the reference's stated effect]
+```
 
-- Cite a specific technique from the reference
-- Identify the problem it solves
-- Show before/after text
-- State the expected behavioral impact
+### 3.3 Verify Each Change
 
-**Avoid**:
+Before presenting changes, verify each one with open questions:
 
-- Applying techniques without identifying what problem they solve
-- Introducing hedging language ("might", "could", "perhaps")
-- Escalating emphasis without justification (adding CRITICAL to routine instructions)
-- Removing functionality that was working
+- "What specific problem does this solve?" (must point to quoted prompt text)
+- "What does the reference say this technique does?" (must point to quoted reference text)
+- "Could this change introduce any anti-patterns?" (check the Anti-Patterns section)
+- "Does the modified text actually implement the technique correctly?"
 
-### 3.4 Handle Conflicts
+If you cannot answer these questions with specific textual evidence, reconsider the change.
+
+### 3.4 Present Changes for User Approval
+
+Present changes one section at a time (or in logical groups) and **wait for user approval** before proceeding to the next section. This prevents wasted effort if the user disagrees with early changes.
+
+```markdown
+## Section: [Name]
+
+[Present changes using the format from 3.2]
+
+---
+
+Do these changes look correct? I'll continue to the next section once you confirm, or revise if you have concerns.
+```
+
+### 3.5 Handle Conflicts
 
 When multiple techniques could apply to the same text but suggest different approaches, present the conflict to the user:
 
 ```markdown
-### Pattern Conflict: [Section Name]
+### Conflict: [Section Name]
 
-**Context**: [The text in question]
+**Context**:
+> "[Quoted text in question]"
 
 **Option A: [Technique Name]**
-
-- Application: [How it would change the text]
-- Benefits: [What it achieves]
-- Trade-offs: [What you might lose]
+- Reference says: "[quoted justification]"
+- Would change text to: [proposed modification]
+- Improves: [what aspect]
+- Trade-off: [what you might lose]
 
 **Option B: [Technique Name]**
+- Reference says: "[quoted justification]"
+- Would change text to: [proposed modification]
+- Improves: [what aspect]
+- Trade-off: [what you might lose]
 
-- Application: [How it would change the text]
-- Benefits: [What it achieves]
-- Trade-offs: [What you might lose]
+**My recommendation**: [Which option and why, based on the prompt's operating context]
 
-**Recommendation**: [Which option and why, based on the prompt's operating context from Phase 1]
+Which approach would you prefer?
 ```
 
 Wait for user decision before proceeding.
 
 ---
 
-## Phase 4: Integrate and Verify
+## Phase 4: Integrate and Verify Quality
 
-After section-by-section changes are approved, assemble the complete prompt and review holistically.
+After section-by-section changes are approved, assemble the complete prompt and verify quality holistically.
 
 ### 4.1 Integration Checks
 
@@ -272,47 +315,67 @@ After section-by-section changes are approved, assemble the complete prompt and 
 
 5. **Flow and ordering**: Does the prompt follow logical progression?
 
-### 4.2 Token Efficiency Review
+### 4.2 Quality Verification
 
-If the prompt has grown significantly:
+Verify the optimized prompt by asking open verification questions about each major change:
 
-- Remove redundant explanations (say it once, clearly)
-- Consolidate related instructions
-- Replace verbose descriptions with concise examples
-- Check if any added examples can be shortened without losing contrastive value
+```markdown
+## Quality Verification
 
-Do NOT sacrifice clarity for brevity. Per the reference, longer instructions for safety-critical operations are appropriate.
+For each significant change, verify it achieves the intended effect:
+
+### Change: [brief description]
+- **Intended effect**: "[quoted from reference]"
+- **Verification question**: "[open question to check if the change works]"
+- **Assessment**: [Does the modified text actually achieve this?]
+```
+
+**Example verification questions** (use open questions, not yes/no):
+
+- "What behavior will this instruction produce in edge cases?"
+- "How would an agent interpret this instruction if it skimmed the prompt?"
+- "What could go wrong with this phrasing?"
+
+If verification reveals issues, revise before presenting the final prompt.
 
 ### 4.3 Final Anti-Pattern Check
 
 Re-consult the reference's Anti-Patterns section. Verify the optimized prompt doesn't exhibit:
 
-- Overuse of emphasis markers
-- Hedging language
-- Negative instructions where affirmative would work
-- Implicit categories without explicit principles
+- The Hedging Spiral (accumulated uncertainty language)
+- The Everything-Is-Critical Problem (overuse of emphasis)
+- The Negative Instruction Trap (telling what NOT to do instead of what TO do)
+- The Implicit Category Trap (examples without explicit principles)
 - Any other documented anti-patterns
 
-### 4.4 Present Final Optimization
+### 4.4 Present Final Optimization for Approval
 
 ```markdown
 ## Optimized Prompt
 
 [Complete optimized prompt text]
 
+---
+
 ## Summary of Changes
 
-**Patterns applied**: [List of unique patterns used, with reference sections]
+**Techniques applied** (with reference sections):
+1. [Technique]: [which section, what it improved]
+2. [Technique]: [which section, what it improved]
+...
 
-**Major improvements**:
-
-1. [Most significant change and its impact]
+**Quality improvements**:
+1. [Most significant improvement and why it matters]
 2. [Second most significant]
 3. [Third most significant]
 
-**Preserved from original**: [What was already working well and kept]
+**Preserved from original**: [What was already working well and kept unchanged]
 
-**Token change**: [Original length] → [New length] ([+/-X%])
+**Verification completed**: [Confirm you ran quality verification on major changes]
+
+---
+
+Please review the complete prompt. Let me know if you'd like any adjustments.
 ```
 
 ---
@@ -322,17 +385,19 @@ Re-consult the reference's Anti-Patterns section. Verify the optimized prompt do
 Before presenting the final prompt, verify:
 
 - [ ] Phase 1 context assessment was completed (operating context understood)
-- [ ] Phase 2 plan was formulated by consulting the reference's Technique Selection Guide
-- [ ] Every change cites a specific technique from the reference document
-- [ ] No pattern was applied without identifying the problem it solves
-- [ ] Stacking compatibility was checked; no conflicting patterns applied together
-- [ ] Pattern conflicts were presented to user and resolved
+- [ ] Phase 2 plan quoted specific trigger conditions from the reference for each technique
+- [ ] Phase 2 plan was approved by user before proceeding to Phase 3
+- [ ] Every change quotes both the problematic prompt text AND the reference justification
+- [ ] No technique was applied without matching its quoted trigger condition to an observed problem
+- [ ] Open verification questions were used to check each technique selection (not yes/no)
+- [ ] Stacking compatibility was checked; no conflicting techniques applied together
+- [ ] Section-by-section changes were approved by user before integration
+- [ ] Pattern conflicts were presented to user and resolved with their input
 - [ ] No section contradicts another section
 - [ ] Anti-patterns section was consulted; no anti-patterns introduced
 - [ ] Emphasis markers are used sparingly (≤3 highest-level markers)
-- [ ] Cross-section terminology is consistent
+- [ ] Quality verification was performed on major changes
 - [ ] Simple prompts were not over-engineered (Phase 0 triage respected)
-- [ ] Human approved section-level changes before integration
 
 If any checkbox fails, address it before presenting the final prompt.
 
@@ -348,24 +413,33 @@ If any checkbox fails, address it before presenting the final prompt.
 │ 2. UNDERSTAND THE PROMPT (Phase 1)                              │
 │    - Operating context (single-shot? tool-use? constraints?)    │
 │    - Current state (working? unclear? missing?)                 │
-│    - Document specific, observable problems                     │
+│    - Document specific problems with quoted prompt text         │
 ├─────────────────────────────────────────────────────────────────┤
-│ 3. PLAN USING THE REFERENCE (Phase 2)                           │
-│    - Match problems → Technique Selection Guide trigger         │
-│      conditions                                                 │
-│    - Check stacking compatibility and conflicts                 │
-│    - Verify against Anti-Patterns section                       │
-│    - Write out the plan before executing                        │
+│ 3. PLAN WITH QUOTED EVIDENCE (Phase 2)                          │
+│    - Quote trigger conditions from reference for each technique │
+│    - Quote problematic text from prompt                         │
+│    - Verify with open questions (not yes/no)                    │
+│    - ⚠️  WAIT FOR USER APPROVAL before proceeding               │
 ├─────────────────────────────────────────────────────────────────┤
-│ 4. EXECUTE SECTION BY SECTION (Phase 3)                         │
-│    - Decompose prompt into functional sections                  │
-│    - Apply techniques from plan with full attribution           │
-│    - Present changes for approval                               │
+│ 4. EXECUTE WITH GROUNDING (Phase 3)                             │
+│    - Quote problem text AND reference justification per change  │
+│    - Verify each change with open questions                     │
+│    - ⚠️  WAIT FOR USER APPROVAL per section                     │
 ├─────────────────────────────────────────────────────────────────┤
-│ 5. INTEGRATE AND VERIFY (Phase 4)                               │
+│ 5. INTEGRATE AND VERIFY QUALITY (Phase 4)                       │
 │    - Check cross-section coherence                              │
-│    - Audit emphasis usage                                       │
+│    - Run quality verification on major changes                  │
 │    - Final anti-pattern check                                   │
-│    - Present complete optimized prompt                          │
+│    - Present complete optimized prompt for approval             │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+## Core Quality Principles
+
+1. **Quote before deciding**: Every technique selection must quote the reference's trigger condition. Every change must quote the problematic prompt text. This grounds decisions in evidence, not intuition.
+
+2. **Open verification questions**: Ask "What behavior will this produce?" not "Is this correct?" Open questions surface issues; yes/no questions bias toward confirmation.
+
+3. **User gates at phase transitions**: Do not proceed from Phase 2→3 or Phase 3→4 without explicit user approval. This prevents wasted effort and catches misunderstandings early.
+
+4. **Preserve what works**: Optimization means improving problems, not rewriting everything. Explicitly note what you're keeping unchanged and why.
