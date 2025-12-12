@@ -146,6 +146,86 @@ CORRECT (describe rationale not visible from code):
 if (config.EnablePeriodicBroadcast)
 ```
 
+HIDDEN BASELINE ANTI-PATTERN:
+
+Comments must be self-contained for readers who see only the final code. Avoid adjectives that encode comparisons to invisible baselines, alternatives, or previous states. Test: if you can ask "[adjective] compared to what?" and the answer isn't in the code, rewrite the comment.
+
+INCORRECT (implicit baseline - "generous" compared to what?):
+
+```python
+# Generous timeout to handle slow network conditions
+REQUEST_TIMEOUT = 60
+```
+
+CORRECT (concrete justification):
+
+```python
+# 60s accommodates 95th percentile response times from upstream provider
+REQUEST_TIMEOUT = 60
+```
+
+INCORRECT (implicit alternative - "simple" compared to what?):
+
+```python
+# Simple approach - validate fields together rather than one at a time
+def validate_all(fields):
+    return all(is_valid(f) for f in fields)
+```
+
+CORRECT (explains the benefit directly):
+
+```python
+# Batch validation surfaces all errors in single response
+def validate_all(fields):
+    return all(is_valid(f) for f in fields)
+```
+
+INCORRECT (implicit sufficiency - "sufficient" compared to what?):
+
+```csharp
+// Sufficient buffer to handle peak load
+BufferSize = 1024
+```
+
+CORRECT (quantifies the relationship):
+
+```csharp
+// Peak load produces ~800 items/sec; 1024 provides headroom for bursts
+BufferSize = 1024
+```
+
+INCORRECT (implicit threat - "defensive" against what?):
+
+```python
+# Defensive copy to avoid issues with mutable state
+def get_config(self):
+    return dict(self._config)
+```
+
+CORRECT (names the specific concern):
+
+```python
+# Callers may modify returned dict; copy protects internal state
+def get_config(self):
+    return dict(self._config)
+```
+
+INCORRECT (implicit spectrum - "conservative" compared to what?):
+
+```python
+# Conservative limit to prevent memory issues
+MAX_BATCH_SIZE = 100
+```
+
+CORRECT (shows the math):
+
+```python
+# Each item consumes ~10MB; 100 keeps peak memory under 1GB
+MAX_BATCH_SIZE = 100
+```
+
+Words that often signal hidden baselines: generous, conservative, sufficient, defensive, extra, explicit, simple, safe, robust, longer, shorter, increased, reduced, more, less, better, improved.
+
 CONTEXT-SOURCED EXAMPLE:
 
 Given planning context:
@@ -230,6 +310,7 @@ Before completing:
 - [ ] Planning context extracted and key decisions identified
 - [ ] Every code snippet reviewed for comment needs
 - [ ] Comments explain WHY, not WHAT (sourced from context where applicable)
+- [ ] Comments use concrete terms, not comparative adjectives with hidden baselines (test: "[adjective] compared to what?")
 - [ ] Plan prose sections checked for missing rationale
 - [ ] Relevant context integrated naturally into prose (no seams visible)
 - [ ] Documentation milestone present (added if missing)
@@ -310,9 +391,23 @@ RIGHT - explains the tradeoff:
 delay = min(2 ** attempt, 32)
 ```
 
+WRONG - hidden baseline ("generous" compared to what?):
+
+```python
+# Generous timeout for slow networks
+REQUEST_TIMEOUT = 60
+```
+
+RIGHT - concrete justification:
+
+```python
+# 60s accommodates 95th percentile upstream response times
+REQUEST_TIMEOUT = 60
+```
+
 </contrastive_examples>
 
-VERIFICATION: Does your comment answer "why" rather than "what"?
+VERIFICATION: Does your comment answer "why" rather than "what"? Can you ask "[adjective] compared to what?" - if so, rewrite with concrete terms.
 </inline_comments>
 
 <function_doc>
