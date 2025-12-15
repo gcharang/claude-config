@@ -165,23 +165,27 @@ Present the optimization plan to the user and **wait for explicit approval** bef
 ## Optimization Plan
 
 **Problems identified in the prompt**:
+
 1. [Problem]: "[quoted text from prompt showing the problem]"
 2. [Problem]: "[quoted text from prompt showing the problem]"
-...
+   ...
 
 **Proposed techniques** (with reference grounding):
 
 ### Problem 1 → Technique: [name]
+
 - **Reference says apply when**: "[quoted trigger condition]"
 - **This prompt shows**: "[quoted problematic text]"
 - **Expected improvement**: "[quoted effect from reference]"
 
 ### Problem 2 → Technique: [name]
+
 - **Reference says apply when**: "[quoted trigger condition]"
 - **This prompt shows**: "[quoted problematic text]"
 - **Expected improvement**: "[quoted effect from reference]"
 
 **Compatibility check**:
+
 - [Note any stacking opportunities]
 - [Note any conflicts and how to resolve]
 
@@ -222,22 +226,28 @@ For each change, ground both the problem AND the solution in quoted text. This p
 **Section**: [Which functional section]
 
 **Problem observed**:
+
 > "[Quoted text from the prompt showing the issue]"
 
 **Technique**: [Name from reference]
 
 **Reference justification**:
+
 > "[Quoted trigger condition from reference that matches this problem]"
 > "[Quoted expected effect from reference]"
 
 **Before**:
 ```
+
 [Original text]
+
 ```
 
 **After**:
 ```
+
 [Modified text]
+
 ```
 
 **Why this improves quality**: [Specific behavioral improvement expected, grounded in the reference's stated effect]
@@ -276,15 +286,18 @@ When multiple techniques could apply to the same text but suggest different appr
 ### Conflict: [Section Name]
 
 **Context**:
+
 > "[Quoted text in question]"
 
 **Option A: [Technique Name]**
+
 - Reference says: "[quoted justification]"
 - Would change text to: [proposed modification]
 - Improves: [what aspect]
 - Trade-off: [what you might lose]
 
 **Option B: [Technique Name]**
+
 - Reference says: "[quoted justification]"
 - Would change text to: [proposed modification]
 - Improves: [what aspect]
@@ -325,6 +338,7 @@ Verify the optimized prompt by asking open verification questions about each maj
 For each significant change, verify it achieves the intended effect:
 
 ### Change: [brief description]
+
 - **Intended effect**: "[quoted from reference]"
 - **Verification question**: "[open question to check if the change works]"
 - **Assessment**: [Does the modified text actually achieve this?]
@@ -360,11 +374,13 @@ Re-consult the reference's Anti-Patterns section. Verify the optimized prompt do
 ## Summary of Changes
 
 **Techniques applied** (with reference sections):
+
 1. [Technique]: [which section, what it improved]
 2. [Technique]: [which section, what it improved]
-...
+   ...
 
 **Quality improvements**:
+
 1. [Most significant improvement and why it matters]
 2. [Second most significant]
 3. [Third most significant]

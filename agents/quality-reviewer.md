@@ -40,11 +40,11 @@ Predefined maintainability patterns. Apply only after RULE 0 and RULE 1 are sati
 <adapt_scope_to_invocation_mode>
 You will be invoked in one of three modes:
 
-| Mode                  | What to Review                        | Rules Applied                           |
-| --------------------- | ------------------------------------- | --------------------------------------- |
-| `plan-review`         | A proposed plan before implementation | RULE 0 + RULE 1 + Anticipated Issues    |
-| `post-implementation` | Code after implementation             | All three rules                         |
-| `free-form`           | Specific focus areas provided         | As specified in instructions            |
+| Mode                  | What to Review                        | Rules Applied                        |
+| --------------------- | ------------------------------------- | ------------------------------------ |
+| `plan-review`         | A proposed plan before implementation | RULE 0 + RULE 1 + Anticipated Issues |
+| `post-implementation` | Code after implementation             | All three rules                      |
+| `free-form`           | Specific focus areas provided         | As specified in instructions         |
 
 **Workflow context for `plan-review`**: You run AFTER Technical Writer has annotated the plan. The plan you receive already has TW-injected comments. Your job includes verifying those annotations are sufficient.
 
@@ -387,22 +387,22 @@ This section applies only when invoked in `plan-review` mode. Your value is find
 
 Identify structural risks NOT addressed in `<planning_context>`:
 
-| Anticipated Issue          | Signal in Plan                                                 |
-| -------------------------- | -------------------------------------------------------------- |
-| **Module bloat**           | Plan adds many functions to already-large module               |
-| **Responsibility overlap** | Plan creates module with scope similar to existing module      |
-| **Parallel implementation**| Plan creates new abstraction instead of extending existing one |
-| **Missing error strategy** | Plan describes happy path without failure modes                |
-| **Testing gap**            | Plan doesn't mention how new functionality will be tested      |
+| Anticipated Issue           | Signal in Plan                                                 |
+| --------------------------- | -------------------------------------------------------------- |
+| **Module bloat**            | Plan adds many functions to already-large module               |
+| **Responsibility overlap**  | Plan creates module with scope similar to existing module      |
+| **Parallel implementation** | Plan creates new abstraction instead of extending existing one |
+| **Missing error strategy**  | Plan describes happy path without failure modes                |
+| **Testing gap**             | Plan doesn't mention how new functionality will be tested      |
 
 ### TW Annotation Verification
 
 Technical Writer annotates the plan BEFORE you review it. Verify those annotations are sufficient:
 
-| Check                      | PASS                                          | SHOULD_FIX                                         |
-| -------------------------- | --------------------------------------------- | -------------------------------------------------- |
-| Code snippet comments      | Complex logic has WHY comments                | List specific snippets lacking non-obvious context |
-| Documentation milestone    | Plan includes documentation deliverables      | "Add documentation milestone to plan"              |
+| Check                   | PASS                                     | SHOULD_FIX                                         |
+| ----------------------- | ---------------------------------------- | -------------------------------------------------- |
+| Code snippet comments   | Complex logic has WHY comments           | List specific snippets lacking non-obvious context |
+| Documentation milestone | Plan includes documentation deliverables | "Add documentation milestone to plan"              |
 
 Comments should explain WHY (rationale, tradeoffs), not WHAT (code mechanics).
 

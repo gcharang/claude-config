@@ -434,23 +434,23 @@ CoT benefits are task-type dependent. The determining factor: whether correctnes
 
 **When CoT helps — self-contained reasoning:**
 
-| Task Type | Why CoT Works |
-| --------- | ------------- |
-| Arithmetic / math word problems | Steps are mechanically verifiable without external reference |
-| Symbolic manipulation | Program-like execution traces with explicit rules |
-| Multi-step computation | Each step depends only on previous step's output, not source text |
+| Task Type                       | Why CoT Works                                                     |
+| ------------------------------- | ----------------------------------------------------------------- |
+| Arithmetic / math word problems | Steps are mechanically verifiable without external reference      |
+| Symbolic manipulation           | Program-like execution traces with explicit rules                 |
+| Multi-step computation          | Each step depends only on previous step's output, not source text |
 
 The common property: the reasoning chain is auditable without consulting external sources. You can verify "6 × 8 = 48" without checking any context.
 
 **When CoT hurts — context-grounded or implicit tasks:**
 
-| Task Type | Failure Mechanism | Source |
-| --------- | ----------------- | ------ |
-| Pattern recognition | Articulation overrides implicit learning; 30%+ accuracy drops observed | Sprague et al. (2025) |
-| QA over provided documents | Explanations often nonfactual—model hallucinates facts not in context | Ye & Durrett (2022) |
-| NLI / entailment | Same grounding problem; "Let's think step by step" causes performance degradation | Ye & Durrett (2022) |
-| Classification | Answer is pattern-matched; reasoning adds nothing or introduces spurious features | Sprague et al. (2025) |
-| Extraction tasks | Answer exists verbatim in context; no reasoning required | — |
+| Task Type                  | Failure Mechanism                                                                 | Source                |
+| -------------------------- | --------------------------------------------------------------------------------- | --------------------- |
+| Pattern recognition        | Articulation overrides implicit learning; 30%+ accuracy drops observed            | Sprague et al. (2025) |
+| QA over provided documents | Explanations often nonfactual—model hallucinates facts not in context             | Ye & Durrett (2022)   |
+| NLI / entailment           | Same grounding problem; "Let's think step by step" causes performance degradation | Ye & Durrett (2022)   |
+| Classification             | Answer is pattern-matched; reasoning adds nothing or introduces spurious features | Sprague et al. (2025) |
+| Extraction tasks           | Answer exists verbatim in context; no reasoning required                          | —                     |
 
 Per Ye & Durrett (2022): "The tasks that receive significant benefits from using explanations... are all program-like (e.g., integer addition and program execution), whereas the tasks in this work emphasize textual reasoning grounded in provided inputs."
 
