@@ -51,7 +51,7 @@ This document synthesizes practical prompt engineering patterns with academic re
 5. **System 2 Attention (S2A) for Contaminated Context** — Filter out bias/noise before reasoning
 6. **Distractor-Robust Prompting for Efficiency** — Exemplars with distractors + ignore instruction
 7. **Chain of Draft for Efficiency** — Minimal intermediate steps can reduce tokens by up to 92%
-8. **Know When to Skip CoT** — Pattern recognition tasks can see 30%+ accuracy drops with CoT
+8. **Know When to Use/Skip CoT** — Helps: arithmetic, symbolic manipulation, multi-step computation. Hurts: pattern recognition, context-grounded QA/NLI, classification
 9. **CoT Explanations May Be Unfaithful** — Models can rationalize biased answers without mentioning the bias
 10. **Thread of Thought for Complex Contexts** — Systematic segmentation prevents information loss
 11. **Analogical Prompting for Missing Examples** — Self-generate relevant examples AND tutorials from model knowledge
@@ -428,21 +428,41 @@ The conclusion marker ("Therefore, the answer:") forces the model to distill its
 
 ---
 
-### When Chain-of-Thought Hurts Performance
+### Chain-of-Thought: When It Helps vs. When It Hurts
 
-Recent research reveals that CoT can _reduce_ performance on certain task types. Per Sprague et al. (2025): "Chain-of-thought can reduce performance on tasks where thinking makes humans worse."
+CoT benefits are task-type dependent. The determining factor: whether correctness requires grounding in external context.
 
-The mechanism: CoT prompts the model to articulate reasoning, which can override implicit pattern recognition with faulty explicit reasoning. On artificial grammar learning tasks, GPT-4o's accuracy dropped from 94% (direct) to 62.5% (CoT)—a 31.5 percentage point decrease.
+**When CoT helps — self-contained reasoning:**
 
-**Tasks where CoT may hurt performance:**
+| Task Type | Why CoT Works |
+| --------- | ------------- |
+| Arithmetic / math word problems | Steps are mechanically verifiable without external reference |
+| Symbolic manipulation | Program-like execution traces with explicit rules |
+| Multi-step computation | Each step depends only on previous step's output, not source text |
 
-- Pattern recognition requiring implicit learning
-- Tasks where explicit reasoning introduces spurious features
-- Simple classification where the answer is "obvious" to the model
+The common property: the reasoning chain is auditable without consulting external sources. You can verify "6 × 8 = 48" without checking any context.
 
-**Non-obvious insight**: This isn't about task difficulty. The issue is task _type_—specifically, whether the task benefits from explicit articulation or implicit pattern matching. A complex pattern-matching task can still be hurt by CoT, while a simple arithmetic task benefits from it.
+**When CoT hurts — context-grounded or implicit tasks:**
 
-**Recommendation**: When you observe CoT reducing performance on a task, try direct prompting first, or use very targeted steering prompts like "Focus only on [specific feature]" rather than general step-by-step reasoning.
+| Task Type | Failure Mechanism | Source |
+| --------- | ----------------- | ------ |
+| Pattern recognition | Articulation overrides implicit learning; 30%+ accuracy drops observed | Sprague et al. (2025) |
+| QA over provided documents | Explanations often nonfactual—model hallucinates facts not in context | Ye & Durrett (2022) |
+| NLI / entailment | Same grounding problem; "Let's think step by step" causes performance degradation | Ye & Durrett (2022) |
+| Classification | Answer is pattern-matched; reasoning adds nothing or introduces spurious features | Sprague et al. (2025) |
+| Extraction tasks | Answer exists verbatim in context; no reasoning required | — |
+
+Per Ye & Durrett (2022): "The tasks that receive significant benefits from using explanations... are all program-like (e.g., integer addition and program execution), whereas the tasks in this work emphasize textual reasoning grounded in provided inputs."
+
+**The grounding problem**: On textual reasoning tasks, LLMs generate explanations that are _consistent_ (they entail the prediction) but not _factual_ (they contain hallucinated claims). An explanation can look coherent while misrepresenting what the source text actually says.
+
+**Non-obvious insight**: This isn't about task difficulty. A complex pattern-matching task is still hurt by CoT, while simple arithmetic benefits from it. The issue is whether the task requires (a) computation over self-contained steps, or (b) faithful grounding in provided text.
+
+**Recommendations**:
+
+- For computation: Use Plan-and-Solve or standard CoT
+- For context-grounded tasks: Skip CoT; use Quote Extraction to force grounding before any analysis
+- For classification/pattern recognition: Use direct prompting or targeted steering ("Focus only on [specific feature]")
 
 ---
 
@@ -1653,6 +1673,7 @@ Affirmative instructions directly specify the target behavior without requiring 
 - Xu et al. (2023). "Re-Reading Improves Reasoning in Large Language Models." arXiv.
 - Xu et al. (2025). "Chain of Draft: Thinking Faster by Writing Less." arXiv.
 - Yasunaga et al. (2024). "Large Language Models as Analogical Reasoners." ICLR.
+- Ye & Durrett (2022). "The Unreliability of Explanations in Few-shot Prompting for Textual Reasoning." NeurIPS.
 - Zhang et al. (2022). "Automatic Chain of Thought Prompting in Large Language Models." arXiv.
 - Zhao et al. (2021). "Calibrate Before Use: Improving Few-Shot Performance of Language Models." ICML.
 - Zheng et al. (2023). "Take a Step Back: Evoking Reasoning via Abstraction in Large Language Models." arXiv.
