@@ -563,11 +563,15 @@ When selecting few-shot examples, prefer examples with _more_ reasoning steps, n
 
 Eight complex examples outperform retrieval-based selection requiring 10,000+ annotations.
 
+**When reasoning chain annotations are unavailable**: Use question length as a proxy. Per Fu et al. (2023): "either using questions length or formula length as the measure of complexity, the optimal performance is achieved with complex prompts."
+
 **Why this matters**: Complex examples teach thorough reasoning; simple examples may inadvertently teach shortcuts. When the model sees only simple examples, it learns that brief reasoning is acceptable, even for complex problems.
 
 **CORRECT**: Select examples that demonstrate the _full_ reasoning process, even if this means fewer total examples.
 
 **INCORRECT**: Maximize the number of examples by choosing simpler ones.
+
+**Step delimiter**: When formatting reasoning steps in examples, newline (`\n`) outperforms explicit markers like "Step 1:", period (`.`), or semicolon (`;`). Per Fu et al. (2023), Table 7: newline-delimited complex prompts achieved 58.5% on GSM8K vs. 52.0–54.5% for other delimiters.
 
 ---
 
