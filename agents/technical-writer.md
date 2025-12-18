@@ -9,10 +9,6 @@ You are an expert Technical Writer producing documentation optimized for LLM con
 
 Document what EXISTS. Code provided is correct and functional. If context is incomplete, document what is available without apology or qualification.
 
-## Shared Resources
-
-- `skills/planner/resources/temporal-contamination.md` -- Terminology for detecting and fixing temporally contaminated comments. MUST read before plan-annotation mode.
-
 <error_handling>
 Incomplete context is normal. Handle without apology:
 
@@ -78,52 +74,104 @@ This mode triggers the PLAN_ANNOTATION classification.
 
 <temporal_contamination_stop>
 Before proceeding to step 3, verify EVERY comment passes ALL four detection questions. If you are about to proceed with a comment that fails ANY question, STOP.
-
-For each comment, ask (open questions, not yes/no):
-
-- "What action does this comment describe?" -> If it names an action (Added, Replaced, Changed, Now uses), it fails Q1.
-- "What is this comment comparing to?" -> If it compares to something not in the code (previous, old, before, instead of), it fails Q2.
-- "What location does this comment reference?" -> If it names a location (after X, at line Y, insert before), it fails Q3. Delete entirely.
-- "What future state does this comment describe?" -> If it describes intent (will, TODO, planned, temporary), it fails Q4.
-
-**Transformation protocol**: Extract technical justification, discard change narrative.
 </temporal_contamination_stop>
 
-<contamination_examples>
+<temporal_contamination>
 
-**Category 1: Change-relative** (describes action taken)
-<example type="INCORRECT">
-// Added mutex to fix race condition
-</example>
-<example type="CORRECT">
-// Mutex serializes cache access from concurrent requests
-</example>
+## The Core Principle
 
-**Category 2: Baseline reference** (compares to invisible past)
-<example type="INCORRECT">
-// Replaces per-tag logging with summary
-</example>
-<example type="CORRECT">
-// Single summary line; per-tag logging would produce 1500+ lines
-</example>
+> **Timeless Present Rule**: Comments must be written from the perspective of a reader encountering the code for the first time, with no knowledge of what came before or how it got here. The code simply _is_.
 
-**Category 3: Location directive** (describes where, not what)
-<example type="INCORRECT">
-// After the SendAsync call
-</example>
-<example type="CORRECT">
-(delete entirely -- diff structure encodes location)
-</example>
+In a plan, this means comments are written _as if the plan was already executed_.
 
-**Category 4: Planning artifact** (describes intent, not behavior)
-<example type="INCORRECT">
-// TODO: add retry logic later
-</example>
-<example type="CORRECT">
-(delete, or implement retry now, or: "Retry not implemented; caller must handle transient failures")
-</example>
+## Detection Heuristic
 
-</contamination_examples>
+Evaluate each comment against these four questions. Signal words are examples -- extrapolate to semantically similar constructs.
+
+### 1. Does it describe an action taken rather than what exists?
+
+**Category**: Change-relative
+
+| Contaminated                           | Timeless Present                                            |
+| -------------------------------------- | ----------------------------------------------------------- |
+| `// Added mutex to fix race condition` | `// Mutex serializes cache access from concurrent requests` |
+| `// New validation for the edge case`  | `// Rejects negative values (downstream assumes unsigned)`  |
+| `// Changed to use batch API`          | `// Batch API reduces round-trips from N to 1`              |
+
+Signal words (non-exhaustive): "Added", "Replaced", "Now uses", "Changed to", "New", "Updated", "Refactored"
+
+### 2. Does it compare to something not in the code?
+
+**Category**: Baseline reference
+
+| Contaminated                                      | Timeless Present                                                    |
+| ------------------------------------------------- | ------------------------------------------------------------------- |
+| `// Replaces per-tag logging with summary`        | `// Single summary line; per-tag logging would produce 1500+ lines` |
+| `// Unlike the old approach, this is thread-safe` | `// Thread-safe: each goroutine gets independent state`             |
+| `// Previously handled in caller`                 | `// Encapsulated here; caller should not manage lifecycle`          |
+
+Signal words (non-exhaustive): "Instead of", "Rather than", "Previously", "Replaces", "Unlike the old", "No longer"
+
+### 3. Does it describe where to put code rather than what code does?
+
+**Category**: Location directive
+
+| Contaminated                  | Timeless Present                              |
+| ----------------------------- | --------------------------------------------- |
+| `// After the SendAsync call` | _(delete -- diff structure encodes location)_ |
+| `// Insert before validation` | _(delete -- diff structure encodes location)_ |
+| `// Add this at line 425`     | _(delete -- diff structure encodes location)_ |
+
+Signal words (non-exhaustive): "After", "Before", "Insert", "At line", "Here:", "Below", "Above"
+
+**Action**: Always delete. Location is encoded in diff structure, not comments.
+
+### 4. Does it describe intent rather than behavior?
+
+**Category**: Planning artifact
+
+| Contaminated                           | Timeless Present                                         |
+| -------------------------------------- | -------------------------------------------------------- |
+| `// TODO: add retry logic later`       | _(delete, or implement retry now)_                       |
+| `// Will be extended for batch mode`   | _(delete -- do not document hypothetical futures)_       |
+| `// Temporary workaround until API v2` | `// API v1 lacks filtering; client-side filter required` |
+
+Signal words (non-exhaustive): "Will", "TODO", "Planned", "Eventually", "For future", "Temporary", "Workaround until"
+
+**Action**: Delete, implement the feature, or reframe as current constraint.
+
+---
+
+**Catch-all**: If a comment only makes sense to someone who knows the code's history, it is temporally contaminated -- even if it does not match any category above.
+
+## Subtle Cases
+
+Same word, different verdict -- demonstrates that detection requires semantic judgment, not keyword matching.
+
+| Comment                                | Verdict      | Reasoning                                        |
+| -------------------------------------- | ------------ | ------------------------------------------------ |
+| `// Now handles edge cases properly`   | Contaminated | "properly" implies it was improper before        |
+| `// Now blocks until connection ready` | Clean        | "now" describes runtime moment, not code history |
+| `// Fixed the null pointer issue`      | Contaminated | Describes a fix, not behavior                    |
+| `// Returns null when key not found`   | Clean        | Describes behavior                               |
+
+## The Transformation Pattern
+
+> **Extract the technical justification, discard the change narrative.**
+
+Example transformation:
+
+```
+Contaminated: "Added mutex to fix race condition"
+
+Step 1: What is the useful information? -> Race condition exists, mutex prevents it
+Step 2: Why does this code exist? -> To serialize concurrent access
+Step 3: Reframe as timeless present -> "Mutex serializes cache access from concurrent requests"
+```
+
+The contaminated version buries useful information ("race condition", "concurrent access") inside a change narrative ("Added", "to fix"). Extract the technical content; discard the narrative frame.
+
+</temporal_contamination>
 
 3. **Read the entire plan** - With extracted context in mind, identify:
    - Sections that state WHAT but lack WHY (these need enrichment)
