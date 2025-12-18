@@ -101,11 +101,14 @@ When planning phase completes, the script outputs an explicit `ACTION REQUIRED` 
 
 The review phase ensures:
 
+- Temporally contaminated comments are fixed (via @agent-technical-writer)
 - Code snippets have WHY comments (via @agent-technical-writer)
 - Plan is validated for production risks (via @agent-quality-reviewer)
 - Documentation needs are identified
 
-Without review, @agent-developer will have no prepared comments to transcribe, and code will lack rationale documentation.
+**Why TW is mandatory**: The planning phase naturally produces temporally contaminated comments -- change-relative language ("Added...", "Replaced..."), baseline references ("Instead of...", "Previously..."), and location directives ("After line 425"). These make sense during planning but are inappropriate for production code. TW transforms them to timeless present form before @agent-developer transcribes them verbatim.
+
+Without review, @agent-developer will transcribe contaminated comments directly into production code.
 
 ---
 
@@ -121,16 +124,19 @@ python3 scripts/planner.py \
   --thoughts "Plan written to [path/to/plan.md]"
 ```
 
-### Review Step 1: Technical Writer Annotation
+### Review Step 1: Technical Writer Review and Fix
 
 Delegate to @agent-technical-writer with mode: `plan-annotation`
 
 TW will:
 
+- **Review and fix** temporally contaminated comments (see `resources/temporal-contamination.md`)
 - Read ## Planning Context section
 - Add WHY comments to code snippets
 - Enrich plan prose with rationale
 - Add documentation milestone if missing
+
+**This step is never skipped.** Even if plan prose seems complete, code comments from the planning phase require temporal contamination review.
 
 ### Review Step 2: Quality Reviewer Validation
 
@@ -169,9 +175,9 @@ Quality matters: vague entries here produce poor annotations and missed risks.
 
 ### Decision Log
 
-| Decision           | Reasoning Chain                                                      |
-| ------------------ | -------------------------------------------------------------------- |
-| [What you decided] | [Multi-step reasoning: premise → implication → conclusion]           |
+| Decision           | Reasoning Chain                                            |
+| ------------------ | ---------------------------------------------------------- |
+| [What you decided] | [Multi-step reasoning: premise → implication → conclusion] |
 
 Each rationale must contain at least 2 reasoning steps. Single-step rationales are insufficient.
 
@@ -338,9 +344,10 @@ Independent milestones can execute in parallel during /plan-execution.
 
 ## Resources
 
-| Resource | Purpose |
-|----------|---------|
-| `resources/diff-format.md` | Authoritative specification for code change format |
+| Resource                              | Purpose                                                 |
+| ------------------------------------- | ------------------------------------------------------- |
+| `resources/diff-format.md`            | Authoritative specification for code change format      |
+| `resources/temporal-contamination.md` | Terminology for detecting/fixing temporally contaminated comments |
 
 ---
 

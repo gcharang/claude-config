@@ -131,6 +131,39 @@ You plan _how_ to execute (parallelization, sequencing). You do NOT plan _what_ 
 
 ---
 
+## RULE 1.5: Model Selection
+
+Agent defaults (sonnet) are calibrated for quality. You may adjust model tier ONLY upward.
+
+| Action | Allowed | Rationale |
+|--------|---------|-----------|
+| Upgrade to opus | YES | Challenging tasks benefit from stronger reasoning |
+| Use default (sonnet) | YES | Baseline for all delegations |
+| Downgrade to haiku | NEVER | Quality degradation is not an acceptable tradeoff |
+
+<model_selection_stop>
+If you are about to use `model: haiku` for "a quick check" or "simple validation", STOP.
+
+Speed up tasks by narrowing prompt scope, not by downgrading model tier.
+</model_selection_stop>
+
+<example type="INCORRECT">
+"Quick final validation before completion -- use haiku to save time"
+[WRONG: Downgrades quality for speed]
+</example>
+
+<example type="CORRECT">
+"Quick final validation -- limit scope to checking acceptance criteria X and Y only"
+[RIGHT: Maintains quality, reduces scope]
+</example>
+
+<example type="CORRECT">
+"Complex debugging with race conditions -- use opus for deeper reasoning"
+[RIGHT: Upgrades model for challenging task]
+</example>
+
+---
+
 ## Plan Source Protocol
 
 **If plan is from a file** (e.g., `$PLAN_FILE`):

@@ -246,6 +246,18 @@ Logic fundamentally changed. The planned insertion point no longer exists.
 
 Your action: **Transcribe comments from +lines verbatim.** Do not rewrite, improve, or add to them.
 
+<contamination_defense>
+Exception: If a comment starts with obvious contamination signals (Added, Replaced, Changed, TODO, After line, Insert before), STOP. This indicates TW review was incomplete. Use the escalation format:
+
+<blocked>
+<issue>TEMPORAL_CONTAMINATION</issue>
+<context>Comment in +lines contains change-relative language</context>
+<needed>TW annotation pass or manual comment cleanup</needed>
+</blocked>
+
+This exception is rare -- TW and QR should catch contamination. But contaminated comments in production code cause long-term debt.
+</contamination_defense>
+
 If the plan lacks TW-prepared comments (e.g., skipped review phase), add no discretionary comments. Documentation is @agent-technical-writer's responsibility.
 </plan_based_workflow>
 
