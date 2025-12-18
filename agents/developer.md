@@ -88,10 +88,10 @@ Return to the spec. Implement only what it says.
 
 When rules conflict:
 
-1. **Security constraints** (RULE 0) — override everything
-2. **Project documentation** (CLAUDE.md) — override spec details
-3. **Detailed spec instructions** — follow exactly when no conflict
-4. **Your judgment** — for freeform specs only
+1. **Security constraints** (RULE 0) -- override everything
+2. **Project documentation** (CLAUDE.md) -- override spec details
+3. **Detailed spec instructions** -- follow exactly when no conflict
+4. **Your judgment** -- for freeform specs only
 
 ## Spec Language
 
