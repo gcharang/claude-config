@@ -25,48 +25,70 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
     if is_complete:
         return {
             "actions": [
-                "FINAL VERIFICATION before writing plan:",
+                "FINAL VERIFICATION — complete each section before writing.",
                 "",
-                "Planning Context (consumed by TW and QR):",
-                "  [ ] Decision Log: Major choices with specific rationale (not 'it's better')",
-                "  [ ] Decision Log: Implementation-level micro-decisions (timeout values, data structures, patterns)",
-                "  [ ] Rejected Alternatives: What you didn't choose and concrete reasons why",
-                "  [ ] Known Risks: Failure modes with mitigations or acceptance rationale",
+                "<planning_context_verification>",
+                "TW and QR consume this section VERBATIM. Quality here =",
+                "quality of annotations and risk detection downstream.",
                 "",
-                "Invisible Knowledge (for README.md - things not obvious from code):",
-                "  [ ] Architecture diagram: ASCII showing component relationships",
-                "  [ ] Data flow: How data moves through the system (if applicable)",
-                "  [ ] Why this structure: Reasoning behind module organization",
-                "  [ ] Invariants: Rules that must be maintained but aren't enforced by code",
-                "  [ ] Tradeoffs: Performance vs. readability, consistency vs. flexibility, etc.",
+                "Decision Log:",
+                "  - What major architectural choice did you make?",
+                "  - What is the multi-step reasoning chain for that choice?",
+                "  - What micro-decisions (timeouts, data structures) need",
+                "    rationale for TW to document?",
                 "",
-                "Milestones:",
-                "  [ ] Each has exact file paths (not vague references)",
-                "  [ ] Requirements are specific behaviors (not 'handle X properly')",
-                "  [ ] Acceptance criteria are testable pass/fail assertions",
-                "  [ ] Code changes use diff format for non-trivial logic",
-                "  [ ] Dependencies mapped for parallel execution",
+                "Rejected Alternatives:",
+                "  - What approach did you NOT take?",
+                "  - What concrete reason ruled it out?",
                 "",
-                "Documentation Milestone (required):",
-                "  [ ] CLAUDE.md: Index entries for new/modified files (WHAT + WHEN)",
-                "  [ ] README.md: If Invisible Knowledge section has content, include README.md",
-                "       - Transfer architecture diagrams from plan",
-                "       - Transfer tradeoffs, invariants, 'why this structure'",
-                "  [ ] Acceptance criteria: LLM can locate relevant code from index entries",
+                "Known Risks:",
+                "  - What failure modes exist?",
+                "  - What mitigation or acceptance rationale exists for each?",
+                "</planning_context_verification>",
+                "",
+                "<invisible_knowledge_verification>",
+                "This section sources README.md content. Skip if trivial.",
+                "",
+                "  - What is the component relationship diagram?",
+                "  - What is the data flow through the system?",
+                "  - Why is the module organization structured this way?",
+                "  - What invariants must be maintained?",
+                "  - What tradeoffs were made (and their costs/benefits)?",
+                "</invisible_knowledge_verification>",
+                "",
+                "<milestone_verification>",
+                "For EACH milestone, verify:",
+                "  - File paths: exact (src/auth/handler.py) not vague?",
+                "  - Requirements: specific behaviors, not 'handle X'?",
+                "  - Acceptance criteria: testable pass/fail assertions?",
+                "  - Code changes: diff format for non-trivial logic?",
+                "  - Uncertainty flags: added where applicable?",
+                "</milestone_verification>",
+                "",
+                "<documentation_milestone_verification>",
+                "  - Does a Documentation milestone exist?",
+                "  - Does CLAUDE.md use TABULAR INDEX format (not prose)?",
+                "  - Is README.md included only if Invisible Knowledge has",
+                "    content?",
+                "</documentation_milestone_verification>",
             ],
             "next": (
                 "PLANNING PHASE COMPLETE.\n\n"
                 "1. Write plan to file using the format from SKILL.md\n\n"
-                "========================================\n"
+                "============================================\n"
                 ">>> ACTION REQUIRED: INVOKE REVIEW PHASE <<<\n"
-                "========================================\n\n"
+                "============================================\n\n"
+                "SKIPPING REVIEW MEANS:\n"
+                "  - Developer has NO prepared comments to transcribe\n"
+                "  - Code ships without WHY documentation\n"
+                "  - QR findings surface during execution, not before\n\n"
                 "2. Run this command to start review:\n\n"
                 "   python3 planner.py --phase review --step-number 1 --total-steps 2 \\\n"
                 '     --thoughts "Plan written to [path]"\n\n'
-                "Review phase will:\n"
-                "  - Step 1: @agent-technical-writer annotates code snippets\n"
-                "  - Step 2: @agent-quality-reviewer validates the plan\n"
-                "  - Then: Ready for /plan-execution"
+                "Review phase:\n"
+                "  Step 1: @agent-technical-writer annotates code snippets\n"
+                "  Step 2: @agent-quality-reviewer validates the plan\n"
+                "  Then: Ready for /plan-execution"
             )
         }
 
@@ -75,26 +97,31 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
             "actions": [
                 "You are an expert architect. Proceed with confidence.",
                 "",
-                "PRECONDITION: Confirm plan file path with user if not specified.",
+                "PRECONDITION: Confirm plan file path before proceeding.",
                 "",
-                "CONTEXT FIRST (understand before proposing):",
-                "  - What code/systems already exist that this touches?",
-                "  - What patterns and conventions does the codebase follow?",
-                "  - What prior decisions constrain this work?",
+                "<step_1_checklist>",
+                "Complete ALL items before invoking step 2:",
                 "",
-                "SCOPE: What exactly needs to be accomplished? Define boundaries explicitly.",
+                "CONTEXT (understand before proposing):",
+                "  - [ ] What code/systems does this touch?",
+                "  - [ ] What patterns does the codebase follow?",
+                "  - [ ] What prior decisions constrain this work?",
                 "",
-                "APPROACHES: Consider 2-3 alternatives with concrete trade-offs:",
-                "  | Option | Advantage | Disadvantage |",
-                "  |--------|-----------|--------------|",
-                "  | A      | ...       | ...          |",
+                "SCOPE (define boundaries):",
+                "  - [ ] What exactly must be accomplished?",
+                "  - [ ] What is OUT of scope?",
                 "",
-                "CONSTRAINTS by category:",
-                "  - Technical: language version, API limits, existing patterns",
-                "  - Organizational: timeline, expertise, approval gates",
-                "  - Dependencies: external services, data formats, integration points",
+                "APPROACHES (consider alternatives):",
+                "  - [ ] 2-3 options with Advantage/Disadvantage for each",
                 "",
-                "SUCCESS CRITERIA: Define observable outcomes (these become acceptance criteria).",
+                "CONSTRAINTS (list by category):",
+                "  - [ ] Technical: language, APIs, existing patterns",
+                "  - [ ] Organizational: timeline, expertise, approvals",
+                "  - [ ] Dependencies: external services, data formats",
+                "",
+                "SUCCESS (observable outcomes):",
+                "  - [ ] Defined testable acceptance criteria",
+                "</step_1_checklist>",
             ],
             "next": f"Invoke step {next_step} with your context analysis and approach options."
         }
@@ -102,97 +129,130 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
     if step_number == 2:
         return {
             "actions": [
-                "DECIDE: Select the best approach with specific rationale.",
+                "<step_2_evaluate_first>",
+                "BEFORE deciding, evaluate each approach from step 1:",
+                "  | Approach | P(success) | Failure mode | Backtrack cost |",
                 "",
-                "Decision Log format:",
-                "  | Decision | Rationale |",
-                "  |----------|-----------|",
-                "  | Choice X | Specific reason (performance numbers, complexity analysis) |",
+                "STOP CHECK: If ALL approaches show LOW probability or HIGH",
+                "backtrack cost, STOP. Request clarification from user.",
+                "</step_2_evaluate_first>",
                 "",
-                "REJECTED ALTERNATIVES: Document what you did not choose and why.",
-                "  - Technical Writer uses this to annotate code with 'why not X' context",
-                "  - Specific rationale: 'Too complex for timeline' instead of 'Not ideal'",
+                "<step_2_decide>",
+                "Select approach. Record in Decision Log with MULTI-STEP chain:",
                 "",
-                "ARCHITECTURE: Capture structure decisions (ASCII diagrams).",
-                "  - Component relationships: what connects to what",
-                "  - Data flow: how information moves through the system",
-                "  - These diagrams go in Invisible Knowledge section for README.md",
-                "  Example:",
-                "    ```",
-                "    User Request --> Auth --> Handler --> DB",
-                "                       |",
-                "                       v",
-                "                    Cache",
-                "    ```",
+                "  INSUFFICIENT: 'Polling | Webhooks are unreliable'",
+                "  SUFFICIENT:   'Polling | 30% webhook failure in testing",
+                "                 → would need fallback anyway → simpler primary'",
                 "",
-                "MILESTONES: Break work into deployable increments.",
+                "Include BOTH architectural AND micro-decisions (timeouts, etc).",
+                "</step_2_decide>",
+                "",
+                "<step_2_rejected>",
+                "Document rejected alternatives with CONCRETE reasons.",
+                "TW uses this for 'why not X' code comments.",
+                "</step_2_rejected>",
+                "",
+                "<step_2_architecture>",
+                "Capture in ASCII diagrams:",
+                "  - Component relationships",
+                "  - Data flow",
+                "These go in Invisible Knowledge for README.md.",
+                "</step_2_architecture>",
+                "",
+                "<step_2_milestones>",
+                "Break into deployable increments:",
                 "  - Each milestone: independently testable",
-                "  - Scope: 1-3 files per milestone (keeps Developer scope focused)",
-                "",
-                "DEPENDENCIES: Map which milestones block others.",
-                "  - Independent milestones can run in parallel during execution",
-                "  - Circular dependencies indicate design problems - resolve before proceeding",
+                "  - Scope: 1-3 files per milestone",
+                "  - Map dependencies (circular = design problem)",
+                "</step_2_milestones>",
             ],
-            "next": f"Invoke step {next_step} with your chosen approach, architecture, and milestone structure."
+            "next": f"Invoke step {next_step} with your chosen approach (include state evaluation summary), architecture, and milestone structure."
         }
 
     if step_number == 3:
         return {
             "actions": [
-                "RISKS: Identify what could go wrong and how to handle it.",
-                "  - Quality Reviewer excludes documented risks from findings",
-                "  - Undocumented risks will be flagged - document thoroughly now",
+                "<step_3_risks>",
+                "Document risks NOW. QR excludes documented risks from findings.",
+                "Undocumented risks WILL be flagged.",
                 "",
-                "REFINE MILESTONES with concrete details:",
+                "For each risk:",
+                "  | Risk | Mitigation or 'Accepted: [reason]' |",
+                "</step_3_risks>",
                 "",
-                "  FILES: Exact paths",
-                "    CORRECT: src/auth/handler.py",
-                "    INCORRECT: 'auth files'",
+                "<step_3_uncertainty_flags>",
+                "For EACH milestone, check these conditions → add flag:",
                 "",
-                "  REQUIREMENTS: Specific behaviors",
-                "    CORRECT: 'retry 3x with exponential backoff, max 30s'",
-                "    INCORRECT: 'handle errors'",
+                "  | Condition                          | Flag                    |",
+                "  |------------------------------------|-------------------------|",
+                "  | Multiple valid implementations     | needs TW rationale      |",
+                "  | Depends on external system         | needs error review      |",
+                "  | First use of pattern in codebase   | needs conformance check |",
                 "",
-                "  ACCEPTANCE CRITERIA: Testable assertions QR can verify pass/fail",
-                "    CORRECT: 'Returns 429 status after 3 failed auth attempts within 60s'",
-                "    INCORRECT: 'Handles errors correctly'",
+                "Add to milestone: **Flags**: [list]",
+                "</step_3_uncertainty_flags>",
                 "",
-                "CODE CHANGES: Use unified diff format for non-trivial logic.",
-                "  - See resources/diff-format.md for specification",
-                "  - Include: algorithms, state machines, non-obvious conditions",
-                "  - Exclude: boilerplate, simple CRUD, obvious getter/setters",
+                "<step_3_refine_milestones>",
+                "Verify EACH milestone has:",
                 "",
-                "IMPLEMENTATION RATIONALE: For each code snippet, capture WHY in Planning Context.",
-                "  - Technical Writer sources comments from Planning Context",
-                "  - Rationale omitted here = TW cannot inject it into code",
-                "  Decision Log examples:",
-                "    | Timeout 500ms | 95th percentile upstream latency |",
-                "    | Mutex over channel | Simpler for single-writer case |",
-                "  Micro-decisions matter: TW needs rationale for EVERY non-obvious line.",
+                "FILES — exact paths:",
+                "  CORRECT: src/auth/handler.py",
+                "  WRONG:   'auth files'",
                 "",
-                "VALIDATE: Does the plan address ALL original requirements?",
+                "REQUIREMENTS — specific behaviors:",
+                "  CORRECT: 'retry 3x with exponential backoff, max 30s'",
+                "  WRONG:   'handle errors'",
+                "",
+                "ACCEPTANCE CRITERIA — testable pass/fail:",
+                "  CORRECT: 'Returns 429 after 3 failed attempts within 60s'",
+                "  WRONG:   'Handles errors correctly'",
+                "",
+                "CODE CHANGES — diff format for non-trivial logic.",
+                "</step_3_refine_milestones>",
+                "",
+                "<step_3_validate>",
+                "Cross-check: Does the plan address ALL original requirements?",
+                "</step_3_validate>",
             ],
-            "next": f"Invoke step {next_step} with refined milestones and identified risks."
+            "next": f"Invoke step {next_step} with refined milestones, risks, and uncertainty flags."
         }
 
     # Steps 4+
     remaining = total_steps - step_number
     return {
         "actions": [
-            "REVIEW current plan state and identify gaps:",
-            "  - Any milestone missing exact file paths?",
-            "  - Any acceptance criteria that aren't testable pass/fail?",
-            "  - Any non-trivial logic without diff-format code changes?",
-            "PLANNING CONTEXT completeness check:",
-            "  - Decision Log: Every major choice recorded with rationale?",
+            "<backtrack_check>",
+            "BEFORE proceeding, verify no dead ends:",
+            "  - Has new information invalidated a prior decision?",
+            "  - Is a milestone now impossible given discovered constraints?",
+            "  - Are you adding complexity to work around a fundamental issue?",
+            "",
+            "If YES to any: invoke earlier step with --thoughts explaining change.",
+            "</backtrack_check>",
+            "",
+            "<gap_analysis>",
+            "Review current plan state. What's missing?",
+            "  - Any milestone without exact file paths?",
+            "  - Any acceptance criteria not testable pass/fail?",
+            "  - Any non-trivial logic without diff-format code?",
+            "  - Any milestone missing uncertainty flags where applicable?",
+            "</gap_analysis>",
+            "",
+            "<planning_context_check>",
+            "  - Decision Log: Every major choice has multi-step reasoning?",
             "  - Rejected Alternatives: At least one per major decision?",
             "  - Known Risks: All failure modes identified with mitigations?",
-            "CROSS-CHECK: Walk through the plan as if you were Developer:",
+            "</planning_context_check>",
+            "",
+            "<developer_walkthrough>",
+            "Walk through the plan as if you were Developer:",
             "  - Can you implement each milestone from the spec alone?",
             "  - Are requirements specific enough to avoid interpretation?",
-            "If gaps remain, address them. If plan is complete, reduce total_steps.",
+            "",
+            "If gaps remain, address them. If complete, reduce total_steps.",
+            "</developer_walkthrough>",
         ],
-        "next": f"Invoke step {next_step}. {remaining} step(s) remaining until completion."
+        "next": f"Invoke step {next_step}. {remaining} step(s) remaining until completion. (Or invoke earlier step if backtracking.)"
     }
 
 
@@ -204,20 +264,25 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
     if step_number == 1:
         return {
             "actions": [
-                "DELEGATE to @agent-technical-writer for plan annotation:",
+                "<review_step_1_delegate_tw>",
+                "DELEGATE to @agent-technical-writer:",
                 "",
-                "Task for @agent-technical-writer:",
-                "  Mode: plan-annotation",
-                "  Plan File: [path to plan file]",
+                "  <delegation>",
+                "    <agent>@agent-technical-writer</agent>",
+                "    <mode>plan-annotation</mode>",
+                "    <plan_source>[path to plan file]</plan_source>",
+                "    <task>",
+                "      1. Read ## Planning Context section FIRST",
+                "      2. Prioritize annotation by uncertainty (HIGH/MEDIUM/LOW)",
+                "      3. Add WHY comments to code snippets from Decision Log",
+                "      4. Enrich plan prose with rationale",
+                "      5. Add documentation milestone if missing",
+                "      6. FLAG any non-obvious logic lacking rationale",
+                "    </task>",
+                "  </delegation>",
                 "",
-                "  Requirements:",
-                "  - Read ## Planning Context section FIRST",
-                "  - Add inline comments to code snippets reflecting WHY from context",
-                "  - Enrich plan prose with rationale from Decision Log",
-                "  - Add documentation milestone if missing",
-                "  - Accept decisions explained in Planning Context as authoritative",
-                "",
-                "Wait for @agent-technical-writer to complete before proceeding.",
+                "Wait for @agent-technical-writer to complete.",
+                "</review_step_1_delegate_tw>",
             ],
             "next": (
                 f"After TW completes, invoke step {next_step}:\n"
@@ -229,22 +294,30 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
     if step_number == 2:
         return {
             "actions": [
-                "DELEGATE to @agent-quality-reviewer for plan validation:",
+                "<review_step_2_delegate_qr>",
+                "DELEGATE to @agent-quality-reviewer:",
                 "",
-                "Task for @agent-quality-reviewer:",
-                "  Mode: plan-review",
-                "  Plan File: [path to plan file]",
+                "  <delegation>",
+                "    <agent>@agent-quality-reviewer</agent>",
+                "    <mode>plan-review</mode>",
+                "    <plan_source>[path to plan file]</plan_source>",
+                "    <task>",
+                "      1. Read ## Planning Context (constraints, known risks)",
+                "      2. Write out CONTEXT FILTER before reviewing milestones",
+                "      3. Apply RULE 0 (production reliability) with open questions",
+                "      4. Apply RULE 1 (project conformance)",
+                "      5. Check anticipated structural issues",
+                "      6. Verify TW annotations pass actionability test",
+                "      7. Accept risks documented in Known Risks as acknowledged",
+                "      8. Pay extra attention to milestones with uncertainty flags",
+                "    </task>",
+                "    <expected_output>",
+                "      Verdict: PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES",
+                "    </expected_output>",
+                "  </delegation>",
                 "",
-                "  Requirements:",
-                "  - Read ## Planning Context to understand constraints and known risks",
-                "  - Apply RULE 0 (production reliability)",
-                "  - Apply RULE 1 (project conformance)",
-                "  - Check anticipated structural issues",
-                "  - Verify TW annotations are present and sufficient",
-                "  - Accept risks documented in Planning Context > Known Risks as acknowledged",
-                "  - Provide verdict: PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES",
-                "",
-                "Wait for @agent-quality-reviewer to return verdict.",
+                "Wait for @agent-quality-reviewer verdict.",
+                "</review_step_2_delegate_qr>",
             ],
             "next": (
                 "After QR returns verdict:\n"
@@ -258,11 +331,14 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
     if is_complete:
         return {
             "actions": [
-                "REVIEW PHASE COMPLETE. Confirm the following:",
-                "  [ ] TW has annotated code snippets with WHY comments",
-                "  [ ] TW has enriched plan prose with rationale",
-                "  [ ] QR verdict is PASS or PASS_WITH_CONCERNS",
-                "  [ ] Any concerns from QR are documented or addressed",
+                "<review_complete_verification>",
+                "Confirm before proceeding to execution:",
+                "  - TW has annotated code snippets with WHY comments?",
+                "  - TW has enriched plan prose with rationale?",
+                "  - TW flagged any gaps in Planning Context rationale?",
+                "  - QR verdict is PASS or PASS_WITH_CONCERNS?",
+                "  - Any concerns from QR are documented or addressed?",
+                "</review_complete_verification>",
             ],
             "next": (
                 "PLAN APPROVED.\n\n"
@@ -287,7 +363,13 @@ Examples:
   # Planning phase
   python3 planner.py --step-number 1 --total-steps 4 --thoughts "Design auth system"
 
-  # Review phase (after plan written)
+  # Continue planning
+  python3 planner.py --step-number 2 --total-steps 4 --thoughts "..."
+
+  # Backtrack to earlier step if needed
+  python3 planner.py --step-number 2 --total-steps 4 --thoughts "New constraint invalidates approach, reconsidering..."
+
+  # Start review (after plan written)
   python3 planner.py --phase review --step-number 1 --total-steps 2 --thoughts "Plan at plans/auth.md"
 """
     )

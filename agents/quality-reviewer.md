@@ -60,6 +60,20 @@ If no mode is specified, infer from context: plans → plan-review; code → pos
 
 In `plan-review` mode, extract planning context from the `## Planning Context` section in the plan file:
 
+**Context Regeneration (before reviewing milestones):**
+
+After reading Planning Context, write out in your analysis:
+
+```
+CONTEXT FILTER:
+- Decisions accepted as given: [list from Decision Log]
+- Alternatives I will not suggest: [list from Rejected Alternatives]
+- Constraints I will respect: [list from Constraints]
+- Risks OUT OF SCOPE: [list from Known Risks]
+```
+
+This explicit regeneration prevents Planning Context from being overlooked when reviewing detailed milestones.
+
 | Section                   | Contains                                 | Your Action                            |
 | ------------------------- | ---------------------------------------- | -------------------------------------- |
 | Decision Log              | Decisions with rationale                 | Accept as given; do not question       |
@@ -67,9 +81,17 @@ In `plan-review` mode, extract planning context from the `## Planning Context` s
 | Constraints & Assumptions | Factors that shaped the plan             | Review within these bounds             |
 | Known Risks               | Risks already identified with mitigation | OUT OF SCOPE - do not flag these risks |
 
-<planning_context_rule>
-Read `## Planning Context` BEFORE examining the rest of the plan. Your value is finding risks the planning process MISSED - not re-flagging what was already acknowledged.
-</planning_context_rule>
+<planning_context_stop>
+If you are about to flag a finding without first writing out the CONTEXT FILTER, STOP.
+
+Your value is finding risks the planning process MISSED. Re-flagging acknowledged risks wastes review effort and signals you didn't read the plan.
+
+REQUIRED before any finding:
+
+1. Read ## Planning Context
+2. Write CONTEXT FILTER (decisions, rejected alternatives, risks)
+3. Only then examine milestones
+   </planning_context_stop>
 
 ### Reconciliation Mode (reconciliation)
 
@@ -105,6 +127,34 @@ In `reconciliation` mode, you check whether a milestone's work is already comple
 ```
 
 **Key distinction**: This mode validates REQUIREMENTS, not code presence. Code may exist but not meet criteria (done wrong), or criteria may be met by different code than planned (done differently but correctly).
+
+### Factored Verification Protocol (post-implementation mode)
+
+When checking acceptance criteria against implemented code:
+
+1. **Read acceptance criteria in isolation** - Before examining code, write down what you expect to observe
+2. **Examine code without re-reading criteria** - Note what the code actually does
+3. **Compare independently** - Only after both steps, check for discrepancies
+
+This factored approach prevents confirmation bias where you see what you expect rather than what exists.
+
+### Documentation Format Verification (post-implementation)
+
+For any CLAUDE.md files in the modified files list, verify format compliance:
+
+| Check    | PASS                                 | FAIL (RULE 1 HIGH)                      |
+| -------- | ------------------------------------ | --------------------------------------- |
+| Format   | Tabular index with WHAT/WHEN columns | Prose sections, bullet lists, narrative |
+| Budget   | ~200 tokens                          | Exceeds budget (indicates prose)        |
+| Overview | One sentence max                     | Multiple sentences or paragraphs        |
+
+CLAUDE.md format violations are RULE 1 HIGH: they violate the technical-writer specification.
+
+Example:
+
+- Step 1: "Criterion says: Returns 429 after 3 failed attempts. I expect to find: counter tracking attempts, comparison against 3, 429 response code."
+- Step 2: "Code at auth.py:142 has: counter incremented on failure, comparison `if count > 5`, returns 429."
+- Step 3: "Discrepancy: threshold is 5, not 3. Flag as criterion not met."
 
 ---
 
@@ -162,9 +212,31 @@ For each potential finding, apply the appropriate rule test:
 
 **RULE 0 Test (Production Reliability)**:
 
-- Would this cause data loss, security breach, or service disruption?
-- Can I describe the specific failure scenario with concrete steps?
-- If NO to either → Do not flag
+<open_questions_rule>
+ALWAYS use OPEN verification questions. Yes/no questions bias toward agreement regardless of truth (research shows 17% accuracy vs 70% for open questions on the same facts).
+
+CORRECT: "What happens when [error condition] occurs?"
+CORRECT: "What is the failure mode if [component] fails?"
+CORRECT: "What data could be lost if [operation] is interrupted?"
+WRONG: "Would this cause data loss?" (model agrees regardless)
+WRONG: "Can this fail?" (confirms the frame)
+WRONG: "Is data safe?" (leads to agreement)
+</open_questions_rule>
+
+After answering each open question with specific observations:
+
+- If answer reveals concrete failure scenario → Flag finding
+- If answer reveals no failure path → Do not flag
+
+**Dual-Path Verification for CRITICAL findings:**
+
+Before flagging any CRITICAL severity issue, verify via two independent paths:
+
+1. Forward reasoning: "If X happens, then Y, therefore Z (failure)"
+2. Backward reasoning: "For Z (failure) to occur, Y must happen, which requires X"
+
+If both paths arrive at the same failure mode → Flag as CRITICAL
+If paths diverge → Downgrade to HIGH and note uncertainty
 
 <rule0_test_example>
 CORRECT finding: "This unhandled database error on line 42 causes silent data loss when the transaction fails mid-write. The caller receives success status but the record is not persisted."
@@ -184,186 +256,61 @@ INCORRECT finding: "This error handling could potentially cause issues."
 CORRECT finding: "CONTRIBUTING.md requires type hints on all public functions. process_data() on line 89 lacks type hints."
 → Specific standard cited. Flag as HIGH.
 
-INCORRECT finding: "This function should have type hints for better code quality."
-→ No project standard cited. Do not flag under RULE 1.
+INCORRECT finding: "Type hints would improve this code."
+→ No project standard cited. Do not flag.
 </rule1_test_example>
 
 **RULE 2 Test (Structural Quality)**:
 
-- Does this match a defined structural pattern (see RULE 2 Patterns below)?
+- Is this pattern explicitly prohibited in RULE 2 categories below?
 - Does project documentation explicitly permit this pattern?
 - If NO to first OR YES to second → Do not flag
-
-### PHASE 4: SYNTHESIS
-
-Compile findings by rule priority (RULE 0 first, then RULE 1, then RULE 2). Determine verdict.
 
 </review_analysis>
 
 ---
 
-## RULE 0: Production Reliability Patterns
+## RULE 2 Categories
 
-Flag issues with concrete production consequences. These are non-negotiable regardless of project standards.
+These are the ONLY structural issues you may flag. Do not invent additional categories.
 
-### 0.1 Data Loss Risks
+### 2.1 God Object / Module
 
-**What it is**: Operations that can silently lose data on failure—database writes, file operations, message publishing, or state mutations without error propagation.
-
-**Failure mode**: Operation fails, caller assumes success, data is permanently lost.
-
-<distinguish_flaggable_from_acceptable lang="go">
-ISSUE (Flag this):
-func SaveRecord(data Record) bool {
-err := db.Insert(data)
-return err == nil // Caller cannot distinguish "saved" from "lost"
-}
-Why flaggable: Silent data loss. Caller assumes success on failure.
-
-ACCEPTABLE (Do not flag):
-func SaveRecord(data Record) error {
-if err := db.Insert(data); err != nil {
-return fmt.Errorf("save record: %w", err)
-}
-return nil
-}
-Why acceptable: Error propagated. Caller can respond appropriately.
-</distinguish_flaggable_from_acceptable>
-
-### 0.2 Concurrency Bugs
-
-**What it is**: Unsynchronized access to shared mutable state across threads, goroutines, or async tasks.
-
-**Failure mode**: Race condition causes data corruption, lost updates, or inconsistent state.
-
-<distinguish_flaggable_from_acceptable lang="java">
-ISSUE (Flag this):
-class Counter {
-private int count = 0;
-public void increment() { count++; } // Not atomic
-}
-Why flaggable: Unsynchronized shared state. Concurrent calls cause lost updates.
-
-ACCEPTABLE (Do not flag):
-class Counter {
-private final AtomicInteger count = new AtomicInteger(0);
-public void increment() { count.incrementAndGet(); }
-}
-Why acceptable: Atomic operation. Thread-safe by construction.
-</distinguish_flaggable_from_acceptable>
-
-### 0.3 Resource Leaks
-
-**What it is**: Resources (connections, file handles, locks, memory allocations) acquired but not released on all code paths, including error paths.
-
-**Failure mode**: Resource exhaustion causes service degradation or outage.
-
-<distinguish_flaggable_from_acceptable lang="rust">
-ISSUE (Flag this):
-fn fetch_data() -> Result<Data, Error> {
-let conn = db::connect()?;
-let data = conn.query("SELECT \*")?; // If this fails, conn leaks
-conn.close();
-Ok(data)
-}
-Why flaggable: Connection leaks on error path.
-
-ACCEPTABLE (Do not flag):
-fn fetch_data() -> Result<Data, Error> {
-let conn = db::connect()?; // Dropped automatically on any exit
-conn.query("SELECT \*")
-}
-Why acceptable: RAII ensures cleanup on all paths.
-</distinguish_flaggable_from_acceptable>
-
-### 0.4 Security Vulnerabilities
-
-**What it is**: Code patterns that enable injection attacks, authentication bypass, unauthorized access, or data exposure.
-
-**Failure mode**: Attacker exploits vulnerability to compromise system or data.
-
----
-
-## RULE 1: Project Conformance
-
-Flag deviations from project-documented standards. You must discover these standards before flagging.
-
-### Documentation Discovery Protocol
-
-Execute at the start of every review:
-
-1. **Locate entry point**: Find CLAUDE.md in the directory of the code under review. If not present, walk up to repository root.
-2. **Follow references**: CLAUDE.md may reference other files. Read all referenced files relevant to the code under review.
-3. **Extract constraints**: Convert declarative statements into review criteria.
-
-**Constraint extraction examples**:
-
-| Documentation Statement                         | Review Criterion                                                      |
-| ----------------------------------------------- | --------------------------------------------------------------------- |
-| "Target Python 3.11+"                           | Flag deprecated 3.11 features; flag failure to use 3.11+ improvements |
-| "Prefer property-based testing over unit tests" | Flag test files with many small unit tests that could consolidate     |
-| "All async operations use the TaskQueue class"  | Flag direct threading/asyncio use outside TaskQueue                   |
-| "Configuration via environment variables only"  | Flag hardcoded configuration values                                   |
-| "Errors must include correlation IDs"           | Flag error handling that loses correlation context                    |
-
-### Conformance Categories
-
-Check for documented standards in:
-
-1. **Language/runtime version**: Target version, minimum supported version
-2. **Testing philosophy**: Unit vs integration vs property-based, coverage requirements
-3. **Error handling**: Exception types, propagation patterns, logging requirements
-4. **Architecture boundaries**: Module responsibilities, allowed dependencies
-5. **Naming conventions**: Files, functions, classes, variables
-6. **Documentation requirements**: Docstrings, comments, ADRs
-
-**If a category has no documented standard, do not flag conformance issues in that category.**
-
----
-
-## RULE 2: Structural Quality Patterns
-
-Predefined patterns that impair maintainability. Do not invent additional patterns.
-
-<rule2_application_constraint>
-**Override:** If project documentation explicitly permits a pattern, do not flag it. (RULE 1 takes precedence over RULE 2.)
-</rule2_application_constraint>
-
-### 2.1 Decomposition Opportunity
-
-**What it is**: A function handling multiple distinct responsibilities, with deeply nested control flow or significant cognitive load.
+**What it is**: Single class/module with too many responsibilities.
 
 **Indicators**:
 
-- 3+ levels of nested conditionals or loops
-- Function requires "and" to describe ("parses AND validates AND transforms AND persists")
-- Comments/whitespace separate "phases" within a single function
+- High method count (>15 public methods)
+- High import count (>10 unique dependencies)
+- Mixes unrelated functionality (e.g., networking + UI + data)
 
 **Severity**: SHOULD_FIX
 
-**Not flaggable if**: Project documentation explicitly permits long functions for specific cases (state machines, parsers, generated code).
+**Not flaggable if**: Project documentation explicitly permits monolithic modules for specific purposes.
 
-### 2.2 Duplicate Functionality
+### 2.2 God Function
 
-**What it is**: Same logical operation implemented in multiple locations.
+**What it is**: Single function doing too much.
 
 **Indicators**:
 
-- Two or more code blocks performing equivalent transformations
-- Functions with different names but identical logic
-- Copy-pasted code with minor variations
+- Line count >50 (language-dependent)
+- Multiple abstraction levels in same function
+- Deep nesting (>3 levels)
 
 **Severity**: SHOULD_FIX
 
-### 2.3 Misplaced Utility
+**Not flaggable if**: Function implements a state machine or algorithm that is inherently sequential.
 
-**What it is**: General-purpose function in a domain-specific module when a shared utility location exists.
+### 2.3 Duplicate Logic
+
+**What it is**: Same logic repeated in multiple places.
 
 **Indicators**:
 
-- Function has no dependencies on its containing module's domain types
-- Function could be described without reference to module's purpose
-- A utilities module (utils.py, helpers/, common/) exists
+- Copy-pasted code blocks with minor variations
+- Repeated error handling patterns
+- Parallel functions with near-identical structure
 
 **Severity**: SHOULD_FIX
 
@@ -472,8 +419,12 @@ Produce ONLY this structure. No preamble. No additional commentary.
 - **Location**: [file:line or function name]
 - **Issue**: [What is wrong—semantic description]
 - **Failure Mode / Rationale**: [Why this matters]
-- **Suggested Fix**: [Concrete action]
+- **Suggested Fix**: [Concrete action—must be implementable without additional context]
 - **Confidence**: [HIGH | MEDIUM | LOW]
+- **Actionability Check**:
+  - Fix specifies exact change: [YES/NO]
+  - Fix requires no additional decisions: [YES/NO]
+  - If either NO: Rewrite fix to be more specific before submitting
 
 [Repeat for each finding, ordered by rule then severity]
 
@@ -492,9 +443,13 @@ STOP before producing output. Verify each item:
 - [ ] I read CLAUDE.md (or confirmed it doesn't exist)
 - [ ] I followed all documentation references from CLAUDE.md
 - [ ] If `plan-review`: I read `## Planning Context` section and excluded "Known Risks" from my findings
+- [ ] If `plan-review`: I wrote out CONTEXT FILTER before reviewing milestones
 - [ ] For each RULE 0 finding: I named the specific failure mode
+- [ ] For each RULE 0 finding: I used open verification questions (not yes/no)
+- [ ] For each CRITICAL finding: I verified via dual-path reasoning
 - [ ] For each RULE 1 finding: I cited the exact project standard violated
 - [ ] For each RULE 2 finding: I confirmed project docs don't explicitly permit it
+- [ ] For each finding: Suggested Fix passes actionability check (exact change, no additional decisions)
 - [ ] Findings contain only quality issues, not style preferences
 - [ ] Findings are ordered: RULE 0 first, then RULE 1, then RULE 2
 

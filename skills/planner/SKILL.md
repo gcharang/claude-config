@@ -92,9 +92,9 @@ python3 scripts/planner.py \
 When planning phase completes, the script outputs an explicit `ACTION REQUIRED` marker:
 
 ```
-========================================
+============================================
 >>> ACTION REQUIRED: INVOKE REVIEW PHASE <<<
-========================================
+============================================
 ```
 
 **You MUST invoke the review phase before proceeding to /plan-execution.**
@@ -169,15 +169,22 @@ Quality matters: vague entries here produce poor annotations and missed risks.
 
 ### Decision Log
 
-| Decision           | Rationale                                                 |
-| ------------------ | --------------------------------------------------------- |
-| [What you decided] | [Why this choice - specific reasoning, not "it's better"] |
+| Decision           | Reasoning Chain                                                      |
+| ------------------ | -------------------------------------------------------------------- |
+| [What you decided] | [Multi-step reasoning: premise → implication → conclusion]           |
+
+Each rationale must contain at least 2 reasoning steps. Single-step rationales are insufficient.
+
+INSUFFICIENT: "Polling over webhooks | Webhooks are unreliable"
+SUFFICIENT: "Polling over webhooks | Third-party API has 30% webhook delivery failure in testing → unreliable delivery would require fallback polling anyway → simpler to use polling as primary mechanism"
+
+INSUFFICIENT: "500ms timeout | Matches upstream latency"
+SUFFICIENT: "500ms timeout | Upstream 95th percentile is 450ms → 500ms covers 95% of requests without timeout → remaining 5% should fail fast rather than queue"
 
 Include BOTH architectural decisions AND implementation-level micro-decisions:
 
-- Architectural: "Polling over webhooks | 30% webhook delivery failures in testing"
-- Implementation: "500ms timeout | 95th percentile upstream latency is 450ms"
-- Implementation: "Mutex over channel | Single-writer case, simpler than channel coordination"
+- Architectural: "Event sourcing over CRUD | Need audit trail + replay capability → CRUD would require separate audit log → event sourcing provides both natively"
+- Implementation: "Mutex over channel | Single-writer case → channel coordination adds complexity without benefit → mutex is simpler with equivalent safety"
 
 Technical Writer sources ALL code comments from this table. If a micro-decision isn't here, TW cannot document it.
 
@@ -262,6 +269,8 @@ Log (async)
 ### Milestone 1: [Name]
 **Files**: [exact paths - e.g., src/auth/handler.py, not "auth files"]
 
+**Flags** (if applicable): [needs TW rationale, needs error handling review, needs conformance check]
+
 **Requirements**:
 - [Specific: "Add retry with exponential backoff", not "improve error handling"]
 
@@ -277,14 +286,14 @@ See `resources/diff-format.md` for specification.
 --- a/path/to/file.py
 +++ b/path/to/file.py
 @@ -123,6 +123,15 @@ def existing_function(ctx):
-    # Context lines (unchanged) serve as location anchors
-    existing_code()
+   # Context lines (unchanged) serve as location anchors
+   existing_code()
 
-+   # WHY comment explaining rationale - transcribed verbatim by Developer
-+   new_code()
++  # WHY comment explaining rationale - transcribed verbatim by Developer
++  new_code()
 
-    # More context to anchor the insertion point
-    more_existing_code()
+   # More context to anchor the insertion point
+   more_existing_code()
 ````
 
 ### Milestone N: ...
@@ -343,6 +352,9 @@ python3 scripts/planner.py --step-number 1 --total-steps 4 --thoughts "..."
 
 # Continue planning
 python3 scripts/planner.py --step-number 2 --total-steps 4 --thoughts "..."
+
+# Backtrack if needed
+python3 scripts/planner.py --step-number 2 --total-steps 4 --thoughts "New info invalidated prior decision..."
 
 # Start review (after plan written)
 python3 scripts/planner.py --phase review --step-number 1 --total-steps 2 --thoughts "Plan at ..."

@@ -73,16 +73,45 @@ This mode triggers the PLAN_ANNOTATION classification.
    - Code snippets with non-obvious logic (these need comments)
    - Architecture explanations that would benefit from decision rationale
 
-3. **Enrich plan prose** - For sections lacking rationale:
+3. **Prioritize by uncertainty** - Not all sections need equal annotation:
+
+<annotation_priority_table>
+
+| Priority | Code Pattern                 | WHY Question to Answer    |
+| -------- | ---------------------------- | ------------------------- |
+| HIGH     | Multiple valid approaches    | Why this approach?        |
+| HIGH     | Thresholds, timeouts, limits | Why these values?         |
+| HIGH     | Error handling paths         | What's recovery strategy? |
+| HIGH     | External system interactions | What assumptions?         |
+| MEDIUM   | Non-standard pattern usage   | Why deviate from norm?    |
+| MEDIUM   | Performance-critical paths   | Why this optimization?    |
+| LOW      | Boilerplate/established      | Skip unless unusual       |
+| LOW      | Simple CRUD operations       | Skip unless unusual       |
+
+</annotation_priority_table>
+
+<priority_stop>
+If annotating LOW priority code before completing HIGH, STOP.
+</priority_stop>
+
+4. **Enrich plan prose** - For HIGH and MEDIUM priority sections lacking rationale:
    - Integrate relevant decision context naturally into the prose
    - Add "why not X" explanations where rejected alternatives provide insight
    - Surface constraints that explain non-obvious design choices
 
-4. **Inject code comments** - For each snippet with non-obvious logic:
+5. **Inject code comments** - For HIGH priority snippets:
    - Source comments from planning context when applicable
    - Explain WHY, referencing the design decisions that led here
+   - For each comment added, verify it passes the actionability test:
+     - Does it name a specific decision or constraint? (not "for performance")
+     - Does it reference concrete evidence? (threshold, measurement, rejected alternative)
+   - If planning context lacks sufficient rationale for a non-obvious line, flag it:
+     ```
+     FLAG: [file:line] - Non-obvious logic lacks rationale in Planning Context
+     Suggested addition to Decision Log: [what decision needs documentation]
+     ```
 
-5. **Add documentation milestones** - If plan lacks explicit documentation steps, add them
+6. **Add documentation milestones** - If plan lacks explicit documentation steps, add them
 
 ### Documentation Tiers
 
@@ -218,787 +247,242 @@ Complex algorithms need a large explanatory block at the TOP (before the code) e
 - Non-obvious implications or edge cases
 
 ```cpp
-// CORRECT (C++ example - from real code):
-template <typename Rng>
-inline enum qdb::detail::mask_probe_t probe_mask(Rng const & xs) noexcept
-{
-    // In order for auto-vectorization to work, we use an outer loop (this function)
-    // which divides work into chunks of 256 booleans; these are then processed as
-    // one work unit.
-    //
-    // The outer loop checks whether we already have a mixed mask, and shortcuts when
-    // that's the case.
-    //
-    // This ensures that, if we're dealing with large, mixed masks, we scan only a
-    // fraction of it.
-    constexpr std::size_t chunk_size = 256; // not chosen scientifically
-    // ... implementation follows
-}
+// CORRECT (C++ example):
+/*
+ * Bulk batch insertion using hybrid approach:
+ *
+ * Strategy: Partition incoming data by timestamp ranges, then batch-insert
+ * each partition independently. This exploits QuasarDB's time-partitioned
+ * storage to maximize write locality.
+ *
+ * Why hybrid: Pure streaming (row-at-a-time) causes excessive compaction.
+ * Pure batch (collect-then-write) risks OOM on large datasets. Hybrid
+ * approach bounds memory at partition_size * avg_row_bytes while
+ * maintaining write efficiency.
+ *
+ * Invariants:
+ *   - Partitions are non-overlapping (each timestamp maps to exactly one partition)
+ *   - Within a partition, rows maintain insertion order (stable sort)
+ *   - Empty partitions are skipped (no zero-length writes to QuasarDB)
+ *
+ * Edge cases:
+ *   - Single-row input: becomes single-partition, still efficient
+ *   - All-same-timestamp: becomes one large partition, may spike memory
+ *   - Out-of-order input: handled by partition assignment, not pre-sorting
+ */
 ```
+
+#### Tier 6: Inline Comments (Specific WHY)
+
+Inline comments explain non-obvious WHY, never WHAT. Use sparingly—only when the reason isn't apparent.
+
+<example type="INCORRECT" category="what_not_why">
 
 ```python
-# CORRECT (Python example):
-def reconcile_timeseries(local_data, remote_data, conflict_strategy):
-    # Reconciliation uses a three-phase approach to handle clock skew between
-    # distributed nodes:
-    #
-    # Phase 1: Align timestamps to nearest bucket boundary (configurable granularity)
-    #          This absorbs clock drift up to bucket_size/2 without false conflicts.
-    #
-    # Phase 2: Detect true conflicts where both sides modified same bucket.
-    #          We compare value hashes, not timestamps, because timestamps are
-    #          unreliable across nodes.
-    #
-    # Phase 3: Apply conflict_strategy to resolve. Default is "last-writer-wins"
-    #          using Lamport timestamps, not wall clock.
-    #
-    # Invariant: After reconciliation, both sides have identical data for all
-    # buckets that existed before the call. New buckets may still diverge until
-    # next sync.
-    # ... implementation follows
+count += 1  # increment count
 ```
 
-#### Tier 6: Inline Comments (WHY, Not WHAT)
+</example>
+Restates what code does - redundant.
 
-Individual lines need comments only when the WHY is not obvious. Never comment WHAT the code does.
-
-| Comment When                          | Don't Comment When       |
-| ------------------------------------- | ------------------------ |
-| Design decision not obvious from code | Code is self-explanatory |
-| Performance tradeoff being made       | Standard library usage   |
-| Invariant being maintained            | Control flow mechanics   |
-| Non-obvious side effect               | Variable assignments     |
-| Edge case being handled               | Type conversions         |
-
-**Principle:** A comment earns its tokens by answering "why would a future reader be confused here?" If the code alone answers the question, no comment is needed. If the code is correct but the reasoning is invisible, add a WHY comment.
-
-```cpp
-// CORRECT:
-state |= probe_chunk(chunk);
-
-if (state == mask_mixed)
-{
-    // Exit early: no point scanning rest once we know it's mixed
-    break;
-}
-```
-
-```cpp
-// INCORRECT (comments WHAT, not WHY):
-state |= probe_chunk(chunk);  // OR the chunk probe result into state
-
-if (state == mask_mixed)  // if state equals mixed mask
-{
-    break;  // break out of loop
-}
-```
-
-### Prose Enrichment
-
-When plan sections state WHAT without WHY, integrate context naturally:
-
-| Plan says                                | Context provides                         | Action                                                             |
-| ---------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------ |
-| "We use X approach"                      | Decision log explains why X              | Add rationale inline: "We use X because [reason from context]"     |
-| "The system does Y"                      | Rejected alternatives explain trade-offs | Add contrast: "We chose Y over Z because [trade-off from context]" |
-| Architecture diagram without explanation | Constraints shaped the design            | Add paragraph explaining how constraints drove the structure       |
-
-**Integration style**: Weave context into existing prose. Do NOT add separate "Rationale" sections or break the plan's flow. The reader should not notice where original text ends and enrichment begins.
-
-**Scope limit**: Enrich only where planning context provides relevant information. Do not invent rationale or speculate beyond what context provides.
-
-<contrastive_examples>
-CORRECT (explains WHY):
+<example type="CORRECT" category="what_not_why">
 
 ```python
-# Balance retry speed against API rate limits
-delay = min(2 ** attempt, 32)
+count += 1  # Track total for rate limiting check at batch boundary
 ```
 
-INCORRECT (restates WHAT):
+</example>
+Explains WHY this increment matters.
+
+<example type="INCORRECT" category="vague_comment">
 
 ```python
-# Calculate delay using exponential backoff capped at 32
-delay = min(2 ** attempt, 32)
+time.sleep(0.1)  # small delay
 ```
 
-CORRECT (captures invisible knowledge):
+</example>
+"Small" is a hidden baseline - compared to what?
+
+<example type="CORRECT" category="vague_comment">
 
 ```python
-# Parser accepts malformed JSON to capture partial data for error reporting
-data = lenient_parse(raw_input)
+time.sleep(0.1)  # Allow DB replication to propagate before read (100ms SLA)
 ```
 
-INCORRECT (obvious from code):
+</example>
+Concrete justification with specific constraint.
 
-```python
-# Parse the raw input
-data = lenient_parse(raw_input)
-```
+### Annotation Coverage
 
-LOCATION DIRECTIVE ANTI-PATTERN:
+<annotation_coverage_check>
+After annotating, verify coverage:
 
-Plans use unified diff format for code changes. See `skills/planner/resources/diff-format.md` for full specification.
+Tiers 3-4 (structure):
 
-Key principle: Location metadata (file path, line numbers, context anchors) is encoded in the diff structure itself. Comments inside code should explain WHY, never WHERE to insert. If you see location directives in code comments, flag this during annotation.
+- [ ] Every new file has module-level comment
+- [ ] Every non-trivial function has docstring
+- [ ] No function docstring restates the function name
 
-INCORRECT (location directive leaked into code comment):
+Tiers 5-6 (understanding):
 
-```go
-// Insert this BEFORE the retry loop (line 716)
-// Timestamp guard: prevent older data from overwriting newer
-getCtx, getCancel := context.WithTimeout(ctx, 500*time.Millisecond)
-```
+- [ ] Every algorithm block has explanatory comment
+- [ ] Every non-obvious line has WHY comment
+- [ ] No comment states WHAT the code does
 
-CORRECT (diff format handles location; comment explains WHY only):
+Forbidden in ALL tiers:
 
-```diff
-@@ -714,6 +714,12 @@ func (s *Server) Put(ctx context.Context, tags <-chan SnapshotData) {
- 	for tag := range tags {
- 		subject := tag.Subject
+- [ ] No hidden baselines (adjectives without anchors)
+- [ ] No aspirational language (will, should, might)
+- [ ] No marketing words (powerful, elegant, robust)
 
-+		// Timestamp guard: prevent older data from overwriting newer due to
-+		// network delays, retries, or concurrent pod writes
-+		getCtx, getCancel := context.WithTimeout(ctx, 500*time.Millisecond)
-+
- 		// Retry loop for Put operations
- 		for attempt := 0; attempt < maxRetries; attempt++ {
-```
+If gaps exist, add annotations. If gaps cannot be filled (missing rationale), add `TODO: [reason needed]`.
+</annotation_coverage_check>
 
-Context lines ("for tag := range tags", "// Retry loop") are **authoritative anchors**. @agent-developer matches these patterns - @@ line numbers may drift. No "insert at line X" comment needed.
-
-INCORRECT (describe planning details):
-
-```csharp
-// After line 425: await ProcessStaleRefreshResults(...)
-if (config.EnablePeriodicBroadcast)
-```
-
-CORRECT (describe rationale not visible from code):
-
-```csharp
-// Trigger broadcast immediately after stale refresh completes to ensure cache
-// contains maximally fresh data. This timing guarantees we're broadcasting
-// the most recent values available after stale tags have been refreshed.
-if (config.EnablePeriodicBroadcast)
-```
-
-HIDDEN BASELINE ANTI-PATTERN:
-
-Comments must be self-contained for readers who see only the final code. Avoid adjectives that encode comparisons to invisible baselines, alternatives, or previous states. Test: if you can ask "[adjective] compared to what?" and the answer isn't in the code, rewrite the comment.
-
-INCORRECT (implicit baseline - "generous" compared to what?):
-
-```python
-# Generous timeout to handle slow network conditions
-REQUEST_TIMEOUT = 60
-```
-
-CORRECT (concrete justification):
-
-```python
-# 60s accommodates 95th percentile response times from upstream provider
-REQUEST_TIMEOUT = 60
-```
-
-INCORRECT (implicit alternative - "simple" compared to what?):
-
-```python
-# Simple approach - validate fields together rather than one at a time
-def validate_all(fields):
-    return all(is_valid(f) for f in fields)
-```
-
-CORRECT (explains the benefit directly):
-
-```python
-# Batch validation surfaces all errors in single response
-def validate_all(fields):
-    return all(is_valid(f) for f in fields)
-```
-
-INCORRECT (implicit sufficiency - "sufficient" compared to what?):
-
-```csharp
-// Sufficient buffer to handle peak load
-BufferSize = 1024
-```
-
-CORRECT (quantifies the relationship):
-
-```csharp
-// Peak load produces ~800 items/sec; 1024 provides headroom for bursts
-BufferSize = 1024
-```
-
-INCORRECT (implicit threat - "defensive" against what?):
-
-```python
-# Defensive copy to avoid issues with mutable state
-def get_config(self):
-    return dict(self._config)
-```
-
-CORRECT (names the specific concern):
-
-```python
-# Callers may modify returned dict; copy protects internal state
-def get_config(self):
-    return dict(self._config)
-```
-
-INCORRECT (implicit spectrum - "conservative" compared to what?):
-
-```python
-# Conservative limit to prevent memory issues
-MAX_BATCH_SIZE = 100
-```
-
-CORRECT (shows the math):
-
-```python
-# Each item consumes ~10MB; 100 keeps peak memory under 1GB
-MAX_BATCH_SIZE = 100
-```
-
-Words that often signal hidden baselines: generous, conservative, sufficient, defensive, extra, explicit, simple, safe, robust, longer, shorter, increased, reduced, more, less, better, improved.
-
-**Hidden baseline test:** For any adjective in a comment, ask "[adjective] compared to what?" If the answer requires knowledge not in the code, rewrite with concrete terms. This principle applies to all comment tiers.
-
-CONTEXT-SOURCED EXAMPLE:
-
-Given planning context:
-
-```
-## Decision Log
-- Chose polling over webhooks: Third-party API has unreliable webhook delivery (30% failure rate in testing)
-
-## Rejected Alternatives
-- WebSocket connection: Would require persistent connection; doesn't match our stateless architecture
-```
-
-CORRECT (sources from context):
-
-```python
-# Polling chosen over webhooks due to 30% webhook delivery failures in third-party API testing.
-# WebSocket rejected to preserve stateless architecture.
-def fetch_updates():
-    return poll_api(interval=30)
-```
-
-INCORRECT (generic comment, ignores available context):
-
-```python
-# Fetch updates from the API
-def fetch_updates():
-    return poll_api(interval=30)
-```
-
-PROSE ENRICHMENT EXAMPLE:
-
-Given planning context:
-
-```
-## Design Decisions
-- Event sourcing for audit trail: Regulatory requirement for 7-year data retention with full history
-
-## Constraints
-- Must support replay from any point in time for compliance audits
-```
-
-Plan section BEFORE enrichment:
-
-```markdown
-## Data Layer
-
-We use event sourcing for the transaction history.
-```
-
-Plan section AFTER enrichment:
-
-```markdown
-## Data Layer
-
-We use event sourcing for the transaction history. This choice is driven by regulatory requirements mandating 7-year data retention with full audit history. The append-only event log supports replay from any point in time, which compliance audits require.
-```
-
-</contrastive_examples>
-
-### Documentation Milestones
-
-Verify the plan has a documentation milestone. If missing or incomplete, add/enhance it.
-
-**Check for Invisible Knowledge section in plan**:
-
-- If `## Invisible Knowledge` has content (architecture diagrams, tradeoffs, invariants), documentation milestone MUST include README.md
-- README.md will source directly from Invisible Knowledge section during post-implementation
-
-**Documentation milestone template**:
-
-```markdown
-### Milestone [Last]: Documentation
-
-**Files**:
-
-- `path/to/CLAUDE.md` (index updates)
-- `path/to/README.md` (if Invisible Knowledge section has content)
-
-**Requirements**:
-
-- Update CLAUDE.md index entries for all new/modified files (WHAT + WHEN)
-- If plan's Invisible Knowledge section is non-empty:
-  - Create/update README.md with architecture diagrams from plan
-  - Include tradeoffs, invariants, "why this structure" content
-
-**Acceptance Criteria**:
-
-- CLAUDE.md enables LLM to locate relevant code for debugging/modification tasks
-- README.md captures knowledge not discoverable from reading source files
-
-**Source Material**: `## Invisible Knowledge` section of this plan
-```
-
-### Output
-
-Edit the plan file in place. After completing annotation:
-
-```
-Plan annotated: [plan_file_path]
-Changes by tier:
-- Tier 3 (module-level): [count] file docstrings added/verified
-- Tier 4 (function-level): [count] function docstrings added/verified
-- Tier 5 (algorithm blocks): [count] algorithm explanations added
-- Tier 6 (inline comments): [count] WHY comments added
-- Prose sections: [count] enriched with rationale
-- Documentation milestone: [ADDED | VERIFIED PRESENT]
-```
-
-### Verification
-
-Before completing, verify each tier:
-
-**Tiers 1-2 (Documentation Milestone)**:
-
-- [ ] Documentation milestone present (added if missing)
-- [ ] CLAUDE.md listed with WHAT + WHEN index requirement
-- [ ] If Invisible Knowledge section has content, README.md included in milestone
-
-**Tier 3 (Module-Level)**:
-
-- [ ] Every new file in plan has module-level docstring
-- [ ] Module docstrings explain: purpose, contents, key dependencies
-
-**Tier 4 (Function-Level)**:
-
-- [ ] Functions with non-obvious behavior have docstrings
-- [ ] Docstrings cover: purpose, behavior, parameters, return value
-- [ ] Complex APIs include usage examples
-
-**Tier 5 (Algorithm Blocks)**:
-
-- [ ] Complex algorithms have explanatory block at TOP
-- [ ] Algorithm blocks explain: strategy, why this approach, invariants
-
-**Tier 6 (Inline Comments)**:
-
-- [ ] Comments explain WHY, not WHAT
-- [ ] No comments on self-explanatory code
-- [ ] No location directives in code comments
-- [ ] **Hidden baseline scan complete** (REQUIRED before output):
-  - Scan ALL comments for: generous, conservative, sufficient, defensive, extra, simple, safe, reasonable, significant
-  - For each found: apply test "[adjective] compared to what?"
-  - If answer not in comment: rewrite with concrete justification (threshold, measurement, tradeoff)
-
-**General**:
-
-- [ ] Planning context extracted and key decisions identified
-- [ ] Code changes use diff format with context lines as anchors
-- [ ] Context lines exist in target files (validate patterns match)
-- [ ] Plan prose enriched with rationale (no visible seams)
-      </plan_annotation_mode>
+</plan_annotation_mode>
 
 <post_implementation_mode>
 
 ## Post-Implementation Mode
 
-When invoked with `mode: post-implementation` after code has been implemented, you create documentation from a completed plan.
+When invoked with `mode: post-implementation`, you create index entries and optional architecture documentation AFTER implementation is complete.
 
-This mode triggers CLAUDE_MD and README_OPTIONAL classifications as needed.
+This mode triggers the POST_IMPL classification.
+
+### Prerequisites
+
+Post-implementation documentation requires:
+
+1. **Plan file path** - Contains Invisible Knowledge section for README.md
+2. **List of modified files** - What was actually implemented
+3. **Quality review passed** - Implementation is stable
 
 ### Process
 
-1. **Read the plan file** - Locate:
-   - `## Invisible Knowledge` section (source for README.md)
-   - `## Milestones` section (identifies modified files for CLAUDE.md)
-   - Documentation milestone requirements
+1. **Read plan file** - Extract:
+   - Invisible Knowledge section (for README.md)
+   - Modified file list (for CLAUDE.md index)
+   - Milestone descriptions (for understanding file purposes)
 
-2. **Update CLAUDE.md index entries**:
-   - Add entries for all new files (WHAT + WHEN columns)
-   - Update entries for modified files
-   - WHAT: Factual description of contents
-   - WHEN: Task-oriented triggers (debugging X, modifying Y, understanding Z)
+2. **Update CLAUDE.md** - For each modified file:
+   - If CLAUDE.md exists but is NOT tabular index format: REWRITE completely (not improve, replace)
+   - Add index entry with WHAT (contents) and WHEN (task triggers)
+   - Use tabular format per CLAUDE.md spec below
+   - Convert any prose "WHAT" / "WHEN" sections to table rows
 
-3. **Create/update README.md** (if Invisible Knowledge has content):
-   - **Source directly from plan's Invisible Knowledge section**
-   - Transfer architecture diagrams verbatim (verify they match implementation)
-   - Transfer data flow diagrams
-   - Transfer tradeoffs, invariants, "why this structure"
-   - Do NOT rediscover this knowledge from code - it's already captured in the plan
+3. **Create README.md** (if applicable) - Only if:
+   - Plan's Invisible Knowledge section has content
+   - Architecture diagrams exist
+   - Tradeoffs or invariants are documented
+   - Use README.md spec below
 
-4. **Verify diagram accuracy**:
-   - Compare plan's ASCII diagrams against actual implementation
-   - If implementation diverged, update diagrams to match reality
-   - Note any divergences in documentation
+4. **Verify transcribed comments** - Spot-check that @agent-developer transcribed TW-prepared comments accurately
 
-### Sourcing from Plan
+### CLAUDE.md Index Format
 
-The plan's `## Invisible Knowledge` section contains:
+```markdown
+# CLAUDE.md
 
-| Plan Section       | README.md Section                   |
-| ------------------ | ----------------------------------- |
-| Architecture       | ## Architecture (transfer diagram)  |
-| Data Flow          | ## Data Flow (transfer diagram)     |
-| Why This Structure | ## Design Decisions                 |
-| Invariants         | ## Invariants                       |
-| Tradeoffs          | ## Design Decisions or ## Tradeoffs |
+## Overview
 
-**Do not reinvent this content.** The planning process already captured it. Your job is to transfer and verify.
+[One sentence: what this directory contains]
 
-### Output
+## Index
 
-```
-Documentation complete: [directory_path]
-CLAUDE.md: [UPDATED | CREATED] - [count] index entries
-README.md: [CREATED | UPDATED | SKIPPED: no Invisible Knowledge in plan]
-Source: [plan_file_path]
+| File         | Contents (WHAT)              | Read When (WHEN)                        |
+| ------------ | ---------------------------- | --------------------------------------- |
+| `handler.py` | Request handling, validation | Debugging request flow, adding endpoint |
+| `types.py`   | Data models, schemas         | Modifying data structures               |
+| `README.md`  | Architecture decisions       | Understanding system design             |
 ```
 
-### Verification
+**Index rules:**
 
-- [ ] Plan file read and Invisible Knowledge section identified
-- [ ] CLAUDE.md has entries for all files mentioned in plan milestones
-- [ ] Each CLAUDE.md entry has WHAT and WHEN columns populated
-- [ ] If plan has Invisible Knowledge: README.md created/updated
-- [ ] README.md content sourced from plan (not rediscovered)
-- [ ] Architecture diagrams in README.md match actual implementation
-- [ ] README.md contains only invisible knowledge (not code descriptions)
-      </post_implementation_mode>
+- WHAT: Nouns and actions (handlers, validators, models)
+- WHEN: Task-based triggers using action verbs
+- Every file in directory should have an entry
+- Generated files (build artifacts, caches) are excluded
 
-<whole_repo_methodology>
-For WHOLE_REPO documentation tasks, apply Plan-and-Solve prompting:
-
-PHASE 1 - UNDERSTAND: Map the repository structure
-
-- Identify all directories requiring CLAUDE.md files
-- Exclude: generated files, build outputs, vendored dependencies (node_modules/, vendor/, dist/, build/, .git/)
-- Include: hidden config files (.eslintrc, .env.example) when they affect development
-
-PHASE 2 - EXTRACT: For each directory, identify:
-
-- Files that need index entries (what they contain, when to open)
-- Subdirectories that need index entries
-- Whether complexity warrants a README.md (see criteria below)
-- Relationships between components not visible from file contents alone
-
-PHASE 3 - PLAN: Create documentation order
-
-- Start from leaf directories (deepest), work toward root
-- This ensures child CLAUDE.md files exist before parent references them
-- Group related directories to maintain consistency
-
-PHASE 4 - EXECUTE: For each directory in plan order:
-
-- Create/update CLAUDE.md with index entries
-- Create README.md only if complexity criteria met
-- Verify cross-references are accurate
-
-VERIFICATION: After completion, spot-check 3 random navigation paths from root to leaf files.
-</whole_repo_methodology>
+</post_implementation_mode>
 
 <type_specific_processes>
 
-<inline_comments>
-NOTE: For plan-based workflows, use PLAN_ANNOTATION mode (pre-implementation). This section applies to post-implementation tasks or standalone documentation requests where no plan exists.
-
-PURPOSE: Explain WHY, not WHAT. The code already shows WHAT happens.
-
-PROCESS:
-
-1. Read the code block requiring comment
-2. Identify: What is non-obvious? What decision would future readers question?
-3. Write a comment that answers the implicit "why"
-
-<contrastive_examples>
-WRONG - restates WHAT:
-
-```python
-# Skip .git directory always
-if entry.name == ".git":
-    continue
-```
-
-RIGHT - explains WHY:
-
-```python
-# Repository metadata shouldn't be processed as project content
-if entry.name == ".git":
-    continue
-```
-
-WRONG - describes mechanism:
-
-```python
-# Use exponential backoff with max 32 second delay
-delay = min(2 ** attempt, 32)
-```
-
-RIGHT - explains the tradeoff:
-
-```python
-# Balance retry speed against API rate limits
-delay = min(2 ** attempt, 32)
-```
-
-WRONG - hidden baseline ("generous" compared to what?):
-
-```python
-# Generous timeout for slow networks
-REQUEST_TIMEOUT = 60
-```
-
-RIGHT - concrete justification:
-
-```python
-# 60s accommodates 95th percentile upstream response times
-REQUEST_TIMEOUT = 60
-```
-
-</contrastive_examples>
-
-VERIFICATION: Does your comment answer "why" rather than "what"? Can you ask "[adjective] compared to what?" - if so, rewrite with concrete terms.
-</inline_comments>
-
-<function_doc>
-PURPOSE: Enable correct usage without reading the implementation.
-
-TEMPLATE:
-
-```
-# [verb] [what] [key constraint or behavior].
-#
-# [Only if non-obvious: one sentence on approach/algorithm]
-#
-# Args: [only non-obvious args - skip if types are self-documenting]
-# Returns: [type and semantic meaning]
-# Raises: [only if non-obvious from name]
-```
-
-<contrastive_examples>
-WRONG - restates signature:
-
-```python
-def get_user(user_id: str) -> User:
-    """Gets a user by their ID.
-    Args:
-        user_id: The user's ID
-    Returns:
-        User: The user object
-    """
-```
-
-RIGHT - documents non-obvious behavior:
-
-```python
-def get_user(user_id: str) -> User:
-    """Fetches user from cache, falling back to database.
-    Returns: User object. Raises UserNotFound if ID invalid.
-    """
-```
-
-</contrastive_examples>
-
-BUDGET: 100 tokens MAX. Triage: cut adjectives → cut redundant explanations → cut optional details.
-</function_doc>
-
-<module_doc>
-PURPOSE: Help readers understand what's in this module and when to use it.
-
-TEMPLATE:
-
-```
-# [Name] [provides/implements/wraps] [primary capability].
-#
-# [One sentence: what pattern/abstraction does this implement?]
-#
-# Usage:
-#   [2-4 lines - must be copy-pasteable]
-#
-# [Key constraint or invariant]
-# Errors: [how errors surface]. Thread safety: [safe/unsafe/conditional].
-```
-
-BUDGET: 150 tokens MAX.
-VERIFICATION: Does this name the pattern? Is the usage example copy-pasteable?
-</module_doc>
-
 <claude_md>
-PURPOSE: Provide progressive disclosure for LLMs navigating the codebase. Each CLAUDE.md is a navigation hub.
+PURPOSE: Pure index for LLM navigation. No prose explanations—just WHAT and WHEN.
 
-<hierarchy>
-ROOT CLAUDE.md:
-- Build/test commands
-- Project-wide constraints (language version, coding standards, testing rules)
-- Development setup (dependencies, environment)
-- Index of top-level files and directories
-- Content constraint: index entries + essential invariants only, no prose explanations
-
-DIRECTORY CLAUDE.md:
-
-- Index with WHAT and/or WHEN for each entry
-- If README.md exists in directory, include it in the index
-- Content constraint: pure index, no architectural explanations (those belong in README.md)
-  </hierarchy>
-
-<index_format>
-Use tabular format. At minimum, provide WHAT or WHEN for each entry (both preferred).
-
+<structure>
 ```markdown
-## Files
+# CLAUDE.md
 
-| File        | What                           | When to read                              |
-| ----------- | ------------------------------ | ----------------------------------------- |
-| `cache.rs`  | LRU cache with O(1) operations | Implementing caching, debugging evictions |
-| `errors.rs` | Error types and Result aliases | Adding error variants, handling failures  |
+## Overview
 
-## Subdirectories
+[One sentence only]
 
-| Directory   | What                          | When to read                              |
-| ----------- | ----------------------------- | ----------------------------------------- |
-| `config/`   | Runtime configuration loading | Adding config options, modifying defaults |
-| `handlers/` | HTTP request handlers         | Adding endpoints, modifying request flow  |
-```
+## Index
 
-COLUMN GUIDELINES:
+| File/Directory | Contents (WHAT)            | Read When (WHEN)     |
+| -------------- | -------------------------- | -------------------- |
+| `file.py`      | [What it contains]         | [Task that needs it] |
+| `subdir/`      | [What the directory holds] | [When to explore it] |
 
-- WHAT: Factual description of contents (nouns, not actions)
-- WHEN: Task-oriented triggers using action verbs (implementing, debugging, modifying, adding, understanding)
-- At least one column must have content; empty cells use `-`
+````
+</structure>
 
-TRIGGER QUALITY TEST: Given task "add a new validation rule", can an LLM scan WHEN column and identify the right file?
-</index_format>
+<trigger_format>
+Triggers answer: "When should an LLM read this file?"
+
+CORRECT triggers (action-oriented):
+- "Debugging authentication flow"
+- "Adding new API endpoint"
+- "Modifying database schema"
+- "Understanding error handling patterns"
+
+INCORRECT triggers (vague/passive):
+- "For reference"
+- "Contains important code"
+- "Related to authentication"
+- "May be useful"
+</trigger_format>
 
 <contrastive_examples>
-WRONG - WHAT column only describes, no actionable WHEN:
+WRONG - prose explanation:
 
 ```markdown
-| File       | What                   | When to read |
-| ---------- | ---------------------- | ------------ |
-| `cache.rs` | Contains the LRU cache | -            |
+## handler.py
+
+This file contains the request handler. It processes incoming HTTP requests and validates them before passing to the service layer. You should read this when working on request processing.
+````
+
+RIGHT - tabular index:
+
+```markdown
+| `handler.py` | Request handling, input validation | Adding endpoint, debugging request flow |
 ```
 
-RIGHT - Both columns provide value:
+WRONG - missing triggers:
 
 ```markdown
-| File       | What                        | When to read                                            |
-| ---------- | --------------------------- | ------------------------------------------------------- |
-| `cache.rs` | LRU cache with O(1) get/set | Implementing caching, debugging misses, tuning eviction |
+| `handler.py` | Request handling |
 ```
 
-WRONG - Vague triggers:
+RIGHT - complete entry:
 
 ```markdown
-| `config/` | Configuration | Working with configuration |
-```
-
-RIGHT - Specific task conditions:
-
-```markdown
-| `config/` | YAML config parsing, env overrides | Adding config options, changing defaults, debugging config loading |
+| `handler.py` | Request handling, input validation | Adding endpoint, debugging request flow |
 ```
 
 </contrastive_examples>
 
-<exclusions>
-DO NOT index:
-- Generated files (dist/, build/, *.generated.*, compiled outputs)
-- Vendored dependencies (node_modules/, vendor/, third_party/)
-- Git internals (.git/)
-- IDE/editor configs (.idea/, .vscode/ unless project-specific settings)
-
-DO index:
-
-- Hidden config files that affect development (.eslintrc, .env.example, .gitignore)
-- Test files and test directories
-- Documentation files
-  </exclusions>
-
-<maintenance>
-When documenting files in a directory:
-1. PRESENCE: Create CLAUDE.md if missing
-2. ACCURACY: Ensure documented files appear in index with correct entries
-3. DRIFT: If you encounter entries for deleted files, remove them
-4. NEW FILES: Add entries for files you create
-
-For WHOLE_REPO tasks, systematically process all directories per the methodology above.
-</maintenance>
-
-<templates>
-ROOT:
-```markdown
-# [Project Name]
-
-[One sentence: what this is]
-
-## Files
-
-| File | What | When to read |
-| ---- | ---- | ------------ |
-
-## Subdirectories
-
-| Directory | What | When to read |
-| --------- | ---- | ------------ |
-
-## Build
-
-[Copy-pasteable command]
-
-## Test
-
-[Copy-pasteable command]
-
-## Development
-
-[Setup instructions, environment requirements, workflow notes]
-
-````
-
-SUBDIRECTORY:
-```markdown
-# [directory-name]/
-
-## Files
-
-| File | What | When to read |
-|------|------|--------------|
-
-## Subdirectories
-
-| Directory | What | When to read |
-|-----------|------|--------------|
-````
-
-</templates>
+BUDGET: ~200 tokens total. If exceeding, you're adding prose that belongs elsewhere.
 </claude_md>
 
 <readme_optional>
-PURPOSE: Provide architectural insights NOT visible from reading the code files themselves.
+PURPOSE: Capture knowledge NOT visible from reading source files. Architecture, flows, decisions, rules.
 
 <creation_criteria>
-CREATE README.md when ANY of these apply:
+Create README.md only when the directory has:
 
-- Multiple components interact through non-obvious contracts or protocols
-- Design tradeoffs were made that affect how code should be modified
+- Non-obvious relationships between files (e.g., processing pipeline with specific order)
+- Architectural decisions that affect how code should be modified
 - The directory's structure encodes domain knowledge (e.g., processing order matters)
 - Failure modes or edge cases aren't apparent from reading individual files
 - There are "rules" developers must follow that aren't enforced by the compiler/linter
@@ -1203,6 +687,12 @@ GENERAL:
 - Within token budget?
 - No forbidden patterns?
 - Examples syntactically valid?
+
+PLAN ANNOTATION-specific:
+
+- Prioritized by uncertainty (HIGH/MEDIUM/LOW)?
+- Actionability test passed for each comment?
+- Flagged non-obvious logic lacking rationale in Planning Context?
 
 CLAUDE.md-specific:
 

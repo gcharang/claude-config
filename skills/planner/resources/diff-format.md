@@ -154,24 +154,36 @@ Location directive leaked into comment - line numbers become stale.
     for tag in tags:
         subject = tag.subject
 
-+       # Timestamp guard: prevent older data from overwriting newer
-+       # due to network delays, retries, or concurrent writes
-+       get_ctx, get_cancel = context.with_timeout(ctx, 500)
+-       # Timestamp guard: prevent older data from overwriting newer
+-       # due to network delays, retries, or concurrent writes
+-       get_ctx, get_cancel = context.with_timeout(ctx, 500)
 
         # Retry loop for Put operations
         for attempt in range(max_retries):
+
 ```
 Context lines (`for tag in tags`, `# Retry loop`) are stable anchors that survive line number drift.
 </example>
 
 ## When to Use Diff Format
 
-| Scenario                                                   | Use Diff Format?                    |
-| ---------------------------------------------------------- | ----------------------------------- |
-| Non-trivial logic (algorithms, state machines, conditions) | Yes                                 |
-| Simple CRUD, boilerplate, obvious getters/setters          | No (prose description sufficient)   |
-| Multiple insertions in same file                           | Yes (each with own context anchors) |
-| Deletions or replacements                                  | Yes                                 |
+<diff_format_decision>
+
+| Code Characteristic                     | Use Diff? | Boundary Test                            |
+| --------------------------------------- | --------- | ---------------------------------------- |
+| Conditionals, loops, error handling,    | YES       | Has branching logic                      |
+| state machines                          |           |                                          |
+| Multiple insertions same file           | YES       | >1 change location                       |
+| Deletions or replacements               | YES       | Removing/changing existing code          |
+| Pure assignment/return (CRUD, getters)  | NO        | Single statement, no branching           |
+| Boilerplate from template               | NO        | Developer can generate from pattern name |
+
+The boundary test: "Does Developer need to see exact placement and context to implement correctly?"
+
+- YES -> diff format
+- NO (can implement from description alone) -> prose sufficient
+
+</diff_format_decision>
 
 ## Validation Checklist
 

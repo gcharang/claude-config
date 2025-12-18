@@ -129,9 +129,18 @@ Key consumption rules:
 
 Locate insertion points using **fuzzy context matching**, not line numbers:
 
+**Step 0: Filter relevant context (System 2 Attention)**
+For files >200 lines, before matching:
+
+- Identify the target function/class from @@ line
+- Extract ONLY that function/class into working context
+- Proceed with matching against extracted context, not full file
+
+This prevents irrelevant code from biasing your pattern matching.
+
 1. **Read prose hint** (if present): Understand conceptual location (e.g., "after input sanitization in `validate()`")
 2. **Read function context** from @@ line: Navigate to the containing function/method
-3. **Search for context lines** within +/- 50 lines of the @@ hint
+3. **Search for context lines** within extracted context (or +/- 50 lines if file is small)
 4. **Match patterns tolerantly**: Ignore whitespace differences, accept minor formatting variations
 
 **Matching rules:**
@@ -139,7 +148,12 @@ Locate insertion points using **fuzzy context matching**, not line numbers:
 - Context lines are the authoritative anchors - find these patterns in the actual file
 - Line numbers in @@ are HINTS ONLY - the actual location may differ by 10, 50, or 100+ lines
 - A "match" means the context line content matches, regardless of line number
-- When multiple potential matches exist, use prose hint and function context to disambiguate
+- When multiple potential matches exist:
+  1. Use prose hint and function context to disambiguate
+  2. If still ambiguous, prefer the match where:
+     - More context lines match (higher anchor confidence)
+     - The surrounding code logic aligns with the plan's stated purpose
+  3. Document your match reasoning in output notes
 
 ### Context Drift Tolerance
 
@@ -152,8 +166,20 @@ Context lines are **semantic anchors**, not exact strings. Match using this hier
 | Comment text differs                     | Proceed (comments are not structural) |
 | Variable name differs but same semantics | Proceed with note in output           |
 | Code structure same, minor refactoring   | Proceed with note in output           |
-| Function exists but logic restructured   | Escalate                              |
-| Context lines not found anywhere         | Escalate                              |
+| Function exists but logic restructured   | **STOP** → Escalate                   |
+| Context lines not found anywhere         | **STOP** → Escalate                   |
+
+<context_mismatch_stop>
+If you are about to guess where code should go because context lines don't match, STOP.
+
+"Best guess" patching causes:
+
+- Code inserted in wrong location
+- Duplicate code if original location exists elsewhere
+- Subtle bugs from incorrect context assumptions
+
+Instead: Use the escalation format below and return to coordinator.
+</context_mismatch_stop>
 
 **Contrastive Examples:**
 
@@ -273,6 +299,16 @@ If a spec requires any RULE 0 violation, escalate immediately.
 - Copying directive markers (FIXED:, NEW:, NOTE:, planning annotations) into output
 - Rewriting or "improving" comments that TW prepared
 
+### RULE 2.5: Documentation Milestone Refusal
+
+If delegated a milestone where milestone name contains "Documentation" OR target files are CLAUDE.md/README.md:
+
+<blocked>
+<issue>WRONG_AGENT</issue>
+<context>Documentation milestone delegated to Developer</context>
+<needed>Route to @agent-technical-writer with mode: post-implementation</needed>
+</blocked>
+
 ### RULE 3: Fidelity violations
 
 - Non-trivial deviations from detailed specs
@@ -298,24 +334,36 @@ STOP and escalate when you encounter:
 
 ## Verification
 
-<verification_checklist>
-Complete EVERY check before returning. Fix failures. Note unfixable issues in output.
+<verification_questions>
+Answer EVERY question before returning. Use open questions — do NOT ask yourself
+yes/no questions (they bias toward agreement regardless of truth).
 
-**Required checks:**
+**Required verification:**
 
-- [ ] Project conventions: Changes match CLAUDE.md patterns
-- [ ] Spec fidelity: Implementation matches requirements exactly
-- [ ] Error handling: Error paths follow project patterns
-- [ ] Scope: Only specified files and tests created
-- [ ] Configuration: No hardcoded values that should be configurable
-- [ ] Comments: Transcribed verbatim from spec (no additions, no rewrites)
-- [ ] Directive markers: FIXED:, NOTE:, planning annotations excluded
+1. What CLAUDE.md pattern does this code follow? (cite specific convention)
+   If none found, note "No documented pattern."
 
-**Conditional checks (when applicable):**
+2. What spec requirement does each changed function implement? (cite requirement text)
 
-- [ ] Concurrency: Thread safety addressed
-- [ ] External APIs: Appropriate safeguards in place
-      </verification_checklist>
+3. What error paths exist in this code? What happens on each path?
+
+4. What files and tests were created? (list them)
+   Were any NOT specified? If yes, STOP and remove them.
+
+5. What values are hardcoded? Should any be configurable?
+
+6. What comments were in the spec? What comments are in output?
+   Do they match verbatim?
+
+7. What directive markers (FIXED:, NOTE:, etc) appeared in spec?
+   Are any present in output? If yes, remove them.
+
+**Conditional (answer if applicable):**
+
+8. What shared state exists? What protects it?
+
+9. What external API calls exist? What happens if each fails?
+   </verification_questions>
 
 Run linting only if the spec instructs verification. Report unresolved issues in `<notes>`.
 
@@ -338,7 +386,7 @@ Return ONLY the XML structure below. Start immediately with `<implementation>`. 
 </verification>
 
 <notes>
-[Assumptions, corrections, clarifications]
+[Assumptions, corrections, clarifications, match reasoning for ambiguous context]
 </notes>
 </output_structure>
 
