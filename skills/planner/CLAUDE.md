@@ -15,7 +15,10 @@ Planning skill with resources that must stay synced with agent prompts.
 
 ## Resource Sync Requirements
 
-Resources are **authoritative sources**. Agent prompts embed the essential content but cannot reference these files at runtime (sub-agents lack file access context).
+Resources are **authoritative sources**.
+
+- **SKILL.md** references resources directly (main Claude can read files)
+- **Agent prompts** embed resources 1:1 (sub-agents cannot access files reliably)
 
 ### temporal-contamination.md
 
