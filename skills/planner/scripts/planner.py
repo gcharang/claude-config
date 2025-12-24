@@ -15,6 +15,13 @@ Usage:
 
 import argparse
 import sys
+from pathlib import Path
+
+
+def get_plan_format() -> str:
+    """Read the plan format template from resources."""
+    format_path = Path(__file__).parent.parent / "resources" / "plan-format.md"
+    return format_path.read_text()
 
 
 def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
@@ -52,6 +59,9 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "Known Risks:",
                 "  - What failure modes exist?",
                 "  - What mitigation or acceptance rationale exists for each?",
+                "  - Which mitigations claim code behavior? (list them)",
+                "  - What file:line anchor verifies each behavioral claim?",
+                "  - Any behavioral claim lacking anchor? -> add anchor now",
                 "</planning_context_verification>",
                 "",
                 "<invisible_knowledge_verification>",
@@ -132,7 +142,10 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
             ],
             "next": (
                 "PLANNING PHASE COMPLETE.\n\n"
-                "1. Write plan to file using the format from SKILL.md\n\n"
+                "1. Write plan to file using this format:\n\n"
+                "--- BEGIN PLAN FORMAT ---\n"
+                f"{get_plan_format()}\n"
+                "--- END PLAN FORMAT ---\n\n"
                 "============================================\n"
                 ">>> ACTION REQUIRED: INVOKE REVIEW PHASE <<<\n"
                 "============================================\n\n"
@@ -249,10 +262,28 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
             "actions": [
                 "<step_3_risks>",
                 "Document risks NOW. QR excludes documented risks from findings.",
-                "Undocumented risks WILL be flagged.",
                 "",
                 "For each risk:",
-                "  | Risk | Mitigation or 'Accepted: [reason]' |",
+                "  | Risk | Mitigation | Anchor |",
+                "",
+                "ANCHOR REQUIREMENT (behavioral claims only):",
+                "If mitigation claims existing code behavior ('no change needed',",
+                "'already handles X', 'operates on Y'), you MUST cite:",
+                "  file:L###-L### + brief excerpt proving the claim",
+                "",
+                "Skip anchors for:",
+                "  - Hypothetical risks ('might timeout under load')",
+                "  - External unknowns ('vendor rate limits unclear')",
+                "  - Accepted risks with rationale (no code claim)",
+                "",
+                "INSUFFICIENT (unverified assertion):",
+                "  | Dedup breaks | No change; dedup uses TagData | (none) |",
+                "",
+                "SUFFICIENT (verified with anchor):",
+                "  | Dedup breaks | No change; dedup uses TagData |",
+                "    worker.go:468 `isIdentical := tag.NumericValue == entry.val` |",
+                "",
+                "Claims without anchors are ASSUMPTIONS. QR will challenge them.",
                 "</step_3_risks>",
                 "",
                 "<step_3_uncertainty_flags>",

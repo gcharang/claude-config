@@ -8,8 +8,9 @@ Planning skill with resources that must stay synced with agent prompts.
 
 | File/Directory                        | Contents                                       | Read When                                    |
 | ------------------------------------- | ---------------------------------------------- | -------------------------------------------- |
-| `SKILL.md`                            | Planning workflow, phases, plan format         | Using the planner skill                      |
+| `SKILL.md`                            | Planning workflow, phases                      | Using the planner skill                      |
 | `scripts/planner.py`                  | Step-by-step planning orchestration            | Debugging planner behavior                   |
+| `resources/plan-format.md`            | Plan template (injected by script)             | Editing plan structure                       |
 | `resources/temporal-contamination.md` | Detection heuristic for contaminated comments  | Updating TW/QR temporal contamination logic  |
 | `resources/diff-format.md`            | Unified diff spec for code changes             | Updating Developer diff consumption logic    |
 | `resources/default-conventions.md`    | Default structural conventions (4-tier system) | Updating QR RULE 2 or planner decision audit |
@@ -20,6 +21,13 @@ Resources are **authoritative sources**.
 
 - **SKILL.md** references resources directly (main Claude can read files)
 - **Agent prompts** embed resources 1:1 (sub-agents cannot access files reliably)
+
+### plan-format.md
+
+Plan template injected by `scripts/planner.py` at planning phase completion.
+
+**No agent sync required** - the script reads and outputs the format directly, so editing
+this file takes effect immediately without updating any agent prompts.
 
 ### temporal-contamination.md
 
