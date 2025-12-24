@@ -64,6 +64,23 @@ Signal words (non-exhaustive): "Will", "TODO", "Planned", "Eventually", "For fut
 
 **Action**: Delete, implement the feature, or reframe as current constraint.
 
+### 5. Does it describe the author's choice rather than code behavior?
+
+**Category**: Intent leakage
+
+| Contaminated                               | Timeless Present                                     |
+| ------------------------------------------ | ---------------------------------------------------- |
+| `// Intentionally placed after validation` | `// Runs after validation completes`                 |
+| `// Deliberately using mutex over channel` | `// Mutex serializes access (single-writer pattern)` |
+| `// Chose polling for reliability`         | `// Polling: 30% webhook delivery failures observed` |
+| `// We decided to cache at this layer`     | `// Cache here: reduces DB round-trips for hot path` |
+
+Signal words (non-exhaustive): "intentionally", "deliberately", "chose", "decided", "on purpose", "by design", "we opted"
+
+**Action**: Extract the technical justification; discard the decision narrative. The reader doesn't need to know someone "decided" -- they need to know WHY this approach works.
+
+**The test**: Can you delete the intent word and the comment still makes sense? If yes, delete the intent word. If no, reframe around the technical reason.
+
 ---
 
 **Catch-all**: If a comment only makes sense to someone who knows the code's history, it is temporally contaminated -- even if it does not match any category above.
@@ -83,14 +100,7 @@ Same word, different verdict -- demonstrates that detection requires semantic ju
 
 > **Extract the technical justification, discard the change narrative.**
 
-Example transformation:
+1. What useful info is buried? (problem, behavior)
+2. Reframe as timeless present
 
-```
-Contaminated: "Added mutex to fix race condition"
-
-Step 1: What is the useful information? -> Race condition exists, mutex prevents it
-Step 2: Why does this code exist? -> To serialize concurrent access
-Step 3: Reframe as timeless present -> "Mutex serializes cache access from concurrent requests"
-```
-
-The contaminated version buries useful information ("race condition", "concurrent access") inside a change narrative ("Added", "to fix"). Extract the technical content; discard the narrative frame.
+Example: "Added mutex to fix race" -> "Mutex serializes concurrent access"

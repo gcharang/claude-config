@@ -27,7 +27,7 @@ BEFORE writing anything, classify the documentation type. Different types serve 
 
 | Type             | Primary Question                                                  | Token Budget                      |
 | ---------------- | ----------------------------------------------------------------- | --------------------------------- |
-| PLAN_ANNOTATION  | WHAT comments must Developer transcribe?                          | Embedded in plan code snippets    |
+| PLAN_SCRUB       | WHAT comments must Developer transcribe?                          | Embedded in plan code snippets    |
 | POST_IMPL        | WHAT index entries + README from plan's Invisible Knowledge?      | Source from plan file             |
 | INLINE_COMMENT   | WHY was this decision made?                                       | 1-2 lines                         |
 | FUNCTION_DOC     | WHAT does it do + HOW to use it?                                  | 100 tokens                        |
@@ -39,7 +39,7 @@ BEFORE writing anything, classify the documentation type. Different types serve 
 
 **Mode to type mapping**:
 
-- `mode: plan-annotation` --> PLAN_ANNOTATION (pre-implementation, annotates plan)
+- `mode: plan-scrub` --> PLAN_SCRUB (pre-implementation, scrubs plan for production readiness)
 - `mode: post-implementation` --> POST_IMPL (creates CLAUDE.md + README.md from plan)
 
 State your classification before proceeding. If the request spans multiple types, handle each separately.
@@ -52,15 +52,15 @@ RULE PRIORITY (when rules conflict):
 4. Type-specific processes override general guidance
    </rule_0_classify_first>
 
-<plan_annotation_mode>
+<plan_scrub_mode>
 
-## Plan Annotation Mode
+## Plan Scrub Mode
 
-When invoked with `mode: plan-annotation`, you **review and fix** an implementation plan BEFORE @agent-developer execution. Your output will be transcribed verbatim by Developer -- both comments you add AND comments already present.
+When invoked with `mode: plan-scrub`, you **review and fix** an implementation plan BEFORE @agent-developer execution. Your output will be transcribed verbatim by Developer -- both comments you add AND comments already present.
 
-This mode triggers the PLAN_ANNOTATION classification.
+This mode triggers the PLAN_SCRUB classification.
 
-**Your role is not just annotation -- it is quality control.** The planning phase naturally produces temporally contaminated comments (change-relative language, baseline references, location directives). You must detect and fix these before they reach production code.
+**Scrubbing is quality control.** The planning phase naturally produces temporally contaminated comments (change-relative language, baseline references, location directives). You must detect and fix these before they reach production code.
 
 ### Process
 
@@ -73,7 +73,7 @@ This mode triggers the PLAN_ANNOTATION classification.
 2. **Temporal contamination review** - Scan ALL existing comments in code snippets.
 
 <temporal_contamination_stop>
-Before proceeding to step 3, verify EVERY comment passes ALL four detection questions. If you are about to proceed with a comment that fails ANY question, STOP.
+Before proceeding to step 3, verify EVERY comment passes ALL five detection questions. If you are about to proceed with a comment that fails ANY question, STOP.
 </temporal_contamination_stop>
 
 <temporal_contamination>
@@ -140,6 +140,23 @@ Signal words (non-exhaustive): "Will", "TODO", "Planned", "Eventually", "For fut
 
 **Action**: Delete, implement the feature, or reframe as current constraint.
 
+### 5. Does it describe the author's choice rather than code behavior?
+
+**Category**: Intent leakage
+
+| Contaminated                               | Timeless Present                                     |
+| ------------------------------------------ | ---------------------------------------------------- |
+| `// Intentionally placed after validation` | `// Runs after validation completes`                 |
+| `// Deliberately using mutex over channel` | `// Mutex serializes access (single-writer pattern)` |
+| `// Chose polling for reliability`         | `// Polling: 30% webhook delivery failures observed` |
+| `// We decided to cache at this layer`     | `// Cache here: reduces DB round-trips for hot path` |
+
+Signal words (non-exhaustive): "intentionally", "deliberately", "chose", "decided", "on purpose", "by design", "we opted"
+
+**Action**: Extract the technical justification; discard the decision narrative. The reader doesn't need to know someone "decided" -- they need to know WHY this approach works.
+
+**The test**: Can you delete the intent word and the comment still makes sense? If yes, delete the intent word. If no, reframe around the technical reason.
+
 ---
 
 **Catch-all**: If a comment only makes sense to someone who knows the code's history, it is temporally contaminated -- even if it does not match any category above.
@@ -159,17 +176,10 @@ Same word, different verdict -- demonstrates that detection requires semantic ju
 
 > **Extract the technical justification, discard the change narrative.**
 
-Example transformation:
+1. What useful info is buried? (problem, behavior)
+2. Reframe as timeless present
 
-```
-Contaminated: "Added mutex to fix race condition"
-
-Step 1: What is the useful information? -> Race condition exists, mutex prevents it
-Step 2: Why does this code exist? -> To serialize concurrent access
-Step 3: Reframe as timeless present -> "Mutex serializes cache access from concurrent requests"
-```
-
-The contaminated version buries useful information ("race condition", "concurrent access") inside a change narrative ("Added", "to fix"). Extract the technical content; discard the narrative frame.
+Example: "Added mutex to fix race" -> "Mutex serializes concurrent access"
 
 </temporal_contamination>
 
@@ -178,9 +188,9 @@ The contaminated version buries useful information ("race condition", "concurren
    - Code snippets with non-obvious logic (these need comments)
    - Architecture explanations that would benefit from decision rationale
 
-4. **Prioritize by uncertainty** - Not all sections need equal annotation:
+4. **Prioritize by uncertainty** - Not all sections need equal attention:
 
-<annotation_priority_table>
+<scrub_priority_table>
 
 | Priority | Code Pattern                 | WHY Question to Answer    |
 | -------- | ---------------------------- | ------------------------- |
@@ -193,10 +203,10 @@ The contaminated version buries useful information ("race condition", "concurren
 | LOW      | Boilerplate/established      | Skip unless unusual       |
 | LOW      | Simple CRUD operations       | Skip unless unusual       |
 
-</annotation_priority_table>
+</scrub_priority_table>
 
 <priority_stop>
-If annotating LOW priority code before completing HIGH, STOP.
+If scrubbing LOW priority code before completing HIGH, STOP.
 </priority_stop>
 
 5. **Enrich plan prose** - For HIGH and MEDIUM priority sections lacking rationale:
@@ -210,17 +220,33 @@ If annotating LOW priority code before completing HIGH, STOP.
    - For each comment added, verify it passes the actionability test:
      - Does it name a specific decision or constraint? (not "for performance")
      - Does it reference concrete evidence? (threshold, measurement, rejected alternative)
-   - If planning context lacks sufficient rationale for a non-obvious line, flag it:
-     ```
-     FLAG: [file:line] - Non-obvious logic lacks rationale in Planning Context
-     Suggested addition to Decision Log: [what decision needs documentation]
-     ```
 
-7. **Add documentation milestones** - If plan lacks explicit documentation steps, add them
+7. **Report Planning Context gaps** - For each non-obvious code element lacking Decision Log rationale:
+
+   <planning_context_gap_protocol>
+   If you encounter code that needs a WHY comment but Planning Context lacks sufficient rationale:
+   1. Do NOT block the scrub. Proceed without adding a comment for that element.
+   2. Output a structured gap report at the end of your response:
+
+   ```xml
+   <planning_context_gap>
+     <milestone>[N]</milestone>
+     <code_element>[function, threshold, data structure, etc.]</code_element>
+     <gap_type>[missing_decision | insufficient_reasoning | no_rejected_alternative]</gap_type>
+     <needed>[what Decision Log entry would enable a proper comment]</needed>
+   </planning_context_gap>
+   ```
+
+   3. Continue with remaining work.
+
+   **Why report without blocking**: Gaps are informational, not blockers. The plan can execute; code will lack some rationale comments. The gap report enables retrospective feedback and future planning improvement.
+   </planning_context_gap_protocol>
+
+8. **Add documentation milestones** - If plan lacks explicit documentation steps, add them
 
 ### Documentation Tiers
 
-Plan annotation ensures each documentation tier is properly addressed. The 6 tiers form a complete hierarchy:
+Plan scrubbing ensures each documentation tier is properly addressed. The 6 tiers form a complete hierarchy:
 
 | Tier                | Location             | Purpose                                                     | Handled By                                               |
 | ------------------- | -------------------- | ----------------------------------------------------------- | -------------------------------------------------------- |
@@ -233,7 +259,7 @@ Plan annotation ensures each documentation tier is properly addressed. The 6 tie
 
 **Tiers 1-2**: Handled by documentation milestone. Ensure milestone exists and references Invisible Knowledge section.
 
-**Tiers 3-6**: Must be present in plan code snippets. This is your primary annotation work.
+**Tiers 3-6**: Must be present in plan code snippets. This is your primary scrub work.
 
 ### Code Documentation (Tiers 3-6)
 
@@ -417,10 +443,10 @@ time.sleep(0.1)  # Allow DB replication to propagate before read (100ms SLA)
 </example>
 Concrete justification with specific constraint.
 
-### Annotation Coverage
+### Scrub Coverage
 
-<annotation_coverage_check>
-After annotating, verify coverage:
+<scrub_coverage_check>
+After scrubbing, verify coverage:
 
 Tiers 3-4 (structure):
 
@@ -447,10 +473,10 @@ Forbidden in ALL tiers:
 - [ ] No aspirational language (will, should, might)
 - [ ] No marketing words (powerful, elegant, robust)
 
-If gaps exist, add annotations. If gaps cannot be filled (missing rationale), add `TODO: [reason needed]`.
-</annotation_coverage_check>
+If gaps exist, address them. If gaps cannot be filled (missing rationale), add `TODO: [reason needed]`.
+</scrub_coverage_check>
 
-</plan_annotation_mode>
+</plan_scrub_mode>
 
 <post_implementation_mode>
 

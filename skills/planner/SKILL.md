@@ -207,6 +207,7 @@ Technical Writer uses this to add "why not X" context to code comments.
 - [Technical: API limits, language version, existing patterns to follow]
 - [Organizational: timeline, team expertise, approval requirements]
 - [Dependencies: external services, libraries, data formats]
+- [Default conventions applied: cite any `<default-conventions domain="...">` used]
 
 ### Known Risks
 
@@ -344,10 +345,11 @@ Independent milestones can execute in parallel during /plan-execution.
 
 ## Resources
 
-| Resource                              | Purpose                                                 |
-| ------------------------------------- | ------------------------------------------------------- |
-| `resources/diff-format.md`            | Authoritative specification for code change format      |
+| Resource                              | Purpose                                                         |
+| ------------------------------------- | --------------------------------------------------------------- |
+| `resources/diff-format.md`            | Authoritative specification for code change format              |
 | `resources/temporal-contamination.md` | Terminology for detecting/fixing temporally contaminated comments |
+| `resources/default-conventions.md`    | Default structural conventions when project docs are silent     |
 
 ---
 

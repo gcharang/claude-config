@@ -3,7 +3,7 @@
 Interactive Sequential Planner - Two-phase planning workflow
 
 PLANNING PHASE: Step-based planning with forced reflection pauses.
-REVIEW PHASE: Orchestrates TW annotation and QR validation before execution.
+REVIEW PHASE: Orchestrates TW scrub and QR validation before execution.
 
 Usage:
     # Planning phase (default)
@@ -29,13 +29,21 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "",
                 "<planning_context_verification>",
                 "TW and QR consume this section VERBATIM. Quality here =",
-                "quality of annotations and risk detection downstream.",
+                "quality of scrubbed content and risk detection downstream.",
                 "",
-                "Decision Log:",
+                "Decision Log (major choices):",
                 "  - What major architectural choice did you make?",
                 "  - What is the multi-step reasoning chain for that choice?",
-                "  - What micro-decisions (timeouts, data structures) need",
-                "    rationale for TW to document?",
+                "",
+                "Micro-decisions (TW sources ALL code comments from Decision Log):",
+                "  - Time sources: wall clock vs monotonic? timezone handling?",
+                "  - Concurrency: mutex vs channel vs atomic? why?",
+                "  - Error granularity: specific error types vs generic? why?",
+                "  - Data structures: map vs slice vs custom? capacity assumptions?",
+                "  - Thresholds: why this specific value? (document all magic numbers)",
+                "",
+                "For each non-obvious implementation choice, ask: 'Would a future",
+                "reader understand WHY without asking?' If no, add to Decision Log.",
                 "",
                 "Rejected Alternatives:",
                 "  - What approach did you NOT take?",
@@ -63,6 +71,20 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "  - Acceptance criteria: testable pass/fail assertions?",
                 "  - Code changes: diff format for non-trivial logic?",
                 "  - Uncertainty flags: added where applicable?",
+                "",
+                "For EACH diff block, verify:",
+                "  - Context lines: 2-3 lines copied VERBATIM from actual file",
+                "    (FORBIDDEN: '...', '[existing code]', summaries, placeholders)",
+                "  - If you haven't read the target file, read it now to extract",
+                "    real anchors that Developer can match against",
+                "",
+                "Milestone-type specific criteria:",
+                "  - Test milestones: specify scenario count, assertion types, edge",
+                "    cases covered (e.g., '5 scenarios: normal, timeout, retry",
+                "    exhaustion, concurrent access, empty input')",
+                "  - Doc milestones: reference specific Invisible Knowledge sections",
+                "    that MUST appear in README (e.g., 'README includes: data flow",
+                "    diagram, invariants section from Invisible Knowledge')",
                 "</milestone_verification>",
                 "",
                 "<documentation_milestone_verification>",
@@ -88,6 +110,25 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "",
                 "TW will review, but starting clean reduces rework.",
                 "</comment_hygiene_verification>",
+                "",
+                "<decision_audit_verification>",
+                "Verify classification tables were completed in steps 2-3:",
+                "",
+                "  [ ] Step 2: Decision classification table written?",
+                "      - All architectural choices have backing citations",
+                "      - No 'assumption' rows remain unresolved",
+                "",
+                "  [ ] Step 3: File classification table written?",
+                "      - All new files have backing citations",
+                "      - No 'assumption' rows remain unresolved",
+                "",
+                "If any assumption was resolved via AskUserQuestion:",
+                "  - Update backing to 'user-specified'",
+                "  - Add user's answer as citation",
+                "",
+                "If tables were skipped or assumptions remain: STOP.",
+                "Go back and complete classification before proceeding.",
+                "</decision_audit_verification>",
             ],
             "next": (
                 "PLANNING PHASE COMPLETE.\n\n"
@@ -103,7 +144,7 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "   python3 planner.py --phase review --step-number 1 --total-steps 2 \\\n"
                 '     --thoughts "Plan written to [path]"\n\n'
                 "Review phase:\n"
-                "  Step 1: @agent-technical-writer annotates code snippets\n"
+                "  Step 1: @agent-technical-writer scrubs code snippets\n"
                 "  Step 2: @agent-quality-reviewer validates the plan\n"
                 "  Then: Ready for /plan-execution"
             )
@@ -163,6 +204,23 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "",
                 "Include BOTH architectural AND micro-decisions (timeouts, etc).",
                 "</step_2_decide>",
+                "",
+                "<step_2_decision_classification>",
+                "WRITE this table before proceeding (forces explicit backing):",
+                "",
+                "  | Decision | Backing | Citation |",
+                "  |----------|---------|----------|",
+                "  | [choice] | user-specified / doc-derived / default-derived / assumption | [source] |",
+                "",
+                "Backing tiers (higher overrides lower):",
+                "  1. user-specified: 'User said X' -> cite the instruction",
+                "  2. doc-derived: 'CLAUDE.md says Y' -> cite file:section",
+                "  3. default-derived: 'Convention Z' -> cite <default-conventions domain>",
+                "  4. assumption: 'No backing' -> STOP, use AskUserQuestion NOW",
+                "",
+                "For EACH 'assumption' row: use AskUserQuestion immediately.",
+                "Do not proceed to step 3 with unresolved assumptions.",
+                "</step_2_decision_classification>",
                 "",
                 "<step_2_rejected>",
                 "Document rejected alternatives with CONCRETE reasons.",
@@ -227,6 +285,25 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "CODE CHANGES — diff format for non-trivial logic.",
                 "</step_3_refine_milestones>",
                 "",
+                "<step_3_file_classification>",
+                "For EACH new file in milestones, WRITE this table:",
+                "",
+                "  | New File | Backing | Citation |",
+                "  |----------|---------|----------|",
+                "  | path/to/new.go | [tier] | [source] |",
+                "",
+                "Valid backings for new files:",
+                "  - user-specified: User explicitly requested separate file",
+                "  - doc-derived: Project convention requires it",
+                "  - default-derived: Meets separation trigger (>500 lines, distinct module)",
+                "  - assumption: None of the above -> use AskUserQuestion NOW",
+                "",
+                "Default convention (domain: file-creation, test-organization):",
+                "  Extend existing files unless separation trigger applies.",
+                "",
+                "For EACH 'assumption' row: ask user before finalizing milestones.",
+                "</step_3_file_classification>",
+                "",
                 "<step_3_validate>",
                 "Cross-check: Does the plan address ALL original requirements?",
                 "</step_3_validate>",
@@ -286,11 +363,11 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
                 "",
                 "  <delegation>",
                 "    <agent>@agent-technical-writer</agent>",
-                "    <mode>plan-annotation</mode>",
+                "    <mode>plan-scrub</mode>",
                 "    <plan_source>[path to plan file]</plan_source>",
                 "    <task>",
                 "      1. Read ## Planning Context section FIRST",
-                "      2. Prioritize annotation by uncertainty (HIGH/MEDIUM/LOW)",
+                "      2. Prioritize scrub by uncertainty (HIGH/MEDIUM/LOW)",
                 "      3. Add WHY comments to code snippets from Decision Log",
                 "      4. Enrich plan prose with rationale",
                 "      5. Add documentation milestone if missing",
@@ -304,7 +381,7 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
             "next": (
                 f"After TW completes, invoke step {next_step}:\n"
                 "   python3 planner.py --phase review --step-number 2 --total-steps 2 "
-                '--thoughts "TW annotation complete, [summary of changes]"'
+                '--thoughts "TW scrub complete, [summary of changes]"'
             )
         }
 
@@ -324,7 +401,7 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
                 "      3. Apply RULE 0 (production reliability) with open questions",
                 "      4. Apply RULE 1 (project conformance)",
                 "      5. Check anticipated structural issues",
-                "      6. Verify TW annotations pass actionability test",
+                "      6. Verify TW scrub passes actionability test",
                 "      7. Accept risks documented in Known Risks as acknowledged",
                 "      8. Pay extra attention to milestones with uncertainty flags",
                 "    </task>",
@@ -350,7 +427,7 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
             "actions": [
                 "<review_complete_verification>",
                 "Confirm before proceeding to execution:",
-                "  - TW has annotated code snippets with WHY comments?",
+                "  - TW has scrubbed code snippets with WHY comments?",
                 "  - TW has enriched plan prose with rationale?",
                 "  - TW flagged any gaps in Planning Context rationale?",
                 "  - QR verdict is PASS or PASS_WITH_CONCERNS?",

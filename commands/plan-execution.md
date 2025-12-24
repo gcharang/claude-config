@@ -15,9 +15,9 @@ $ARGUMENTS
 Plans should complete the planner skill's review phase before execution:
 
 1. **Planning phase**: Plan created with milestones, acceptance criteria, code changes
-2. **Review phase**: @agent-technical-writer annotated code snippets, @agent-quality-reviewer approved
+2. **Review phase**: @agent-technical-writer scrubbed code snippets, @agent-quality-reviewer approved
 
-If the plan lacks TW annotations (review phase was skipped), execution can proceed but:
+If the plan wasn't scrubbed by TW (review phase was skipped), execution can proceed but:
 
 - @agent-developer will have no prepared comments to transcribe
 - Code will lack WHY documentation until post-implementation TW pass
@@ -135,11 +135,11 @@ You plan _how_ to execute (parallelization, sequencing). You do NOT plan _what_ 
 
 Agent defaults (sonnet) are calibrated for quality. You may adjust model tier ONLY upward.
 
-| Action | Allowed | Rationale |
-|--------|---------|-----------|
-| Upgrade to opus | YES | Challenging tasks benefit from stronger reasoning |
-| Use default (sonnet) | YES | Baseline for all delegations |
-| Downgrade to haiku | NEVER | Quality degradation is not an acceptable tradeoff |
+| Action               | Allowed | Rationale                                         |
+| -------------------- | ------- | ------------------------------------------------- |
+| Upgrade to opus      | YES     | Challenging tasks benefit from stronger reasoning |
+| Use default (sonnet) | YES     | Baseline for all delegations                      |
+| Downgrade to haiku   | NEVER   | Quality degradation is not an acceptable tradeoff |
 
 <model_selection_stop>
 If you are about to use `model: haiku` for "a quick check" or "simple validation", STOP.
@@ -204,12 +204,19 @@ Speed up tasks by narrowing prompt scope, not by downgrading model tier.
 
 ## Milestone Type Recognition
 
-Before delegating ANY milestone, identify its type from the milestone name and requirements:
+Before delegating ANY milestone, identify its type from the file extensions:
 
-| Milestone Type | Recognition Signal                                                     | Delegate To             |
-| -------------- | ---------------------------------------------------------------------- | ----------------------- |
-| Code           | Files are source code (.py, .go, .ts), requirements involve logic/APIs | @agent-developer        |
-| Documentation  | Name contains "Documentation", files are CLAUDE.md/README.md           | @agent-technical-writer |
+| Milestone Type | Recognition Signal                                      | Delegate To             |
+| -------------- | ------------------------------------------------------- | ----------------------- |
+| Documentation  | ALL files are `*.md` or `*.rst`                         | @agent-technical-writer |
+| Code           | ANY file is source code (.py, .go, .ts, .js, .rs, etc.) | @agent-developer        |
+
+**Mixed milestones**: If a milestone contains both code and documentation files (e.g., .go and .md), split the delegation:
+
+1. @agent-developer handles code files first
+2. After developer completes, @agent-technical-writer handles documentation files
+
+This ensures code is implemented before docs are written to describe it.
 
 <code_writing_stop>
 If you are about to delegate a Documentation milestone to @agent-developer, STOP.
@@ -218,27 +225,26 @@ Route to the correct agent per the table above.
 </code_writing_stop>
 
 <example type="INCORRECT">
-Milestone: Documentation
-Files: src/newmodule/CLAUDE.md, src/newmodule/README.md
+Milestone: Foundation - Integration Architecture
+Files: doc/10-integration/crate-separation.md, doc/10-integration/monorepo-structure.md
 
 Task for @agent-developer:
-Create CLAUDE.md index entries for the new module...
+Translate Rust terminology to Go equivalents...
 
-[WRONG: Documentation milestone sent to developer instead of technical-writer]
+[WRONG: All files are *.md -> documentation milestone sent to developer]
 </example>
 
 <example type="CORRECT">
-Milestone: Documentation
-Files: src/newmodule/CLAUDE.md, src/newmodule/README.md
+Milestone: Foundation - Integration Architecture
+Files: doc/10-integration/crate-separation.md, doc/10-integration/monorepo-structure.md
 
 Task for @agent-technical-writer:
 Mode: post-implementation
 Plan Source: [plan_file.md]
-Files Modified: [list from earlier milestones]
 
-Create CLAUDE.md index entries for the new module...
+Translate Rust terminology to Go equivalents...
 
-[CORRECT: Documentation milestone sent to technical-writer with proper mode]
+[CORRECT: All files are *.md -> documentation milestone sent to technical-writer]
 </example>
 
 <example type="INCORRECT">
@@ -248,7 +254,7 @@ Files: src/pkg/retry/retry.go, src/pkg/retry/retry_test.go
 Task for @agent-technical-writer:
 Implement exponential backoff with jitter...
 
-[WRONG: Code milestone sent to technical-writer instead of developer]
+[WRONG: Files are *.go -> code milestone sent to technical-writer]
 </example>
 
 <example type="CORRECT">
@@ -259,7 +265,27 @@ Task for @agent-developer:
 Plan Reference: [section/lines]
 Implement exponential backoff with jitter...
 
-[CORRECT: Code milestone sent to developer with plan reference]
+[CORRECT: Files are *.go -> code milestone sent to developer]
+</example>
+
+<example type="CORRECT">
+Milestone: Add retry logic with documentation
+Files: src/pkg/retry/retry.go, src/pkg/retry/retry_test.go, doc/08-resilience/retry-patterns.md
+
+Step 1 - Task for @agent-developer:
+Plan Reference: [section/lines]
+Files: src/pkg/retry/retry.go, src/pkg/retry/retry_test.go
+Implement exponential backoff with jitter...
+
+[After developer completes]
+
+Step 2 - Task for @agent-technical-writer:
+Mode: post-implementation
+Plan Source: [plan_file.md]
+Files: doc/08-resilience/retry-patterns.md
+Document the retry patterns implemented above...
+
+[CORRECT: Mixed milestone split between developer (code) then technical-writer (docs)]
 </example>
 
 ---
@@ -315,7 +341,7 @@ receiving agents to lack critical context.
 ```
 <delegation>
   <agent>@agent-[developer|debugger|technical-writer|quality-reviewer]</agent>
-  <mode>[For TW/QR: plan-annotation|post-implementation|plan-review|reconciliation]
+  <mode>[For TW/QR: plan-scrub|post-implementation|plan-review|reconciliation]
         [For Developer/Debugger: omit]</mode>
   <plan_source>[Absolute path to plan file]</plan_source>
   <milestone>[Milestone number and name]</milestone>
@@ -563,7 +589,9 @@ Rationale for priority order: Reconciled code was already present and skipped im
 
 ### 2. Documentation
 
-After ALL phases complete and quality review passes:
+**Skip for doc-primary plans**: If ALL milestones contained only documentation files (`*.md`/`*.rst`), TW already handled this work during milestone execution. Proceed directly to Final Checklist.
+
+**For code-primary plans**: After ALL phases complete and quality review passes:
 
 ```
 Task for @agent-technical-writer:
@@ -683,6 +711,27 @@ Track throughout execution for the retrospective:
 3. **Blocked moments**: Any escalations, anchor mismatches, or unexpected failures
 4. **Quality findings**: Summary from @agent-quality-reviewer post-implementation pass
 5. **Self-consistency checks**: Alignment between Developer notes, test results, and acceptance criteria
+6. **Planning Context gaps**: Any `<planning_context_gap>` outputs from TW scrub phase
+
+### Planning Context Gaps (Retrospective Section)
+
+If TW reported gaps during plan-scrub, aggregate them here:
+
+```
+## Planning Context Gaps
+
+[List any gaps reported by TW during plan-scrub phase]
+
+| Milestone | Code Element | Gap Type | What Was Needed |
+|-----------|--------------|----------|-----------------|
+| [M#] | [from TW output] | [missing_decision/insufficient_reasoning/no_rejected_alternative] | [from TW output] |
+
+If none: "No Planning Context gaps reported."
+
+**Pattern for future plans**: [Aggregate if multiple gaps share a theme, e.g., "Decision Log lacked micro-decisions for thresholds in M1, M3 -- consider adding threshold sensitivity analysis to planning checklist"]
+```
+
+This feedback loop enables future plans to avoid the same gaps.
 
 ### Retrospective Purpose
 

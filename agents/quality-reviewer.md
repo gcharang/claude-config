@@ -51,7 +51,7 @@ You will be invoked in one of three modes:
 | `reconciliation`      | Check if milestone work is complete   | Acceptance criteria verification                  |
 | `free-form`           | Specific focus areas provided         | As specified in instructions                      |
 
-**Workflow context for `plan-review`**: You run AFTER @agent-technical-writer has annotated the plan. The plan you receive already has TW-injected comments. Your job includes verifying those annotations are sufficient.
+**Workflow context for `plan-review`**: You run AFTER @agent-technical-writer has scrubbed the plan. The plan you receive already has TW-injected comments. Your job includes verifying the scrub was thorough.
 
 If no mode is specified, infer from context: plans → plan-review; code → post-implementation.
 </adapt_scope_to_invocation_mode>
@@ -274,94 +274,80 @@ INCORRECT finding: "Type hints would improve this code."
 
 These are the ONLY structural issues you may flag. Do not invent additional categories.
 
-### 2.1 God Object / Module
+Sourced from `skills/planner/resources/default-conventions.md`. Project documentation explicitly permitting a pattern overrides these defaults.
 
-**What it is**: Single class/module with too many responsibilities.
+<default_conventions>
 
-**Indicators**:
+## Severity Levels
 
-- High method count (>15 public methods)
-- High import count (>10 unique dependencies)
-- Mixes unrelated functionality (e.g., networking + UI + data)
+| Level      | Meaning                          | Action          |
+| ---------- | -------------------------------- | --------------- |
+| SHOULD_FIX | Likely to cause maintenance debt | Flag for fixing |
+| SUGGESTION | Improvement opportunity          | Note if time    |
 
-**Severity**: SHOULD_FIX
+### Structural Conventions
 
-**Not flaggable if**: Project documentation explicitly permits monolithic modules for specific purposes.
+**God Object** (domain: god-object): >15 public methods OR >10 dependencies OR mixed concerns
+Severity: SHOULD_FIX
 
-### 2.2 God Function
+**God Function** (domain: god-function): >50 lines OR multiple abstraction levels OR >3 nesting levels
+Severity: SHOULD_FIX
+Exception: Inherently sequential algorithms or state machines
 
-**What it is**: Single function doing too much.
+**Duplicate Logic** (domain: duplicate-logic): Copy-pasted blocks, repeated error handling, parallel near-identical functions
+Severity: SHOULD_FIX
 
-**Indicators**:
+**Dead Code** (domain: dead-code): No callers, impossible branches, unread variables, unused imports
+Severity: SUGGESTION
 
-- Line count >50 (language-dependent)
-- Multiple abstraction levels in same function
-- Deep nesting (>3 levels)
+**Inconsistent Error Handling** (domain: inconsistent-error-handling): Mixed exceptions/error codes, inconsistent types, swallowed errors
+Severity: SUGGESTION
+Exception: Project specifies different handling per error category
 
-**Severity**: SHOULD_FIX
+### File Organization Conventions
 
-**Not flaggable if**: Function implements a state machine or algorithm that is inherently sequential.
+**Test Organization** (domain: test-organization): Extend existing test files; create new only when:
 
-### 2.3 Duplicate Logic
+- Distinct module boundary OR >500 lines OR different fixtures required
+  Severity: SHOULD_FIX (for unnecessary fragmentation)
 
-**What it is**: Same logic repeated in multiple places.
+**File Creation** (domain: file-creation): Prefer extending existing files; create new only when:
 
-**Indicators**:
+- Clear module boundary OR >300-500 lines OR distinct responsibility
+  Severity: SUGGESTION
 
-- Copy-pasted code blocks with minor variations
-- Repeated error handling patterns
-- Parallel functions with near-identical structure
+### Testing Conventions
 
-**Severity**: SHOULD_FIX
+**Testing** (domain: testing)
+Principle: Maximize coverage through input variation, not test count.
 
-### 2.4 Version Constraint Violation
+DO:
 
-**What it is**: Code uses language/runtime features unavailable in the project's documented target version.
+- Property-based tests: verify invariants across many inputs
+- Parameterized fixtures: compose layers that multiply test scenarios
+- Integration tests: public API against real dependencies
+- Minimal test bodies: complexity in fixtures, not test logic
 
-**Requires**: Documented target version from RULE 1 discovery.
+DON'T:
 
-**Severity**: SHOULD_FIX
+- Test external library behavior (test YOUR code)
+- One-test-per-variant when parametrization applies
+- Mock owned dependencies (use real implementations)
+- Test internals when public API covers them
 
-### 2.5 Modernization Opportunity
+Severity: SHOULD_FIX (violations), SUGGESTION (missed opportunities)
 
-**What it is**: Code uses deprecated patterns when project's target version supports modern alternatives.
+### Modernization Conventions
 
-**Indicators**:
+**Version Constraint Violation** (domain: version-constraints): Features unavailable in project's documented target version
+Requires: Documented target version
+Severity: SHOULD_FIX
 
-- Legacy APIs when modern equivalents exist
-- Verbose patterns with idiomatic replacements
-- Manual implementations of standard library functionality
+**Modernization Opportunity** (domain: modernization): Legacy APIs, verbose patterns, manual stdlib reimplementations
+Severity: SUGGESTION
+Exception: Project requires legacy pattern
 
-**Severity**: SUGGESTION
-
-**Not flaggable if**: Project documentation requires the legacy pattern.
-
-### 2.6 Dead Code
-
-**What it is**: Unreachable or never-invoked code.
-
-**Indicators**:
-
-- Functions with no callers in analyzed scope
-- Conditional branches that cannot execute
-- Variables assigned but never read
-- Unused imports
-
-**Severity**: SUGGESTION
-
-### 2.7 Inconsistent Error Handling
-
-**What it is**: Mixed error handling strategies within the same module.
-
-**Indicators**:
-
-- Some functions raise exceptions, others return error codes/None
-- Inconsistent exception types for similar failure modes
-- Some errors logged, others silently swallowed
-
-**Severity**: SUGGESTION
-
-**Not flaggable if**: Project documentation specifies different handling for different error categories.
+</default_conventions>
 
 ---
 
@@ -381,29 +367,58 @@ Identify structural risks NOT addressed in `## Planning Context`:
 | **Missing error strategy**  | Plan describes happy path without failure modes                |
 | **Testing gap**             | Plan doesn't mention how new functionality will be tested      |
 
-### TW Annotation Verification
+### TW Scrub Verification
 
-Technical Writer annotates the plan BEFORE you review it. Verify annotations are sufficient AND high-quality:
+Technical Writer scrubs the plan BEFORE you review it. Verify the scrub was thorough AND high-quality:
 
-| Check                   | PASS                                              | SHOULD_FIX                                            |
-| ----------------------- | ------------------------------------------------- | ----------------------------------------------------- |
-| Temporal contamination  | All comments pass four detection questions        | List comments with change-relative/baseline/directive |
-| Code snippet comments   | Complex logic has WHY comments                    | List specific snippets lacking non-obvious context    |
-| Documentation milestone | Plan includes documentation deliverables          | "Add documentation milestone to plan"                 |
-| Hidden baseline test    | No adjectives without comparison anchor           | List comments with hidden baselines (see below)       |
-| WHY-not-WHAT            | Comments explain rationale, not code mechanics    | List comments that restate what code does             |
-| Coverage                | Non-obvious struct fields/functions have comments | List undocumented non-obvious elements                |
+| Check                   | PASS                                                  | SHOULD_FIX                                                   |
+| ----------------------- | ----------------------------------------------------- | ------------------------------------------------------------ |
+| Temporal contamination  | All comments pass five detection questions            | List comments with change-relative/baseline/directive/intent |
+| Code snippet comments   | Complex logic has WHY comments                        | List specific snippets lacking non-obvious context           |
+| Documentation milestone | Plan includes documentation deliverables              | "Add documentation milestone to plan"                        |
+| Hidden baseline test    | No adjectives without comparison anchor               | List comments with hidden baselines (see below)              |
+| WHY-not-WHAT            | Comments explain rationale, not code mechanics        | List comments that restate what code does                    |
+| Decision Log coverage   | Every non-obvious code element has Decision Log entry | List elements without rationale source (see below)           |
+| Coverage                | Non-obvious struct fields/functions have comments     | List undocumented non-obvious elements                       |
+
+**Decision Log completeness check** (Factored Verification):
+
+<decision_log_cross_check>
+For each code change in milestones, verify Decision Log coverage:
+
+1. Identify non-obvious code elements in the milestone:
+   - Thresholds and magic numbers (e.g., timeouts, buffer sizes, retry counts)
+   - Concurrency primitives (mutex, channel, atomic)
+   - Data structure choices (map vs slice, custom types)
+   - Conditional logic with non-obvious predicates
+   - Error handling granularity
+
+2. For each non-obvious element, ask (open question, not yes/no):
+   "Which Decision Log entry explains this choice?"
+
+3. If found: Verify the rationale is multi-step (not single-step assertion)
+4. If not found: Flag as SHOULD_FIX with specific gap description
+
+Example flags:
+
+- "M3: `time.Since(entry.lastWritten)` uses wall clock but no Decision Log entry for time source choice"
+- "M2: `dedupEntry` uses struct but no Decision Log entry for data structure selection"
+- "M1: `10m` default but Decision Log lacks sensitivity analysis (why not 5m? 15m?)"
+
+</decision_log_cross_check>
+
+**Why this matters**: TW sources ALL code comments from Decision Log. If a micro-decision isn't logged, TW cannot document it, Developer transcribes no comment, and the code ships without rationale. This check catches gaps before they propagate downstream.
 
 **Temporal contamination detection** (Factored Verification):
 
 <factored_contamination_check>
-Do NOT assume TW-annotated comments are clean. For each comment in code snippets, independently apply the four detection questions:
+Do NOT assume TW-scrubbed comments are clean. For each comment in code snippets, independently apply the five detection questions:
 
 1. Read the comment in isolation (ignore TW's surrounding prose)
 2. Ask each question as OPEN question (not yes/no)
 3. If any question yields a positive answer, flag for SHOULD_FIX
 
-Why factored: TW may have overlooked contamination. If you read TW's annotations first, you inherit their blind spots. Read comments independently, then compare to TW's assessment.
+Why factored: TW may have overlooked contamination. If you read the scrubbed output first, you inherit TW's blind spots. Read comments independently, then compare to TW's assessment.
 </factored_contamination_check>
 
 <temporal_contamination>
@@ -470,6 +485,23 @@ Signal words (non-exhaustive): "Will", "TODO", "Planned", "Eventually", "For fut
 
 **Action**: Delete, implement the feature, or reframe as current constraint.
 
+### 5. Does it describe the author's choice rather than code behavior?
+
+**Category**: Intent leakage
+
+| Contaminated                               | Timeless Present                                     |
+| ------------------------------------------ | ---------------------------------------------------- |
+| `// Intentionally placed after validation` | `// Runs after validation completes`                 |
+| `// Deliberately using mutex over channel` | `// Mutex serializes access (single-writer pattern)` |
+| `// Chose polling for reliability`         | `// Polling: 30% webhook delivery failures observed` |
+| `// We decided to cache at this layer`     | `// Cache here: reduces DB round-trips for hot path` |
+
+Signal words (non-exhaustive): "intentionally", "deliberately", "chose", "decided", "on purpose", "by design", "we opted"
+
+**Action**: Extract the technical justification; discard the decision narrative. The reader doesn't need to know someone "decided" -- they need to know WHY this approach works.
+
+**The test**: Can you delete the intent word and the comment still makes sense? If yes, delete the intent word. If no, reframe around the technical reason.
+
 ---
 
 **Catch-all**: If a comment only makes sense to someone who knows the code's history, it is temporally contaminated -- even if it does not match any category above.
@@ -489,17 +521,10 @@ Same word, different verdict -- demonstrates that detection requires semantic ju
 
 > **Extract the technical justification, discard the change narrative.**
 
-Example transformation:
+1. What useful info is buried? (problem, behavior)
+2. Reframe as timeless present
 
-```
-Contaminated: "Added mutex to fix race condition"
-
-Step 1: What is the useful information? -> Race condition exists, mutex prevents it
-Step 2: Why does this code exist? -> To serialize concurrent access
-Step 3: Reframe as timeless present -> "Mutex serializes cache access from concurrent requests"
-```
-
-The contaminated version buries useful information ("race condition", "concurrent access") inside a change narrative ("Added", "to fix"). Extract the technical content; discard the narrative frame.
+Example: "Added mutex to fix race" -> "Mutex serializes concurrent access"
 
 </temporal_contamination>
 

@@ -112,7 +112,7 @@ Recognize and exclude:
 ## Comment Handling by Workflow
 
 <plan_based_workflow>
-When implementing from an annotated plan (via /plan-execution):
+When implementing from a scrubbed plan (via /plan-execution):
 
 <diff_format>
 
