@@ -193,36 +193,36 @@ Plan execution delegates to specialized agents:
 
 ```mermaid
 flowchart TB
-    C[Coordinator] --> D1[Developer]
-    C --> D2[Developer]
-    C --> D3[Debugger]
-    D1 --> batch[Parallel batch completes]
-    D2 --> batch
-    D3 -.->|if error| batch
-    batch --> QR[Quality Reviewer]
-    QR -->|pass| TW[Technical Writer]
-    QR -->|fail| C
-    TW --> done[Execution complete<br>with retrospective]
+    subgraph milestone[Per Milestone]
+        C[Coordinator] --> D[Developer]
+        C -.->|if error| Db[Debugger]
+        Db -.-> D
+        D --> QR[Quality Reviewer]
+        QR -->|fail| C
+    end
+
+    QR -->|pass| next[Next Milestone]
+    next -.-> C
+    next -->|all complete| TW[Technical Writer]
+    TW --> done[Execution complete]
 ```
 
 The coordinator:
 
-- Never writes code directly (delegates to @agent-developer)
-- Parallelizes independent work across up to 4 developers
+- Never writes code directly (delegates to developers)
+- Parallelizes independent work across up to 4 developers per milestone
+- Runs quality review after each milestone
 - Sequences dependent milestones
-- Runs quality review after implementation
-- Generates execution retrospective
+- Invokes technical writer only after all milestones complete
 
 The quality review feedback loop is intentional. LLMs almost always have
 oversights -- missed edge cases, incomplete implementations, sometimes entire
 components skipped. The workflow treats this as expected, not exceptional. When
 QR fails, the coordinator receives specific findings and delegates fixes. This
-cycle repeats until QR passes.
+cycle repeats until QR passes, then the next milestone begins.
 
-The technical writer agent maintains the CLAUDE.md/README.md hierarchy as part of
-execution -- updating indexes and architecture documentation when code changes.
-If you use the planning workflow consistently, documentation stays synchronized
-without manual intervention.
+The technical writer runs once at the end, updating the CLAUDE.md/README.md
+hierarchy for all changes made during execution.
 
 ---
 
