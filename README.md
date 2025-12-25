@@ -33,7 +33,7 @@ commands/
 skills/
   planner/               Implementation planning workflow
     SKILL.md             Skill entry point
-    scripts/planner.py   Just-in-time prompt injection
+    scripts/             Just-in-time prompt injection
     resources/           Shared formats and conventions
 
   prompt-engineer/       Prompt optimization skill
