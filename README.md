@@ -310,16 +310,16 @@ not validation.
 The decision-critic skill forces structured adversarial analysis:
 
 ```mermaid
-flowchart TB
-    D[Decomposition] --> V[Verification]
-    V --> Ch[Challenge]
-    Ch --> S[Synthesis]
-
-    D -.- D1[Extract claims, assumptions, constraints<br>Assign IDs, classify as verifiable/judgment/constraint]
-    V -.- V1[Generate verification questions<br>Answer independently, mark VERIFIED/FAILED/UNCERTAIN]
-    Ch -.- Ch1[Steel-man argument against<br>Explore alternative framings]
-    S -.- S1[Verdict: STAND / REVISE / ESCALATE<br>Summary and recommendation]
+flowchart LR
+    D[Decomposition] --> V[Verification] --> Ch[Challenge] --> S[Synthesis]
 ```
+
+| Phase         | Actions                                                                    |
+| ------------- | -------------------------------------------------------------------------- |
+| Decomposition | Extract claims, assumptions, constraints; assign IDs; classify each        |
+| Verification  | Generate questions for verifiable items; answer independently; mark status |
+| Challenge     | Steel-man argument against; explore alternative framings                   |
+| Synthesis     | Verdict (STAND/REVISE/ESCALATE); summary and recommendation                |
 
 ### When to Use
 
