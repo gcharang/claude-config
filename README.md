@@ -78,19 +78,22 @@ skills/                  Multi-turn workflows
 
 The primary workflow for non-trivial changes:
 
+```mermaid
+flowchart LR
+    A[Free-form Analysis] --> B[Decision Critic]
+    B --> C[Planning Phase]
+    C --> D[Plan Execution]
+
+    A -.- A1[Explore codebase<br>Understand problem<br>Consider approaches]
+    B -.- B1[Stress-test approach<br>before committing]
+    C -.- C1[Write plan to file<br>Review & refine]
+    D -.- D1[Orchestrated implementation<br>via sub-agents]
+
+    style B stroke-dasharray: 5 5
+    style B1 stroke-dasharray: 5 5
 ```
-+-----------------+    +-----------------+    +-----------------+    +-----------------+
-|                 |    |                 |    |                 |    |                 |
-|  Free-form      |--->| Decision Critic |--->|    Planning     |--->| Plan Execution  |
-|  Analysis       |    |   (optional)    |    |     Phase       |    |                 |
-|                 |    |                 |    |                 |    |                 |
-+-----------------+    +-----------------+    +-----------------+    +-----------------+
-        |                      |                      |                      |
-        v                      v                      v                      v
-  Explore codebase       Stress-test           Write plan to         Orchestrated
-  Understand problem     your approach         markdown file         implementation
-  Consider approaches    before committing     Review & refine       via sub-agents
-```
+
+Note: Decision Critic (dashed) is optional.
 
 ### Step 1: Free-form Analysis
 
@@ -131,74 +134,37 @@ Once you understand what needs to be done:
 
 The planner skill runs a multi-step planning process:
 
+```mermaid
+flowchart TB
+    subgraph planning[Planning Phase]
+        P1[Context & Scope] --> P2[Decision & Architecture]
+        P2 --> P3[Refinement]
+        P3 --> P4[Final Verification]
+    end
+
+    subgraph review[Review Phase]
+        R1[Technical Writer] --> R2[Quality Reviewer]
+    end
+
+    planning --> review
+    R2 --> done[Plan written to file]
 ```
-+--------------------------------------------------------------------------------+
-|                           PLANNER SKILL WORKFLOW                               |
-+--------------------------------------------------------------------------------+
-|                                                                                |
-|    Step 1: Context & Scope                                                     |
-|    +------------------------------------------------------------------+        |
-|    | - Confirm plan file path                                         |        |
-|    | - Define scope and out-of-scope                                  |        |
-|    | - Identify 2-3 approaches with tradeoffs                         |        |
-|    | - List constraints (technical, organizational)                   |        |
-|    +------------------------------------------------------------------+        |
-|                                    |                                           |
-|                                    v                                           |
-|    Step 2: Decision & Architecture                                             |
-|    +------------------------------------------------------------------+        |
-|    | - Evaluate approaches (success probability, failure modes)       |        |
-|    | - Select approach with multi-step reasoning                      |        |
-|    | - Capture component diagrams (ASCII art)                         |        |
-|    | - Break into deployable milestones                               |        |
-|    +------------------------------------------------------------------+        |
-|                                    |                                           |
-|                                    v                                           |
-|    Step 3: Refinement                                                          |
-|    +------------------------------------------------------------------+        |
-|    | - Document risks with mitigations                                |        |
-|    | - Add uncertainty flags to milestones                            |        |
-|    | - Specify exact file paths and acceptance criteria               |        |
-|    | - Include code changes in diff format                            |        |
-|    +------------------------------------------------------------------+        |
-|                                    |                                           |
-|                                    v                                           |
-|    Step 4+: Final Verification                                                 |
-|    +------------------------------------------------------------------+        |
-|    | - Verify Planning Context completeness                           |        |
-|    | - Check milestone specifications                                 |        |
-|    | - Write plan to file                                             |        |
-|    +------------------------------------------------------------------+        |
-|                                    |                                           |
-+--------------------------------------------------------------------------------+
-                                     |
-                                     v
-+--------------------------------------------------------------------------------+
-|                              REVIEW PHASE                                      |
-+--------------------------------------------------------------------------------+
-|                                                                                |
-|    Review Step 1: Technical Writer                                             |
-|    +------------------------------------------------------------------+        |
-|    | - Scrub temporally contaminated comments                         |        |
-|    | - Add WHY comments to code snippets                              |        |
-|    | - Enrich plan prose with rationale                               |        |
-|    +------------------------------------------------------------------+        |
-|                                    |                                           |
-|                                    v                                           |
-|    Review Step 2: Quality Reviewer                                             |
-|    +------------------------------------------------------------------+        |
-|    | - Check production reliability (RULE 0)                          |        |
-|    | - Check project conformance (RULE 1)                             |        |
-|    | - Verify TW annotations                                          |        |
-|    | - Return: PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES              |        |
-|    +------------------------------------------------------------------+        |
-|                                                                                |
-+--------------------------------------------------------------------------------+
-                                     |
-                                     | (Plan approved)
-                                     v
-                              [Plan written to file]
-```
+
+**Planning Phase:**
+
+| Step                    | Actions                                                                    |
+| ----------------------- | -------------------------------------------------------------------------- |
+| Context & Scope         | Confirm path, define scope, identify approaches, list constraints          |
+| Decision & Architecture | Evaluate approaches, select with reasoning, diagram, break into milestones |
+| Refinement              | Document risks, add uncertainty flags, specify paths and criteria          |
+| Final Verification      | Verify completeness, check specs, write to file                            |
+
+**Review Phase:**
+
+| Step             | Actions                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| Technical Writer | Scrub temporal comments, add WHY comments, enrich rationale                        |
+| Quality Reviewer | Check reliability, check conformance, return PASS/PASS_WITH_CONCERNS/NEEDS_CHANGES |
 
 The Python script (`scripts/planner.py`) injects step-specific guidance as you
 progress. Each step produces concrete outputs before advancing.
@@ -222,46 +188,17 @@ from polluting the execution phase.
 
 Plan execution delegates to specialized agents:
 
-```
-+--------------------------------------------------------------------------------+
-|                          PLAN EXECUTION WORKFLOW                               |
-+--------------------------------------------------------------------------------+
-|                                                                                |
-|  Coordinator reads plan, analyzes dependencies, identifies parallel work       |
-|                                                                                |
-|                           +----------------+                                   |
-|                           |  Coordinator   |                                   |
-|                           +-------+--------+                                   |
-|                                   |                                            |
-|         +------------+------------+------------+------------+                  |
-|         |            |            |            |            |                  |
-|         v            v            v            v            v                  |
-|  +-----------+ +-----------+ +-----------+ +-----------+ +-----------+         |
-|  | Developer | | Developer | | Debugger  | | Quality   | | Technical |         |
-|  | (Task 1)  | | (Task 2)  | | (if error)| | Reviewer  | | Writer    |         |
-|  +-----------+ +-----------+ +-----------+ +-----------+ +-----------+         |
-|         |            |            |            |            |                  |
-|         +------------+------------+            |            |                  |
-|                      |                         |            |                  |
-|                      v                         |            |                  |
-|              [Parallel batch                   |            |                  |
-|               completes]                       |            |                  |
-|                      |                         |            |                  |
-|                      +------------------------>+            |                  |
-|                                                |            |                  |
-|                                    [QR validates            |                  |
-|                                     implementation]         |                  |
-|                                                |            |                  |
-|                                                +----------->+                  |
-|                                                             |                  |
-|                                                 [TW documents                  |
-|                                                  changes]                      |
-|                                                             |                  |
-+--------------------------------------------------------------------------------+
-                                                              |
-                                                              v
-                                                    [Execution complete
-                                                     with retrospective]
+```mermaid
+flowchart TB
+    C[Coordinator] --> D1[Developer]
+    C --> D2[Developer]
+    C --> D3[Debugger]
+    D1 --> batch[Parallel batch completes]
+    D2 --> batch
+    D3 -.->|if error| batch
+    batch --> QR[Quality Reviewer]
+    QR --> TW[Technical Writer]
+    TW --> done[Execution complete<br>with retrospective]
 ```
 
 The coordinator:
@@ -362,43 +299,16 @@ not validation.
 
 The decision-critic skill forces structured adversarial analysis:
 
-```
-+--------------------------------------------------------------------------------+
-|                        DECISION CRITIC WORKFLOW                                |
-+--------------------------------------------------------------------------------+
-|                                                                                |
-|  DECOMPOSITION (Steps 1-2)                                                     |
-|  +----------------------------------------------------------------------+      |
-|  | Extract claims, assumptions, constraints, judgments                  |      |
-|  | Assign stable IDs: C1, C2, A1, A2, K1, J1...                         |      |
-|  | Classify each: [V]erifiable, [J]udgment, [C]onstraint                |      |
-|  +----------------------------------------------------------------------+      |
-|                                    |                                           |
-|                                    v                                           |
-|  VERIFICATION (Steps 3-4)                                                      |
-|  +----------------------------------------------------------------------+      |
-|  | Generate verification questions for [V] items                        |      |
-|  | Answer independently (factored verification)                         |      |
-|  | Mark each: VERIFIED | FAILED | UNCERTAIN                             |      |
-|  +----------------------------------------------------------------------+      |
-|                                    |                                           |
-|                                    v                                           |
-|  CHALLENGE (Steps 5-6)                                                         |
-|  +----------------------------------------------------------------------+      |
-|  | Steel-man the strongest argument AGAINST the decision                |      |
-|  | Explore alternative problem framings                                 |      |
-|  | Surface hidden assumptions in original formulation                   |      |
-|  +----------------------------------------------------------------------+      |
-|                                    |                                           |
-|                                    v                                           |
-|  SYNTHESIS (Step 7)                                                            |
-|  +----------------------------------------------------------------------+      |
-|  | Verdict: STAND | REVISE | ESCALATE                                   |      |
-|  | Summary of verified/failed/uncertain items                           |      |
-|  | Specific recommendation for next action                              |      |
-|  +----------------------------------------------------------------------+      |
-|                                                                                |
-+--------------------------------------------------------------------------------+
+```mermaid
+flowchart TB
+    D[Decomposition] --> V[Verification]
+    V --> Ch[Challenge]
+    Ch --> S[Synthesis]
+
+    D -.- D1[Extract claims, assumptions, constraints<br>Assign IDs, classify as verifiable/judgment/constraint]
+    V -.- V1[Generate verification questions<br>Answer independently, mark VERIFIED/FAILED/UNCERTAIN]
+    Ch -.- Ch1[Steel-man argument against<br>Explore alternative framings]
+    S -.- S1[Verdict: STAND / REVISE / ESCALATE<br>Summary and recommendation]
 ```
 
 ### When to Use
