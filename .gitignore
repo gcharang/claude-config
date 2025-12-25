@@ -1,0 +1,19 @@
+# Ignore everything by default
+*
+
+# Track these directories and their contents
+!agents/
+!agents/**
+!commands/
+!commands/**
+!skills/
+!skills/**
+
+# Track root files
+!README.md
+!LICENSE
+!.gitignore
+
+# Always ignore these, even in tracked directories
+.DS_Store
+**/.DS_Store
