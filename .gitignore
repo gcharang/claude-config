@@ -8,6 +8,8 @@
 !commands/**
 !skills/
 !skills/**
+!output-styles/
+!output-styles/**
 
 # Track root files
 !README.md
