@@ -6,43 +6,70 @@ coding agents.
 
 ## Philosophy
 
-This repository embeds a structured approach to AI-assisted development:
+LLM-assisted coding fails long-term because technical debt accumulates
+unaddressed. I treat that as an engineering problem.
 
-- **Skills** orchestrate complex workflows via Python scripts that inject
-  prompts "just in time" based on workflow state
-- **Agents** are specialized sub-agents with domain expertise (developer,
-  debugger, quality reviewer, technical writer)
-- **Commands** trigger specific workflows like plan execution
+LLMs are tools, not collaborators. They cannot infer unspoken context -- the
+culture, assumptions, and shared experiences that humans understand naturally.
+When an engineer says "add retry logic", another engineer infers exponential
+backoff, jitter, idempotency. An LLM infers nothing you do not explicitly state.
 
-The workflow prioritizes **hygiene over speed**: strict documentation rules,
-decision tracking, and quality gates prevent technical debt accumulation when
-maintaining repositories over long periods.
+LLMs also have limited attention. Larger context windows do not solve this --
+giving an LLM more text is like giving a human a larger stack of papers.
+Attention drifts to the beginning and end; details in the middle are missed.
+The solution is not more context, but precisely the right context.
+
+The safeguards:
+
+- **Context hygiene** -- Each task receives precisely the information it needs.
+  Sub-agents start with fresh, focused context. CLAUDE.md files in each
+  directory serve as indexes; README.md captures decisions invisible in code.
+  The `doc-sync` skill bootstraps and maintains this hierarchy.
+- **Planning that resolves ambiguities** -- LLMs make first-shot mistakes. The
+  workflow separates planning from execution, forcing ambiguities to surface
+  when they are cheap to fix.
+- **Multi-turn review cycles** -- Plans pass through quality gates with multiple
+  iterations until all checks pass. Execution generates retrospectives that feed
+  back into planning.
+- **Documentation for LLM consumption** -- Functions include "use when..."
+  triggers and usage examples. Decision rationale lives in README.md files, not
+  lost chat history.
+
+This workflow is opinionated. I am a backend engineer by trade -- the workflow
+should apply equally to frontend, but feedback welcome. Same for whether these
+patterns translate to less experienced engineers.
+
+## Components
+
+**Skills** -- Multi-turn workflows via Python scripts with just-in-time prompts:
+
+- `planner` -- Structured implementation planning with quality review gates
+- `prompt-engineer` -- Prompt optimization using documented patterns
+- `decision-critic` -- Adversarial analysis to counter LLM sycophancy
+- `doc-sync` -- Synchronizes CLAUDE.md indexes and README.md architecture docs;
+  useful for bootstrapping a repository into this workflow
+
+**Agents** -- Specialized sub-agents with domain expertise:
+
+- `developer` -- Implements specifications with tests
+- `debugger` -- Systematic bug analysis through evidence gathering
+- `quality-reviewer` -- Production risk and project conformance checks
+- `technical-writer` -- Documentation optimized for LLM consumption
+
+**Commands** -- Entry points for workflows:
+
+- `plan-execution` -- Executes approved plans via agent delegation
 
 ## Repository Structure
 
 ```
-agents/                  Specialized sub-agents
-  developer.md           Implements specs with tests
-  debugger.md            Systematic bug analysis
-  quality-reviewer.md    Production risk detection
-  technical-writer.md    LLM-optimized documentation
-
-commands/
-  plan-execution.md      Executes approved plans via agent delegation
-
-skills/
-  planner/               Implementation planning workflow
-    SKILL.md             Skill entry point
+agents/                  Sub-agent definitions (*.md)
+commands/                Workflow entry points (*.md)
+skills/                  Multi-turn workflows
+  <skill>/
+    SKILL.md             Entry point
     scripts/             Just-in-time prompt injection
     resources/           Shared formats and conventions
-
-  prompt-engineer/       Prompt optimization skill
-    SKILL.md             Skill entry point
-    references/          Prompt engineering patterns
-
-  decision-critic/       Adversarial decision analysis
-    SKILL.md             Skill entry point
-    scripts/             Just-in-time prompt injection
 ```
 
 ---
@@ -52,17 +79,17 @@ skills/
 The primary workflow for non-trivial changes:
 
 ```
-+------------------+     +------------------+     +------------------+
-|                  |     |                  |     |                  |
-|  Free-form       |---->|  Planning        |---->|  Plan Execution  |
-|  Analysis        |     |  Phase           |     |  Phase           |
-|                  |     |                  |     |                  |
-+------------------+     +------------------+     +------------------+
-        |                        |                        |
-        v                        v                        v
-  Explore codebase         Write plan to          Orchestrated
-  Understand problem       markdown file          implementation
-  Consider approaches      Review & refine        via sub-agents
++-----------------+    +-----------------+    +-----------------+    +-----------------+
+|                 |    |                 |    |                 |    |                 |
+|  Free-form      |--->| Decision Critic |--->|    Planning     |--->| Plan Execution  |
+|  Analysis       |    |   (optional)    |    |     Phase       |    |                 |
+|                 |    |                 |    |                 |    |                 |
++-----------------+    +-----------------+    +-----------------+    +-----------------+
+        |                      |                      |                      |
+        v                      v                      v                      v
+  Explore codebase       Stress-test           Write plan to         Orchestrated
+  Understand problem     your approach         markdown file         implementation
+  Consider approaches    before committing     Review & refine       via sub-agents
 ```
 
 ### Step 1: Free-form Analysis
@@ -70,20 +97,36 @@ The primary workflow for non-trivial changes:
 Start with open exploration. Claude Code investigates the problem space:
 
 ```
-User: "I need to add retry logic to our API client"
+I need to add retry logic to our API client.
 
-Claude: [Explores codebase, understands patterns, considers approaches]
-        [May ask clarifying questions]
-        [Identifies constraints and dependencies]
+Before proposing a solution:
+- Explore the codebase to understand the existing API client structure
+- Identify existing error handling patterns and conventions
+- Ask clarifying questions about retry strategies, failure scenarios, and configuration
 ```
 
-### Step 2: Invoke the Planner Skill
+Claude explores the codebase, understands existing patterns, may ask clarifying
+questions, and identifies constraints and dependencies.
+
+### Step 2: Decision Critic (Optional)
+
+If you're uncertain about your approach, or want to make sure you're not
+overlooking something, invoke the decision critic skill:
+
+```
+Use your decision critic skill to stress-test my reasoning about the retry
+logic approach before we commit to a plan.
+```
+
+This forces adversarial analysis of your assumptions and approach. Skip this
+step for straightforward changes where the path forward is clear.
+
+### Step 3: Invoke the Planner Skill
 
 Once you understand what needs to be done:
 
 ```
-User: "Now use your planner skill to write an implementation plan to
-       plans/api-retry.md"
+"Now use your planner skill to write an implementation plan to plans/api-retry.md"
 ```
 
 The planner skill runs a multi-step planning process:
@@ -160,21 +203,21 @@ The planner skill runs a multi-step planning process:
 The Python script (`scripts/planner.py`) injects step-specific guidance as you
 progress. Each step produces concrete outputs before advancing.
 
-### Step 3: Clear Context
+### Step 4: Clear Context
 
 After planning completes:
 
 ```
-User: /clear
+/clear
 ```
 
 This clears the conversation context, preventing the exploration/planning phase
 from polluting the execution phase.
 
-### Step 4: Execute the Plan
+### Step 5: Execute the Plan
 
 ```
-User: /plan-execution plans/api-retry.md
+/plan-execution plans/api-retry.md
 ```
 
 Plan execution delegates to specialized agents:
@@ -229,6 +272,11 @@ The coordinator:
 - Runs quality review after implementation
 - Generates execution retrospective
 
+The technical writer agent maintains the CLAUDE.md/README.md hierarchy as part of
+execution -- updating indexes and architecture documentation when code changes.
+If you use the planning workflow consistently, documentation stays synchronized
+without manual intervention.
+
 ---
 
 ## The Prompt Engineer Skill
@@ -241,10 +289,10 @@ consists of prompts consumed by LLMs, each can be individually optimized.
 Optimize a simple prompt:
 
 ```
-User: Use your prompt engineer skill to optimize the following prompt:
+Use your prompt engineer skill to optimize the following prompt:
 
-      "You are a helpful assistant that writes Python code.
-       Be concise and write clean code."
+"You are a helpful assistant that writes Python code.
+ Be concise and write clean code."
 ```
 
 ### Optimizing Sub-Agents
@@ -252,8 +300,8 @@ User: Use your prompt engineer skill to optimize the following prompt:
 Optimize a Claude Code sub-agent definition:
 
 ```
-User: Use your prompt engineer skill to optimize the system prompt for
-      the following claude code sub-agent: agents/developer.md
+Use your prompt engineer skill to optimize the system prompt for
+the following claude code sub-agent: agents/developer.md
 ```
 
 ### Optimizing Multi-Prompt Workflows
@@ -261,12 +309,12 @@ User: Use your prompt engineer skill to optimize the system prompt for
 For complex workflows where multiple prompts interact:
 
 ```
-User: Consider the following Python file. Your task:
-      - Identify all different system/user prompts
-      - Understand how they interact together
-      - Use your prompt engineer skill to optimize each of these individually
+Consider the following Python file. Your task:
+- Identify all different system/user prompts
+- Understand how they interact together
+- Use your prompt engineer skill to optimize each of these individually
 
-      @skills/planner/scripts/planner.py
+@skills/planner/scripts/planner.py
 ```
 
 ### Full Workflow Optimization
@@ -274,26 +322,26 @@ User: Consider the following Python file. Your task:
 Optimize the entire planning/execution workflow:
 
 ```
-User: Consider the following tightly integrated workflow:
+Consider the following tightly integrated workflow:
 
-      Claude Code sub-agents:
-      * @agents/developer.md
-      * @agents/debugger.md
-      * @agents/quality-reviewer.md
-      * @agents/technical-writer.md
+Claude Code sub-agents:
+* @agents/developer.md
+* @agents/debugger.md
+* @agents/quality-reviewer.md
+* @agents/technical-writer.md
 
-      Planner skill:
-      * @skills/planner/SKILL.md
-      * @skills/planner/scripts/planner.py
-      * @skills/planner/resources/diff-format.md
+Planner skill:
+* @skills/planner/SKILL.md
+* @skills/planner/scripts/planner.py
+* @skills/planner/resources/diff-format.md
 
-      Plan execution command:
-      * @commands/plan-execution.md
+Plan execution command:
+* @commands/plan-execution.md
 
-      Your task:
-      * Think deeply to understand how everything fits together
-      * Identify all different prompts being consumed by LLMs
-      * Use your prompt engineer skill to optimize each of these
+Your task:
+* Think deeply to understand how everything fits together
+* Identify all different prompts being consumed by LLMs
+* Use your prompt engineer skill to optimize each of these
 ```
 
 The prompt engineer skill:
@@ -365,14 +413,14 @@ Use for important decisions where you want genuine criticism, not agreement:
 ### Example Usage
 
 ```
-User: I'm considering using Redis for our session storage instead of
-      PostgreSQL. My reasoning:
+I'm considering using Redis for our session storage instead of PostgreSQL.
+My reasoning:
 
-      - Redis is faster for key-value lookups
-      - Sessions are ephemeral, don't need ACID guarantees
-      - We already have Redis for caching
+- Redis is faster for key-value lookups
+- Sessions are ephemeral, don't need ACID guarantees
+- We already have Redis for caching
 
-      Use your decision critic skill to stress-test this decision.
+Use your decision critic skill to stress-test this decision.
 ```
 
 The skill will:
@@ -398,6 +446,51 @@ The skill is grounded in three research-backed techniques:
 
 The 7-step structure forces the LLM through adversarial phases rather than
 allowing it to immediately agree with your reasoning.
+
+---
+
+## The Doc Sync Skill
+
+The CLAUDE.md/README.md hierarchy is central to context hygiene. CLAUDE.md files
+are pure indexes -- tabular navigation with "What" and "When to read" columns
+that help LLMs (and humans) find relevant files without loading everything.
+README.md files capture invisible knowledge: architecture decisions, design
+tradeoffs, invariants that are not apparent from reading code.
+
+The `doc-sync` skill audits and synchronizes this hierarchy across a repository.
+
+### How It Works
+
+1. **Discovery** -- Maps all directories, identifies missing or outdated
+   CLAUDE.md files
+2. **Audit** -- Checks for drift (files added/removed but not indexed),
+   misplaced content (architecture docs in CLAUDE.md instead of README.md)
+3. **Migration** -- Moves architectural content from CLAUDE.md to README.md
+4. **Update** -- Creates/updates indexes with proper tabular format
+5. **Verification** -- Confirms complete coverage and correct structure
+
+### When to Use
+
+- **Bootstrapping** -- Adopting this workflow on an existing repository
+- **After bulk changes** -- Major refactors, directory restructuring
+- **Periodic audits** -- Checking for documentation drift
+- **Onboarding** -- Before starting work on an unfamiliar codebase
+
+If you use the planning workflow consistently, the technical writer agent
+maintains documentation as part of execution. The `doc-sync` skill is primarily
+for bootstrapping or recovery.
+
+### Example Usage
+
+```
+Use your doc-sync skill to synchronize documentation across this repository
+```
+
+For targeted updates:
+
+```
+Use your doc-sync skill to update documentation in src/validators/
+```
 
 ---
 
