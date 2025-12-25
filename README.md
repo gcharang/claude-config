@@ -147,7 +147,8 @@ flowchart TB
     end
 
     planning --> review
-    R2 --> done[Plan written to file]
+    R2 -->|pass| done[Plan written to file]
+    R2 -->|fail| planning
 ```
 
 **Planning Phase:**
@@ -166,8 +167,10 @@ flowchart TB
 | Technical Writer | Scrub temporal comments, add WHY comments, enrich rationale                        |
 | Quality Reviewer | Check reliability, check conformance, return PASS/PASS_WITH_CONCERNS/NEEDS_CHANGES |
 
-The Python script (`scripts/planner.py`) injects step-specific guidance as you
-progress. Each step produces concrete outputs before advancing.
+The review feedback loop catches LLM mistakes before execution begins. Plans
+frequently have gaps -- missing error handling, incomplete acceptance criteria,
+ambiguous specifications. The workflow iterates until QR passes, ensuring
+problems are caught when they are cheap to fix rather than during implementation.
 
 ### Step 4: Clear Context
 
@@ -197,7 +200,8 @@ flowchart TB
     D2 --> batch
     D3 -.->|if error| batch
     batch --> QR[Quality Reviewer]
-    QR --> TW[Technical Writer]
+    QR -->|pass| TW[Technical Writer]
+    QR -->|fail| C
     TW --> done[Execution complete<br>with retrospective]
 ```
 
@@ -208,6 +212,12 @@ The coordinator:
 - Sequences dependent milestones
 - Runs quality review after implementation
 - Generates execution retrospective
+
+The quality review feedback loop is intentional. LLMs almost always have
+oversights -- missed edge cases, incomplete implementations, sometimes entire
+components skipped. The workflow treats this as expected, not exceptional. When
+QR fails, the coordinator receives specific findings and delegates fixes. This
+cycle repeats until QR passes.
 
 The technical writer agent maintains the CLAUDE.md/README.md hierarchy as part of
 execution -- updating indexes and architecture documentation when code changes.
