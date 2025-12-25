@@ -48,6 +48,9 @@ patterns translate to less experienced engineers.
 - `decision-critic` -- Adversarial analysis to counter LLM sycophancy
 - `doc-sync` -- Synchronizes CLAUDE.md indexes and README.md architecture docs;
   useful for bootstrapping a repository into this workflow
+- `incoherence` -- Detects contradictions between docs and code, ambiguous
+  specs, documentation gaps; designed for hub-and-spoke doc architectures
+  (experimental)
 
 **Agents** -- Specialized sub-agents with domain expertise:
 
@@ -411,6 +414,167 @@ For targeted updates:
 ```
 Use your doc-sync skill to update documentation in src/validators/
 ```
+
+---
+
+## The Incoherence Skill
+
+> **Work in Progress**: This skill is functional but rough around the edges.
+> The current workflow relies on writing findings to a markdown file and having
+> the user fill in resolutions manually. A more streamlined interaction model
+> is in development.
+
+Documentation drifts from implementation. Specs contradict each other.
+Comments describe code that no longer exists. The incoherence skill
+systematically detects these contradictions and helps resolve them.
+
+### Designed for Hub-and-Spoke Documentation
+
+This skill pairs naturally with structured `doc/` folders -- hub-and-spoke
+architectures where specifications are clearly defined and cross-referenced:
+
+```
+doc/
+  01-principles/
+  02-architecture/
+  03-data/
+  ...
+  README.md           <- hub
+  security-index.md   <- cross-cutting index
+```
+
+But it works with any collection of information sources: codebases, end-user
+documentation, configuration files, or a mix of all three.
+
+### Use Cases
+
+- **Spec vs Implementation**: Find where docs claim X but code does Y
+- **Cross-Document Consistency**: Find contradictions between different docs
+- **End-User Documentation**: Ensure customer-facing docs match current behavior
+- **Configuration Docs**: Find documented env vars that aren't used, or defaults
+  that don't match code
+
+### How It Works
+
+The skill operates in two phases with parallel sub-agents:
+
+```mermaid
+flowchart TB
+    subgraph DETECTION["DETECTION PHASE"]
+        direction TB
+        S1[Survey Codebase]
+        S2[Select Dimensions]
+        S3[Dispatch Explorers]
+        S4[Synthesize Findings]
+        S5[Dispatch Verifiers]
+        S8[Analyze Verdicts]
+        S9[Generate Report]
+
+        subgraph EXPLORE["Parallel Exploration"]
+            E1[Dim A]
+            E2[Dim B]
+            E3[Dim C]
+        end
+
+        subgraph VERIFY["Parallel Verification"]
+            V1[Candidate 1]
+            V2[Candidate 2]
+            V3[Candidate 3]
+        end
+
+        S1 --> S2 --> S3
+        S3 --> EXPLORE
+        EXPLORE --> S4 --> S5
+        S5 --> VERIFY
+        VERIFY --> S8 --> S9
+    end
+
+    S9 --> REPORT[/"Report File"/]
+    REPORT --> USER{{"User fills in<br/>resolutions"}}
+    USER --> S10
+
+    subgraph RECONCILIATION["RECONCILIATION PHASE"]
+        direction TB
+        S10[Parse Resolutions]
+        S11[Analyze Targets]
+        S12[Plan Waves]
+        S13[Dispatch Wave]
+        S16[Collect Results]
+        S17[Update Report]
+
+        subgraph APPLY["Parallel Application"]
+            A1[Developer]
+            A2[Tech Writer]
+        end
+
+        S10 --> S11 --> S12 --> S13
+        S13 --> APPLY
+        APPLY --> S16
+        S16 -->|more waves| S13
+        S16 -->|done| S17
+    end
+
+    style DETECTION fill:#e8f4e8,stroke:#2d5a2d
+    style RECONCILIATION fill:#e8e8f4,stroke:#2d2d5a
+    style USER fill:#fff3cd,stroke:#856404
+```
+
+**Detection Phase:**
+
+1. Survey the codebase to identify information sources
+2. Select relevant dimensions from the catalog (see below)
+3. Dispatch parallel haiku agents to explore each dimension
+4. Synthesize findings, score candidates, select top 10
+5. Dispatch parallel sonnet agents to verify each candidate
+6. Classify verdicts as TRUE_INCOHERENCE or FALSE_POSITIVE
+7. Generate report with Resolution sections for user input
+
+**Reconciliation Phase** (after user fills in resolutions):
+
+1. Parse the report, extract user resolutions
+2. Analyze targets, determine file types and agent types
+3. Plan dispatch waves (batch by file, sequence conflicting agent types)
+4. Dispatch Developer/Technical Writer agents in parallel waves
+5. Collect results, update report with resolved status
+
+### Example Usage
+
+```
+Use your incoherence skill to audit doc/ against the implementation.
+Output to incoherence-report.md.
+```
+
+After detection completes, review the report. For each issue, write your
+resolution in the designated section:
+
+```markdown
+#### Resolution
+
+<!-- USER: Write your decision below. Be specific. -->
+
+Use the spec value (100MB). Update the code to match.
+
+<!-- /Resolution -->
+```
+
+Then invoke reconciliation:
+
+```
+Continue with the reconciliation phase for incoherence-report.md
+```
+
+### Current Limitations
+
+1. **Manual resolution input**: User must edit the markdown file directly.
+   Exploring better interaction patterns.
+
+2. **Report file management**: User must specify output filename upfront.
+
+3. **Large codebases**: Dimension exploration can be slow. Consider scoping
+   to specific directories.
+
+4. **False positive rate**: Dimensions J and K can produce false positives
+   requiring manual triage.
 
 ---
 
