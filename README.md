@@ -19,63 +19,84 @@ giving an LLM more text is like giving a human a larger stack of papers.
 Attention drifts to the beginning and end; details in the middle are missed.
 The solution is not more context, but precisely the right context.
 
-The safeguards:
+This workflow addresses these failures through four principles:
 
-- **Context hygiene** -- Each task receives precisely the information it needs.
-  Sub-agents start with fresh, focused context. CLAUDE.md files in each
-  directory serve as indexes; README.md captures decisions invisible in code.
-  The `doc-sync` skill bootstraps and maintains this hierarchy.
-- **Planning that resolves ambiguities** -- LLMs make first-shot mistakes. The
-  workflow separates planning from execution, forcing ambiguities to surface
-  when they are cheap to fix.
-- **Multi-turn review cycles** -- Plans pass through quality gates with multiple
-  iterations until all checks pass. Execution generates retrospectives that feed
-  back into planning.
-- **Documentation for LLM consumption** -- Functions include "use when..."
-  triggers and usage examples. Decision rationale lives in README.md files, not
-  lost chat history.
+### Context Hygiene
+
+Each task receives precisely the information it needs -- no more. Sub-agents
+start with fresh, focused context. CLAUDE.md files in each directory serve as
+indexes; README.md captures decisions invisible in code.
+
+Hygiene extends to code artifacts. Comments are scrubbed for temporal
+contamination ("Added X" becomes "X handles Y"). Documentation uses tabular
+indexes, not prose. Functions include "use when..." triggers and usage
+examples. Decision rationale lives in README.md files, not lost chat history.
+These rules prevent cruft accumulation.
+
+### Planning Before Execution
+
+LLMs make first-shot mistakes. The workflow separates planning from execution,
+forcing ambiguities to surface when they are cheap to fix. Analysis is separate
+from implementation. Each phase has clear inputs and outputs.
+
+Plans capture why decisions were made, what alternatives were rejected, and
+what risks were accepted. This survives context clears and new sessions --
+the reasoning persists even when the conversation does not.
+
+### Review Cycles
+
+Plans pass through quality gates with multiple iterations until all checks
+pass. Technical writer and quality reviewer run before execution begins,
+catching issues when they are cheap to fix. Execution generates retrospectives
+that feed back into planning.
+
+### Cost-Effective Delegation
+
+The orchestrator runs on a capable model, but delegates execution to smaller
+agents -- Haiku-class for straightforward tasks, Sonnet-class for moderate
+complexity. Just-in-time prompt injection provides precise guidance at each
+step, allowing smaller models to perform reliably.
+
+Model selection is dynamic. When quality review fails, issues appear subtle,
+or problems recur, the orchestrator progressively escalates to higher-quality
+models. The heavy lifting happens in well-scoped tasks with clear instructions;
+expensive frontier models are reserved for genuine ambiguity, not routine work.
+
+Plans are written to files. Execution can be interrupted and resumed.
+Reconciliation detects already-completed milestones.
+
+---
 
 This workflow is opinionated. I am a backend engineer by trade -- the workflow
 should apply equally to frontend, but feedback welcome. Same for whether these
 patterns translate to less experienced engineers.
 
-## Components
+## Quick Start
 
-**Skills** -- Multi-turn workflows via Python scripts with just-in-time prompts:
+Install by cloning into your Claude Code configuration directory:
 
-- `planner` -- Structured implementation planning with quality review gates
-- `prompt-engineer` -- Prompt optimization using documented patterns
-- `decision-critic` -- Adversarial analysis to counter LLM sycophancy
-- `doc-sync` -- Synchronizes CLAUDE.md indexes and README.md architecture docs;
-  useful for bootstrapping a repository into this workflow
-- `incoherence` -- Detects contradictions between docs and code, ambiguous
-  specs, documentation gaps; designed for hub-and-spoke doc architectures
-  (experimental)
+```bash
+# Per-project installation
+git clone https://github.com/solatis/claude-config .claude
 
-**Agents** -- Specialized sub-agents with domain expertise:
+# Global installation (new)
+git clone https://github.com/solatis/claude-config ~/.claude
 
-- `developer` -- Implements specifications with tests
-- `debugger` -- Systematic bug analysis through evidence gathering
-- `quality-reviewer` -- Production risk and project conformance checks
-- `technical-writer` -- Documentation optimized for LLM consumption
-
-**Commands** -- Entry points for workflows:
-
-- `plan-execution` -- Executes approved plans via agent delegation
-
-## Repository Structure
-
-```
-agents/                  Sub-agent definitions (*.md)
-commands/                Workflow entry points (*.md)
-skills/                  Multi-turn workflows
-  <skill>/
-    SKILL.md             Entry point
-    scripts/             Just-in-time prompt injection
-    resources/           Shared formats and conventions
+# Global installation (existing ~/.claude with files)
+cd ~/.claude
+git remote add workflow https://github.com/solatis/claude-config
+git fetch workflow
+git merge workflow/main --allow-unrelated-histories
 ```
 
----
+For non-trivial changes, the workflow is: explore -> plan -> execute.
+
+1. Investigate the problem, ask clarifying questions
+2. "Use your planner skill to write a plan to plans/my-feature.md"
+3. `/clear` -- reset context
+4. `/plan-execution plans/my-feature.md` -- execute via sub-agents
+
+For details, see [The Workflow](#the-workflow).
 
 ## The Workflow
 
@@ -125,7 +146,8 @@ logic approach before we commit to a plan.
 ```
 
 This forces adversarial analysis of your assumptions and approach. Skip this
-step for straightforward changes where the path forward is clear.
+step for straightforward changes where the path forward is clear. See
+[Decision Critic](#decision-critic) for details.
 
 ### Step 3: Invoke the Planner Skill
 
@@ -135,7 +157,108 @@ Once you understand what needs to be done:
 "Now use your planner skill to write an implementation plan to plans/api-retry.md"
 ```
 
-The planner skill runs a multi-step planning process:
+The planner runs a multi-step process: context gathering, decision/architecture,
+refinement, then review by technical writer and quality reviewer. The review
+loop catches LLM mistakes before execution begins. See [Planner](#planner) for
+the full phase breakdown.
+
+### Step 4: Clear Context
+
+After planning completes:
+
+```
+/clear
+```
+
+This clears the conversation context, preventing the exploration/planning phase
+from polluting the execution phase.
+
+### Step 5: Execute the Plan
+
+```
+/plan-execution plans/api-retry.md
+```
+
+Plan execution delegates to specialized agents (developer, debugger,
+quality-reviewer, technical-writer). The coordinator never writes code directly
+-- it orchestrates. See [Plan Execution](#plan-execution) for the delegation
+flow.
+
+---
+
+## Workflow Skills
+
+These skills form the core workflow, used in sequence.
+
+### Decision Critic
+
+LLMs tend toward sycophancy -- agreeing with the user rather than providing
+genuine pushback. For important architectural decisions, you want stress-testing,
+not validation.
+
+The decision-critic skill forces structured adversarial analysis:
+
+```mermaid
+flowchart LR
+    D[Decomposition] --> V[Verification] --> Ch[Challenge] --> S[Synthesis]
+```
+
+| Phase         | Actions                                                                    |
+| ------------- | -------------------------------------------------------------------------- |
+| Decomposition | Extract claims, assumptions, constraints; assign IDs; classify each        |
+| Verification  | Generate questions for verifiable items; answer independently; mark status |
+| Challenge     | Steel-man argument against; explore alternative framings                   |
+| Synthesis     | Verdict (STAND/REVISE/ESCALATE); summary and recommendation                |
+
+#### When to Use
+
+Use for important decisions where you want genuine criticism, not agreement:
+
+- Architectural choices with long-term consequences
+- Technology selection (language, framework, database)
+- Tradeoffs between competing concerns (performance vs. maintainability)
+- Decisions you're uncertain about and want stress-tested
+
+#### Example Usage
+
+```
+I'm considering using Redis for our session storage instead of PostgreSQL.
+My reasoning:
+
+- Redis is faster for key-value lookups
+- Sessions are ephemeral, don't need ACID guarantees
+- We already have Redis for caching
+
+Use your decision critic skill to stress-test this decision.
+```
+
+The skill will:
+
+1. **Decompose** the decision into claims (C1: Redis is faster), assumptions
+   (A1: sessions don't need durability), constraints (K1: Redis already deployed)
+2. **Verify** each claim -- is Redis actually faster for your access pattern?
+   What's the actual latency difference?
+3. **Challenge** -- what if sessions DO need durability (shopping carts)?
+   What's the operational cost of Redis failures?
+4. **Synthesize** -- verdict with specific failed/uncertain items
+
+#### The Anti-Sycophancy Design
+
+The skill is grounded in three research-backed techniques:
+
+- **Chain-of-Verification** (Dhuliawala et al., 2023) -- factored verification
+  prevents confirmation bias by answering questions independently
+- **Self-Consistency** (Wang et al., 2023) -- multiple reasoning paths reveal
+  disagreement
+- **Multi-Expert Prompting** (Wang et al., 2024) -- diverse perspectives catch
+  blind spots
+
+The 7-step structure forces the LLM through adversarial phases rather than
+allowing it to immediately agree with your reasoning.
+
+### Planner
+
+The planner skill runs a multi-step planning process with built-in review:
 
 ```mermaid
 flowchart TB
@@ -175,22 +298,7 @@ frequently have gaps -- missing error handling, incomplete acceptance criteria,
 ambiguous specifications. The workflow iterates until QR passes, ensuring
 problems are caught when they are cheap to fix rather than during implementation.
 
-### Step 4: Clear Context
-
-After planning completes:
-
-```
-/clear
-```
-
-This clears the conversation context, preventing the exploration/planning phase
-from polluting the execution phase.
-
-### Step 5: Execute the Plan
-
-```
-/plan-execution plans/api-retry.md
-```
+### Plan Execution
 
 Plan execution delegates to specialized agents:
 
@@ -229,12 +337,16 @@ hierarchy for all changes made during execution.
 
 ---
 
-## The Prompt Engineer Skill
+## Standalone Skills
+
+These skills can be used independently, outside the main workflow.
+
+### Prompt Engineer
 
 A meta-skill for optimizing prompts themselves. Since this entire workflow
 consists of prompts consumed by LLMs, each can be individually optimized.
 
-### Basic Usage
+#### Basic Usage
 
 Optimize a simple prompt:
 
@@ -245,7 +357,7 @@ Use your prompt engineer skill to optimize the following prompt:
  Be concise and write clean code."
 ```
 
-### Optimizing Sub-Agents
+#### Optimizing Sub-Agents
 
 Optimize a Claude Code sub-agent definition:
 
@@ -254,7 +366,7 @@ Use your prompt engineer skill to optimize the system prompt for
 the following claude code sub-agent: agents/developer.md
 ```
 
-### Optimizing Multi-Prompt Workflows
+#### Optimizing Multi-Prompt Workflows
 
 For complex workflows where multiple prompts interact:
 
@@ -267,7 +379,7 @@ Consider the following Python file. Your task:
 @skills/planner/scripts/planner.py
 ```
 
-### Full Workflow Optimization
+#### Full Workflow Optimization
 
 Optimize the entire planning/execution workflow:
 
@@ -302,77 +414,7 @@ The prompt engineer skill:
 4. Waits for approval before applying changes
 5. Presents optimized result with verification
 
----
-
-## The Decision Critic Skill
-
-LLMs tend toward sycophancy -- agreeing with the user rather than providing
-genuine pushback. For important architectural decisions, you want stress-testing,
-not validation.
-
-The decision-critic skill forces structured adversarial analysis:
-
-```mermaid
-flowchart LR
-    D[Decomposition] --> V[Verification] --> Ch[Challenge] --> S[Synthesis]
-```
-
-| Phase         | Actions                                                                    |
-| ------------- | -------------------------------------------------------------------------- |
-| Decomposition | Extract claims, assumptions, constraints; assign IDs; classify each        |
-| Verification  | Generate questions for verifiable items; answer independently; mark status |
-| Challenge     | Steel-man argument against; explore alternative framings                   |
-| Synthesis     | Verdict (STAND/REVISE/ESCALATE); summary and recommendation                |
-
-### When to Use
-
-Use for important decisions where you want genuine criticism, not agreement:
-
-- Architectural choices with long-term consequences
-- Technology selection (language, framework, database)
-- Tradeoffs between competing concerns (performance vs. maintainability)
-- Decisions you're uncertain about and want stress-tested
-
-### Example Usage
-
-```
-I'm considering using Redis for our session storage instead of PostgreSQL.
-My reasoning:
-
-- Redis is faster for key-value lookups
-- Sessions are ephemeral, don't need ACID guarantees
-- We already have Redis for caching
-
-Use your decision critic skill to stress-test this decision.
-```
-
-The skill will:
-
-1. **Decompose** the decision into claims (C1: Redis is faster), assumptions
-   (A1: sessions don't need durability), constraints (K1: Redis already deployed)
-2. **Verify** each claim -- is Redis actually faster for your access pattern?
-   What's the actual latency difference?
-3. **Challenge** -- what if sessions DO need durability (shopping carts)?
-   What's the operational cost of Redis failures?
-4. **Synthesize** -- verdict with specific failed/uncertain items
-
-### The Anti-Sycophancy Design
-
-The skill is grounded in three research-backed techniques:
-
-- **Chain-of-Verification** (Dhuliawala et al., 2023) -- factored verification
-  prevents confirmation bias by answering questions independently
-- **Self-Consistency** (Wang et al., 2023) -- multiple reasoning paths reveal
-  disagreement
-- **Multi-Expert Prompting** (Wang et al., 2024) -- diverse perspectives catch
-  blind spots
-
-The 7-step structure forces the LLM through adversarial phases rather than
-allowing it to immediately agree with your reasoning.
-
----
-
-## The Doc Sync Skill
+### Doc Sync
 
 The CLAUDE.md/README.md hierarchy is central to context hygiene. CLAUDE.md files
 are pure indexes -- tabular navigation with "What" and "When to read" columns
@@ -382,7 +424,7 @@ tradeoffs, invariants that are not apparent from reading code.
 
 The `doc-sync` skill audits and synchronizes this hierarchy across a repository.
 
-### How It Works
+#### How It Works
 
 1. **Discovery** -- Maps all directories, identifies missing or outdated
    CLAUDE.md files
@@ -392,7 +434,7 @@ The `doc-sync` skill audits and synchronizes this hierarchy across a repository.
 4. **Update** -- Creates/updates indexes with proper tabular format
 5. **Verification** -- Confirms complete coverage and correct structure
 
-### When to Use
+#### When to Use
 
 - **Bootstrapping** -- Adopting this workflow on an existing repository
 - **After bulk changes** -- Major refactors, directory restructuring
@@ -403,7 +445,7 @@ If you use the planning workflow consistently, the technical writer agent
 maintains documentation as part of execution. The `doc-sync` skill is primarily
 for bootstrapping or recovery.
 
-### Example Usage
+#### Example Usage
 
 ```
 Use your doc-sync skill to synchronize documentation across this repository
@@ -414,167 +456,6 @@ For targeted updates:
 ```
 Use your doc-sync skill to update documentation in src/validators/
 ```
-
----
-
-## The Incoherence Skill
-
-> **Work in Progress**: This skill is functional but rough around the edges.
-> The current workflow relies on writing findings to a markdown file and having
-> the user fill in resolutions manually. A more streamlined interaction model
-> is in development.
-
-Documentation drifts from implementation. Specs contradict each other.
-Comments describe code that no longer exists. The incoherence skill
-systematically detects these contradictions and helps resolve them.
-
-### Designed for Hub-and-Spoke Documentation
-
-This skill pairs naturally with structured `doc/` folders -- hub-and-spoke
-architectures where specifications are clearly defined and cross-referenced:
-
-```
-doc/
-  01-principles/
-  02-architecture/
-  03-data/
-  ...
-  README.md           <- hub
-  security-index.md   <- cross-cutting index
-```
-
-But it works with any collection of information sources: codebases, end-user
-documentation, configuration files, or a mix of all three.
-
-### Use Cases
-
-- **Spec vs Implementation**: Find where docs claim X but code does Y
-- **Cross-Document Consistency**: Find contradictions between different docs
-- **End-User Documentation**: Ensure customer-facing docs match current behavior
-- **Configuration Docs**: Find documented env vars that aren't used, or defaults
-  that don't match code
-
-### How It Works
-
-The skill operates in two phases with parallel sub-agents:
-
-```mermaid
-flowchart TB
-    subgraph DETECTION["DETECTION PHASE"]
-        direction TB
-        S1[Survey Codebase]
-        S2[Select Dimensions]
-        S3[Dispatch Explorers]
-        S4[Synthesize Findings]
-        S5[Dispatch Verifiers]
-        S8[Analyze Verdicts]
-        S9[Generate Report]
-
-        subgraph EXPLORE["Parallel Exploration"]
-            E1[Dim A]
-            E2[Dim B]
-            E3[Dim C]
-        end
-
-        subgraph VERIFY["Parallel Verification"]
-            V1[Candidate 1]
-            V2[Candidate 2]
-            V3[Candidate 3]
-        end
-
-        S1 --> S2 --> S3
-        S3 --> EXPLORE
-        EXPLORE --> S4 --> S5
-        S5 --> VERIFY
-        VERIFY --> S8 --> S9
-    end
-
-    S9 --> REPORT[/"Report File"/]
-    REPORT --> USER{{"User fills in<br/>resolutions"}}
-    USER --> S10
-
-    subgraph RECONCILIATION["RECONCILIATION PHASE"]
-        direction TB
-        S10[Parse Resolutions]
-        S11[Analyze Targets]
-        S12[Plan Waves]
-        S13[Dispatch Wave]
-        S16[Collect Results]
-        S17[Update Report]
-
-        subgraph APPLY["Parallel Application"]
-            A1[Developer]
-            A2[Tech Writer]
-        end
-
-        S10 --> S11 --> S12 --> S13
-        S13 --> APPLY
-        APPLY --> S16
-        S16 -->|more waves| S13
-        S16 -->|done| S17
-    end
-
-    style DETECTION fill:#e8f4e8,stroke:#2d5a2d
-    style RECONCILIATION fill:#e8e8f4,stroke:#2d2d5a
-    style USER fill:#fff3cd,stroke:#856404
-```
-
-**Detection Phase:**
-
-1. Survey the codebase to identify information sources
-2. Select relevant dimensions from the catalog (see below)
-3. Dispatch parallel haiku agents to explore each dimension
-4. Synthesize findings, score candidates, select top 10
-5. Dispatch parallel sonnet agents to verify each candidate
-6. Classify verdicts as TRUE_INCOHERENCE or FALSE_POSITIVE
-7. Generate report with Resolution sections for user input
-
-**Reconciliation Phase** (after user fills in resolutions):
-
-1. Parse the report, extract user resolutions
-2. Analyze targets, determine file types and agent types
-3. Plan dispatch waves (batch by file, sequence conflicting agent types)
-4. Dispatch Developer/Technical Writer agents in parallel waves
-5. Collect results, update report with resolved status
-
-### Example Usage
-
-```
-Use your incoherence skill to audit doc/ against the implementation.
-Output to incoherence-report.md.
-```
-
-After detection completes, review the report. For each issue, write your
-resolution in the designated section:
-
-```markdown
-#### Resolution
-
-<!-- USER: Write your decision below. Be specific. -->
-
-Use the spec value (100MB). Update the code to match.
-
-<!-- /Resolution -->
-```
-
-Then invoke reconciliation:
-
-```
-Continue with the reconciliation phase for incoherence-report.md
-```
-
-### Current Limitations
-
-1. **Manual resolution input**: User must edit the markdown file directly.
-   Exploring better interaction patterns.
-
-2. **Report file management**: User must specify output filename upfront.
-
-3. **Large codebases**: Dimension exploration can be slow. Consider scoping
-   to specific directories.
-
-4. **False positive rate**: Dimensions J and K can produce false positives
-   requiring manual triage.
 
 ---
 
@@ -621,33 +502,6 @@ python3 scripts/planner.py --step-number 1 --total-steps 4 --thoughts "..."
 This pattern keeps context focused, allows workflows that adapt based on
 intermediate results, and enables cost-effective model selection -- smaller
 models can handle well-scoped tasks with precise instructions.
-
----
-
-## Design Principles
-
-**Separation of concerns**: Planning is separate from execution. Analysis is
-separate from implementation. Each phase has clear inputs and outputs.
-
-**Explicit decision tracking**: The Planning Context section captures why
-decisions were made, what alternatives were rejected, and what risks were
-accepted. This survives context clears and new sessions.
-
-**Quality gates**: Technical writer and quality reviewer run before execution
-begins, catching issues when they're cheap to fix.
-
-**Cost-effective model selection**: The orchestrator and planner run on capable
-models, but delegate execution to Sonnet-class agents. Just-in-time prompt
-injection provides precise guidance at each step, allowing smaller models to
-perform reliably. The heavy lifting happens in well-scoped tasks with clear
-instructions, not in expensive frontier models reasoning through ambiguity.
-
-**Hygiene over speed**: Comments are scrubbed for temporal contamination
-("Added X" becomes "X handles Y"). Documentation uses tabular indexes, not
-prose. These rules prevent cruft accumulation.
-
-**Resumability**: Plans are written to files. Execution can be interrupted and
-resumed. Reconciliation detects already-completed milestones.
 
 ---
 
