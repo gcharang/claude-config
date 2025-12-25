@@ -454,8 +454,9 @@ Invocation:
 python3 scripts/planner.py --step-number 1 --total-steps 4 --thoughts "..."
 ```
 
-This pattern keeps context focused and allows workflows that adapt based on
-intermediate results.
+This pattern keeps context focused, allows workflows that adapt based on
+intermediate results, and enables cost-effective model selection -- smaller
+models can handle well-scoped tasks with precise instructions.
 
 ---
 
@@ -470,6 +471,12 @@ accepted. This survives context clears and new sessions.
 
 **Quality gates**: Technical writer and quality reviewer run before execution
 begins, catching issues when they're cheap to fix.
+
+**Cost-effective model selection**: The orchestrator and planner run on capable
+models, but delegate execution to Sonnet-class agents. Just-in-time prompt
+injection provides precise guidance at each step, allowing smaller models to
+perform reliably. The heavy lifting happens in well-scoped tasks with clear
+instructions, not in expensive frontier models reasoning through ambiguity.
 
 **Hygiene over speed**: Comments are scrubbed for temporal contamination
 ("Added X" becomes "X handles Y"). Documentation uses tabular indexes, not
