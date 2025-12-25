@@ -104,11 +104,11 @@ The primary workflow for non-trivial changes:
 
 ```mermaid
 flowchart LR
-    A[Free-form Analysis] --> B[Decision Critic]
+    A[Analyze] --> B[Decision Critic]
     B --> C[Planning Phase]
     C --> D[Plan Execution]
 
-    A -.- A1[Explore codebase<br>Understand problem<br>Consider approaches]
+    A -.- A1[Systematic exploration<br>Evidence-backed findings<br>Prioritized focus areas]
     B -.- B1[Stress-test approach<br>before committing]
     C -.- C1[Write plan to file<br>Review & refine]
     D -.- D1[Orchestrated implementation<br>via sub-agents]
@@ -119,21 +119,19 @@ flowchart LR
 
 Note: Decision Critic (dashed) is optional.
 
-### Step 1: Free-form Analysis
+### Step 1: Analyze
 
-Start with open exploration. Claude Code investigates the problem space:
+Start with systematic exploration using the analyze skill:
 
 ```
-I need to add retry logic to our API client.
-
-Before proposing a solution:
-- Explore the codebase to understand the existing API client structure
-- Identify existing error handling patterns and conventions
-- Ask clarifying questions about retry strategies, failure scenarios, and configuration
+Use your analyze skill to understand this codebase before we plan changes.
+Focus on: [architecture / performance / security / quality]
 ```
 
-Claude explores the codebase, understands existing patterns, may ask clarifying
-questions, and identifies constraints and dependencies.
+The analyze skill runs a six-phase workflow: exploration (via Explore sub-agent),
+focus selection, investigation planning, deep analysis, verification, and
+synthesis. Each finding requires evidence -- file:line references and quoted
+code. See [Analyze](#analyze) for the full phase breakdown.
 
 ### Step 2: Decision Critic (Optional)
 
@@ -189,6 +187,55 @@ flow.
 ## Workflow Skills
 
 These skills form the core workflow, used in sequence.
+
+### Analyze
+
+The analyze skill provides systematic codebase investigation with structured
+phases and evidence requirements. Use it as the first step before planning any
+non-trivial changes.
+
+```mermaid
+flowchart LR
+    E[Exploration] --> F[Focus Selection]
+    F --> I[Investigation Planning]
+    I --> D[Deep Analysis]
+    D --> V[Verification]
+    V --> S[Synthesis]
+```
+
+| Phase                  | Actions                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| Exploration            | Delegate to Explore agent; process structure, tech stack, patterns             |
+| Focus Selection        | Classify areas (architecture, performance, security, quality); assign P1/P2/P3 |
+| Investigation Planning | Commit to specific files and questions; create accountability contract         |
+| Deep Analysis          | Progressive investigation; document with file:line + quoted code               |
+| Verification           | Audit completeness; ensure all commitments addressed                           |
+| Synthesis              | Consolidate by severity; provide prioritized recommendations                   |
+
+#### When to Use
+
+- Unfamiliar codebase requiring systematic understanding
+- Security review or vulnerability assessment
+- Performance analysis before optimization
+- Architecture evaluation before major refactoring
+- Any situation requiring evidence-backed findings (not impressions)
+
+#### When to Skip
+
+- You already understand the codebase well
+- Simple bug fix with obvious scope
+- User has provided comprehensive context
+
+#### Example Usage
+
+```
+Use your analyze skill to understand this codebase.
+Focus on security and architecture before we plan the authentication refactor.
+```
+
+The skill outputs findings organized by severity (CRITICAL/HIGH/MEDIUM/LOW),
+each with file:line references and quoted code. This feeds directly into
+planning -- you have evidence-backed understanding before proposing changes.
 
 ### Decision Critic
 
@@ -346,73 +393,142 @@ These skills can be used independently, outside the main workflow.
 A meta-skill for optimizing prompts themselves. Since this entire workflow
 consists of prompts consumed by LLMs, each can be individually optimized.
 
-#### Basic Usage
+#### When to Use
 
-Optimize a simple prompt:
+- Optimizing a sub-agent definition (`agents/developer.md`)
+- Improving a skill's Python script prompts (`skills/planner/scripts/planner.py`)
+- Reviewing an entire multi-prompt workflow for consistency
+- Any prompt that isn't performing as expected
 
-```
-Use your prompt engineer skill to optimize the following prompt:
+#### How It Works
 
-"You are a helpful assistant that writes Python code.
- Be concise and write clean code."
-```
+1. Reads prompt engineering pattern references
+2. Analyzes the prompt(s) for issues
+3. Proposes changes with explicit pattern attribution
+4. Waits for approval before applying changes
+5. Presents optimized result with self-verification
 
-#### Optimizing Sub-Agents
+The skill uses recitation and careful output ordering to ground itself in the
+referenced patterns -- it was optimized using itself.
 
-Optimize a Claude Code sub-agent definition:
+#### Example Usage
+
+Optimize a sub-agent:
 
 ```
 Use your prompt engineer skill to optimize the system prompt for
 the following claude code sub-agent: agents/developer.md
 ```
 
-#### Optimizing Multi-Prompt Workflows
-
-For complex workflows where multiple prompts interact:
+Optimize a multi-prompt workflow:
 
 ```
-Consider the following Python file. Your task:
-- Identify all different system/user prompts
-- Understand how they interact together
-- Use your prompt engineer skill to optimize each of these individually
-
-@skills/planner/scripts/planner.py
+Consider @skills/planner/scripts/planner.py. Identify all prompts,
+understand how they interact, then use your prompt engineer skill
+to optimize each.
 ```
 
-#### Full Workflow Optimization
+#### Example Output
 
-Optimize the entire planning/execution workflow:
+Each proposed change includes scope, problem, technique, before/after, and
+rationale. A single invocation may propose many changes:
 
 ```
-Consider the following tightly integrated workflow:
+  +==============================================================================+
+  |  CHANGE 1: Add STOP gate to Step 1 (Exploration)                             |
+  +==============================================================================+
+  |                                                                              |
+  |  SCOPE                                                                       |
+  |  -----                                                                       |
+  |  Prompt:      analyze.py step 1                                              |
+  |  Section:     Lines 41-49 (precondition check)                               |
+  |  Downstream:  All subsequent steps depend on exploration results             |
+  |                                                                              |
+  +------------------------------------------------------------------------------+
+  |                                                                              |
+  |  PROBLEM                                                                     |
+  |  -------                                                                     |
+  |  Issue:    Hedging language allows model to skip precondition                |
+  |                                                                              |
+  |  Evidence: "PRECONDITION: You should have already delegated..."              |
+  |            "If you have not, STOP and do that first"                         |
+  |                                                                              |
+  |  Runtime:  Model proceeds to "process exploration results" without having    |
+  |            any results, produces empty/fabricated structure analysis         |
+  |                                                                              |
+  +------------------------------------------------------------------------------+
+  |                                                                              |
+  |  TECHNIQUE                                                                   |
+  |  ---------                                                                   |
+  |  Apply:    STOP Escalation Pattern (single-turn ref)                         |
+  |                                                                              |
+  |  Trigger:  "For behaviors you need to interrupt, not just discourage"        |
+  |  Effect:   "Creates metacognitive checkpoint--the model must pause and       |
+  |             re-evaluate before proceeding"                                   |
+  |  Stacks:   Affirmative Directives                                            |
+  |                                                                              |
+  +------------------------------------------------------------------------------+
+  |                                                                              |
+  |  BEFORE                                                                      |
+  |  ------                                                                      |
+  |  +----------------------------------------------------------------------+    |
+  |  | "PRECONDITION: You should have already delegated to the Explore      |    |
+  |  |  sub-agent.",                                                        |    |
+  |  | "If you have not, STOP and do that first:",                          |    |
+  |  +----------------------------------------------------------------------+    |
+  |                                                                              |
+  |                                    |                                         |
+  |                                    v                                         |
+  |                                                                              |
+  |  AFTER                                                                       |
+  |  -----                                                                       |
+  |  +----------------------------------------------------------------------+    |
+  |  | "STOP. Before proceeding, verify you have Explore agent results.",   |    |
+  |  | "",                                                                  |    |
+  |  | "If your --thoughts do NOT contain Explore agent output, you MUST:", |    |
+  |  | "  1. Use Task tool with subagent_type='Explore'                     |    |
+  |  | "  2. Prompt: 'Explore this repository. Report directory structure,  |    |
+  |  | "     tech stack, entry points, main components, observed patterns.' |    |
+  |  | "  3. WAIT for results before invoking this step again               |    |
+  |  | "",                                                                  |    |
+  |  | "Only proceed below if you have concrete Explore output to process." |    |
+  |  +----------------------------------------------------------------------+    |
+  |                                                                              |
+  +------------------------------------------------------------------------------+
+  |                                                                              |
+  |  WHY THIS IMPROVES QUALITY                                                   |
+  |  -------------------------                                                   |
+  |  Transforms soft precondition into hard gate. Model must explicitly verify   |
+  |  it has Explore results before processing, preventing fabricated analysis.   |
+  |                                                                              |
+  +==============================================================================+
 
-Claude Code sub-agents:
-* @agents/developer.md
-* @agents/debugger.md
-* @agents/quality-reviewer.md
-* @agents/technical-writer.md
+  ... many more
 
-Planner skill:
-* @skills/planner/SKILL.md
-* @skills/planner/scripts/planner.py
-* @skills/planner/resources/diff-format.md
 
-Plan execution command:
-* @commands/plan-execution.md
+  ---
+  Compatibility check:
+  - STOP Escalation + Affirmative Directives: Compatible (STOP is for interrupting specific behaviors)
+  - History Accumulation + Completeness Checkpoint Tags: Synergistic (both enforce state tracking)
+  - Quote Extraction + Chain-of-Verification: Complementary (both prevent hallucination)
+  - Progressive depth + Pre-Work Context Analysis: Sequential (planning enables deeper execution)
 
-Your task:
-* Think deeply to understand how everything fits together
-* Identify all different prompts being consumed by LLMs
-* Use your prompt engineer skill to optimize each of these
+  Anti-patterns verified:
+  - No hedging spiral (replaced "should have" with "STOP. Verify...")
+  - No everything-is-critical (CRITICAL used only for state requirement)
+  - Affirmative directives used (changed negatives to positives)
+  - No implicit category trap (explicit checklists provided)
+
+  ---
+  Does this plan look reasonable? I'll apply these changes once you confirm.
 ```
 
-The prompt engineer skill:
+#### Caveat
 
-1. Reads prompt engineering pattern references
-2. Analyzes the prompt(s) for issues
-3. Proposes changes with explicit pattern attribution
-4. Waits for approval before applying changes
-5. Presents optimized result with verification
+When you tell an LLM "find problems and opportunities for optimization", it will
+always find "problems" -- that's what it was asked to do. Some may not be real
+issues. Invoke the skill multiple times on challenging prompts, but recognize
+when it's good enough and stop.
 
 ### Doc Sync
 
