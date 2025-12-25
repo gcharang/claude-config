@@ -77,7 +77,7 @@ skills/                  Multi-turn workflows
 
 ---
 
-## The Planning Workflow
+## The Workflow
 
 The primary workflow for non-trivial changes:
 
