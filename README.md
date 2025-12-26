@@ -94,7 +94,7 @@ For non-trivial changes, the workflow is: explore -> plan -> execute.
 1. Investigate the problem, ask clarifying questions
 2. "Use your planner skill to write a plan to plans/my-feature.md"
 3. `/clear` -- reset context
-4. `/plan-execution plans/my-feature.md` -- execute via sub-agents
+4. "Use your planner skill to execute plans/my-feature.md" -- execute via sub-agents
 
 For details, see [The Workflow](#the-workflow).
 
@@ -105,8 +105,8 @@ The primary workflow for non-trivial changes:
 ```mermaid
 flowchart LR
     A[Analyze] --> B[Decision Critic]
-    B --> C[Planning Phase]
-    C --> D[Plan Execution]
+    B --> C[Planning]
+    C --> D[Execution]
 
     A -.- A1[Systematic exploration<br>Evidence-backed findings<br>Prioritized focus areas]
     B -.- B1[Stress-test approach<br>before committing]
@@ -174,13 +174,13 @@ from polluting the execution phase.
 ### Step 5: Execute the Plan
 
 ```
-/plan-execution plans/api-retry.md
+Use your planner skill to execute plans/api-retry.md
 ```
 
-Plan execution delegates to specialized agents (developer, debugger,
-quality-reviewer, technical-writer). The coordinator never writes code directly
--- it orchestrates. See [Plan Execution](#plan-execution) for the delegation
-flow.
+The planner skill's execution workflow delegates to specialized agents
+(developer, debugger, quality-reviewer, technical-writer). The coordinator never
+writes code directly -- it orchestrates. See [Planner](#planner) for the full
+workflow.
 
 ---
 
@@ -305,82 +305,81 @@ allowing it to immediately agree with your reasoning.
 
 ### Planner
 
-The planner skill runs a multi-step planning process with built-in review:
+The planner skill provides both planning and execution workflows:
 
 ```mermaid
 flowchart TB
-    subgraph planning[Planning Phase]
+    subgraph planning[Planning Workflow]
         P1[Context & Scope] --> P2[Decision & Architecture]
         P2 --> P3[Refinement]
         P3 --> P4[Final Verification]
+        P4 --> R1[Technical Writer]
+        R1 --> R2[Quality Reviewer]
     end
 
-    subgraph review[Review Phase]
-        R1[Technical Writer] --> R2[Quality Reviewer]
+    subgraph execution[Execution Workflow]
+        E1[Execution Planning] --> E2[Reconciliation]
+        E2 --> E3[Milestone Execution]
+        E3 --> E4[Post-Implementation QR]
+        E4 -->|issues| E5[Issue Resolution]
+        E5 --> E4
+        E4 -->|pass| E6[Documentation]
+        E6 --> E7[Retrospective]
     end
 
-    planning --> review
-    R2 -->|pass| done[Plan written to file]
-    R2 -->|fail| planning
+    R2 -->|pass| clear[/clear context/]
+    clear --> E1
+    R2 -->|fail| P1
+    E2 -.->|conditional| E3
+    E5 -.->|conditional| E4
 ```
 
-**Planning Phase:**
+#### Planning Workflow
 
-| Step                    | Actions                                                                    |
-| ----------------------- | -------------------------------------------------------------------------- |
-| Context & Scope         | Confirm path, define scope, identify approaches, list constraints          |
-| Decision & Architecture | Evaluate approaches, select with reasoning, diagram, break into milestones |
-| Refinement              | Document risks, add uncertainty flags, specify paths and criteria          |
-| Final Verification      | Verify completeness, check specs, write to file                            |
-
-**Review Phase:**
-
-| Step             | Actions                                                                            |
-| ---------------- | ---------------------------------------------------------------------------------- |
-| Technical Writer | Scrub temporal comments, add WHY comments, enrich rationale                        |
-| Quality Reviewer | Check reliability, check conformance, return PASS/PASS_WITH_CONCERNS/NEEDS_CHANGES |
+| Step                    | Actions                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| Context & Scope         | Confirm path, define scope, identify approaches, list constraints            |
+| Decision & Architecture | Evaluate approaches, select with reasoning, diagram, break into milestones   |
+| Refinement              | Document risks, add uncertainty flags, specify paths and criteria            |
+| Final Verification      | Verify completeness, check specs, write to file                              |
+| Technical Writer        | Scrub temporal comments, add WHY comments, enrich rationale                  |
+| Quality Reviewer        | Check reliability, conformance; return PASS/PASS_WITH_CONCERNS/NEEDS_CHANGES |
 
 The review feedback loop catches LLM mistakes before execution begins. Plans
 frequently have gaps -- missing error handling, incomplete acceptance criteria,
-ambiguous specifications. The workflow iterates until QR passes, ensuring
-problems are caught when they are cheap to fix rather than during implementation.
+ambiguous specifications. The workflow iterates until QR passes.
 
-### Plan Execution
+#### Execution Workflow
 
-Plan execution delegates to specialized agents:
+After planning completes and the user clears context (`/clear`), execution
+proceeds through seven steps:
 
-```mermaid
-flowchart TB
-    subgraph milestone[Per Milestone]
-        C[Coordinator] --> D[Developer]
-        C -.->|if error| Db[Debugger]
-        Db -.-> D
-        D --> QR[Quality Reviewer]
-        QR -->|fail| C
-    end
-
-    QR -->|pass| next[Next Milestone]
-    next -.-> C
-    next -->|all complete| TW[Technical Writer]
-    TW --> done[Execution complete]
-```
+| Step                   | Purpose                                                         |
+| ---------------------- | --------------------------------------------------------------- |
+| Execution Planning     | Analyze plan, detect reconciliation signals, output strategy    |
+| Reconciliation         | (conditional) Validate existing code against plan               |
+| Milestone Execution    | Delegate to agents, run tests; repeat until all complete        |
+| Post-Implementation QR | Quality review of implemented code                              |
+| Issue Resolution       | (conditional) Present issues, collect decisions, delegate fixes |
+| Documentation          | Technical writer updates CLAUDE.md/README.md                    |
+| Retrospective          | Present execution summary                                       |
 
 The coordinator:
 
 - Never writes code directly (delegates to developers)
 - Parallelizes independent work across up to 4 developers per milestone
-- Runs quality review after each milestone
-- Sequences dependent milestones
-- Invokes technical writer only after all milestones complete
+- Runs quality review after all milestones complete
+- Loops through issue resolution until QR passes
+- Invokes technical writer only after QR passes
 
-The quality review feedback loop is intentional. LLMs almost always have
-oversights -- missed edge cases, incomplete implementations, sometimes entire
-components skipped. The workflow treats this as expected, not exceptional. When
-QR fails, the coordinator receives specific findings and delegates fixes. This
-cycle repeats until QR passes, then the next milestone begins.
+**Reconciliation** handles resume scenarios. If the user's request contains
+signals like "already implemented", "resume", or "partially complete", step 2
+validates existing code against plan requirements before executing remaining
+milestones.
 
-The technical writer runs once at the end, updating the CLAUDE.md/README.md
-hierarchy for all changes made during execution.
+**Issue Resolution** presents each QR finding individually with options (Fix /
+Skip / Alternative). Fixes are delegated to developers or technical writers,
+then QR runs again. This cycle repeats until QR passes.
 
 ---
 
