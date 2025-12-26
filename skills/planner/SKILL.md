@@ -1,16 +1,32 @@
 ---
 name: planner
-description: Interactive sequential planning for complex tasks. Use when breaking down multi-step projects, system designs, migration strategies, or architectural decisions. Invoked via python script that outputs required actions between steps.
+description: Interactive planning and execution for complex tasks. Use when breaking down multi-step projects (planning) or executing approved plans through delegation (execution). Planning creates milestones with specifications; execution delegates to specialized agents.
 ---
 
 # Planner Skill
 
 ## Purpose
 
-Two-phase planning workflow with forced reflection pauses:
+Two workflows for complex tasks:
 
-1. **PLANNING PHASE**: Break down complex tasks into milestones with concrete specifications
-2. **REVIEW PHASE**: Orchestrate TW annotation and QR validation before execution
+1. **Planning workflow** (planner.py): Create and review implementation plans
+2. **Execution workflow** (executor.py): Execute approved plans through delegation
+
+## Invocation Routing
+
+**Invoke planner.py** when user asks to:
+
+- "plan", "design", "architect" a feature
+- "review" an existing plan
+- Break down a complex task into milestones
+
+**Invoke executor.py** when user asks to:
+
+- "execute", "implement", "run" a plan
+- "resume" or "continue" execution
+- Provides a plan file path for implementation
+
+---
 
 ## When to Use
 
@@ -29,6 +45,10 @@ Skip the planner skill when the task is:
 - A quick fix or minor change
 - Already well-specified by the user
 
+---
+
+# PLANNING WORKFLOW (planner.py)
+
 ## Workflow Overview
 
 ```
@@ -42,23 +62,17 @@ REVIEW PHASE (steps 1-2)
     |-- Step 1: @agent-technical-writer (plan-annotation)
     |-- Step 2: @agent-quality-reviewer (plan-review)
     v
-APPROVED --> /plan-execution
+APPROVED --> Execution workflow
 ```
 
----
-
-## PLANNING PHASE
-
-### Preconditions
+## Preconditions
 
 Before invoking step 1, you MUST have:
 
 1. **Plan file path** - If user did not specify, ASK before proceeding
 2. **Clear problem statement** - What needs to be accomplished
 
-### Invocation
-
-Script location: `scripts/planner.py` (relative to this skill)
+## Invocation
 
 ```bash
 python3 scripts/planner.py \
@@ -76,7 +90,7 @@ python3 scripts/planner.py \
 | `--total-steps` | Estimated total steps for this phase             |
 | `--thoughts`    | Your thinking, findings, and progress            |
 
-### Planning Workflow
+## Planning Workflow
 
 1. Confirm preconditions (plan file path, problem statement)
 2. Invoke step 1 immediately
@@ -85,11 +99,10 @@ python3 scripts/planner.py \
 5. Repeat until `STATUS: phase_complete`
 6. Write plan to file using format below
 
----
-
 ## Phase Transition: Planning to Review
 
-When planning phase completes, the script outputs an explicit `ACTION REQUIRED` marker:
+When planning phase completes, the script outputs an explicit `ACTION REQUIRED`
+marker:
 
 ```
 ============================================
@@ -97,7 +110,7 @@ When planning phase completes, the script outputs an explicit `ACTION REQUIRED` 
 ============================================
 ```
 
-**You MUST invoke the review phase before proceeding to /plan-execution.**
+**You MUST invoke the review phase before proceeding to execution.**
 
 The review phase ensures:
 
@@ -106,13 +119,7 @@ The review phase ensures:
 - Plan is validated for production risks (via @agent-quality-reviewer)
 - Documentation needs are identified
 
-**Why TW is mandatory**: The planning phase naturally produces temporally contaminated comments -- change-relative language ("Added...", "Replaced..."), baseline references ("Instead of...", "Previously..."), and location directives ("After line 425"). These make sense during planning but are inappropriate for production code. TW transforms them to timeless present form before @agent-developer transcribes them verbatim.
-
-Without review, @agent-developer will transcribe contaminated comments directly into production code.
-
----
-
-## REVIEW PHASE
+## Review Phase
 
 After writing the plan file, transition to review phase:
 
@@ -124,72 +131,139 @@ python3 scripts/planner.py \
   --thoughts "Plan written to [path/to/plan.md]"
 ```
 
-### Review Step 1: Technical Writer Review and Fix
+### Review Step 1: Technical Writer
 
 Delegate to @agent-technical-writer with mode: `plan-annotation`
 
-TW will:
-
-- **Review and fix** temporally contaminated comments (see `resources/temporal-contamination.md`)
-- Read ## Planning Context section
-- Add WHY comments to code snippets
-- Enrich plan prose with rationale
-- Add documentation milestone if missing
-
-**This step is never skipped.** Even if plan prose seems complete, code comments from the planning phase require temporal contamination review.
-
-### Review Step 2: Quality Reviewer Validation
+### Review Step 2: Quality Reviewer
 
 Delegate to @agent-quality-reviewer with mode: `plan-review`
 
-QR will:
-
-- Check production reliability (RULE 0)
-- Check project conformance (RULE 1)
-- Verify TW annotations are sufficient
-- Exclude risks already documented in Planning Context
-- Return verdict: PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES
-
 ### After Review
 
-- **PASS / PASS_WITH_CONCERNS**: Ready for `/plan-execution`
+- **PASS / PASS_WITH_CONCERNS**: Ready for execution workflow
 - **NEEDS_CHANGES**: Return to planning phase to address issues
 
 ---
 
-## Plan Format
+# EXECUTION WORKFLOW (executor.py)
 
-The plan format template is in `resources/plan-format.md`. The script injects this
-format when the planning phase completes, so you don't need to reference it manually.
+## Workflow Overview
+
+```
+Step 1: Execution Planning
+    |
+    v
+Step 2: Reconciliation (conditional, if prior work signaled)
+    |
+    v
+Step 3: Milestone Execution (repeat until all complete)
+    |
+    v
+Step 4: Post-Implementation QR
+    |
+    v
+QR issues? --YES--> Step 5: Issue Resolution --> delegate fixes --> Step 4
+    |
+    NO
+    v
+Step 6: Documentation
+    |
+    v
+Step 7: Retrospective
+```
+
+## Preconditions
+
+Before invoking step 1, you MUST have:
+
+1. **Approved plan file** - Plan that passed review phase
+2. **Clear context window** - User should /clear before execution
+
+## Invocation
+
+```bash
+python3 scripts/executor.py \
+  --plan-file PATH \
+  --step-number 1 \
+  --total-steps 7 \
+  --thoughts "<user's request and context>"
+```
+
+### Arguments
+
+| Argument        | Description                      |
+| --------------- | -------------------------------- |
+| `--plan-file`   | Path to the approved plan file   |
+| `--step-number` | Current step (1-7)               |
+| `--total-steps` | Always 7 for executor            |
+| `--thoughts`    | Your current thinking and status |
+
+## Execution Steps
+
+| Step | Name                   | Purpose                                       |
+| ---- | ---------------------- | --------------------------------------------- |
+| 1    | Execution Planning     | Analyze plan, detect reconciliation, strategy |
+| 2    | Reconciliation         | (conditional) Validate existing code vs plan  |
+| 3    | Milestone Execution    | Delegate to agents, run tests (repeat)        |
+| 4    | Post-Implementation QR | Quality review of implemented code            |
+| 5    | Issue Resolution       | (conditional) Present issues, collect fixes   |
+| 6    | Documentation          | TW pass for CLAUDE.md, README.md              |
+| 7    | Retrospective          | Present execution summary                     |
+
+Note: Step 3 may be re-invoked multiple times until all milestones complete.
+Step 4 may loop back through step 5 until QR passes.
 
 ---
 
 ## Resources
 
-| Resource                              | Purpose                                                           |
-| ------------------------------------- | ----------------------------------------------------------------- |
-| `resources/plan-format.md`            | Plan template (injected by script at planning completion)         |
-| `resources/diff-format.md`            | Authoritative specification for code change format                |
-| `resources/temporal-contamination.md` | Terminology for detecting/fixing temporally contaminated comments |
-| `resources/default-conventions.md`    | Default structural conventions when project docs are silent       |
+| Resource                              | Purpose                                            |
+| ------------------------------------- | -------------------------------------------------- |
+| `resources/plan-format.md`            | Plan template (injected at planning completion)    |
+| `resources/diff-format.md`            | Authoritative specification for code change format |
+| `resources/temporal-contamination.md` | Detecting/fixing temporally contaminated comments  |
+| `resources/default-conventions.md`    | Default conventions when project docs are silent   |
+
+Note: Execution guidance is embedded directly in `scripts/executor.py` (not in
+separate resource files) since it's only used by that script.
 
 ---
 
 ## Quick Reference
 
 ```bash
+# === PLANNING WORKFLOW ===
+
 # Start planning
 python3 scripts/planner.py --step-number 1 --total-steps 4 --thoughts "..."
 
 # Continue planning
 python3 scripts/planner.py --step-number 2 --total-steps 4 --thoughts "..."
 
-# Backtrack if needed
-python3 scripts/planner.py --step-number 2 --total-steps 4 --thoughts "New info invalidated prior decision..."
-
 # Start review (after plan written)
-python3 scripts/planner.py --phase review --step-number 1 --total-steps 2 --thoughts "Plan at ..."
+python3 scripts/planner.py --phase review --step-number 1 --total-steps 2 \
+  --thoughts "Plan at plans/feature.md"
 
 # Continue review
-python3 scripts/planner.py --phase review --step-number 2 --total-steps 2 --thoughts "TW done ..."
+python3 scripts/planner.py --phase review --step-number 2 --total-steps 2 \
+  --thoughts "TW done, ready for QR"
+
+# === EXECUTION WORKFLOW ===
+
+# Start execution
+python3 scripts/executor.py --plan-file plans/feature.md --step-number 1 \
+  --total-steps 7 --thoughts "Execute the feature plan"
+
+# Continue milestone execution
+python3 scripts/executor.py --plan-file plans/feature.md --step-number 3 \
+  --total-steps 7 --thoughts "Completed M1, M2. Executing M3..."
+
+# After QR passes
+python3 scripts/executor.py --plan-file plans/feature.md --step-number 6 \
+  --total-steps 7 --thoughts "QR passed. Running documentation."
+
+# Generate retrospective
+python3 scripts/executor.py --plan-file plans/feature.md --step-number 7 \
+  --total-steps 7 --thoughts "Execution complete. Generating retrospective."
 ```
