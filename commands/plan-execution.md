@@ -587,6 +587,66 @@ Checklist:
 
 Rationale for priority order: Reconciled code was already present and skipped implementation. It bypassed the normal validation cycle, so prioritize reviewing these paths for latent issues.
 
+### 1.1 QR Issue Resolution Protocol
+
+When QR returns findings, resolve issues in two phases: (1) collect all user decisions, (2) execute decisions.
+
+**Phase 1: Collect Decisions**
+
+Sort findings by severity (critical -> high -> medium -> low). For EACH issue, in order:
+
+<issue_presentation>
+
+```
+## Issue [N] of [Total] ([severity])
+
+**Category**: [production-reliability | project-conformance | structural-quality]
+**File**: [affected file path]
+**Location**: [function/line if applicable]
+
+**Problem**:
+[Clear description of what is wrong and why it matters]
+
+**Evidence**:
+[Specific code/behavior that demonstrates the issue]
+```
+
+Then use AskUserQuestion with options:
+
+- **Fix**: Delegate to @agent-developer to resolve
+- **Skip**: Accept the issue as-is
+- **Alternative**: User provides different approach
+
+</issue_presentation>
+
+Repeat for each issue. Do NOT execute any fixes during this phase.
+
+**Phase 2: Execute Decisions**
+
+After ALL decisions are collected:
+
+<decision_execution>
+
+1. Summarize the decisions:
+
+   ```
+   Decisions collected:
+   - Issue 1 (critical): Fix
+   - Issue 2 (high): Skip
+   - Issue 3 (medium): Alternative -- [user's approach]
+   ```
+
+2. Execute fixes:
+   - "Fix" decisions: Delegate to @agent-developer
+   - "Skip" decisions: Record in retrospective as "accepted risk"
+   - "Alternative" decisions: Apply user's specified approach
+
+3. Parallelize where possible (different files, no dependencies)
+
+</decision_execution>
+
+Proceed to Documentation only after all decisions are executed.
+
 ### 2. Documentation
 
 **Skip for doc-primary plans**: If ALL milestones contained only documentation files (`*.md`/`*.rst`), TW already handled this work during milestone execution. Proceed directly to Final Checklist.
