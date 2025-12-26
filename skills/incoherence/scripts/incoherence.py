@@ -4,25 +4,28 @@ Incoherence Detector - Step-based incoherence detection workflow
 
 Usage:
     # Detection phase
-    python3 incoherence.py --step-number 1 --total-steps 18 --thoughts "Analyzing project X"
+    python3 incoherence.py --step-number 1 --total-steps 22 --thoughts "Analyzing project X"
 
     # Reconciliation phase (after user fills in resolutions)
-    python3 incoherence.py --step-number 10 --total-steps 18 --thoughts "Reconciling..."
+    python3 incoherence.py --step-number 14 --total-steps 22 --thoughts "Reconciling..."
 
-DETECTION PHASE (Steps 1-9):
-    Steps 1-5 (Parent): Survey, dimension selection, exploration, synthesis, dispatch
-    Steps 6-7 (Sub-Agent): Deep-dive exploration and formatting
-    Steps 8-9 (Parent): Verdict analysis, report generation
+DETECTION PHASE (Steps 1-13):
+    Steps 1-3 (Parent): Survey, dimension selection, exploration dispatch
+    Steps 4-7 (Sub-Agent): Broad sweep, coverage check, gap-fill, format findings
+    Step 8 (Parent): Synthesis & candidate selection
+    Step 9 (Parent): Deep-dive dispatch
+    Steps 10-11 (Sub-Agent): Deep-dive exploration and formatting
+    Steps 12-13 (Parent): Verdict analysis, report generation
 
-RECONCILIATION PHASE (Steps 10-18, after user edits report):
-    Step 10 (Parent): Parse report, extract resolutions, detect already-resolved
-    Step 11 (Parent): Analyze targets and select agent types
-    Step 12 (Parent): Plan dispatch waves, detect file conflicts
-    Step 13 (Parent): Dispatch current wave of agents
-    Steps 14-15 (Sub-Agent): Apply resolution, format result
-    Step 16 (Parent): Collect wave results, check for next wave
-    Step 17 (Parent): Update original report with resolved status
-    Step 18 (Parent): Output brief reconciliation summary
+RECONCILIATION PHASE (Steps 14-22, after user edits report):
+    Step 14 (Parent): Parse report, extract resolutions, detect already-resolved
+    Step 15 (Parent): Analyze targets and select agent types
+    Step 16 (Parent): Plan dispatch waves, detect file conflicts
+    Step 17 (Parent): Dispatch current wave of agents
+    Steps 18-19 (Sub-Agent): Apply resolution, format result
+    Step 20 (Parent): Collect wave results, check for next wave
+    Step 21 (Parent): Update original report with resolved status
+    Step 22 (Parent): Output brief reconciliation summary
 
 Reconciliation is idempotent - can be run multiple times on the same report.
 Issues are skipped if: (a) no resolution provided, or (b) already resolved.
@@ -171,13 +174,139 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "Launch one haiku Explore agent per dimension.",
                 "Launch ALL in a SINGLE message for parallelism.",
                 "",
-                "AGENT PROMPT: Tell each agent its dimension and what to look for.",
-                "Output format: Location A, Location B, Conflict, Confidence.",
+                f"SCRIPT PATH: {script_path}",
+                "",
+                "AGENT PROMPT TEMPLATE (copy exactly, fill placeholders):",
+                "```",
+                "DIMENSION EXPLORATION TASK",
+                "",
+                "DIMENSION: {category_letter} - {dimension_name}",
+                "DESCRIPTION: {description_from_catalog}",
+                "",
+                "Start by invoking:",
+                f"  python3 {script_path} --step-number 4 --total-steps 22 \\",
+                "    --thoughts \"Dimension: {category_letter} - {dimension_name}\"",
+                "```",
             ],
-            "next": "After all agents complete, invoke step 4 with combined findings"
+            "next": "After all agents complete, invoke step 8 with combined findings"
         }
 
+    # =========================================================================
+    # EXPLORATION SUB-AGENT STEPS: 4-7
+    # =========================================================================
+
     if step_number == 4:
+        return {
+            "actions": [
+                "BROAD SWEEP [SUB-AGENT]",
+                "",
+                "Cast a WIDE NET. Prioritize recall over precision.",
+                "Report ANYTHING that MIGHT be incoherence. Verification comes later.",
+                "",
+                "Your dimension (from --thoughts) tells you what to look for.",
+                "",
+                "SEARCH STRATEGY:",
+                "  1. Start with obvious locations (docs/, README, src/)",
+                "  2. Search for keywords related to your dimension",
+                "  3. Check configs, schemas, type definitions",
+                "  4. Look at tests for behavioral claims",
+                "",
+                "FOR EACH POTENTIAL FINDING, note:",
+                "  - Location A (file:line)",
+                "  - Location B (file:line)",
+                "  - What might conflict",
+                "  - Confidence: high/medium/low (low is OK!)",
+                "",
+                "BIAS: Report more, not fewer. False positives are filtered later.",
+                "",
+                "Track which directories/files you searched.",
+            ],
+            "next": "Invoke step 5 with your findings and searched locations in --thoughts"
+        }
+
+    if step_number == 5:
+        return {
+            "actions": [
+                "COVERAGE CHECK [SUB-AGENT]",
+                "",
+                "Review your search coverage. Identify GAPS.",
+                "",
+                "ASK YOURSELF:",
+                "  - What directories have I NOT searched?",
+                "  - What file types did I skip? (.yaml, .json, .toml, tests?)",
+                "  - Are there related modules I haven't checked?",
+                "  - Did I only look at obvious places?",
+                "  - What would a second reviewer check that I didn't?",
+                "",
+                "DIVERSITY CHECK:",
+                "  - Are all my findings in one directory? (bad)",
+                "  - Are all my findings the same file type? (bad)",
+                "  - Did I check both docs AND code? Both should have claims.",
+                "",
+                "OUTPUT:",
+                "  1. List of gaps/unexplored areas (at least 3)",
+                "  2. Specific files or patterns to search next",
+            ],
+            "next": "Invoke step 6 with identified gaps in --thoughts"
+        }
+
+    if step_number == 6:
+        return {
+            "actions": [
+                "GAP-FILL EXPLORATION [SUB-AGENT]",
+                "",
+                "Explore the gaps identified in step 5.",
+                "",
+                "REQUIREMENTS:",
+                "  - Search at least 3 new locations from your gap list",
+                "  - Use different search strategies than before",
+                "  - Look in non-obvious places (tests, examples, scripts/)",
+                "",
+                "ADDITIONAL TECHNIQUES:",
+                "  - Search for negations ('not', 'don't', 'never', 'deprecated')",
+                "  - Look for TODOs, FIXMEs, HACKs near your dimension's topic",
+                "  - Check git-ignored or generated files if accessible",
+                "",
+                "Record any new potential incoherences found.",
+                "Same format: Location A, Location B, conflict, confidence.",
+            ],
+            "next": "Invoke step 7 with all findings (original + new) in --thoughts"
+        }
+
+    if step_number == 7:
+        return {
+            "actions": [
+                "FORMAT EXPLORATION FINDINGS [SUB-AGENT]",
+                "",
+                "Consolidate all findings from your exploration.",
+                "",
+                "OUTPUT FORMAT:",
+                "```",
+                "EXPLORATION RESULTS - DIMENSION {letter}",
+                "",
+                "FINDING 1:",
+                "  Location A: [file:line]",
+                "  Location B: [file:line]",
+                "  Potential conflict: [one-line description]",
+                "  Confidence: high|medium|low",
+                "",
+                "[repeat for each finding]",
+                "",
+                "TOTAL FINDINGS: N",
+                "AREAS SEARCHED: [list of directories/file patterns]",
+                "```",
+                "",
+                "Include ALL findings, even low-confidence ones.",
+                "Deduplication happens in step 8.",
+            ],
+            "next": "Output formatted results. Sub-agent task complete."
+        }
+
+    # =========================================================================
+    # DETECTION PHASE CONTINUED: Steps 8-13
+    # =========================================================================
+
+    if step_number == 8:
         return {
             "actions": [
                 "SYNTHESIS & CANDIDATE SELECTION",
@@ -187,10 +316,10 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "",
                 "Output: C1, C2, ... with location, summary, score.",
             ],
-            "next": "Invoke step 5 with selected candidates in --thoughts"
+            "next": "Invoke step 9 with selected candidates in --thoughts"
         }
 
-    if step_number == 5:
+    if step_number == 9:
         return {
             "actions": [
                 "DEEP-DIVE DISPATCH",
@@ -210,20 +339,24 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "YOUR WORKFLOW:",
                 "",
                 "STEP A: Get exploration instructions",
-                f"   python3 {script_path} --step-number 6 --total-steps 18 --thoughts \"Verifying: {{id}}\"",
+                f"   python3 {script_path} --step-number 10 --total-steps 22 --thoughts \"Verifying: {{id}}\"",
                 "",
                 "STEP B: Follow those instructions to gather evidence",
                 "",
                 "STEP C: Format your findings",
-                f"   python3 {script_path} --step-number 7 --total-steps 18 --thoughts \"<your findings>\"",
+                f"   python3 {script_path} --step-number 11 --total-steps 22 --thoughts \"<your findings>\"",
                 "",
-                "IMPORTANT: You MUST invoke step 6 before exploring, step 7 to format.",
+                "IMPORTANT: You MUST invoke step 10 before exploring, step 11 to format.",
                 "```",
             ],
-            "next": "After all agents complete, invoke step 8 with all verdicts"
+            "next": "After all agents complete, invoke step 12 with all verdicts"
         }
 
-    if step_number == 6:
+    # =========================================================================
+    # DEEP-DIVE SUB-AGENT STEPS: 10-11
+    # =========================================================================
+
+    if step_number == 10:
         return {
             "actions": [
                 "DEEP-DIVE EXPLORATION [SUB-AGENT]",
@@ -251,10 +384,10 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "   - TRUE_INCOHERENCE: genuinely conflicting claims",
                 "   - FALSE_POSITIVE: apparent conflict resolves with context",
             ],
-            "next": "When done exploring, invoke step 7 with findings in --thoughts"
+            "next": "When done exploring, invoke step 11 with findings in --thoughts"
         }
 
-    if step_number == 7:
+    if step_number == 11:
         return {
             "actions": [
                 "FORMAT RESULTS [SUB-AGENT]",
@@ -289,7 +422,7 @@ def get_step_guidance(step_number, total_steps, script_path=None):
             "next": "Output formatted result. Sub-agent task complete."
         }
 
-    if step_number == 8:
+    if step_number == 12:
         return {
             "actions": [
                 "VERDICT ANALYSIS",
@@ -302,10 +435,10 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "",
                 "Quality check each TRUE_INCOHERENCE for exact quotes.",
             ],
-            "next": "Invoke step 9 with confirmed findings"
+            "next": "Invoke step 13 with confirmed findings"
         }
 
-    if step_number == 9:
+    if step_number == 13:
         return {
             "actions": [
                 "REPORT GENERATION",
@@ -363,14 +496,14 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "[Repeat for each issue I2, I3, ...]",
                 "```",
             ],
-            "next": "DETECTION PHASE COMPLETE. User edits report, then runs step 10."
+            "next": "DETECTION PHASE COMPLETE. User edits report, then runs step 14."
         }
 
     # =========================================================================
-    # RECONCILIATION PHASE: Steps 10-17
+    # RECONCILIATION PHASE: Steps 14-22
     # =========================================================================
 
-    if step_number == 10:
+    if step_number == 14:
         return {
             "actions": [
                 "RECONCILE PARSE",
@@ -409,10 +542,10 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "",
                 "If no issues to process: RECONCILIATION COMPLETE (nothing to do).",
             ],
-            "next": "Invoke step 11 with issues to process in --thoughts"
+            "next": "Invoke step 15 with issues to process in --thoughts"
         }
 
-    if step_number == 11:
+    if step_number == 15:
         return {
             "actions": [
                 "RECONCILE ANALYZE",
@@ -452,10 +585,10 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "- I7 requires changes to both docs AND code. List both files.",
                 "```",
             ],
-            "next": "Invoke step 12 with analysis in --thoughts"
+            "next": "Invoke step 16 with analysis in --thoughts"
         }
 
-    if step_number == 12:
+    if step_number == 16:
         return {
             "actions": [
                 "RECONCILE PLAN",
@@ -508,10 +641,10 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "  [none]",
                 "```",
             ],
-            "next": "Invoke step 13 with dispatch plan in --thoughts"
+            "next": "Invoke step 17 with dispatch plan in --thoughts"
         }
 
-    if step_number == 13:
+    if step_number == 17:
         return {
             "actions": [
                 "RECONCILE DISPATCH",
@@ -520,7 +653,7 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "",
                 "WHICH WAVE?",
                 "  - First time here: dispatch Wave 1",
-                "  - Returned from step 16: dispatch the next wave",
+                "  - Returned from step 20: dispatch the next wave",
                 "",
                 f"SCRIPT PATH: {script_path}",
                 "",
@@ -547,20 +680,24 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "[Repeat for batched issues]",
                 "",
                 "YOUR WORKFLOW:",
-                f"1. python3 {script_path} --step-number 14 --total-steps 18 \\",
+                f"1. python3 {script_path} --step-number 18 --total-steps 22 \\",
                 "     --thoughts \"FILE: {file_path} | ISSUES: {id_list}\"",
                 "2. Apply the resolution(s)",
-                f"3. python3 {script_path} --step-number 15 --total-steps 18 \\",
+                f"3. python3 {script_path} --step-number 19 --total-steps 22 \\",
                 "     --thoughts \"<what you did>\"",
                 "4. Output your formatted result",
                 "```",
                 "",
                 "Launch all agents for THIS WAVE in a SINGLE message (parallel).",
             ],
-            "next": "After all wave agents complete, invoke step 16 with results"
+            "next": "After all wave agents complete, invoke step 20 with results"
         }
 
-    if step_number == 14:
+    # =========================================================================
+    # RECONCILIATION SUB-AGENT STEPS: 18-19
+    # =========================================================================
+
+    if step_number == 18:
         return {
             "actions": [
                 "RECONCILE APPLY [SUB-AGENT]",
@@ -603,10 +740,10 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "",
                 "BIAS: Apply the resolution. Interpret charitably. Skip rarely.",
             ],
-            "next": "When done, invoke step 15 with results in --thoughts"
+            "next": "When done, invoke step 19 with results in --thoughts"
         }
 
-    if step_number == 15:
+    if step_number == 19:
         return {
             "actions": [
                 "RECONCILE FORMAT [SUB-AGENT]",
@@ -641,7 +778,7 @@ def get_step_guidance(step_number, total_steps, script_path=None):
             "next": "Output formatted result(s). Sub-agent task complete."
         }
 
-    if step_number == 16:
+    if step_number == 20:
         return {
             "actions": [
                 "RECONCILE COLLECT",
@@ -669,9 +806,9 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "",
                 "STEP B: CHECK FOR NEXT WAVE",
                 "",
-                "Review your dispatch plan from step 12:",
-                "  - More waves remaining? → Invoke step 13 for next wave",
-                "  - All waves complete? → Invoke step 17 to update report",
+                "Review your dispatch plan from step 16:",
+                "  - More waves remaining? → Invoke step 17 for next wave",
+                "  - All waves complete? → Invoke step 21 to update report",
                 "",
                 "OUTPUT:",
                 "",
@@ -685,10 +822,10 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "Remaining waves: [list or \"none\"]",
                 "```",
             ],
-            "next": "If more waves: invoke step 13. Otherwise: invoke step 17."
+            "next": "If more waves: invoke step 17. Otherwise: invoke step 21."
         }
 
-    if step_number == 17:
+    if step_number == 21:
         return {
             "actions": [
                 "RECONCILE UPDATE",
@@ -722,10 +859,10 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "",
                 "Save the updated report file.",
             ],
-            "next": "Invoke step 18 to output summary"
+            "next": "Invoke step 22 to output summary"
         }
 
-    if step_number >= 18:
+    if step_number >= 22:
         return {
             "actions": [
                 "RECONCILE COMPLETE",
@@ -774,13 +911,15 @@ def main():
     guidance = get_step_guidance(args.step_number, args.total_steps, script_path)
 
     # Determine agent type and phase
-    if args.step_number in [6, 7]:
+    # Exploration sub-agent: 4-7, Deep-dive sub-agent: 10-11
+    if args.step_number in [4, 5, 6, 7, 10, 11]:
         agent_type = "SUB-AGENT"
         phase = "DETECTION"
-    elif args.step_number in [14, 15]:
+    # Reconciliation sub-agent: 18-19
+    elif args.step_number in [18, 19]:
         agent_type = "SUB-AGENT"
         phase = "RECONCILIATION"
-    elif args.step_number <= 9:
+    elif args.step_number <= 13:
         agent_type = "PARENT"
         phase = "DETECTION"
     else:
