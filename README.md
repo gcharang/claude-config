@@ -133,11 +133,6 @@ multiple milestones, each with its own review cycle, to execute the plan.
 Where possible, it executes multiple tasks in parallel.
 
 For detailed breakdowns of each skill, see their READMEs:
-[Analyze](skills/analyze/README.md) ·
-[Decision Critic](skills/decision-critic/README.md) ·
-[Planner](skills/planner/README.md)
-
-## Acknowledgments
-
-[Southbridge Research's analysis of Claude Code prompts](https://southbridge-research.notion.site/Prompt-Engineering-The-Art-of-Instructing-AI-2055fec70db181369002dcdea7d9e732)
-was essential for understanding how to write effective prompts.
+* [Analyze](skills/analyze/README.md)
+* [Decision Critic](skills/decision-critic/README.md)
+* [Planner](skills/planner/README.md)
