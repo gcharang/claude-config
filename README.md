@@ -51,10 +51,17 @@ context and start fresh, the reasoning survives.
 
 ### Review Cycles
 
-Plans pass through quality gates before execution begins. A technical
-writer agent checks clarity; a quality reviewer checks completeness.
-The loop runs until both pass. Issues get caught when they're cheap
-to fix, not after you've written 500 lines.
+Execution is split into milestones -- smaller units that are manageable
+and can be validated individually. This ensures continuous, verified
+progress. Without it, execution becomes a waterfall: one small oversight
+early on and agents drown in accumulated mistakes by the end.
+
+Quality gates run at every stage. A technical writer agent checks
+clarity; a quality reviewer checks completeness. The loop runs until
+both pass.
+
+Plans pass review before execution begins. During execution, each
+milestone passes review before the next starts.
 
 ### Cost-Effective Delegation
 
@@ -126,13 +133,15 @@ plan execution.
 **5. Execute.**
 "Use your planner skill to execute plans/my-feature.md"
 
-The planner delegates to sub-agents. It never writes code directly, and
-instead uses the developer, technical-writer and quality-reviewer in
-multiple milestones, each with its own review cycle, to execute the plan.
+The planner delegates to sub-agents. It never writes code directly.
+Each milestone goes through the developer, then the technical-writer
+and quality-reviewer. No milestone starts until the previous one
+passes review.
 
 Where possible, it executes multiple tasks in parallel.
 
 For detailed breakdowns of each skill, see their READMEs:
-* [Analyze](skills/analyze/README.md)
-* [Decision Critic](skills/decision-critic/README.md)
-* [Planner](skills/planner/README.md)
+
+- [Analyze](skills/analyze/README.md)
+- [Decision Critic](skills/decision-critic/README.md)
+- [Planner](skills/planner/README.md)
