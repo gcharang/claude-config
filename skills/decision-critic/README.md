@@ -6,11 +6,6 @@ That's not what you need for important decisions -- you need stress-testing.
 
 The decision-critic skill forces structured adversarial analysis:
 
-```mermaid
-flowchart LR
-    D[Decomposition] --> V[Verification] --> Ch[Challenge] --> S[Synthesis]
-```
-
 | Phase         | Actions                                                                    |
 | ------------- | -------------------------------------------------------------------------- |
 | Decomposition | Extract claims, assumptions, constraints; assign IDs; classify each        |

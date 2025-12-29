@@ -4,15 +4,6 @@ Before you plan anything non-trivial, you need to actually understand the
 codebase. Not impressions -- evidence. The analyze skill forces systematic
 investigation with structured phases and explicit evidence requirements.
 
-```mermaid
-flowchart LR
-    E[Exploration] --> F[Focus Selection]
-    F --> I[Investigation Planning]
-    I --> D[Deep Analysis]
-    D --> V[Verification]
-    V --> S[Synthesis]
-```
-
 | Phase                  | Actions                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------ |
 | Exploration            | Delegate to Explore agent; process structure, tech stack, patterns             |
