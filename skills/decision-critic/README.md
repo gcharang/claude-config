@@ -1,0 +1,65 @@
+# Decision Critic
+
+LLMs tend toward sycophancy -- agreeing with the user rather than providing
+genuine pushback. For important architectural decisions, you want stress-testing,
+not validation.
+
+The decision-critic skill forces structured adversarial analysis:
+
+```mermaid
+flowchart LR
+    D[Decomposition] --> V[Verification] --> Ch[Challenge] --> S[Synthesis]
+```
+
+| Phase         | Actions                                                                    |
+| ------------- | -------------------------------------------------------------------------- |
+| Decomposition | Extract claims, assumptions, constraints; assign IDs; classify each        |
+| Verification  | Generate questions for verifiable items; answer independently; mark status |
+| Challenge     | Steel-man argument against; explore alternative framings                   |
+| Synthesis     | Verdict (STAND/REVISE/ESCALATE); summary and recommendation                |
+
+## When to Use
+
+Use for important decisions where you want genuine criticism, not agreement:
+
+- Architectural choices with long-term consequences
+- Technology selection (language, framework, database)
+- Tradeoffs between competing concerns (performance vs. maintainability)
+- Decisions you're uncertain about and want stress-tested
+
+## Example Usage
+
+```
+I'm considering using Redis for our session storage instead of PostgreSQL.
+My reasoning:
+
+- Redis is faster for key-value lookups
+- Sessions are ephemeral, don't need ACID guarantees
+- We already have Redis for caching
+
+Use your decision critic skill to stress-test this decision.
+```
+
+The skill will:
+
+1. **Decompose** the decision into claims (C1: Redis is faster), assumptions
+   (A1: sessions don't need durability), constraints (K1: Redis already deployed)
+2. **Verify** each claim -- is Redis actually faster for your access pattern?
+   What's the actual latency difference?
+3. **Challenge** -- what if sessions DO need durability (shopping carts)?
+   What's the operational cost of Redis failures?
+4. **Synthesize** -- verdict with specific failed/uncertain items
+
+## The Anti-Sycophancy Design
+
+The skill is grounded in three research-backed techniques:
+
+- **Chain-of-Verification** (Dhuliawala et al., 2023) -- factored verification
+  prevents confirmation bias by answering questions independently
+- **Self-Consistency** (Wang et al., 2023) -- multiple reasoning paths reveal
+  disagreement
+- **Multi-Expert Prompting** (Wang et al., 2024) -- diverse perspectives catch
+  blind spots
+
+The 7-step structure forces the LLM through adversarial phases rather than
+allowing it to immediately agree with your reasoning.
