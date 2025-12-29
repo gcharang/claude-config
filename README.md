@@ -15,15 +15,15 @@ the LLM cannot see it, and you're moving too fast to notice. I treat
 this as an engineering problem, not a tooling problem.
 
 LLMs are tools, not collaborators. When an engineer says "add retry logic",
-another engineer infers exponential backoff, jitter, idempotency. An LLM
+another engineer infers exponential backoff, jitter, and idempotency. An LLM
 infers nothing you don't explicitly state. It cannot read the room. It has
 no institutional memory. It will cheerfully implement the wrong thing with
-perfect confidence.
+perfect confidence and call it "production-ready".
 
 Larger context windows don't help. Giving an LLM more text is like giving
-a human a larger stack of papers — attention drifts to the beginning and
-end, details in the middle get missed. The solution isn't more context.
-It's the right context.
+a human a larger stack of papers; attention drifts to the beginning and
+end, and details in the middle get missed. The solution isn't more context.
+It's the proper context.
 
 ## Principles
 
@@ -32,10 +32,10 @@ This workflow is built on four principles:
 ### Context Hygiene
 
 Each task gets precisely the information it needs — no more. Sub-agents
-start with fresh context. CLAUDE.md files in each directory serve as
+Start with a fresh context. CLAUDE.md files in each directory serve as
 indexes; README.md captures decisions that aren't visible in the code.
 
-This extends to code artifacts. Comments get scrubbed for temporal
+This extends to code artefacts. Comments get scrubbed for temporal
 contamination — "Added X" becomes "X handles Y". Functions include
 "use when..." triggers. Decision rationale lives in README files, not
 in chat history that gets cleared.
@@ -46,7 +46,7 @@ LLMs make first-shot mistakes. Always. The workflow separates planning
 from execution, forcing ambiguities to surface when they're cheap to fix.
 
 Plans capture why decisions were made, what alternatives were rejected,
-what risks were accepted. Plans are written to files. When you clear
+and what risks were accepted. Plans are written to files. When you clear
 context and start fresh, the reasoning survives.
 
 ### Review Cycles
@@ -70,7 +70,7 @@ ambiguity, not routine work.
 
 This workflow is opinionated. I'm a backend engineer — the patterns should
 apply to frontend work, but I haven't tested that. If you're less experienced
-with software engineering, I'd like to know whether this helps or just adds
+with software engineering, I'd like to know whether this helps or adds
 overhead.
 
 ## Quick Start
@@ -97,10 +97,11 @@ The workflow for non-trivial changes: explore → plan → execute.
 
 **1. Explore the problem.**
 In this phase, it's important to:
-* understand what you're dealing,
-* figure out the solution.
 
-This is relatively free-form. If the project and/our surface area is
+- understand what you're dealing with,
+- figure out the solution.
+
+This is relatively free-form. If the project and/or our surface area is
 particularly large, use the `analyze` skill to explore the project's
 code properly before proposing a solution.
 
@@ -115,11 +116,11 @@ The planner runs your plan through review cycles — technical writer
 for clarity, quality reviewer for completeness — until it passes.
 
 The planner captures all decisions, tradeoffs, and information not
-visible from code so that this context does not get lost.
+visible from the code so that this context does not get lost.
 
 **4. Clear context.**
-`/clear` — this is important. You don't want to minimize context usage,
-and you have now already written down everything that's necessary for
+`/clear` — this is important. You don't want to minimise context usage,
+and you have already written down everything necessary for
 plan execution.
 
 **5. Execute.**
@@ -127,7 +128,7 @@ plan execution.
 
 The planner delegates to sub-agents. It never writes code directly, and
 instead uses the developer, technical-writer and quality-reviewer in
-multiple milestones, each with their review cycles, to execute the plan.
+multiple milestones, each with its own review cycle, to execute the plan.
 
 Where possible, it executes multiple tasks in parallel.
 
