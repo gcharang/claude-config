@@ -26,8 +26,8 @@ The `doc-sync` skill audits and synchronizes this hierarchy across a repository.
 - **Onboarding** -- Before starting work on an unfamiliar codebase
 
 If you use the planning workflow consistently, the technical writer agent
-maintains documentation as part of execution. The `doc-sync` skill is primarily
-for bootstrapping or recovery.
+maintains documentation as part of execution. As such, the `doc-sync` skill is
+primarily for bootstrapping or recovery -- not routine use.
 
 ## Example Usage
 

@@ -1,8 +1,8 @@
 # Analyze
 
-The analyze skill provides systematic codebase investigation with structured
-phases and evidence requirements. Use it as the first step before planning any
-non-trivial changes.
+Before you plan anything non-trivial, you need to actually understand the
+codebase. Not impressions -- evidence. The analyze skill forces systematic
+investigation with structured phases and explicit evidence requirements.
 
 ```mermaid
 flowchart LR
@@ -24,17 +24,26 @@ flowchart LR
 
 ## When to Use
 
-- Unfamiliar codebase requiring systematic understanding
-- Security review or vulnerability assessment
-- Performance analysis before optimization
-- Architecture evaluation before major refactoring
-- Any situation requiring evidence-backed findings (not impressions)
+So when does this actually matter? Four scenarios:
+
+- **Unfamiliar codebase** -- You cannot plan what you do not understand. Period.
+- **Security review** -- Vulnerability assessment requires systematic coverage,
+  not "I looked around and it seems fine."
+- **Performance analysis** -- Before optimization, you need to know where time
+  actually goes, not where you assume it goes.
+- **Architecture evaluation** -- Major refactors deserve evidence-backed
+  understanding, not vibes.
 
 ## When to Skip
+
+However, not everything needs this level of rigor:
 
 - You already understand the codebase well
 - Simple bug fix with obvious scope
 - User has provided comprehensive context
+
+The astute reader will notice that all three skip conditions share a trait: you
+already have the evidence. The skill exists for when you don't.
 
 ## Example Usage
 

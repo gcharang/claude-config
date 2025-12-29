@@ -96,12 +96,16 @@ git merge workflow/main --allow-unrelated-histories
 The workflow for non-trivial changes: explore → plan → execute.
 
 **1. Explore the problem.**
-Use the analyze skill to understand what you're dealing with before
-proposing solutions. This surfaces constraints and dependencies you'd
-otherwise miss.
+In this phase, it's important to:
+* understand what you're dealing,
+* figure out the solution.
+
+This is relatively free-form. If the project and/our surface area is
+particularly large, use the `analyze` skill to explore the project's
+code properly before proposing a solution.
 
 **2. (Optional) Stress-test your approach.**
-If you're uncertain, use the decision critic skill to find holes in
+If you're uncertain, use the `decision-critic` skill to find holes in
 your reasoning before you commit to a direction.
 
 **3. Write a plan.**
@@ -110,14 +114,22 @@ your reasoning before you commit to a direction.
 The planner runs your plan through review cycles — technical writer
 for clarity, quality reviewer for completeness — until it passes.
 
+The planner captures all decisions, tradeoffs, and information not
+visible from code so that this context does not get lost.
+
 **4. Clear context.**
-`/clear` — this is important. You don't want exploration artifacts
-polluting execution.
+`/clear` — this is important. You don't want to minimize context usage,
+and you have now already written down everything that's necessary for
+plan execution.
 
 **5. Execute.**
 "Use your planner skill to execute plans/my-feature.md"
 
-The planner delegates to sub-agents. It never writes code directly.
+The planner delegates to sub-agents. It never writes code directly, and
+instead uses the developer, technical-writer and quality-reviewer in
+multiple milestones, each with their review cycles, to execute the plan.
+
+Where possible, it executes multiple tasks in parallel.
 
 For detailed breakdowns of each skill, see their READMEs:
 [Analyze](skills/analyze/README.md) ·

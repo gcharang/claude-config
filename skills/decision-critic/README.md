@@ -1,8 +1,8 @@
 # Decision Critic
 
-LLMs tend toward sycophancy -- agreeing with the user rather than providing
-genuine pushback. For important architectural decisions, you want stress-testing,
-not validation.
+Here's the problem: LLMs are sycophants. They agree with you. They validate your
+reasoning. They tell you your architectural decision is sound and well-reasoned.
+That's not what you need for important decisions -- you need stress-testing.
 
 The decision-critic skill forces structured adversarial analysis:
 
@@ -20,7 +20,7 @@ flowchart LR
 
 ## When to Use
 
-Use for important decisions where you want genuine criticism, not agreement:
+Use this for decisions where you actually want criticism, not agreement:
 
 - Architectural choices with long-term consequences
 - Technology selection (language, framework, database)
@@ -40,19 +40,19 @@ My reasoning:
 Use your decision critic skill to stress-test this decision.
 ```
 
-The skill will:
+So what happens? The skill:
 
-1. **Decompose** the decision into claims (C1: Redis is faster), assumptions
+1. **Decomposes** the decision into claims (C1: Redis is faster), assumptions
    (A1: sessions don't need durability), constraints (K1: Redis already deployed)
-2. **Verify** each claim -- is Redis actually faster for your access pattern?
+2. **Verifies** each claim -- is Redis actually faster for your access pattern?
    What's the actual latency difference?
-3. **Challenge** -- what if sessions DO need durability (shopping carts)?
+3. **Challenges** -- what if sessions DO need durability (shopping carts)?
    What's the operational cost of Redis failures?
-4. **Synthesize** -- verdict with specific failed/uncertain items
+4. **Synthesizes** -- verdict with specific failed/uncertain items
 
 ## The Anti-Sycophancy Design
 
-The skill is grounded in three research-backed techniques:
+I grounded this skill in three research-backed techniques:
 
 - **Chain-of-Verification** (Dhuliawala et al., 2023) -- factored verification
   prevents confirmation bias by answering questions independently
@@ -61,5 +61,5 @@ The skill is grounded in three research-backed techniques:
 - **Multi-Expert Prompting** (Wang et al., 2024) -- diverse perspectives catch
   blind spots
 
-The 7-step structure forces the LLM through adversarial phases rather than
-allowing it to immediately agree with your reasoning.
+The structure forces the LLM through adversarial phases rather than allowing it
+to immediately agree with your reasoning. That's the whole point.

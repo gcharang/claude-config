@@ -98,13 +98,34 @@ Step 22: RECONCILE COMPLETE      ────┘
 
 ## Report Format
 
-Step 9 generates issues with Resolution sections:
+Step 13 generates a report with optional Issue Groups and individual Issues.
+
+### Issue Groups (optional)
+
+When Step 12 identifies related issues, they are grouped:
+
+```markdown
+### Group G1: [Relationship Description]
+
+**Member Issues**: I2, I5, I7
+**Common Thread**: [what connects these issues]
+**Unified Resolution Approach**: [suggested fix for all]
+
+#### Group Resolution
+
+<!-- USER: Optionally provide a resolution for ALL member issues. -->
+
+<!-- /Group Resolution -->
+```
+
+### Individual Issues
 
 ```markdown
 ### Issue I1: [Title]
 
 **Type**: Contradiction | Ambiguity | Gap | Policy Violation
 **Severity**: critical | high | medium | low
+**Group**: G1 | Ungrouped
 
 #### Source A / Source B
 
@@ -122,20 +143,20 @@ Step 9 generates issues with Resolution sections:
 <!-- /Resolution -->
 ```
 
-After reconciliation, resolved issues get a Status section:
+### Resolution Priority
+
+1. Individual resolution (if provided) - overrides group
+2. Group resolution (if issue is member and group has resolution)
+3. No resolution - skip
+
+### After Reconciliation
+
+Resolved issues get a Status section:
 
 ```markdown
-#### Resolution
-
-<!-- USER: Write your decision below. Be specific. -->
-
-Use the spec value (100MB).
-
-<!-- /Resolution -->
-
 #### Status
 
-✅ RESOLVED — src/uploader.py:156: Changed MAX_FILE_SIZE to 100MB
+✅ RESOLVED -- src/uploader.py:156: Changed MAX_FILE_SIZE to 100MB
 ```
 
 ## Dimension Catalog (A-K)

@@ -1,6 +1,7 @@
 # Planner
 
-The planner skill provides both planning and execution workflows:
+The planner skill handles both planning and execution. Two distinct workflows,
+one coherent system.
 
 ```mermaid
 flowchart TB
@@ -40,14 +41,15 @@ flowchart TB
 | Technical Writer        | Scrub temporal comments, add WHY comments, enrich rationale                  |
 | Quality Reviewer        | Check reliability, conformance; return PASS/PASS_WITH_CONCERNS/NEEDS_CHANGES |
 
-The review feedback loop catches LLM mistakes before execution begins. Plans
-frequently have gaps -- missing error handling, incomplete acceptance criteria,
-ambiguous specifications. The workflow iterates until QR passes.
+Now, why the review feedback loop? Because LLM-generated plans frequently have
+gaps: missing error handling, incomplete acceptance criteria, ambiguous
+specifications. The workflow iterates until QR passes. That's not overhead --
+it's catching mistakes before they become code.
 
 ## Execution Workflow
 
-After planning completes and the user clears context (`/clear`), execution
-proceeds through seven steps:
+After planning completes and you clear context (`/clear`), execution proceeds
+through seven steps:
 
 | Step                   | Purpose                                                         |
 | ---------------------- | --------------------------------------------------------------- |
@@ -59,18 +61,19 @@ proceeds through seven steps:
 | Documentation          | Technical writer updates CLAUDE.md/README.md                    |
 | Retrospective          | Present execution summary                                       |
 
-The coordinator:
+The coordinator never writes code directly -- it delegates to developers. This
+is intentional. I've found that separating coordination from implementation
+produces cleaner results. The coordinator:
 
-- Never writes code directly (delegates to developers)
 - Parallelizes independent work across up to 4 developers per milestone
 - Runs quality review after all milestones complete
 - Loops through issue resolution until QR passes
 - Invokes technical writer only after QR passes
 
 **Reconciliation** handles resume scenarios. If the user's request contains
-signals like "already implemented", "resume", or "partially complete", step 2
-validates existing code against plan requirements before executing remaining
-milestones.
+signals like "already implemented", "resume", or "partially complete", the
+workflow validates existing code against plan requirements before executing
+remaining milestones. Otherwise you're building on unknown foundation.
 
 **Issue Resolution** presents each QR finding individually with options (Fix /
 Skip / Alternative). Fixes are delegated to developers or technical writers,

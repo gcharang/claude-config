@@ -1,7 +1,7 @@
 # Prompt Engineer
 
-A meta-skill for optimizing prompts themselves. Since this entire workflow
-consists of prompts consumed by LLMs, each can be individually optimized.
+A meta-skill for optimizing prompts themselves. This entire workflow consists of
+prompts consumed by LLMs -- each can be individually optimized.
 
 ## When to Use
 
@@ -12,14 +12,16 @@ consists of prompts consumed by LLMs, each can be individually optimized.
 
 ## How It Works
 
+The skill:
+
 1. Reads prompt engineering pattern references
 2. Analyzes the prompt(s) for issues
 3. Proposes changes with explicit pattern attribution
 4. Waits for approval before applying changes
 5. Presents optimized result with self-verification
 
-The skill uses recitation and careful output ordering to ground itself in the
-referenced patterns -- it was optimized using itself.
+I use recitation and careful output ordering to ground the skill in the
+referenced patterns. The skill was optimized using itself -- of course!
 
 ## Example Usage
 
@@ -137,5 +139,5 @@ rationale. A single invocation may propose many changes:
 
 When you tell an LLM "find problems and opportunities for optimization", it will
 always find "problems" -- that's what it was asked to do. Some may not be real
-issues. Invoke the skill multiple times on challenging prompts, but recognize
-when it's good enough and stop.
+issues. I recommend invoking the skill multiple times on challenging prompts,
+but recognize when it's good enough and stop. Diminishing returns are real.
