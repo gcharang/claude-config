@@ -3,34 +3,13 @@
 The planner skill handles both planning and execution. Two distinct workflows,
 one coherent system.
 
-```mermaid
-flowchart TB
-    subgraph planning[Planning Workflow]
-        P1[Context & Scope] --> P2[Decision & Architecture]
-        P2 --> P3[Refinement]
-        P3 --> P4[Final Verification]
-        P4 --> R1[Technical Writer]
-        R1 --> R2[Quality Reviewer]
-    end
-
-    subgraph execution[Execution Workflow]
-        E1[Execution Planning] --> E2[Reconciliation]
-        E2 --> E3[Milestone Execution]
-        E3 --> E4[Post-Implementation QR]
-        E4 -->|issues| E5[Issue Resolution]
-        E5 --> E4
-        E4 -->|pass| E6[Documentation]
-        E6 --> E7[Retrospective]
-    end
-
-    R2 -->|pass| clear[/clear context/]
-    clear --> E1
-    R2 -->|fail| P1
-    E2 -.->|conditional| E3
-    E5 -.->|conditional| E4
-```
-
 ## Planning Workflow
+
+```
+  Context --> Decision --> Refinement --> Verification --> TW --> QR --+
+     ^                                                                  |
+     +---------------------------- [fail] ------------------------------+
+```
 
 | Step                    | Actions                                                                      |
 | ----------------------- | ---------------------------------------------------------------------------- |
@@ -48,8 +27,15 @@ it's catching mistakes before they become code.
 
 ## Execution Workflow
 
-After planning completes and you clear context (`/clear`), execution proceeds
-through seven steps:
+```
+  Plan --> Milestones --> QR --> Docs --> Retrospective
+               ^          |
+               +- [fail] -+
+
+  * Reconciliation phase precedes Milestones when resuming partial work
+```
+
+After planning completes and you clear context (`/clear`), execution proceeds:
 
 | Step                   | Purpose                                                         |
 | ---------------------- | --------------------------------------------------------------- |
