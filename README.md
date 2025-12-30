@@ -156,9 +156,9 @@ The planner captures all decisions, tradeoffs, and information not
 visible from the code so that this context does not get lost.
 
 **5. Clear context.**
-`/clear` -- this is important. You don't want to minimise context usage,
+`/clear` -- this is important. You  want to minimise context usage,
 and you have already written down everything necessary for
-plan execution.
+execution inside the plan.
 
 **6. Execute.**
 "Use your planner skill to execute plans/my-feature.md"
