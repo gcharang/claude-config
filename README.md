@@ -85,7 +85,7 @@ milestone passes review before the next starts.
 
 ### Cost-Effective Delegation
 
-The orchestrator delegates to smaller agents — Haiku for straightforward
+The orchestrator delegates to smaller agents -- Haiku for straightforward
 tasks, Sonnet for moderate complexity. Prompts are injected just-in-time,
 giving smaller models precisely the guidance they need at each step.
 
@@ -95,7 +95,7 @@ ambiguity, not routine work.
 
 ---
 
-This workflow is opinionated. I'm a backend engineer — the patterns should
+This workflow is opinionated. I'm a backend engineer -- the patterns should
 apply to frontend work, but I haven't tested that. If you're less experienced
 with software engineering, I'd like to know whether this helps or adds
 overhead.
@@ -120,7 +120,7 @@ git merge workflow/main --allow-unrelated-histories
 
 ## Usage
 
-The workflow for non-trivial changes: explore → plan → execute.
+The workflow for non-trivial changes: explore -> plan -> execute.
 
 **1. Explore the problem.**
 In this phase, it's important to:
@@ -132,25 +132,35 @@ This is relatively free-form. If the project and/or our surface area is
 particularly large, use the `analyze` skill to explore the project's
 code properly before proposing a solution.
 
-**2. (Optional) Stress-test your approach.**
+**2. (Optional) Think through the problem.**
+For complex decisions, the `thinkdeep` skill forces structured analysis:
+decompose problems into constraints and variables, generate distinct
+approaches, verify  assumptions against evidence. It produces a decision
+framework with explicit tradeoffs.
+
+Use it when you need to gain a better understanding of the problem domain,
+potential solutions, their tradeoffs, and the cost of choosing wrong is
+high.
+
+**3. (Optional) Stress-test your approach.**
 If you're uncertain, use the `decision-critic` skill to find holes in
 your reasoning before you commit to a direction.
 
-**3. Write a plan.**
+**4. Write a plan.**
 "Use your planner skill to write a plan to plans/my-feature.md"
 
-The planner runs your plan through review cycles — technical writer
-for clarity, quality reviewer for completeness — until it passes.
+The planner runs your plan through review cycles -- technical writer
+for clarity, quality reviewer for completeness -- until it passes.
 
 The planner captures all decisions, tradeoffs, and information not
 visible from the code so that this context does not get lost.
 
-**4. Clear context.**
-`/clear` — this is important. You don't want to minimise context usage,
+**5. Clear context.**
+`/clear` -- this is important. You don't want to minimise context usage,
 and you have already written down everything necessary for
 plan execution.
 
-**5. Execute.**
+**6. Execute.**
 "Use your planner skill to execute plans/my-feature.md"
 
 The planner delegates to sub-agents. It never writes code directly.
@@ -163,6 +173,7 @@ Where possible, it executes multiple tasks in parallel.
 For detailed breakdowns of each skill, see their READMEs:
 
 - [Analyze](skills/analyze/README.md)
+- [ThinkDeep](skills/thinkdeep/README.md)
 - [Decision Critic](skills/decision-critic/README.md)
 - [Planner](skills/planner/README.md)
 
