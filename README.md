@@ -1,4 +1,4 @@
-# Claude Code Workflow Extensions
+# My Claude Code Workflow
 
 I use Claude Code for most of my work. After months of iteration, I noticed
 a pattern: LLM-assisted code rots faster than hand-written code. Technical
@@ -31,14 +31,34 @@ This workflow is built on four principles:
 
 ### Context Hygiene
 
-Each task gets precisely the information it needs — no more. Sub-agents
-Start with a fresh context. CLAUDE.md files in each directory serve as
-indexes; README.md captures decisions that aren't visible in the code.
+Each task gets precisely the information it needs -- no more. Sub-agents
+start with a fresh context, so architectural knowledge must be encoded
+somewhere persistent.
 
-This extends to code artefacts. Comments get scrubbed for temporal
-contamination — "Added X" becomes "X handles Y". Functions include
-"use when..." triggers. Decision rationale lives in README files, not
-in chat history that gets cleared.
+I use a two-file pattern in every directory:
+
+**CLAUDE.md** -- Claude loads these automatically when entering a directory.
+Because they load whether needed or not, content must be minimal: a tabular
+index with short descriptions and triggers for when to open each file. When
+Claude opens `app/web/controller.py`, it retrieves just the indexes along
+that path -- not prose it might never need.
+
+**README.md** -- Invisible knowledge: architecture decisions, invariants
+not apparent from code. The test: if a developer could learn it by reading
+source files, it does not belong here. Claude reads these only when the
+CLAUDE.md trigger says to.
+
+The principle is just-in-time context. Indexes load automatically but stay
+small. Detailed knowledge loads only when relevant.
+
+The technical writer agent enforces token budgets: ~200 tokens for CLAUDE.md,
+~500 for README.md, 100 for function docs, 150 for module docs. These limits
+force discipline -- if you're exceeding them, you're probably documenting
+what code already shows. Function docs include "use when..." triggers so
+the LLM knows when to reach for them.
+
+The planner workflow maintains this hierarchy automatically. If you bypass
+the planner, you maintain it yourself.
 
 ### Planning Before Execution
 
@@ -145,3 +165,56 @@ For detailed breakdowns of each skill, see their READMEs:
 - [Analyze](skills/analyze/README.md)
 - [Decision Critic](skills/decision-critic/README.md)
 - [Planner](skills/planner/README.md)
+
+## Other Skills
+
+Not every task needs the full planning workflow. These skills handle
+specific concerns.
+
+### Doc Sync
+
+The CLAUDE.md/README.md hierarchy requires maintenance. The structure
+changes over time. Documentation drifts.
+
+The doc-sync skill audits and synchronizes documentation across a
+repository.
+
+Use it when:
+
+- Bootstrapping the workflow on an existing repository
+- After major refactors or directory restructuring
+- Periodic audits to check for documentation drift
+
+If you use the planning workflow consistently, the technical writer
+agent handles documentation as part of execution. Doc-sync is primarily
+for bootstrapping or recovery.
+
+```
+Use your doc-sync skill to synchronize documentation across this repository
+```
+
+For targeted updates:
+
+```
+Use your doc-sync skill to update documentation in src/validators/
+```
+
+### Prompt Engineer
+
+This workflow consists entirely of prompts. Each can be optimized
+individually.
+
+The skill analyzes prompts, proposes changes with explicit pattern
+attribution, and waits for your approval before applying anything.
+
+Use it when:
+
+- A sub-agent definition is not performing as expected
+- Optimizing a skill's Python script prompts
+- Reviewing a multi-prompt workflow for consistency
+
+```
+Use your prompt engineer skill to optimize the system prompt for agents/developer.md
+```
+
+The skill was optimized using itself.
