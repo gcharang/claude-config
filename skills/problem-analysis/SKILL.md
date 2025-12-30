@@ -1,9 +1,9 @@
 ---
-name: thinkdeep
-description: Invoke IMMEDIATELY via python script for deep reasoning and systematic analysis. Do NOT explore first - the script orchestrates the workflow.
+name: problem-analysis
+description: Invoke IMMEDIATELY via python script for structured problem analysis and decision reasoning. Do NOT explore first - the script orchestrates the workflow.
 ---
 
-# ThinkDeep Skill
+# Problem Analysis Skill
 
 When this skill activates, IMMEDIATELY invoke the script. The script IS the workflow.
 

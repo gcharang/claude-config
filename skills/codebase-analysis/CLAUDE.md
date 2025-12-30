@@ -1,4 +1,4 @@
-# skills/analyze/
+# skills/codebase-analysis/
 
 ## Overview
 
@@ -6,10 +6,10 @@ Systematic codebase analysis skill. IMMEDIATELY invoke the script - do NOT explo
 
 ## Index
 
-| File/Directory       | Contents                              | Read When                   |
-| -------------------- | ------------------------------------- | --------------------------- |
-| `SKILL.md`           | Invocation instructions               | Using the analyze skill     |
-| `scripts/analyze.py` | Complete workflow with prompt outputs | Debugging analyzer behavior |
+| File/Directory       | Contents                              | Read When                         |
+| -------------------- | ------------------------------------- | --------------------------------- |
+| `SKILL.md`           | Invocation instructions               | Using the codebase-analysis skill |
+| `scripts/analyze.py` | Complete workflow with prompt outputs | Debugging analyzer behavior       |
 
 ## Key Point
 

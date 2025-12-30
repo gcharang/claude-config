@@ -129,13 +129,13 @@ In this phase, it's important to:
 - figure out the solution.
 
 This is relatively free-form. If the project and/or our surface area is
-particularly large, use the `analyze` skill to explore the project's
+particularly large, use the `codebase-analysis` skill to explore the project's
 code properly before proposing a solution.
 
 **2. (Optional) Think through the problem.**
-For complex decisions, the `thinkdeep` skill forces structured analysis:
+For complex decisions, the `problem-analysis` skill forces structured analysis:
 decompose problems into constraints and variables, generate distinct
-approaches, verify  assumptions against evidence. It produces a decision
+approaches, verify assumptions against evidence. It produces a decision
 framework with explicit tradeoffs.
 
 Use it when you need to gain a better understanding of the problem domain,
@@ -156,7 +156,7 @@ The planner captures all decisions, tradeoffs, and information not
 visible from the code so that this context does not get lost.
 
 **5. Clear context.**
-`/clear` -- this is important. You  want to minimise context usage,
+`/clear` -- this is important. You want to minimise context usage,
 and you have already written down everything necessary for
 execution inside the plan.
 
@@ -172,8 +172,8 @@ Where possible, it executes multiple tasks in parallel.
 
 For detailed breakdowns of each skill, see their READMEs:
 
-- [Analyze](skills/analyze/README.md)
-- [ThinkDeep](skills/thinkdeep/README.md)
+- [Codebase Analysis](skills/codebase-analysis/README.md)
+- [Problem Analysis](skills/problem-analysis/README.md)
 - [Decision Critic](skills/decision-critic/README.md)
 - [Planner](skills/planner/README.md)
 

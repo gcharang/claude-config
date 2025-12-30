@@ -1,9 +1,9 @@
 ---
-name: analyze
+name: codebase-analysis
 description: Invoke IMMEDIATELY via python script when user requests codebase analysis, architecture review, security assessment, or quality evaluation. Do NOT explore first - the script orchestrates exploration.
 ---
 
-# Analyze Skill
+# Codebase Analysis Skill
 
 When this skill activates, IMMEDIATELY invoke the script. The script IS the workflow.
 

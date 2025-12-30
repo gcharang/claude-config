@@ -1,8 +1,8 @@
-# ThinkDeep
+# Problem Analysis
 
 LLMs jump to solutions. You describe a problem, they propose an answer. For
 complex decisions with multiple viable paths, that first answer often reflects
-the LLM's biases rather than the best fit for your constraints. ThinkDeep
+the LLM's biases rather than the best fit for your constraints. This skill
 forces structured reasoning before you commit.
 
 The skill runs through six phases:
@@ -34,7 +34,7 @@ Options I'm considering:
 - ZooKeeper
 - Database advisory locks
 
-Use your thinkdeep skill to structure this decision.
+Use your problem-analysis skill to structure this decision.
 ```
 
 ## The Design

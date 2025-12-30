@@ -1,15 +1,15 @@
-# skills/thinkdeep/
+# skills/problem-analysis/
 
 ## Overview
 
-Deep reasoning skill. IMMEDIATELY invoke the script - do NOT explore first.
+Structured problem analysis skill. IMMEDIATELY invoke the script - do NOT explore first.
 
 ## Index
 
-| File/Directory         | Contents                | Read When                  |
-| ---------------------- | ----------------------- | -------------------------- |
-| `SKILL.md`             | Invocation only         | Using the skill            |
-| `scripts/thinkdeep.py` | Complete workflow logic | Debugging or understanding |
+| File/Directory         | Contents                | Read When                        |
+| ---------------------- | ----------------------- | -------------------------------- |
+| `SKILL.md`             | Invocation only         | Using the problem-analysis skill |
+| `scripts/thinkdeep.py` | Complete workflow logic | Debugging or understanding       |
 
 ## Critical Rule
 
