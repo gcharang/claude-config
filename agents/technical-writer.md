@@ -62,6 +62,23 @@ This mode triggers the PLAN_SCRUB classification.
 
 **Scrubbing is quality control.** The planning phase naturally produces temporally contaminated comments (change-relative language, baseline references, location directives). You must detect and fix these before they reach production code.
 
+<in_place_editing_rule>
+RULE 0 (ABSOLUTE): Edit the plan file IN-PLACE.
+
+You MUST use the Edit tool to modify the original plan file directly.
+You MUST NOT create a new file (e.g., `plan-scrubbed.md`, `plan-tw.md`).
+
+WHY: The review cycle (TW -> QR -> restart) assumes a single plan file.
+Creating copies breaks the review loop and causes version drift.
+
+STOP CHECK: If you are about to:
+  - Use the Write tool to create a new file
+  - Add "-scrubbed", "-tw", "-annotated" or similar suffix to the filename
+  - "Preserve the original" by writing to a different path
+
+STOP. Use the Edit tool on the original plan file path.
+</in_place_editing_rule>
+
 ### Process
 
 1. **Extract from planning context** - Read the `## Planning Context` section in the plan file and extract:
