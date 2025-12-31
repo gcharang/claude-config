@@ -20,10 +20,9 @@ one coherent system.
 | Technical Writer        | Scrub temporal comments, add WHY comments, enrich rationale                  |
 | Quality Reviewer        | Check reliability, conformance; return PASS/PASS_WITH_CONCERNS/NEEDS_CHANGES |
 
-Now, why the review feedback loop? Because LLM-generated plans frequently have
-gaps: missing error handling, incomplete acceptance criteria, ambiguous
-specifications. The workflow iterates until QR passes. That's not overhead --
-it's catching mistakes before they become code.
+Why the feedback loop? LLM-generated plans have gaps. Missing error handling.
+Incomplete acceptance criteria. Ambiguous specs. I keep iterating until QR
+passes. This is not overhead -- it catches mistakes before they become code.
 
 ## Execution Workflow
 
@@ -47,8 +46,8 @@ After planning completes and you clear context (`/clear`), execution proceeds:
 | Documentation          | Technical writer updates CLAUDE.md/README.md                    |
 | Retrospective          | Present execution summary                                       |
 
-The coordinator never writes code directly -- it delegates to developers. This
-is intentional. I've found that separating coordination from implementation
+The coordinator never writes code directly -- it delegates to developers. I
+designed it this way intentionally. Separating coordination from implementation
 produces cleaner results. The coordinator:
 
 - Parallelizes independent work across up to 4 developers per milestone
@@ -56,10 +55,10 @@ produces cleaner results. The coordinator:
 - Loops through issue resolution until QR passes
 - Invokes technical writer only after QR passes
 
-**Reconciliation** handles resume scenarios. If the user's request contains
+**Reconciliation** handles resume scenarios. If the user request contains
 signals like "already implemented", "resume", or "partially complete", the
 workflow validates existing code against plan requirements before executing
-remaining milestones. Otherwise you're building on unknown foundation.
+remaining milestones. Otherwise you are building on unknown foundation.
 
 **Issue Resolution** presents each QR finding individually with options (Fix /
 Skip / Alternative). Fixes are delegated to developers or technical writers,

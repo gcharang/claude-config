@@ -15,26 +15,26 @@ investigation with structured phases and explicit evidence requirements.
 
 ## When to Use
 
-So when does this actually matter? Four scenarios:
+Four scenarios where this matters:
 
 - **Unfamiliar codebase** -- You cannot plan what you do not understand. Period.
 - **Security review** -- Vulnerability assessment requires systematic coverage,
   not "I looked around and it seems fine."
-- **Performance analysis** -- Before optimization, you need to know where time
-  actually goes, not where you assume it goes.
+- **Performance analysis** -- Before optimization, know where time actually
+  goes, not where you assume it goes.
 - **Architecture evaluation** -- Major refactors deserve evidence-backed
   understanding, not vibes.
 
 ## When to Skip
 
-However, not everything needs this level of rigor:
+Not everything needs this level of rigor:
 
 - You already understand the codebase well
 - Simple bug fix with obvious scope
 - User has provided comprehensive context
 
-The astute reader will notice that all three skip conditions share a trait: you
-already have the evidence. The skill exists for when you don't.
+The astute reader will notice all three skip conditions share a trait: you
+already have the evidence. The skill exists for when you do not.
 
 ## Example Usage
 

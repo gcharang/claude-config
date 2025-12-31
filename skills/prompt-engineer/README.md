@@ -1,27 +1,32 @@
 # Prompt Engineer
 
-A meta-skill for optimizing prompts themselves. This entire workflow consists of
-prompts consumed by LLMs -- each can be individually optimized.
+Prompts are code. They have bugs, edge cases, and failure modes. This skill
+treats prompt optimization as a systematic discipline -- analyzing issues,
+applying documented patterns, and proposing changes with explicit rationale.
+
+I use this on my own workflow. The skill was optimized using itself -- of
+course.
 
 ## When to Use
 
-- Optimizing a sub-agent definition (`agents/developer.md`)
-- Improving a skill's Python script prompts (`skills/planner/scripts/planner.py`)
-- Reviewing an entire multi-prompt workflow for consistency
-- Any prompt that isn't performing as expected
+- A sub-agent definition that misbehaves (agents/developer.md)
+- A Python script with embedded prompts that underperform
+  (skills/planner/scripts/planner.py)
+- A multi-prompt workflow that produces inconsistent results
+- Any prompt that does not do what you intended
 
 ## How It Works
 
 The skill:
 
 1. Reads prompt engineering pattern references
-2. Analyzes the prompt(s) for issues
+2. Analyzes the target prompt for issues
 3. Proposes changes with explicit pattern attribution
 4. Waits for approval before applying changes
 5. Presents optimized result with self-verification
 
 I use recitation and careful output ordering to ground the skill in the
-referenced patterns. The skill was optimized using itself -- of course!
+referenced patterns. This prevents the model from inventing techniques.
 
 ## Example Usage
 
@@ -138,6 +143,7 @@ rationale. A single invocation may propose many changes:
 ## Caveat
 
 When you tell an LLM "find problems and opportunities for optimization", it will
-always find "problems" -- that's what it was asked to do. Some may not be real
-issues. I recommend invoking the skill multiple times on challenging prompts,
-but recognize when it's good enough and stop. Diminishing returns are real.
+find problems. That is what you asked it to do. Some may not be real issues.
+
+I recommend invoking the skill multiple times on challenging prompts, but
+recognize when it is good enough and stop. Diminishing returns are real.

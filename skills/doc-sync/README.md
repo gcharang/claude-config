@@ -4,11 +4,13 @@ The CLAUDE.md/README.md hierarchy is central to context hygiene. CLAUDE.md files
 are pure indexes -- tabular navigation with "What" and "When to read" columns
 that help LLMs (and humans) find relevant files without loading everything.
 README.md files capture invisible knowledge: architecture decisions, design
-tradeoffs, invariants that are not apparent from reading code.
+tradeoffs, and invariants that are not apparent from reading code.
 
-The `doc-sync` skill audits and synchronizes this hierarchy across a repository.
+The doc-sync skill audits and synchronizes this hierarchy across a repository.
 
 ## How It Works
+
+The skill operates in five phases:
 
 1. **Discovery** -- Maps all directories, identifies missing or outdated
    CLAUDE.md files
@@ -20,14 +22,16 @@ The `doc-sync` skill audits and synchronizes this hierarchy across a repository.
 
 ## When to Use
 
+Use this skill for:
+
 - **Bootstrapping** -- Adopting this workflow on an existing repository
 - **After bulk changes** -- Major refactors, directory restructuring
 - **Periodic audits** -- Checking for documentation drift
 - **Onboarding** -- Before starting work on an unfamiliar codebase
 
 If you use the planning workflow consistently, the technical writer agent
-maintains documentation as part of execution. As such, the `doc-sync` skill is
-primarily for bootstrapping or recovery -- not routine use.
+maintains documentation as part of execution. As such, doc-sync is primarily for
+bootstrapping or recovery -- not routine use.
 
 ## Example Usage
 

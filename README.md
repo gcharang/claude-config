@@ -1,104 +1,127 @@
 # My Claude Code Workflow
 
-I use Claude Code for most of my work. After months of iteration, I noticed
-a pattern: LLM-assisted code rots faster than hand-written code. Technical
-debt accumulates because the LLM doesn't know what it doesn't know, and
-neither do you until it's too late.
+I use Claude Code for most of my work. After months of iteration, I noticed a
+pattern: LLM-assisted code rots faster than hand-written code. Technical debt
+accumulates because the LLM does not know what it does not know, and neither do
+you until it is too late.
 
 This repo is my solution: skills and workflows that force planning before
 execution, keep context focused, and catch mistakes before they compound.
 
 ## Why This Exists
 
-LLM-assisted coding fails long-term. Technical debt accumulates because
-the LLM cannot see it, and you're moving too fast to notice. I treat
-this as an engineering problem, not a tooling problem.
+LLM-assisted coding fails long-term. Technical debt accumulates because the LLM
+cannot see it, and you are moving too fast to notice. I treat this as an
+engineering problem, not a tooling problem.
 
 LLMs are tools, not collaborators. When an engineer says "add retry logic",
 another engineer infers exponential backoff, jitter, and idempotency. An LLM
-infers nothing you don't explicitly state. It cannot read the room. It has
-no institutional memory. It will cheerfully implement the wrong thing with
-perfect confidence and call it "production-ready".
+infers nothing you do not explicitly state. It cannot read the room. It has no
+institutional memory. It will cheerfully implement the wrong thing with perfect
+confidence and call it "production-ready".
 
-Larger context windows don't help. Giving an LLM more text is like giving
-a human a larger stack of papers; attention drifts to the beginning and
-end, and details in the middle get missed. The solution isn't more context.
-It's the proper context.
+Larger context windows do not help. Giving an LLM more text is like giving a
+human a larger stack of papers; attention drifts to the beginning and end, and
+details in the middle get missed. More context makes this worse. Give the LLM
+exactly what it needs for the task at hand -- nothing more.
 
 ## Principles
 
-This workflow is built on four principles:
+This workflow is built on four principles.
 
 ### Context Hygiene
 
-Each task gets precisely the information it needs -- no more. Sub-agents
-start with a fresh context, so architectural knowledge must be encoded
-somewhere persistent.
+Each task gets precisely the information it needs -- no more. Sub-agents start
+with a fresh context, so architectural knowledge must be encoded somewhere
+persistent.
 
 I use a two-file pattern in every directory:
 
 **CLAUDE.md** -- Claude loads these automatically when entering a directory.
 Because they load whether needed or not, content must be minimal: a tabular
 index with short descriptions and triggers for when to open each file. When
-Claude opens `app/web/controller.py`, it retrieves just the indexes along
-that path -- not prose it might never need.
+Claude opens `app/web/controller.py`, it retrieves just the indexes along that
+path -- not prose it might never need.
 
-**README.md** -- Invisible knowledge: architecture decisions, invariants
-not apparent from code. The test: if a developer could learn it by reading
-source files, it does not belong here. Claude reads these only when the
-CLAUDE.md trigger says to.
+**README.md** -- Invisible knowledge: architecture decisions, invariants not
+apparent from code. The test: if a developer could learn it by reading source
+files, it does not belong here. Claude reads these only when the CLAUDE.md
+trigger says to.
 
 The principle is just-in-time context. Indexes load automatically but stay
 small. Detailed knowledge loads only when relevant.
 
 The technical writer agent enforces token budgets: ~200 tokens for CLAUDE.md,
 ~500 for README.md, 100 for function docs, 150 for module docs. These limits
-force discipline -- if you're exceeding them, you're probably documenting
-what code already shows. Function docs include "use when..." triggers so
-the LLM knows when to reach for them.
+force discipline -- if you are exceeding them, you are probably documenting what
+code already shows. Function docs include "use when..." triggers so the LLM
+knows when to reach for them.
 
-The planner workflow maintains this hierarchy automatically. If you bypass
-the planner, you maintain it yourself.
+The planner workflow maintains this hierarchy automatically. If you bypass the
+planner, you maintain it yourself.
 
 ### Planning Before Execution
 
-LLMs make first-shot mistakes. Always. The workflow separates planning
-from execution, forcing ambiguities to surface when they're cheap to fix.
+LLMs make first-shot mistakes. Always. The workflow separates planning from
+execution, forcing ambiguities to surface when they are cheap to fix.
 
-Plans capture why decisions were made, what alternatives were rejected,
-and what risks were accepted. Plans are written to files. When you clear
-context and start fresh, the reasoning survives.
+Plans capture why decisions were made, what alternatives were rejected, and what
+risks were accepted. Plans are written to files. When you clear context and
+start fresh, the reasoning survives.
 
 ### Review Cycles
 
-Execution is split into milestones -- smaller units that are manageable
-and can be validated individually. This ensures continuous, verified
-progress. Without it, execution becomes a waterfall: one small oversight
-early on and agents drown in accumulated mistakes by the end.
+Execution is split into milestones -- smaller units that are manageable and can
+be validated individually. This ensures continuous, verified progress. Without
+it, execution becomes a waterfall: one small oversight early on and agents
+compound each mistake until the result is unusable.
 
-Quality gates run at every stage. A technical writer agent checks
-clarity; a quality reviewer checks completeness. The loop runs until
-both pass.
+Quality gates run at every stage. A technical writer agent checks clarity; a
+quality reviewer checks completeness. The loop runs until both pass.
 
-Plans pass review before execution begins. During execution, each
-milestone passes review before the next starts.
+Plans pass review before execution begins. During execution, each milestone
+passes review before the next starts.
 
 ### Cost-Effective Delegation
 
-The orchestrator delegates to smaller agents -- Haiku for straightforward
-tasks, Sonnet for moderate complexity. Prompts are injected just-in-time,
-giving smaller models precisely the guidance they need at each step.
+The orchestrator delegates to smaller agents -- Haiku for straightforward tasks,
+Sonnet for moderate complexity. Prompts are injected just-in-time, giving
+smaller models precisely the guidance they need at each step.
 
-When quality review fails or problems recur, the orchestrator escalates
-to higher-quality models. Expensive models are reserved for genuine
-ambiguity, not routine work.
+When quality review fails or problems recur, the orchestrator escalates to
+higher-quality models. Expensive models are reserved for genuine ambiguity, not
+routine work.
 
----
+## Does This Actually Work?
 
-This workflow is opinionated. I'm a backend engineer -- the patterns should
-apply to frontend work, but I haven't tested that. If you're less experienced
-with software engineering, I'd like to know whether this helps or adds
-overhead.
+I have not run formal benchmarks. I can only tell you what I have observed using
+this workflow to build and maintain non-trivial applications entirely with
+Claude Code -- backend systems, data pipelines, streaming applications in C++,
+Python, and Go.
+
+The problems I used to hit constantly are gone:
+
+**Ambiguity resolution.** You ask an LLM "make me a sandwich" and it comes back
+with a grilled cheese. Technically correct. Not what you meant. The planning
+phase forces these misunderstandings to surface before you have built the wrong
+thing.
+
+**Code hygiene.** Without review cycles, the same utility function gets
+reimplemented fifteen times across a codebase. The quality reviewer catches
+this. The technical writer ensures documentation stays consistent.
+
+**LLM-navigable documentation.** Function docs include "use when..." triggers.
+CLAUDE.md files tell the LLM which files matter for a given task. The LLM stops
+guessing which code is relevant.
+
+Is it better than writing code by hand? I think so, but I cannot speak for
+everyone. This workflow is opinionated. I am a backend engineer -- the patterns
+should apply to frontend work, but I have not tested that. If you are less
+experienced with software engineering, I would like to know whether this helps
+or adds overhead.
+
+If you are serious about LLM-assisted coding and want to try a structured
+approach, give it a shot. I would like to hear what works and what does not.
 
 ## Quick Start
 
@@ -122,51 +145,42 @@ git merge workflow/main --allow-unrelated-histories
 
 The workflow for non-trivial changes: explore -> plan -> execute.
 
-**1. Explore the problem.**
-In this phase, it's important to:
+**1. Explore the problem.** Understand what you are dealing with. Figure out the
+solution.
 
-- understand what you're dealing with,
-- figure out the solution.
+This is relatively free-form. If the project and/or surface area is particularly
+large, use the `codebase-analysis` skill to explore the project's code properly
+before proposing a solution.
 
-This is relatively free-form. If the project and/or our surface area is
-particularly large, use the `codebase-analysis` skill to explore the project's
-code properly before proposing a solution.
-
-**2. (Optional) Think through the problem.**
-For complex decisions, the `problem-analysis` skill forces structured analysis:
-decompose problems into constraints and variables, generate distinct
-approaches, verify assumptions against evidence. It produces a decision
-framework with explicit tradeoffs.
+**2. (Optional) Think through the problem.** For complex decisions, the
+`problem-analysis` skill forces structured analysis: decompose problems into
+constraints and variables, generate distinct approaches, verify assumptions
+against evidence. It produces a decision framework with explicit tradeoffs.
 
 Use it when you need to gain a better understanding of the problem domain,
-potential solutions, their tradeoffs, and the cost of choosing wrong is
-high.
+potential solutions, their tradeoffs, and the cost of choosing wrong is high.
 
-**3. (Optional) Stress-test your approach.**
-If you're uncertain, use the `decision-critic` skill to find holes in
-your reasoning before you commit to a direction.
+**3. (Optional) Stress-test your approach.** If you are uncertain, use the
+`decision-critic` skill to find holes in your reasoning before you commit to a
+direction.
 
-**4. Write a plan.**
-"Use your planner skill to write a plan to plans/my-feature.md"
+**4. Write a plan.** "Use your planner skill to write a plan to
+plans/my-feature.md"
 
-The planner runs your plan through review cycles -- technical writer
-for clarity, quality reviewer for completeness -- until it passes.
+The planner runs your plan through review cycles -- technical writer for
+clarity, quality reviewer for completeness -- until it passes.
 
-The planner captures all decisions, tradeoffs, and information not
-visible from the code so that this context does not get lost.
+The planner captures all decisions, tradeoffs, and information not visible from
+the code so that this context does not get lost.
 
-**5. Clear context.**
-`/clear` -- this is important. You want to minimise context usage,
-and you have already written down everything necessary for
-execution inside the plan.
+**5. Clear context.** `/clear` -- start fresh. You have written everything
+needed into the plan.
 
-**6. Execute.**
-"Use your planner skill to execute plans/my-feature.md"
+**6. Execute.** "Use your planner skill to execute plans/my-feature.md"
 
-The planner delegates to sub-agents. It never writes code directly.
-Each milestone goes through the developer, then the technical-writer
-and quality-reviewer. No milestone starts until the previous one
-passes review.
+The planner delegates to sub-agents. It never writes code directly. Each
+milestone goes through the developer, then the technical-writer and
+quality-reviewer. No milestone starts until the previous one passes review.
 
 Where possible, it executes multiple tasks in parallel.
 
@@ -179,16 +193,15 @@ For detailed breakdowns of each skill, see their READMEs:
 
 ## Other Skills
 
-Not every task needs the full planning workflow. These skills handle
-specific concerns.
+Not every task needs the full planning workflow. These skills handle specific
+concerns.
 
 ### Doc Sync
 
-The CLAUDE.md/README.md hierarchy requires maintenance. The structure
-changes over time. Documentation drifts.
+The CLAUDE.md/README.md hierarchy requires maintenance. The structure changes
+over time. Documentation drifts.
 
-The doc-sync skill audits and synchronizes documentation across a
-repository.
+The doc-sync skill audits and synchronizes documentation across a repository.
 
 Use it when:
 
@@ -196,9 +209,9 @@ Use it when:
 - After major refactors or directory restructuring
 - Periodic audits to check for documentation drift
 
-If you use the planning workflow consistently, the technical writer
-agent handles documentation as part of execution. Doc-sync is primarily
-for bootstrapping or recovery.
+If you use the planning workflow consistently, the technical writer agent
+handles documentation as part of execution. Doc-sync is primarily for
+bootstrapping or recovery.
 
 ```
 Use your doc-sync skill to synchronize documentation across this repository
@@ -212,11 +225,10 @@ Use your doc-sync skill to update documentation in src/validators/
 
 ### Prompt Engineer
 
-This workflow consists entirely of prompts. Each can be optimized
-individually.
+This workflow consists entirely of prompts. Each can be optimized individually.
 
-The skill analyzes prompts, proposes changes with explicit pattern
-attribution, and waits for your approval before applying anything.
+The skill analyzes prompts, proposes changes with explicit pattern attribution,
+and waits for your approval before applying anything.
 
 Use it when:
 

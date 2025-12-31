@@ -38,7 +38,8 @@ Use your decision critic skill to stress-test this decision.
 So what happens? The skill:
 
 1. **Decomposes** the decision into claims (C1: Redis is faster), assumptions
-   (A1: sessions don't need durability), constraints (K1: Redis already deployed)
+   (A1: sessions don't need durability), constraints (K1: Redis already
+   deployed)
 2. **Verifies** each claim -- is Redis actually faster for your access pattern?
    What's the actual latency difference?
 3. **Challenges** -- what if sessions DO need durability (shopping carts)?
@@ -47,14 +48,12 @@ So what happens? The skill:
 
 ## The Anti-Sycophancy Design
 
-I grounded this skill in three research-backed techniques:
+I grounded this skill in three techniques:
 
-- **Chain-of-Verification** (Dhuliawala et al., 2023) -- factored verification
-  prevents confirmation bias by answering questions independently
-- **Self-Consistency** (Wang et al., 2023) -- multiple reasoning paths reveal
-  disagreement
-- **Multi-Expert Prompting** (Wang et al., 2024) -- diverse perspectives catch
-  blind spots
+- **Chain-of-Verification** -- factored verification prevents confirmation bias
+  by answering questions independently
+- **Self-Consistency** -- multiple reasoning paths reveal disagreement
+- **Multi-Expert Prompting** -- diverse perspectives catch blind spots
 
 The structure forces the LLM through adversarial phases rather than allowing it
 to immediately agree with your reasoning. That's the whole point.
