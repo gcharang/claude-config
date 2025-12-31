@@ -2,18 +2,19 @@
 """
 ThinkDeep Skill - Structured deep reasoning workflow.
 
-Guides problem analysis through six phases:
+Guides problem analysis through seven phases:
   1. Decompose  - understand problem space, constraints, assumptions
-  2. Generate   - create distinct solution approaches
-  3. Critique   - Self-Refine feedback on solutions (NEW)
-  4. Verify     - factored verification of assumptions (improved)
-  5. Cross-check - reconcile verified facts with claims (NEW)
-  6. Synthesize - structured trade-off analysis
+  2. Generate   - create initial solution approaches
+  3. Expand     - push for MORE solutions not yet considered
+  4. Critique   - Self-Refine feedback on solutions
+  5. Verify     - factored verification of assumptions
+  6. Cross-check - reconcile verified facts with claims
+  7. Synthesize - structured trade-off analysis
 
-Extra steps beyond 6 go to verification (where accuracy improves most).
+Extra steps beyond 7 go to verification (where accuracy improves most).
 
 Usage:
-    python3 thinkdeep.py --step 1 --total-steps 6 --thoughts "Problem: Redis vs Memcached"
+    python3 thinkdeep.py --step 1 --total-steps 7 --thoughts "Problem: Redis vs Memcached"
 
 Research grounding:
   - ToT (Yao 2023): decompose into thoughts "small enough for diverse samples,
@@ -22,6 +23,10 @@ Research grounding:
     Use OPEN questions, not yes/no ("model tends to agree whether right or wrong")
   - Self-Refine (Madaan 2023): feedback must be "actionable and specific";
     separate feedback from refinement for 5-40% improvement
+  - Analogical Prompting (Yasunaga 2024): "recall relevant and distinct problems"
+    improves reasoning; diversity in self-generated examples is critical
+  - Diversity-Based Selection (Zhang 2022): "even with 50% wrong demonstrations,
+    diversity-based clustering performance does not degrade significantly"
 """
 
 import argparse
@@ -92,7 +97,47 @@ def get_step_2_guidance():
 
 
 def get_step_3_guidance():
-    """Step 3: Solution Critique - Self-Refine feedback phase."""
+    """Step 3: Solution Expansion - push beyond initial ideas."""
+    return (
+        "Solution Expansion",
+        [
+            "Review the solutions from step 2. Now PUSH FURTHER:",
+            "",
+            "UNEXPLORED AXES - What fundamental trade-offs were NOT represented?",
+            "  - If all solutions are complex, what's the SIMPLEST approach?",
+            "  - If all are centralized, what's DISTRIBUTED?",
+            "  - If all use technology X, what uses its OPPOSITE or COMPETITOR?",
+            "  - If all optimize for metric A, what optimizes for metric B?",
+            "",
+            "ADJACENT DOMAINS - What solutions from RELATED problems might apply?",
+            "  'How does [related domain] solve similar problems?'",
+            "  'What would [different industry/field] do here?'",
+            "  'What patterns from [distributed systems / databases / networking] apply?'",
+            "",
+            "ANTI-SOLUTIONS - What's the OPPOSITE of each current solution?",
+            "  If Solution A is stateful, what's stateless?",
+            "  If Solution A is synchronous, what's asynchronous?",
+            "  If Solution A is custom-built, what's off-the-shelf?",
+            "",
+            "NULL/MINIMAL OPTIONS:",
+            "  - What if we did NOTHING and accepted the current state?",
+            "  - What if we solved a SMALLER version of the problem?",
+            "  - What's the 80/20 solution that's 'good enough'?",
+            "",
+            "ADD 1-3 MORE solutions. Each must represent an axis/approach",
+            "not covered by the initial set.",
+        ],
+        [
+            "INITIAL SOLUTIONS (from step 2)",
+            "AXES NOT YET EXPLORED (identified gaps)",
+            "NEW SOLUTIONS (1-3 additional, each with: name, mechanism, assumptions)",
+            "COMPLETE SOLUTION SET (all solutions for next phase)",
+        ],
+    )
+
+
+def get_step_4_guidance():
+    """Step 4: Solution Critique - Self-Refine feedback phase."""
     return (
         "Solution Critique",
         [
@@ -232,11 +277,12 @@ def get_guidance(step: int, total_steps: int):
     """
     Dispatch to appropriate guidance based on step number.
 
-    New 6-phase structure:
+    7-phase structure:
       Step 1:      Decomposition
-      Step 2:      Generation
-      Step 3:      Critique (Self-Refine feedback)
-      Steps 4-N-2: Verification (factored, extra steps go here)
+      Step 2:      Generation (initial solutions)
+      Step 3:      Expansion (push for MORE solutions)
+      Step 4:      Critique (Self-Refine feedback)
+      Steps 5-N-2: Verification (factored, extra steps go here)
       Step N-1:    Cross-check
       Step N:      Synthesis
     """
@@ -246,11 +292,13 @@ def get_guidance(step: int, total_steps: int):
         return get_step_2_guidance()
     if step == 3:
         return get_step_3_guidance()
+    if step == 4:
+        return get_step_4_guidance()
     if step == total_steps:
         return get_final_step_guidance()
     if step == total_steps - 1:
         return get_crosscheck_guidance()
-    # Steps 4 to N-2 are verification
+    # Steps 5 to N-2 are verification
     return get_verification_guidance()
 
 
@@ -293,7 +341,7 @@ def format_output(step: int, total_steps: int, thoughts: str) -> str:
             f"NEXT: Step {step + 1} - {next_title}",
             f"REMAINING: {total_steps - step} step(s)",
             "",
-            "ADJUST: increase --total-steps if more verification needed (min 6)",
+            "ADJUST: increase --total-steps if more verification needed (min 7)",
         ])
 
     lines.extend(["", "=" * 70])
@@ -304,8 +352,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="ThinkDeep - Structured deep reasoning",
         epilog=(
-            "Phases: decompose (1) -> generate (2) -> critique (3) -> "
-            "verify (4 to N-2) -> cross-check (N-1) -> synthesize (N)"
+            "Phases: decompose (1) -> generate (2) -> expand (3) -> "
+            "critique (4) -> verify (5 to N-2) -> cross-check (N-1) -> synthesize (N)"
         ),
     )
     parser.add_argument("--step", type=int, required=True)
@@ -315,8 +363,8 @@ def main():
 
     if args.step < 1:
         sys.exit("ERROR: --step must be >= 1")
-    if args.total_steps < 6:
-        sys.exit("ERROR: --total-steps must be >= 6 (was 4, now requires 6 phases)")
+    if args.total_steps < 7:
+        sys.exit("ERROR: --total-steps must be >= 7 (requires 7 phases)")
     if args.step > args.total_steps:
         sys.exit("ERROR: --step cannot exceed --total-steps")
 
