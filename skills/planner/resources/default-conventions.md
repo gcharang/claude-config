@@ -72,23 +72,44 @@ Severity: SUGGESTION
 ## Testing Conventions
 
 <default-conventions domain="testing">
-**Principle**: Maximize coverage through input variation, not test count.
+**Principle**: Test behavior, not implementation. Fast feedback.
+
+**Test Type Hierarchy** (preference order):
+
+1. **Integration tests** (highest value)
+   - Test end-user verifiable behavior
+   - Use real systems/dependencies (e.g., testcontainers)
+   - Verify component interaction at boundaries
+   - This is where the real value lies
+
+2. **Property-based / generative tests** (preferred)
+   - Cover wide input space with invariant assertions
+   - Catch edge cases humans miss
+   - Use for functions with clear input/output contracts
+
+3. **Unit tests** (use sparingly)
+   - Only for highly complex or critical logic
+   - Risk: maintenance liability, brittleness to refactoring
+   - Prefer integration tests that cover same behavior
+
+**Test Placement**: Tests are part of implementation milestones, not separate
+milestones. A milestone is not complete until its tests pass. This creates fast
+feedback during development.
 
 **DO**:
 
-- Property-based tests: verify invariants (`write(x) -> read() == x`) across many inputs
-- Parameterized fixtures: compose layers that multiply test scenarios
-- Integration tests: public API against real dependencies
-- Minimal test bodies: complexity in fixtures, not test logic
-- Cover: integration boundaries, invariants, behavior edges, error handling at system edges
+- Integration tests with real dependencies (testcontainers, etc.)
+- Property-based tests for invariant-rich functions
+- Parameterized fixtures over duplicate test bodies
+- Test behavior observable by end users
 
 **DON'T**:
 
-- Test external library behavior (test YOUR code)
-- One-test-per-variant when parametrization applies
+- Test external library/dependency behavior (out of scope)
+- Unit test simple code (maintenance liability exceeds value)
 - Mock owned dependencies (use real implementations)
-- Test internals when public API covers them
-- Verify trivial behavior with no regression risk
+- Test implementation details that may change
+- One-test-per-variant when parametrization applies
 
 Severity: SHOULD_FIX (violations), SUGGESTION (missed opportunities)
 </default-conventions>

@@ -14,7 +14,7 @@ workflow.
 ## Invocation
 
 ```bash
-python3 scripts/thinkdeep.py \
+python3 scripts/analyze.py \
   --step 1 \
   --total-steps 7 \
   --thoughts "Problem: <describe>"

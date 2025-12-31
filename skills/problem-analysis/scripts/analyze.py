@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ThinkDeep Skill - Structured deep reasoning workflow.
+Problem Analysis Skill - Structured deep reasoning workflow.
 
 Guides problem analysis through seven phases:
   1. Decompose  - understand problem space, constraints, assumptions
@@ -14,7 +14,7 @@ Guides problem analysis through seven phases:
 Extra steps beyond 7 go to verification (where accuracy improves most).
 
 Usage:
-    python3 thinkdeep.py --step 1 --total-steps 7 --thoughts "Problem: Redis vs Memcached"
+    python3 analyze.py --step 1 --total-steps 7 --thoughts "Problem: Redis vs Memcached"
 
 Research grounding:
   - ToT (Yao 2023): decompose into thoughts "small enough for diverse samples,
@@ -309,7 +309,7 @@ def format_output(step: int, total_steps: int, thoughts: str) -> str:
 
     lines = [
         "=" * 70,
-        f"THINKDEEP - Step {step}/{total_steps}: {title}",
+        f"PROBLEM ANALYSIS - Step {step}/{total_steps}: {title}",
         "=" * 70,
         "",
         "ACCUMULATED STATE:",
@@ -350,7 +350,7 @@ def format_output(step: int, total_steps: int, thoughts: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ThinkDeep - Structured deep reasoning",
+        description="Problem Analysis - Structured deep reasoning",
         epilog=(
             "Phases: decompose (1) -> generate (2) -> expand (3) -> "
             "critique (4) -> verify (5 to N-2) -> cross-check (N-1) -> synthesize (N)"

@@ -1,10 +1,6 @@
 ---
 name: planner
-description:
-  Interactive planning and execution for complex tasks. Use when breaking down
-  multi-step projects (planning) or executing approved plans through delegation
-  (execution). Planning creates milestones with specifications; execution
-  delegates to specialized agents.
+description: Interactive planning and execution for complex tasks. Use when user asks to use or invoke planner skill.
 ---
 
 # Planner Skill

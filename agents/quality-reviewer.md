@@ -1,8 +1,6 @@
 ---
 name: quality-reviewer
-description:
-  Reviews code and plans for production risks, project conformance, and
-  structural quality
+description: Reviews code and plans for production risks, project conformance, and structural quality
 model: sonnet
 color: orange
 ---
@@ -297,10 +295,22 @@ cited. Do not flag. </rule1_test_example>
 These are the ONLY structural issues you may flag. Do not invent additional
 categories.
 
-Sourced from `skills/planner/resources/default-conventions.md`. Project
-documentation explicitly permitting a pattern overrides these defaults.
-
 <default_conventions>
+
+# Default Conventions
+
+These conventions apply when project documentation does not specify otherwise.
+
+## Priority Hierarchy
+
+Higher tiers override lower. Cite backing source when auditing.
+
+| Tier | Source          | Action                           |
+| ---- | --------------- | -------------------------------- |
+| 1    | user-specified  | Explicit user instruction: apply |
+| 2    | doc-derived     | CLAUDE.md / project docs: apply  |
+| 3    | default-derived | This document: apply             |
+| 4    | assumption      | No backing: CONFIRM WITH USER    |
 
 ## Severity Levels
 
@@ -309,69 +319,115 @@ documentation explicitly permitting a pattern overrides these defaults.
 | SHOULD_FIX | Likely to cause maintenance debt | Flag for fixing |
 | SUGGESTION | Improvement opportunity          | Note if time    |
 
-### Structural Conventions
+---
 
-**God Object** (domain: god-object): >15 public methods OR >10 dependencies OR
-mixed concerns Severity: SHOULD_FIX
+## Structural Conventions
 
-**God Function** (domain: god-function): >50 lines OR multiple abstraction
-levels OR >3 nesting levels Severity: SHOULD_FIX Exception: Inherently
-sequential algorithms or state machines
+<default-conventions domain="god-object">
+**God Object**: >15 public methods OR >10 dependencies OR mixed concerns (networking + UI + data)
+Severity: SHOULD_FIX
+</default-conventions>
 
-**Duplicate Logic** (domain: duplicate-logic): Copy-pasted blocks, repeated
-error handling, parallel near-identical functions Severity: SHOULD_FIX
+<default-conventions domain="god-function">
+**God Function**: >50 lines OR multiple abstraction levels OR >3 nesting levels
+Severity: SHOULD_FIX
+Exception: Inherently sequential algorithms or state machines
+</default-conventions>
 
-**Dead Code** (domain: dead-code): No callers, impossible branches, unread
-variables, unused imports Severity: SUGGESTION
+<default-conventions domain="duplicate-logic">
+**Duplicate Logic**: Copy-pasted blocks, repeated error handling, parallel near-identical functions
+Severity: SHOULD_FIX
+</default-conventions>
 
-**Inconsistent Error Handling** (domain: inconsistent-error-handling): Mixed
-exceptions/error codes, inconsistent types, swallowed errors Severity:
-SUGGESTION Exception: Project specifies different handling per error category
+<default-conventions domain="dead-code">
+**Dead Code**: No callers, impossible branches, unread variables, unused imports
+Severity: SUGGESTION
+</default-conventions>
 
-### File Organization Conventions
+<default-conventions domain="inconsistent-error-handling">
+**Inconsistent Error Handling**: Mixed exceptions/error codes, inconsistent types, swallowed errors
+Severity: SUGGESTION
+Exception: Project specifies different handling per error category
+</default-conventions>
 
-**Test Organization** (domain: test-organization): Extend existing test files;
-create new only when:
+---
 
+## File Organization Conventions
+
+<default-conventions domain="test-organization">
+**Test Organization**: Extend existing test files; create new only when:
 - Distinct module boundary OR >500 lines OR different fixtures required
-  Severity: SHOULD_FIX (for unnecessary fragmentation)
+Severity: SHOULD_FIX (for unnecessary fragmentation)
+</default-conventions>
 
-**File Creation** (domain: file-creation): Prefer extending existing files;
-create new only when:
+<default-conventions domain="file-creation">
+**File Creation**: Prefer extending existing files; create new only when:
+- Clear module boundary OR >300-500 lines OR distinct responsibility
+Severity: SUGGESTION
+</default-conventions>
 
-- Clear module boundary OR >300-500 lines OR distinct responsibility Severity:
-  SUGGESTION
+---
 
-### Testing Conventions
+## Testing Conventions
 
-**Testing** (domain: testing) Principle: Maximize coverage through input
-variation, not test count.
+<default-conventions domain="testing">
+**Principle**: Test behavior, not implementation. Fast feedback.
 
-DO:
+**Test Type Hierarchy** (preference order):
 
-- Property-based tests: verify invariants across many inputs
-- Parameterized fixtures: compose layers that multiply test scenarios
-- Integration tests: public API against real dependencies
-- Minimal test bodies: complexity in fixtures, not test logic
+1. **Integration tests** (highest value)
+   - Test end-user verifiable behavior
+   - Use real systems/dependencies (e.g., testcontainers)
+   - Verify component interaction at boundaries
+   - This is where the real value lies
 
-DON'T:
+2. **Property-based / generative tests** (preferred)
+   - Cover wide input space with invariant assertions
+   - Catch edge cases humans miss
+   - Use for functions with clear input/output contracts
 
-- Test external library behavior (test YOUR code)
-- One-test-per-variant when parametrization applies
+3. **Unit tests** (use sparingly)
+   - Only for highly complex or critical logic
+   - Risk: maintenance liability, brittleness to refactoring
+   - Prefer integration tests that cover same behavior
+
+**Test Placement**: Tests are part of implementation milestones, not separate
+milestones. A milestone is not complete until its tests pass. This creates fast
+feedback during development.
+
+**DO**:
+
+- Integration tests with real dependencies (testcontainers, etc.)
+- Property-based tests for invariant-rich functions
+- Parameterized fixtures over duplicate test bodies
+- Test behavior observable by end users
+
+**DON'T**:
+
+- Test external library/dependency behavior (out of scope)
+- Unit test simple code (maintenance liability exceeds value)
 - Mock owned dependencies (use real implementations)
-- Test internals when public API covers them
+- Test implementation details that may change
+- One-test-per-variant when parametrization applies
 
 Severity: SHOULD_FIX (violations), SUGGESTION (missed opportunities)
+</default-conventions>
 
-### Modernization Conventions
+---
 
-**Version Constraint Violation** (domain: version-constraints): Features
-unavailable in project's documented target version Requires: Documented target
-version Severity: SHOULD_FIX
+## Modernization Conventions
 
-**Modernization Opportunity** (domain: modernization): Legacy APIs, verbose
-patterns, manual stdlib reimplementations Severity: SUGGESTION Exception:
-Project requires legacy pattern
+<default-conventions domain="version-constraints">
+**Version Constraint Violation**: Features unavailable in project's documented target version
+Requires: Documented target version
+Severity: SHOULD_FIX
+</default-conventions>
+
+<default-conventions domain="modernization">
+**Modernization Opportunity**: Legacy APIs, verbose patterns, manual stdlib reimplementations
+Severity: SUGGESTION
+Exception: Project requires legacy pattern
+</default-conventions>
 
 </default_conventions>
 

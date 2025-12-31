@@ -20,25 +20,29 @@ Planning skill with resources that must stay synced with agent prompts.
 Resources are **authoritative sources**.
 
 - **SKILL.md** references resources directly (main Claude can read files)
-- **Agent prompts** embed resources 1:1 (sub-agents cannot access files reliably)
+- **Agent prompts** embed resources 1:1 (sub-agents cannot access files
+  reliably)
 
 ### plan-format.md
 
 Plan template injected by `scripts/planner.py` at planning phase completion.
 
-**No agent sync required** - the script reads and outputs the format directly, so editing
-this file takes effect immediately without updating any agent prompts.
+**No agent sync required** - the script reads and outputs the format directly,
+so editing this file takes effect immediately without updating any agent
+prompts.
 
 ### temporal-contamination.md
 
-Authoritative source for temporal contamination detection. Full content embedded 1:1.
+Authoritative source for temporal contamination detection. Full content embedded
+1:1.
 
 | Synced To                    | Embedded Section           |
 | ---------------------------- | -------------------------- |
 | `agents/technical-writer.md` | `<temporal_contamination>` |
 | `agents/quality-reviewer.md` | `<temporal_contamination>` |
 
-**When updating**: Modify `resources/temporal-contamination.md` first, then copy content into both `<temporal_contamination>` sections.
+**When updating**: Modify `resources/temporal-contamination.md` first, then copy
+content into both `<temporal_contamination>` sections.
 
 ### diff-format.md
 
@@ -48,24 +52,21 @@ Authoritative source for unified diff format. Full content embedded 1:1.
 | --------------------- | ---------------- |
 | `agents/developer.md` | `<diff_format>`  |
 
-**When updating**: Modify `resources/diff-format.md` first, then copy content into `<diff_format>` section.
+**When updating**: Modify `resources/diff-format.md` first, then copy content
+into `<diff_format>` section.
 
 ### default-conventions.md
 
-Authoritative source for default structural conventions (the four-tier decision backing system). Embedded in QR for RULE 2 enforcement; referenced by planner for decision audit.
+Authoritative source for default structural conventions (four-tier decision
+backing system). Embedded 1:1 in QR for RULE 2 enforcement; referenced by
+planner.py for decision audit.
 
 | Synced To                    | Embedded Section        |
 | ---------------------------- | ----------------------- |
 | `agents/quality-reviewer.md` | `<default_conventions>` |
 
-**When updating**: Modify `resources/default-conventions.md` first, then update the `<default_conventions>` section in QR. The planner.py decision audit references this resource by path.
-
-**Four-tier priority hierarchy** (higher overrides lower):
-
-1. user-specified: explicit user instruction
-2. doc-derived: project CLAUDE.md or documentation
-3. default-derived: conventions in this resource
-4. assumption: no backing found (requires user confirmation)
+**When updating**: Modify `resources/default-conventions.md` first, then copy
+full content verbatim into `<default_conventions>` section in QR.
 
 ## Sync Verification
 
