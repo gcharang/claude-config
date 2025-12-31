@@ -400,6 +400,8 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
                 "    <agent>@agent-technical-writer</agent>",
                 "    <mode>plan-scrub</mode>",
                 "    <plan_source>[path to plan file]</plan_source>",
+                "    <scope>[OPTIONAL: If re-reviewing after changes, specify which",
+                "      milestones/sections changed. Omit for full review.]</scope>",
                 "    <task>",
                 "      1. Read ## Planning Context section FIRST",
                 "      2. Prioritize scrub by uncertainty (HIGH/MEDIUM/LOW)",
@@ -430,6 +432,8 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
                 "    <agent>@agent-quality-reviewer</agent>",
                 "    <mode>plan-review</mode>",
                 "    <plan_source>[path to plan file]</plan_source>",
+                "    <scope>[OPTIONAL: If re-reviewing after changes, specify which",
+                "      milestones/sections changed. Omit for full review.]</scope>",
                 "    <task>",
                 "      1. Read ## Planning Context (constraints, known risks)",
                 "      2. Write out CONTEXT FILTER before reviewing milestones",
@@ -447,13 +451,43 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
                 "",
                 "Wait for @agent-quality-reviewer verdict.",
                 "</review_step_2_delegate_qr>",
+                "",
+                "<review_scope_reduction>",
+                "If re-reviewing after changes, you may LIMIT SCOPE -- but NEVER",
+                "skip agents or use smaller models.",
+                "",
+                "CORRECT (scope by topic):",
+                "  Delegate to @agent-technical-writer with:",
+                "    <scope>Focus ONLY on Milestone M2 code snippets that were",
+                "    modified to add LogManager.Shutdown()</scope>",
+                "",
+                "INCORRECT (smaller model):",
+                "  @agent-quality-reviewer with model=haiku for 'quick validation'",
+                "",
+                "INCORRECT (skip TW):",
+                "  Skip TW, go straight to QR since 'changes were minor'",
+                "",
+                "The review loop is ALWAYS: TW step 1 -> QR step 2 -> complete.",
+                "Reduce scope by telling agents WHAT to focus on, not by changing",
+                "WHICH agents run or WHAT model they use.",
+                "</review_scope_reduction>",
             ],
             "next": (
-                "After QR returns verdict:\n"
-                "  - PASS or PASS_WITH_CONCERNS: Invoke step 3 to complete review\n"
-                "  - NEEDS_CHANGES: Address issues in plan, then restart review from step 1:\n"
-                "    python3 planner.py --phase review --step-number 1 --total-steps 2 \\\n"
-                '      --thoughts "Addressed QR feedback: [summary of changes]"'
+                "After QR returns verdict:\n\n"
+                "RULE 0 (CRITICAL): If you made ANY modifications to the plan\n"
+                "(even to address PASS_WITH_CONCERNS findings), you MUST restart\n"
+                "review from step 1 (TW first, then QR).\n\n"
+                "Decision tree:\n"
+                "  1. Did I modify the plan since TW/QR last reviewed it?\n"
+                "     YES -> Restart from step 1 (even if verdict was PASS)\n"
+                "     NO  -> Continue to question 2\n\n"
+                "  2. What was the verdict?\n"
+                "     PASS: Invoke step 3 to complete review\n"
+                "     PASS_WITH_CONCERNS: Address concerns, then restart step 1\n"
+                "     NEEDS_CHANGES: Address issues, then restart step 1\n\n"
+                "Command to restart review:\n"
+                "  python3 planner.py --phase review --step-number 1 --total-steps 2 \\\n"
+                '    --thoughts "Addressed [TW/QR] feedback: [summary of changes]"'
             )
         }
 
