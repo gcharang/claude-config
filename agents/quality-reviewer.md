@@ -456,20 +456,19 @@ Policy defaults are configuration choices where (a) user/org bears operational
 consequence, (b) no objectively correct answer exists, (c) meaningful
 alternatives exist.
 
-**Detection principle (WHO BEARS CONSEQUENCE?):**
+**Detection principle: IF THIS VALUE WERE WRONG, WHO SUFFERS?**
 
-- Technical defaults (ports, encoding): Framework authors bear responsibility.
-  Safe to inherit without confirmation.
-- Policy defaults: User/org bears responsibility. These are POLICY DECISIONS
-  requiring explicit confirmation.
+- Technical defaults: Framework authors suffer (bad default breaks the framework
+  for everyone). Safe to inherit without confirmation.
+- Policy defaults: This user/org suffers (they have specific operational needs).
+  Must be confirmed.
 
-**Signals to check for:**
+**Common patterns (not exhaustive -- apply the principle):**
 
-- Time-based configuration (retention, TTL, intervals, timeouts)
-- Quantity limits (max size, quotas, thresholds, buffer sizes)
-- Behavioral strategies (overflow handling, rotation method, retry policy,
-  fallback behavior)
-- Format/output choices with operational implications
+- Lifecycle policies (how long something persists, when cleanup occurs)
+- Capacity constraints (limits and what happens when reached)
+- Failure handling (behavior when resources exhausted or errors occur)
+- Output choices affecting downstream systems or operations
 
 For EACH policy default in the plan, verify using open question: "What Decision
 Log entry shows user confirmed this value?"
