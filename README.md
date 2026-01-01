@@ -191,6 +191,72 @@ For detailed breakdowns of each skill, see their READMEs:
 - [Decision Critic](skills/decision-critic/README.md)
 - [Planner](skills/planner/README.md)
 
+### In Practice
+
+I needed to migrate a legacy C# Windows Service from print-based logging to
+something that actually rotates files.
+
+The codebase had a homegrown Log() method writing to a single file with
+File.AppendAllText. No rotation, no log levels, synchronous I/O blocking the
+thread. Six Console.WriteLine calls scattered elsewhere went nowhere when
+running as a service.
+
+I started with exploration and analysis in a single prompt:
+
+```
+Use your codebase analysis skill to briefly explore this C# project,
+with a focus on all the places where debug logs are currently emitted.
+
+Then use your problem analysis skill to think through an appropriate
+logging framework:
+ * must work with .NET Framework 4.8.1
+ * must support log rotation out of the box
+ * we run multiple processes on the same machine, so it needs structured
+   multi-process support
+```
+
+The codebase analysis found 31 call sites and the Console.WriteLine leakage. The
+problem analysis evaluated NLog, Serilog, log4net, and
+Microsoft.Extensions.Logging against my constraints.
+
+The recommendation was NLog. It handles rotation and async out of the box.
+Multi-process support comes from layout variables. Serilog would work but
+requires three packages for the same functionality.
+
+I agreed with the recommendation. Not a complicated decision, so I skipped the
+`decision-critic` and moved to planning:
+
+```
+Use your planner skill to write an implementation plan to: plan-logging.md
+```
+
+The planner surfaced two ambiguities:
+
+1. Replace all Log() call sites, or just the implementation? Obvious to a human,
+   but worth clarifying upfront.
+2. Log rotation defaults. The planner assumed 1-day rotation, but I also need
+   size-based rotation at 1GB.
+
+The plan went through review. The technical writer flagged comments that
+explained what rather than why -- the NLog.config had comments like "configures
+file target" instead of explaining the rotation strategy. The quality reviewer
+caught two issues I would have missed: no explicit LogManager.Shutdown() in the
+service's OnStop() handler, and incorrect file paths missing the src/ prefix.
+
+These are the bugs that ship to production when you skip review cycles. The
+shutdown issue would have caused log loss on service restart. The path issue
+would have failed silently.
+
+After fixes, I cleared context and executed:
+
+```
+Use your planner skill to execute: @plan-logging.md
+```
+
+The developer, debugger, technical writer, and quality reviewer run the
+implementation. Each milestone passes review before the next starts. If the
+implementation deviated from the plan, I would know.
+
 ## Other Skills
 
 Not every task needs the full planning workflow. These skills handle specific
