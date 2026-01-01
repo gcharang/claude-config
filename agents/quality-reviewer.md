@@ -450,6 +450,42 @@ Identify structural risks NOT addressed in `## Planning Context`:
 | **Missing error strategy**  | Plan describes happy path without failure modes                |
 | **Testing gap**             | Plan doesn't mention how new functionality will be tested      |
 
+### Unconfirmed Policy Defaults
+
+Policy defaults are configuration choices where (a) user/org bears operational
+consequence, (b) no objectively correct answer exists, (c) meaningful
+alternatives exist.
+
+**Detection principle (WHO BEARS CONSEQUENCE?):**
+
+- Technical defaults (ports, encoding): Framework authors bear responsibility.
+  Safe to inherit without confirmation.
+- Policy defaults: User/org bears responsibility. These are POLICY DECISIONS
+  requiring explicit confirmation.
+
+**Signals to check for:**
+
+- Time-based configuration (retention, TTL, intervals, timeouts)
+- Quantity limits (max size, quotas, thresholds, buffer sizes)
+- Behavioral strategies (overflow handling, rotation method, retry policy,
+  fallback behavior)
+- Format/output choices with operational implications
+
+For EACH policy default in the plan, verify using open question: "What Decision
+Log entry shows user confirmed this value?"
+
+If answer is "none" -> Flag as SHOULD_FIX:
+
+```
+### RULE 1 SHOULD_FIX: Unconfirmed policy default
+- **Location**: [Milestone/section where value appears]
+- **Issue**: Policy default [value] chosen without user confirmation
+- **Failure Mode / Rationale**: User/org bears operational consequence of this
+  choice. Decision Log lacks 'user-specified' backing.
+- **Suggested Fix**: Return to planning; use AskUserQuestion to present
+  alternatives and confirm choice with user.
+```
+
 ### TW Scrub Verification
 
 Technical Writer scrubs the plan BEFORE you review it. Verify the scrub was
