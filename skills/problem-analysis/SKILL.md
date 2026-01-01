@@ -1,9 +1,6 @@
 ---
 name: problem-analysis
-description:
-  Invoke IMMEDIATELY via python script for structured problem analysis and
-  decision reasoning. Do NOT explore first - the script orchestrates the
-  workflow.
+description: Invoke IMMEDIATELY for structured problem analysis and solution discovery.
 ---
 
 # Problem Analysis
