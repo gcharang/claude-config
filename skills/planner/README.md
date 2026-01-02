@@ -6,23 +6,22 @@ one coherent system.
 ## Planning Workflow
 
 ```
-  Context --> Decision --> Refinement --> Verification --+
-     ^                                                    |
-     |                 +----------------------------------+
-     |                 v
-     |        QR-Completeness --+-- QR-Code
-     |                 |                |
-     |                 +------ + -------+
-     |                         |
-     |                [fail] --+-- [pass]
-     |                   |            |
-     +-------------------+            v
-                                     TW --> QR-Docs --+
-                                      ^        |      |
-                                      |        |      | [pass]
-                                      + [fail]-+      v
-                                                   APPROVED
+  Planning ----+
+      |        |
+      v        |
+     QR -------+  (fail: restart planning)
+      |
+      v
+     TW -------+
+      |        |
+      v        |
+   QR-Docs ----+  (fail: restart TW)
+      |
+      v
+   APPROVED
 ```
+
+QR = QR-Completeness + QR-Code (run in parallel).
 
 | Step                    | Actions                                                                    |
 | ----------------------- | -------------------------------------------------------------------------- |
