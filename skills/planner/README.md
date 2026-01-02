@@ -21,8 +21,6 @@ one coherent system.
    APPROVED
 ```
 
-QR = QR-Completeness + QR-Code (run in parallel).
-
 | Step                    | Actions                                                                    |
 | ----------------------- | -------------------------------------------------------------------------- |
 | Context & Scope         | Confirm path, define scope, identify approaches, list constraints          |
