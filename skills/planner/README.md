@@ -1,9 +1,9 @@
 # Planner
 
-LLM-generated plans have gaps. Missing error handling. Incomplete acceptance
-criteria. Ambiguous specs. The planner skill addresses this with two distinct
-workflows -- planning and execution -- connected by quality gates that catch
-mistakes before they become code.
+LLM-generated plans have gaps. I have seen missing error handling, vague
+acceptance criteria, specs that nobody can implement. I built this skill with
+two workflows -- planning and execution -- connected by quality gates that catch
+these problems early.
 
 ## Planning Workflow
 
@@ -36,8 +36,8 @@ mistakes before they become code.
 
 So, why all the feedback loops? QR-Completeness and QR-Code run before TW to
 catch structural issues early. QR-Docs runs after TW to validate documentation
-quality. Doc issues restart only TW; structure issues restart planning. This is
-not overhead -- it catches mistakes before they become code.
+quality. Doc issues restart only TW; structure issues restart planning. The loop
+runs until both pass.
 
 ## Execution Workflow
 
@@ -73,8 +73,7 @@ results. The coordinator:
 **Reconciliation** handles resume scenarios. When the user request contains
 signals like "already implemented", "resume", or "partially complete", the
 workflow validates existing code against plan requirements before executing
-remaining milestones. Building on unknown foundation means rework when
-assumptions prove wrong.
+remaining milestones. Building on unverified code means rework.
 
 **Issue Resolution** presents each QR finding individually with options (Fix /
 Skip / Alternative). Fixes delegate to developers or technical writers, then QR
