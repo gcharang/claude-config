@@ -9,13 +9,13 @@ one coherent system.
   Planning ----+
       |        |
       v        |
-     QR -------+  (fail: restart planning)
+     QR -------+  [fail: restart planning]
       |
       v
      TW -------+
       |        |
       v        |
-   QR-Docs ----+  (fail: restart TW)
+   QR-Docs ----+  [fail: restart TW]
       |
       v
    APPROVED
