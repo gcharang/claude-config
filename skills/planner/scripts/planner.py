@@ -67,11 +67,16 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "<invisible_knowledge_verification>",
                 "This section sources README.md content. Skip if trivial.",
                 "",
-                "  - What is the component relationship diagram?",
-                "  - What is the data flow through the system?",
-                "  - Why is the module organization structured this way?",
-                "  - What invariants must be maintained?",
-                "  - What tradeoffs were made (and their costs/benefits)?",
+                "THE TEST: Would a new team member understand this from reading",
+                "the source files? If no, it belongs here.",
+                "",
+                "Categories (not exhaustive -- apply the principle):",
+                "  1. Architectural decisions: component diagrams, data flow, module boundaries",
+                "  2. Business rules: domain constraints shaping implementation",
+                "  3. System invariants: properties that must hold (not enforced by types)",
+                "  4. Historical context: why alternatives were rejected (link to Decision Log)",
+                "  5. Performance characteristics: non-obvious efficiency properties",
+                "  6. Tradeoffs: costs and benefits of chosen approaches",
                 "</invisible_knowledge_verification>",
                 "",
                 "<diff_format_checkpoint>",
@@ -664,38 +669,157 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
 
 
 def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
-    """Returns guidance for review phase steps."""
+    """Returns guidance for review phase steps.
+
+    Review flow (4 steps):
+      Step 1: QR-Completeness (plan document validation)
+      Step 2: QR-Code (proposed implementation validation)
+      Step 3: TW Scrub (documentation enrichment)
+      Step 4: QR-Docs (documentation quality validation)
+
+    Steps 1 and 2 can run in parallel (both restart to planning on failure).
+    Step 4 restarts to step 3 on failure (doc issues only).
+    """
     is_complete = step_number >= total_steps
     next_step = step_number + 1
 
+    # Common rule for all steps
+    rule_0_block = [
+        "<review_rule_0>",
+        "RULE 0 (ABSOLUTE): You MUST spawn sub-agents. Self-review is PROHIBITED.",
+        "",
+        "This rule applies to ALL review steps. Violations include:",
+        "  - Doing the review yourself instead of spawning the agent",
+        "  - Deciding the plan is 'thorough enough' to skip review",
+        "  - Using a smaller/faster model 'for quick validation'",
+        "",
+        "Your assessment of plan quality is NOT a valid reason to skip.",
+        "The agents exist to catch issues YOU cannot see in your own work.",
+        "</review_rule_0>",
+    ]
+
     if step_number == 1:
         return {
-            "actions": [
-                "<review_rule_0>",
-                "RULE 0 (ABSOLUTE): You MUST spawn sub-agents. Self-review is",
-                "PROHIBITED.",
+            "actions": rule_0_block + [
                 "",
-                "This rule applies to ALL review steps. Violations include:",
-                "  - Doing the TW scrub yourself instead of spawning the agent",
-                "  - Doing the QR validation yourself instead of spawning the agent",
-                "  - Deciding the plan is 'thorough enough' to skip review",
-                "  - Using a smaller/faster model 'for quick validation'",
+                "<review_step_1_qr_completeness>",
+                "STEP 1: Validate plan document completeness.",
                 "",
-                "Your assessment of plan quality is NOT a valid reason to skip.",
-                "The agents exist to catch issues YOU cannot see in your own work.",
-                "</review_rule_0>",
+                "This step runs BEFORE TW to catch incomplete Decision Log entries.",
+                "TW sources ALL comments from Decision Log -- if entries are missing,",
+                "TW cannot add appropriate comments.",
                 "",
-                "<self_review_stop>",
-                "STOP CHECK: If you are about to:",
-                "  - Review the plan yourself instead of spawning an agent",
-                "  - Conclude 'the plan already has adequate comments'",
-                "  - Say 'I'll do a quick review pass'",
-                "  - Skip to step 2 without spawning technical-writer",
+                "You may run this step IN PARALLEL with step 2 (QR-Code) since both",
+                "restart to the planning phase on failure.",
                 "",
-                "STOP. You are violating RULE 0. Spawn the agent.",
-                "</self_review_stop>",
+                "MANDATORY: Spawn the quality-reviewer agent.",
                 "",
-                "<review_step_1_delegate_tw>",
+                "Use the Task tool with these parameters:",
+                "  subagent_type: 'quality-reviewer'",
+                "  prompt: The delegation block below",
+                "",
+                "  <delegation>",
+                "    <mode>plan-completeness</mode>",
+                "    <plan_source>[path to plan file]</plan_source>",
+                "    <task>",
+                "      1. Read ## Planning Context section",
+                "      2. Write CONTEXT FILTER (decisions, rejected alts, risks)",
+                "      3. Check Decision Log completeness for all code elements",
+                "      4. Verify policy defaults have user-specified backing",
+                "      5. Check architectural assumptions are validated",
+                "      6. Verify plan structure (milestones have acceptance criteria)",
+                "    </task>",
+                "    <expected_output>",
+                "      Verdict: PASS | NEEDS_CHANGES",
+                "    </expected_output>",
+                "  </delegation>",
+                "",
+                "If running in parallel with step 2, spawn both agents simultaneously.",
+                "</review_step_1_qr_completeness>",
+            ],
+            "next": (
+                "PARALLEL EXECUTION OPTION:\n"
+                "  You may invoke steps 1 and 2 simultaneously using two Task tool calls\n"
+                "  in a single message. Both QR modes run before TW.\n\n"
+                "If running sequentially, after QR-Completeness returns:\n"
+                "  - PASS -> Invoke step 2\n"
+                "  - NEEDS_CHANGES -> Fix plan, restart planning phase\n\n"
+                "Command for step 2:\n"
+                "  python3 planner.py --phase review --step-number 2 --total-steps 4 \\\n"
+                '    --thoughts "QR-Completeness passed, proceeding to QR-Code"'
+            )
+        }
+
+    if step_number == 2:
+        return {
+            "actions": rule_0_block + [
+                "",
+                "<review_step_2_qr_code>",
+                "STEP 2: Validate proposed implementation against codebase.",
+                "",
+                "This step runs BEFORE TW to catch implementation issues.",
+                "QR-Code MUST read the actual codebase files referenced in the plan.",
+                "",
+                "You may run this step IN PARALLEL with step 1 (QR-Completeness).",
+                "",
+                "MANDATORY: Spawn the quality-reviewer agent.",
+                "",
+                "Use the Task tool with these parameters:",
+                "  subagent_type: 'quality-reviewer'",
+                "  prompt: The delegation block below",
+                "",
+                "  <delegation>",
+                "    <mode>plan-code</mode>",
+                "    <plan_source>[path to plan file]</plan_source>",
+                "    <task>",
+                "      1. Read ## Planning Context section",
+                "      2. Write CONTEXT FILTER (decisions, rejected alts, risks)",
+                "      3. READ the actual codebase files referenced in the plan",
+                "      4. Verify diff context lines match current file content",
+                "      5. Apply RULE 0 (production reliability) to proposed code",
+                "      6. Apply RULE 1 (project conformance) to proposed code",
+                "      7. Apply RULE 2 (structural quality) to proposed code",
+                "      8. Check for anticipated structural issues",
+                "    </task>",
+                "    <expected_output>",
+                "      Verdict: PASS | NEEDS_CHANGES",
+                "    </expected_output>",
+                "  </delegation>",
+                "",
+                "Wait for the quality-reviewer agent to complete before proceeding.",
+                "</review_step_2_qr_code>",
+                "",
+                "<pre_tw_gate>",
+                "GATE: Both QR-Completeness AND QR-Code must PASS before TW runs.",
+                "",
+                "If either returns NEEDS_CHANGES:",
+                "  1. Fix the issues in the plan",
+                "  2. Return to planning phase to regenerate affected sections",
+                "  3. Restart review from step 1",
+                "",
+                "Do NOT proceed to TW (step 3) until both step 1 and step 2 pass.",
+                "</pre_tw_gate>",
+            ],
+            "next": (
+                "After QR-Code (and QR-Completeness if parallel) returns:\n\n"
+                "  Both PASS -> Invoke step 3 (TW Scrub)\n"
+                "  Either NEEDS_CHANGES -> Fix plan, restart from step 1\n\n"
+                "Command for step 3:\n"
+                "  python3 planner.py --phase review --step-number 3 --total-steps 4 \\\n"
+                '    --thoughts "QR-Completeness and QR-Code passed, proceeding to TW"'
+            )
+        }
+
+    if step_number == 3:
+        return {
+            "actions": rule_0_block + [
+                "",
+                "<review_step_3_tw_scrub>",
+                "STEP 3: Documentation enrichment by Technical Writer.",
+                "",
+                "This step runs AFTER QR-Completeness and QR-Code have passed.",
+                "TW sources all comments from Decision Log (verified complete in step 1).",
+                "",
                 "MANDATORY: Spawn the technical-writer agent.",
                 "",
                 "Use the Task tool with these parameters:",
@@ -705,8 +829,8 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
                 "  <delegation>",
                 "    <mode>plan-scrub</mode>",
                 "    <plan_source>[path to plan file]</plan_source>",
-                "    <scope>[OPTIONAL: If re-reviewing after changes, specify which",
-                "      milestones/sections changed. Omit for full review.]</scope>",
+                "    <scope>[OPTIONAL: If re-reviewing after QR-Docs feedback, specify",
+                "      which milestones/sections to focus on.]</scope>",
                 "    <task>",
                 "      1. Read ## Planning Context section FIRST",
                 "      2. Prioritize scrub by uncertainty (HIGH/MEDIUM/LOW)",
@@ -718,28 +842,24 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
                 "  </delegation>",
                 "",
                 "Wait for the technical-writer agent to complete before proceeding.",
-                "</review_step_1_delegate_tw>",
+                "</review_step_3_tw_scrub>",
             ],
             "next": (
-                f"After TW completes, invoke step {next_step}:\n"
-                "   python3 planner.py --phase review --step-number 2 --total-steps 2 "
-                '--thoughts "TW scrub complete, [summary of changes]"'
+                "After TW completes, invoke step 4:\n"
+                "  python3 planner.py --phase review --step-number 4 --total-steps 4 \\\n"
+                '    --thoughts "TW scrub complete, [summary of changes]"'
             )
         }
 
-    if step_number == 2:
+    if step_number == 4:
         return {
-            "actions": [
-                "<self_review_stop>",
-                "STOP CHECK: If you are about to:",
-                "  - Validate the plan yourself instead of spawning an agent",
-                "  - Conclude 'this is straightforward, I can validate it'",
-                "  - Say 'I'll do a quick validation'",
+            "actions": rule_0_block + [
                 "",
-                "STOP. You are violating RULE 0. Spawn the agent.",
-                "</self_review_stop>",
+                "<review_step_4_qr_docs>",
+                "STEP 4: Validate documentation quality.",
                 "",
-                "<review_step_2_delegate_qr>",
+                "This step runs AFTER TW to verify documentation was done correctly.",
+                "",
                 "MANDATORY: Spawn the quality-reviewer agent.",
                 "",
                 "Use the Task tool with these parameters:",
@@ -747,103 +867,49 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
                 "  prompt: The delegation block below",
                 "",
                 "  <delegation>",
-                "    <mode>plan-review</mode>",
+                "    <mode>plan-docs</mode>",
                 "    <plan_source>[path to plan file]</plan_source>",
-                "    <scope>[OPTIONAL: If re-reviewing after changes, specify which",
-                "      milestones/sections changed. Omit for full review.]</scope>",
+                "    <scope>[OPTIONAL: If re-reviewing, specify changed sections.]</scope>",
                 "    <task>",
-                "      1. Read ## Planning Context (constraints, known risks)",
-                "      2. Write out CONTEXT FILTER before reviewing milestones",
-                "      3. Apply RULE 0 (production reliability) with open questions",
-                "      4. Apply RULE 1 (project conformance)",
-                "      5. Check anticipated structural issues",
-                "      6. Verify TW scrub passes actionability test",
-                "      7. Accept risks documented in Known Risks as acknowledged",
-                "      8. Pay extra attention to milestones with uncertainty flags",
+                "      1. Check all comments for temporal contamination (five questions)",
+                "      2. Verify no hidden baselines in comments",
+                "      3. Verify comments explain WHY, not WHAT",
+                "      4. Verify coverage of non-obvious code elements",
                 "    </task>",
                 "    <expected_output>",
-                "      Verdict: PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES",
+                "      Verdict: PASS | NEEDS_CHANGES",
                 "    </expected_output>",
                 "  </delegation>",
                 "",
                 "Wait for the quality-reviewer agent to complete before proceeding.",
-                "</review_step_2_delegate_qr>",
+                "</review_step_4_qr_docs>",
                 "",
-                "<review_scope_reduction>",
-                "SCOPE REDUCTION (for re-reviews only):",
+                "<post_qr_docs_restart>",
+                "RESTART BEHAVIOR for QR-Docs:",
                 "",
-                "When re-reviewing after changes, you may tell agents to FOCUS on",
-                "specific sections. You may NOT:",
-                "  - Skip agents entirely",
-                "  - Use smaller/faster models",
-                "  - Do the review yourself",
+                "Unlike steps 1-2, QR-Docs failures restart to step 3 (TW) only.",
+                "This is because doc issues don't require plan restructuring.",
                 "",
-                "CORRECT: <scope>Focus ONLY on Milestone M2 changes</scope>",
-                "INCORRECT: Skip TW since 'changes were minor'",
-                "INCORRECT: model=haiku for 'quick validation'",
-                "INCORRECT: 'I'll review this myself since it's simple'",
-                "</review_scope_reduction>",
+                "If QR-Docs returns NEEDS_CHANGES:",
+                "  1. Note the specific doc issues",
+                "  2. Restart from step 3 with <scope> specifying affected sections",
+                "  3. TW fixes the documentation issues",
+                "  4. Return to step 4 for re-validation",
                 "",
-                "<post_qr_restart_enforcement>",
-                "RULE 0 (ABSOLUTE): ANY plan modification triggers restart.",
-                "",
-                "After QR returns AND you make ANY change to the plan:",
-                "  You MUST invoke step 1 (not step 3).",
-                "",
-                "WHAT COUNTS AS 'ANY CHANGE':",
-                "  - Editing a code snippet -> restart",
-                "  - Editing a comment -> restart",
-                "  - Editing the Decision Log -> restart",
-                "  - Adding/removing a milestone -> restart",
-                "  - Changing acceptance criteria -> restart",
-                "  - Adding a user-specified citation -> restart",
-                "  - ANY edit to the plan file -> restart",
-                "",
-                "THERE IS NO 'MINOR CHANGE' EXCEPTION.",
-                "",
-                "<restart_stop_check>",
-                "STOP CHECK: If you are about to:",
-                "  - Say 'this was just a documentation change'",
-                "  - Say 'the change was minor'",
-                "  - Say 'I don't need to restart the full review cycle'",
-                "  - Say 'TW already reviewed this'",
-                "  - Invoke step 3 after modifying the plan",
-                "",
-                "STOP. You are rationalizing. Invoke step 1.",
-                "</restart_stop_check>",
-                "",
-                "<restart_contrastive_examples>",
-                "CORRECT (made change, restarts review):",
-                "  QR: PASS_WITH_CONCERNS (citation missing)",
-                "  Agent: *edits Decision Log to add citation*",
-                "  Agent: python3 planner.py --phase review --step-number 1 ...",
-                "",
-                "INCORRECT (made change, skips restart):",
-                "  QR: PASS_WITH_CONCERNS (citation missing)",
-                "  Agent: *edits Decision Log to add citation*",
-                "  Agent: 'Since this was just a documentation change, I'll",
-                "           proceed to step 3 without restarting.'",
-                "  WHY WRONG: TW has not reviewed the new citation text.",
-                "             Modified text bypasses temporal contamination review.",
-                "</restart_contrastive_examples>",
-                "",
-                "The ONLY path to step 3: QR returns PASS and you made ZERO edits.",
-                "</post_qr_restart_enforcement>",
+                "If QR-Docs returns PASS:",
+                "  Proceed to step 5 (complete).",
+                "</post_qr_docs_restart>",
             ],
             "next": (
-                "After QR returns verdict, apply this decision tree:\n\n"
-                "  1. Did you edit the plan file? (Check: any Edit/Write tool use)\n"
-                "     YES -> Invoke step 1. No exceptions.\n"
-                "     NO  -> Continue to question 2.\n\n"
-                "  2. Is QR verdict PASS?\n"
-                "     YES -> Invoke step 3 (complete).\n"
-                "     NO  -> Address feedback, then invoke step 1.\n\n"
-                "Command to restart:\n"
-                "  python3 planner.py --phase review --step-number 1 --total-steps 2 \\\n"
-                '    --thoughts "Addressed [feedback]: [changes made]"\n\n'
-                "Command to complete (ONLY if no edits AND verdict=PASS):\n"
-                "  python3 planner.py --phase review --step-number 3 --total-steps 2 \\\n"
-                '    --thoughts "QR passed, no changes needed"'
+                "After QR-Docs returns verdict:\n\n"
+                "  PASS -> Invoke step 5 (complete)\n"
+                "  NEEDS_CHANGES -> Restart from step 3 (TW only)\n\n"
+                "Command to restart TW:\n"
+                "  python3 planner.py --phase review --step-number 3 --total-steps 4 \\\n"
+                '    --thoughts "QR-Docs feedback: [issues]. Restarting TW."\n\n'
+                "Command to complete:\n"
+                "  python3 planner.py --phase review --step-number 5 --total-steps 4 \\\n"
+                '    --thoughts "All review steps passed"'
             )
         }
 
@@ -852,11 +918,12 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
             "actions": [
                 "<review_complete_verification>",
                 "Confirm before proceeding to execution:",
+                "  - QR-Completeness verified Decision Log is complete?",
+                "  - QR-Code verified proposed code aligns with codebase?",
                 "  - TW has scrubbed code snippets with WHY comments?",
                 "  - TW has enriched plan prose with rationale?",
-                "  - TW flagged any gaps in Planning Context rationale?",
-                "  - QR verdict is PASS or PASS_WITH_CONCERNS?",
-                "  - Any concerns from QR are documented or addressed?",
+                "  - QR-Docs verified no temporal contamination?",
+                "  - Final verdict is PASS?",
                 "</review_complete_verification>",
             ],
             "next": (
@@ -866,7 +933,7 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
             )
         }
 
-    # Shouldn't reach here with standard 2-step review, but handle gracefully
+    # Shouldn't reach here with standard 4-step review, but handle gracefully
     return {
         "actions": ["Continue review process as needed."],
         "next": f"Invoke step {next_step} when ready."
@@ -888,8 +955,8 @@ Examples:
   # Backtrack to earlier step if needed
   python3 planner.py --step-number 2 --total-steps 4 --thoughts "New constraint invalidates approach, reconsidering..."
 
-  # Start review (after plan written)
-  python3 planner.py --phase review --step-number 1 --total-steps 2 --thoughts "Plan at plans/auth.md"
+  # Start review (after plan written) - 4 steps: QR-Completeness, QR-Code, TW, QR-Docs
+  python3 planner.py --phase review --step-number 1 --total-steps 4 --thoughts "Plan at plans/auth.md"
 """
     )
 

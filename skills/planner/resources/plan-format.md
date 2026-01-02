@@ -76,8 +76,25 @@ behavioral claims.
 
 ## Invisible Knowledge
 
-This section captures information NOT visible from reading the code. Technical
-Writer uses this for README.md documentation during post-implementation.
+This section captures knowledge NOT deducible from reading the code alone.
+Technical Writer uses this for README.md documentation during
+post-implementation.
+
+**The test**: Would a new team member understand this from reading the source
+files? If no, it belongs here.
+
+**Categories** (not exhaustive -- apply the principle):
+
+1. **Architectural decisions**: Component relationships, data flow, module
+   boundaries
+2. **Business rules**: Domain constraints that shape implementation choices
+3. **System invariants**: Properties that must hold but are not enforced by
+   types/compiler
+4. **Historical context**: Why alternatives were rejected (links to Decision
+   Log)
+5. **Performance characteristics**: Non-obvious efficiency properties or
+   requirements
+6. **Tradeoffs**: Costs and benefits of chosen approaches
 
 ### Architecture
 ```

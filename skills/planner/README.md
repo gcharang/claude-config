@@ -6,23 +6,40 @@ one coherent system.
 ## Planning Workflow
 
 ```
-  Context --> Decision --> Refinement --> Verification --> TW --> QR --+
-     ^                                                                  |
-     +---------------------------- [fail] ------------------------------+
+  Context --> Decision --> Refinement --> Verification --+
+     ^                                                    |
+     |                 +----------------------------------+
+     |                 v
+     |        QR-Completeness --+-- QR-Code
+     |                 |                |
+     |                 +------ + -------+
+     |                         |
+     |                [fail] --+-- [pass]
+     |                   |            |
+     +-------------------+            v
+                                     TW --> QR-Docs --+
+                                      ^        |      |
+                                      |        |      | [pass]
+                                      + [fail]-+      v
+                                                   APPROVED
 ```
 
-| Step                    | Actions                                                                      |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| Context & Scope         | Confirm path, define scope, identify approaches, list constraints            |
-| Decision & Architecture | Evaluate approaches, select with reasoning, diagram, break into milestones   |
-| Refinement              | Document risks, add uncertainty flags, specify paths and criteria            |
-| Final Verification      | Verify completeness, check specs, write to file                              |
-| Technical Writer        | Scrub temporal comments, add WHY comments, enrich rationale                  |
-| Quality Reviewer        | Check reliability, conformance; return PASS/PASS_WITH_CONCERNS/NEEDS_CHANGES |
+| Step                    | Actions                                                                    |
+| ----------------------- | -------------------------------------------------------------------------- |
+| Context & Scope         | Confirm path, define scope, identify approaches, list constraints          |
+| Decision & Architecture | Evaluate approaches, select with reasoning, diagram, break into milestones |
+| Refinement              | Document risks, add uncertainty flags, specify paths and criteria          |
+| Final Verification      | Verify completeness, check specs, write to file                            |
+| QR-Completeness         | Verify Decision Log complete, policy defaults confirmed, plan structure    |
+| QR-Code                 | Read codebase, verify diff context, apply RULE 0/1/2 to proposed code      |
+| Technical Writer        | Scrub temporal comments, add WHY comments, enrich rationale                |
+| QR-Docs                 | Verify no temporal contamination, comments explain WHY not WHAT            |
 
 Why the feedback loop? LLM-generated plans have gaps. Missing error handling.
-Incomplete acceptance criteria. Ambiguous specs. I keep iterating until QR
-passes. This is not overhead -- it catches mistakes before they become code.
+Incomplete acceptance criteria. Ambiguous specs. QR-Completeness and QR-Code run
+before TW to catch structural issues early. QR-Docs runs after TW to validate
+documentation quality. Doc issues restart only TW; structure issues restart
+planning. This is not overhead -- it catches mistakes before they become code.
 
 ## Execution Workflow
 

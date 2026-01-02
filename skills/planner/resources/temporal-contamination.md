@@ -1,16 +1,34 @@
 # Temporal Contamination in Code Comments
 
-This document defines terminology for identifying comments that leak information about code history, change processes, or planning artifacts. Both @agent-technical-writer and @agent-quality-reviewer reference this specification.
+This document defines terminology for identifying comments that leak information
+about code history, change processes, or planning artifacts. Both
+@agent-technical-writer and @agent-quality-reviewer reference this
+specification.
 
 ## The Core Principle
 
-> **Timeless Present Rule**: Comments must be written from the perspective of a reader encountering the code for the first time, with no knowledge of what came before or how it got here. The code simply _is_.
+> **Timeless Present Rule**: Comments must be written from the perspective of a
+> reader encountering the code for the first time, with no knowledge of what
+> came before or how it got here. The code simply _is_.
 
-In a plan, this means comments are written _as if the plan was already executed_.
+**Why this matters**: Change-narrative comments are an LLM artifact -- a
+category error, not merely a style issue. The change process is ephemeral and
+irrelevant to the code's ongoing existence. Humans writing comments naturally
+describe what code IS, not what they DID to create it. Referencing the change
+that created a comment is fundamentally confused about what belongs in
+documentation.
+
+Think of it this way: a novel's narrator never describes the author's typing
+process. Similarly, code comments should never describe the developer's editing
+process. The code simply exists; the path to its existence is invisible.
+
+In a plan, this means comments are written _as if the plan was already
+executed_.
 
 ## Detection Heuristic
 
-Evaluate each comment against these four questions. Signal words are examples -- extrapolate to semantically similar constructs.
+Evaluate each comment against these five questions. Signal words are examples --
+extrapolate to semantically similar constructs.
 
 ### 1. Does it describe an action taken rather than what exists?
 
@@ -22,7 +40,8 @@ Evaluate each comment against these four questions. Signal words are examples --
 | `// New validation for the edge case`  | `// Rejects negative values (downstream assumes unsigned)`  |
 | `// Changed to use batch API`          | `// Batch API reduces round-trips from N to 1`              |
 
-Signal words (non-exhaustive): "Added", "Replaced", "Now uses", "Changed to", "New", "Updated", "Refactored"
+Signal words (non-exhaustive): "Added", "Replaced", "Now uses", "Changed to",
+"New", "Updated", "Refactored"
 
 ### 2. Does it compare to something not in the code?
 
@@ -34,7 +53,8 @@ Signal words (non-exhaustive): "Added", "Replaced", "Now uses", "Changed to", "N
 | `// Unlike the old approach, this is thread-safe` | `// Thread-safe: each goroutine gets independent state`             |
 | `// Previously handled in caller`                 | `// Encapsulated here; caller should not manage lifecycle`          |
 
-Signal words (non-exhaustive): "Instead of", "Rather than", "Previously", "Replaces", "Unlike the old", "No longer"
+Signal words (non-exhaustive): "Instead of", "Rather than", "Previously",
+"Replaces", "Unlike the old", "No longer"
 
 ### 3. Does it describe where to put code rather than what code does?
 
@@ -46,7 +66,8 @@ Signal words (non-exhaustive): "Instead of", "Rather than", "Previously", "Repla
 | `// Insert before validation` | _(delete -- diff structure encodes location)_ |
 | `// Add this at line 425`     | _(delete -- diff structure encodes location)_ |
 
-Signal words (non-exhaustive): "After", "Before", "Insert", "At line", "Here:", "Below", "Above"
+Signal words (non-exhaustive): "After", "Before", "Insert", "At line", "Here:",
+"Below", "Above"
 
 **Action**: Always delete. Location is encoded in diff structure, not comments.
 
@@ -60,7 +81,8 @@ Signal words (non-exhaustive): "After", "Before", "Insert", "At line", "Here:", 
 | `// Will be extended for batch mode`   | _(delete -- do not document hypothetical futures)_       |
 | `// Temporary workaround until API v2` | `// API v1 lacks filtering; client-side filter required` |
 
-Signal words (non-exhaustive): "Will", "TODO", "Planned", "Eventually", "For future", "Temporary", "Workaround until"
+Signal words (non-exhaustive): "Will", "TODO", "Planned", "Eventually", "For
+future", "Temporary", "Workaround until"
 
 **Action**: Delete, implement the feature, or reframe as current constraint.
 
@@ -75,19 +97,26 @@ Signal words (non-exhaustive): "Will", "TODO", "Planned", "Eventually", "For fut
 | `// Chose polling for reliability`         | `// Polling: 30% webhook delivery failures observed` |
 | `// We decided to cache at this layer`     | `// Cache here: reduces DB round-trips for hot path` |
 
-Signal words (non-exhaustive): "intentionally", "deliberately", "chose", "decided", "on purpose", "by design", "we opted"
+Signal words (non-exhaustive): "intentionally", "deliberately", "chose",
+"decided", "on purpose", "by design", "we opted"
 
-**Action**: Extract the technical justification; discard the decision narrative. The reader doesn't need to know someone "decided" -- they need to know WHY this approach works.
+**Action**: Extract the technical justification; discard the decision narrative.
+The reader doesn't need to know someone "decided" -- they need to know WHY this
+approach works.
 
-**The test**: Can you delete the intent word and the comment still makes sense? If yes, delete the intent word. If no, reframe around the technical reason.
+**The test**: Can you delete the intent word and the comment still makes sense?
+If yes, delete the intent word. If no, reframe around the technical reason.
 
 ---
 
-**Catch-all**: If a comment only makes sense to someone who knows the code's history, it is temporally contaminated -- even if it does not match any category above.
+**Catch-all**: If a comment only makes sense to someone who knows the code's
+history, it is temporally contaminated -- even if it does not match any category
+above.
 
 ## Subtle Cases
 
-Same word, different verdict -- demonstrates that detection requires semantic judgment, not keyword matching.
+Same word, different verdict -- demonstrates that detection requires semantic
+judgment, not keyword matching.
 
 | Comment                                | Verdict      | Reasoning                                        |
 | -------------------------------------- | ------------ | ------------------------------------------------ |
