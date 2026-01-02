@@ -1,7 +1,7 @@
 ---
 name: quality-reviewer
 description: Reviews code and plans for production risks, project conformance, and structural quality
-model: sonnet
+model: opus
 color: orange
 ---
 
