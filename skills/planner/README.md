@@ -1,7 +1,9 @@
 # Planner
 
-The planner skill handles both planning and execution. Two distinct workflows,
-one coherent system.
+LLM-generated plans have gaps. Missing error handling. Incomplete acceptance
+criteria. Ambiguous specs. The planner skill addresses this with two distinct
+workflows -- planning and execution -- connected by quality gates that catch
+mistakes before they become code.
 
 ## Planning Workflow
 
@@ -32,11 +34,10 @@ one coherent system.
 | Technical Writer        | Scrub temporal comments, add WHY comments, enrich rationale                |
 | QR-Docs                 | Verify no temporal contamination, comments explain WHY not WHAT            |
 
-Why the feedback loop? LLM-generated plans have gaps. Missing error handling.
-Incomplete acceptance criteria. Ambiguous specs. QR-Completeness and QR-Code run
-before TW to catch structural issues early. QR-Docs runs after TW to validate
-documentation quality. Doc issues restart only TW; structure issues restart
-planning. This is not overhead -- it catches mistakes before they become code.
+So, why all the feedback loops? QR-Completeness and QR-Code run before TW to
+catch structural issues early. QR-Docs runs after TW to validate documentation
+quality. Doc issues restart only TW; structure issues restart planning. This is
+not overhead -- it catches mistakes before they become code.
 
 ## Execution Workflow
 
@@ -48,7 +49,7 @@ planning. This is not overhead -- it catches mistakes before they become code.
   * Reconciliation phase precedes Milestones when resuming partial work
 ```
 
-After planning completes and you clear context (`/clear`), execution proceeds:
+After planning completes and context clears (`/clear`), execution proceeds:
 
 | Step                   | Purpose                                                         |
 | ---------------------- | --------------------------------------------------------------- |
@@ -60,20 +61,21 @@ After planning completes and you clear context (`/clear`), execution proceeds:
 | Documentation          | Technical writer updates CLAUDE.md/README.md                    |
 | Retrospective          | Present execution summary                                       |
 
-The coordinator never writes code directly -- it delegates to developers. I
-designed it this way intentionally. Separating coordination from implementation
-produces cleaner results. The coordinator:
+I designed the coordinator to never write code directly -- it delegates to
+developers. Separating coordination from implementation produces cleaner
+results. The coordinator:
 
 - Parallelizes independent work across up to 4 developers per milestone
 - Runs quality review after all milestones complete
 - Loops through issue resolution until QR passes
 - Invokes technical writer only after QR passes
 
-**Reconciliation** handles resume scenarios. If the user request contains
+**Reconciliation** handles resume scenarios. When the user request contains
 signals like "already implemented", "resume", or "partially complete", the
 workflow validates existing code against plan requirements before executing
-remaining milestones. Otherwise you are building on unknown foundation.
+remaining milestones. Building on unknown foundation means rework when
+assumptions prove wrong.
 
 **Issue Resolution** presents each QR finding individually with options (Fix /
-Skip / Alternative). Fixes are delegated to developers or technical writers,
-then QR runs again. This cycle repeats until QR passes.
+Skip / Alternative). Fixes delegate to developers or technical writers, then QR
+runs again. This cycle repeats until QR passes.
