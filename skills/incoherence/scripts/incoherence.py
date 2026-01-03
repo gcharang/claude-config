@@ -1226,7 +1226,27 @@ def main():
     for action in guidance["actions"]:
         print(f"  {action}")
     print()
-    print("NEXT:", guidance["next"])
+
+    # Phase boundary warnings for known deviation points
+    if args.step_number == 12:
+        print("=" * 70)
+        print("PHASE BOUNDARY: You are completing the DETECTION phase.")
+        print("If you are about to summarize findings or skip resolution, STOP.")
+        print("The workflow REQUIRES interactive resolution via AskUserQuestion.")
+        print("=" * 70)
+        print()
+
+    if args.step_number == 15:
+        print("=" * 70)
+        print("PHASE BOUNDARY: You are completing the RESOLUTION phase.")
+        print("If you are about to fix issues yourself or skip application, STOP.")
+        print("The workflow REQUIRES dispatching agents to apply resolutions.")
+        print("=" * 70)
+        print()
+
+    # Mandatory next action with enforcement
+    print("MANDATORY:", guidance["next"])
+    print("This is the ONLY valid action. Do NOT summarize, skip, or fix issues yourself.")
     print("=" * 70)
 
 
