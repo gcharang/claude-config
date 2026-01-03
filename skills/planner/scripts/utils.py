@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""
+Shared utilities for planner scripts.
+
+Three Pillars Pattern for QR Verification Loops:
+  1. STATE BANNER: Visual header showing loop iteration
+  2. STOP CONDITION: Explicit blocker preventing progression
+  3. RE-VERIFICATION MODE: Different prompts for first-run vs retry
+
+This pattern is applied consistently across:
+  - planner.py (review phase steps 1 and 3)
+  - executor.py (step 4: holistic QR)
+  - execute-milestone.py (steps 2-3: per-milestone QR)
+"""
+
+
+def get_qr_state_banner(step_name: str, qr_iteration: int, fixing_issues: bool) -> list:
+    """Generate the Three Pillars STATE BANNER for QR verification loops.
+
+    Args:
+        step_name: Name of the QR checkpoint (e.g., "PLAN QR", "HOLISTIC QR", "MILESTONE QR")
+        qr_iteration: Loop iteration count (1 = initial, 2+ = re-verification)
+        fixing_issues: Whether this invocation is fixing issues from previous QR
+
+    Returns:
+        List of strings to be included in script output
+    """
+    if qr_iteration == 1 and not fixing_issues:
+        return [
+            f"===[ {step_name}: INITIAL REVIEW ]===",
+            "",
+        ]
+    else:
+        return [
+            f"===[ {step_name}: RE-VERIFICATION (iteration {qr_iteration}) ]===",
+            "",
+            "You previously fixed issues identified by QR.",
+            "This invocation verifies those fixes were applied correctly.",
+            "",
+            "CRITICAL: QR MUST return PASS before you can proceed.",
+            "",
+        ]
+
+
+def get_qr_stop_condition(gate_description: str) -> list:
+    """Generate the Three Pillars STOP CONDITION block.
+
+    Args:
+        gate_description: What must happen before proceeding
+            (e.g., "BOTH QR agents return PASS", "Milestone QR returns PASS")
+
+    Returns:
+        List of strings to be included in script output
+    """
+    return [
+        "<stop_condition>",
+        "STOP. You MUST NOT proceed until:",
+        f"  1. {gate_description}",
+        "  2. If QR returned ISSUES, you have FIXED them AND RE-RUN this step",
+        "  3. Current QR result is PASS",
+        "",
+        "Skipping re-verification after fixes is PROHIBITED.",
+        "The QR agent exists to catch issues YOU cannot see in your own work.",
+        "</stop_condition>",
+    ]
+
+
+def format_restart_command(
+    script: str,
+    plan_file: str | None,
+    step_or_milestone: int,
+    qr_iteration: int,
+    thoughts_template: str,
+    **extra_args: str | int | bool
+) -> str:
+    """Generate a restart command with Three Pillars flags.
+
+    Args:
+        script: Script name (planner.py, executor.py, execute-milestone.py)
+        plan_file: Path to plan file (if applicable)
+        step_or_milestone: Step or milestone number
+        qr_iteration: Current iteration (will be incremented)
+        thoughts_template: Template for --thoughts argument
+        **extra_args: Additional CLI arguments
+
+    Returns:
+        Formatted command string
+    """
+    parts = [f"python3 {script}"]
+
+    if plan_file:
+        parts.append(f'--plan-file "{plan_file}"')
+
+    # Handle different argument names for different scripts
+    if "execute-milestone" in script:
+        parts.append(f"--milestone {step_or_milestone}")
+        parts.append("--step 1")  # Always restart to implementation step
+        parts.append("--fixing-qr-issues")
+    else:
+        parts.append(f"--step-number {step_or_milestone}")
+        parts.append("--fixing-issues")
+
+    parts.append(f"--qr-iteration {qr_iteration + 1}")
+
+    for key, value in extra_args.items():
+        arg_name = key.replace("_", "-")
+        if isinstance(value, bool):
+            if value:
+                parts.append(f"--{arg_name}")
+        else:
+            parts.append(f"--{arg_name} {value}")
+
+    parts.append(f'--thoughts "{thoughts_template}"')
+
+    return " \\\n    ".join(parts)

@@ -12,8 +12,8 @@ plans).
 
 | User Intent                                 | Script      | Invocation                                                                         |
 | ------------------------------------------- | ----------- | ---------------------------------------------------------------------------------- |
-| "plan", "design", "architect", "break down" | planner.py  | `python3 scripts/planner.py --step-number 1 --total-steps 4 --thoughts "..."`      |
-| "review plan" (after plan written)          | planner.py  | `python3 scripts/planner.py --phase review --step-number 1 --total-steps 2 ...`    |
+| "plan", "design", "architect", "break down" | planner.py  | `python3 scripts/planner.py --step-number 1 --total-steps 5 --thoughts "..."`      |
+| "review plan" (after plan written)          | planner.py  | `python3 scripts/planner.py --phase review --step-number 1 --total-steps 3 ...`    |
 | "execute", "implement", "run plan"          | executor.py | `python3 scripts/executor.py --plan-file PATH --step-number 1 --total-steps 7 ...` |
 
 Scripts inject step-specific guidance via JIT prompt injection. Invoke the
@@ -47,9 +47,19 @@ decision points. When prompted, read the full resource before proceeding.
 
 ## Workflow Summary
 
-**Planning phase**: Steps 1-N explore context, evaluate approaches, refine
-milestones. Final step writes plan to file. Review phase (TW scrub -> QR
-validation) follows.
+**Planning phase**: 5+ steps with focused concerns per step:
+
+1. Context & Scope Discovery -- understand before proposing
+2. Approach Generation -- generate options, not select
+3. Assumption Surfacing -- user confirmation of architectural choices
+4. Approach Evaluation & Selection -- evaluate and decide
+5. Risks, Milestones & Verification -- document risks, refine milestones
+6. (optional) Gap analysis and developer walkthrough
+
+Final step writes plan to file.
+
+**Review phase**: 3 steps -- (1) parallel QR for completeness + code, (2) TW
+scrub, (3) QR-Docs validation. Step 1 MUST spawn both QR agents in parallel.
 
 **Execution phase**: 7 steps -- analyze plan, reconcile existing code, delegate
 milestones to agents, QR validation, issue resolution, documentation,

@@ -5,17 +5,28 @@ Interactive Sequential Planner - Two-phase planning workflow
 PLANNING PHASE: Step-based planning with forced reflection pauses.
 REVIEW PHASE: Orchestrates TW scrub and QR validation before execution.
 
+Three Pillars Pattern for QR Verification Loops:
+  1. STATE BANNER: Visual header showing loop iteration
+  2. STOP CONDITION: Explicit blocker preventing progression
+  3. RE-VERIFICATION MODE: Different prompts for first-run vs retry
+
 Usage:
     # Planning phase (default)
     python3 planner.py --step-number 1 --total-steps 4 --thoughts "Design auth system"
 
     # Review phase (after plan is written)
-    python3 planner.py --phase review --step-number 1 --total-steps 2 --thoughts "Plan written to plans/auth.md"
+    python3 planner.py --phase review --step-number 1 --total-steps 3 --thoughts "Plan written to plans/auth.md"
+
+    # Review phase - re-verification after fixing QR issues
+    python3 planner.py --phase review --step-number 1 --total-steps 3 \\
+      --qr-iteration 2 --fixing-issues --thoughts "Fixed issues, re-verifying..."
 """
 
 import argparse
 import sys
 from pathlib import Path
+
+from utils import get_qr_state_banner, get_qr_stop_condition
 
 
 def get_plan_format() -> str:
@@ -32,150 +43,87 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
     if is_complete:
         return {
             "actions": [
-                "FINAL VERIFICATION — complete each section before writing.",
+                "FINAL VERIFICATION — complete in priority order before writing.",
                 "",
-                "<planning_context_verification>",
-                "TW and QR consume this section VERBATIM. Quality here =",
-                "quality of scrubbed content and risk detection downstream.",
+                "Work through these verifications in order. Earlier items are",
+                "more critical; do not skip ahead.",
                 "",
-                "Decision Log (major choices):",
-                "  - What major architectural choice did you make?",
-                "  - What is the multi-step reasoning chain for that choice?",
+                "---",
                 "",
-                "Micro-decisions (TW sources ALL code comments from Decision Log):",
-                "  - Time sources: wall clock vs monotonic? timezone handling?",
-                "  - Concurrency: mutex vs channel vs atomic? why?",
-                "  - Error granularity: specific error types vs generic? why?",
-                "  - Data structures: map vs slice vs custom? capacity assumptions?",
-                "  - Thresholds: why this specific value? (document all magic numbers)",
+                "VERIFY 1 (CRITICAL): Decision Log Completeness",
                 "",
-                "For each non-obvious implementation choice, ask: 'Would a future",
-                "reader understand WHY without asking?' If no, add to Decision Log.",
+                "TW sources ALL code comments from Decision Log. Missing entries",
+                "mean undocumented code.",
                 "",
-                "Rejected Alternatives:",
-                "  - What approach did you NOT take?",
-                "  - What concrete reason ruled it out?",
+                "  - Every architectural choice has multi-step reasoning?",
+                "    INSUFFICIENT: 'Polling | Webhooks are unreliable'",
+                "    SUFFICIENT: 'Polling | 30% webhook failure -> need fallback",
+                "                 anyway -> simpler as primary'",
+                "  - Every micro-decision documented? (timeouts, thresholds,",
+                "    concurrency choices, data structure selections)",
+                "  - Rejected alternatives listed with concrete reasons?",
+                "  - Known risks have mitigations with file:line anchors",
+                "    for any behavioral claims?",
                 "",
-                "Known Risks:",
-                "  - What failure modes exist?",
-                "  - What mitigation or acceptance rationale exists for each?",
-                "  - Which mitigations claim code behavior? (list them)",
-                "  - What file:line anchor verifies each behavioral claim?",
-                "  - Any behavioral claim lacking anchor? -> add anchor now",
-                "</planning_context_verification>",
+                "---",
                 "",
-                "<invisible_knowledge_verification>",
-                "This section sources README.md content. Skip if trivial.",
+                "VERIFY 2: Diff Format Compliance",
                 "",
-                "THE TEST: Would a new team member understand this from reading",
-                "the source files? If no, it belongs here.",
+                "Re-read resources/diff-format.md before writing any code changes.",
                 "",
-                "Categories (not exhaustive -- apply the principle):",
-                "  1. Architectural decisions: component diagrams, data flow, module boundaries",
-                "  2. Business rules: domain constraints shaping implementation",
-                "  3. System invariants: properties that must hold (not enforced by types)",
-                "  4. Historical context: why alternatives were rejected (link to Decision Log)",
-                "  5. Performance characteristics: non-obvious efficiency properties",
-                "  6. Tradeoffs: costs and benefits of chosen approaches",
-                "</invisible_knowledge_verification>",
+                "  For EACH diff block:",
+                "  - File path exact (src/auth/handler.py not 'auth files')?",
+                "  - Context lines: 2-3 lines copied VERBATIM from actual file?",
+                "  - WHY comments explain rationale, not WHAT code does?",
+                "  - No location directives in comments?",
+                "  - No hidden baselines ('[adjective] compared to what?')?",
                 "",
-                "<diff_format_checkpoint>",
-                "BEFORE writing any code changes to the plan:",
+                "  FORBIDDEN: '...', '[existing code]', summaries, placeholders.",
+                "  If you haven't read the target file, read it now.",
                 "",
-                "  1. Re-read resources/diff-format.md (authoritative specification)",
-                "  2. Re-read resources/temporal-contamination.md (comment hygiene)",
+                "---",
                 "",
-                "For EACH diff block you write, verify against diff-format.md:",
-                "  - [ ] File path: exact (src/auth/handler.py not 'auth files')?",
-                "  - [ ] Context lines: 2-3 lines copied VERBATIM from actual file?",
-                "  - [ ] WHY comments: explain rationale, not WHAT code does?",
-                "  - [ ] No location directives in comments (diff encodes location)?",
-                "  - [ ] No hidden baselines (test: '[adjective] compared to what?')?",
+                "VERIFY 3: Milestone Specification",
                 "",
-                "FORBIDDEN in context lines: '...', '[existing code]', summaries,",
-                "placeholders, or any text not literally in the target file.",
+                "  For EACH milestone:",
+                "  - File paths exact?",
+                "  - Requirements are specific behaviors, not 'handle X'?",
+                "  - Acceptance criteria are testable pass/fail assertions?",
+                "  - Tests section with type, backing, scenarios?",
+                "    (or explicit skip reason)",
+                "  - Uncertainty flags added where applicable?",
                 "",
-                "If you have not read the target file to extract real context lines,",
-                "read it now before writing the diff.",
-                "</diff_format_checkpoint>",
+                "---",
                 "",
-                "<milestone_verification>",
-                "For EACH milestone, verify:",
-                "  - File paths: exact (src/auth/handler.py) not vague?",
-                "  - Requirements: specific behaviors, not 'handle X'?",
-                "  - Acceptance criteria: testable pass/fail assertions?",
-                "  - Code changes: diff format for non-trivial logic?",
-                "  - Uncertainty flags: added where applicable?",
-                "  - Tests: specified with type, backing, and scenarios?",
-                "    (or explicit skip reason if tests not applicable)",
+                "VERIFY 4: Documentation Milestone",
                 "",
-                "For EACH diff block, verify:",
-                "  - Context lines: 2-3 lines copied VERBATIM from actual file",
-                "    (FORBIDDEN: '...', '[existing code]', summaries, placeholders)",
-                "  - If you haven't read the target file, read it now to extract",
-                "    real anchors that Developer can match against",
+                "  - Documentation milestone exists?",
+                "  - CLAUDE.md uses TABULAR INDEX format?",
+                "  - README.md included only if Invisible Knowledge has content?",
                 "",
-                "Milestone-type specific criteria:",
-                "  - Implementation milestones: Tests section with type, backing,",
-                "    scenarios (normal, edge, error). Milestone is NOT complete",
-                "    until tests pass.",
-                "  - Doc milestones: reference specific Invisible Knowledge sections",
-                "    that MUST appear in README (e.g., 'README includes: data flow",
-                "    diagram, invariants section from Invisible Knowledge')",
-                "</milestone_verification>",
+                "---",
                 "",
-                "<documentation_milestone_verification>",
-                "  - Does a Documentation milestone exist?",
-                "  - Does CLAUDE.md use TABULAR INDEX format (not prose)?",
-                "  - Is README.md included only if Invisible Knowledge has",
-                "    content?",
-                "</documentation_milestone_verification>",
+                "VERIFY 5: Comment Hygiene",
                 "",
-                "<comment_hygiene_verification>",
-                "Comments in code snippets will be transcribed VERBATIM to code.",
-                "Write in TIMELESS PRESENT -- describe what the code IS, not what",
-                "you are changing.",
+                "Comments will be transcribed VERBATIM. Write in TIMELESS PRESENT.",
                 "",
-                "CONTAMINATED: '// Added mutex to fix race condition'",
-                "CLEAN: '// Mutex serializes cache access from concurrent requests'",
+                "  CONTAMINATED: '// Added mutex to fix race condition'",
+                "  CLEAN: '// Mutex serializes cache access from concurrent requests'",
                 "",
-                "CONTAMINATED: '// Replaces per-tag logging with summary'",
-                "CLEAN: '// Single summary line; per-tag avoids 1500+ lines'",
+                "  CONTAMINATED: '// After the retry loop'",
+                "  CLEAN: (delete -- diff context encodes location)",
                 "",
-                "CONTAMINATED: '// After the retry loop' (location directive)",
-                "CLEAN: (delete -- diff context encodes location)",
+                "---",
                 "",
-                "TW will review, but starting clean reduces rework.",
-                "</comment_hygiene_verification>",
+                "VERIFY 6: Assumption Audit Complete",
                 "",
-                "<decision_audit_verification>",
-                "Verify classification and assumption audit in steps 2-4:",
+                "  - Step 2 assumption audit completed (all categories)?",
+                "  - Step 3 decision classification table written?",
+                "  - Step 4 file classification table written?",
+                "  - No 'assumption' rows remain unresolved?",
+                "  - User responses recorded with 'user-specified' backing?",
                 "",
-                "  [ ] Step 2: Assumption audit completed?",
-                "      - All four categories addressed (pattern, migration,",
-                "        idiomatic, boundary)",
-                "      - Any surfaced assumption triggered AskUserQuestion",
-                "      - User response recorded in Decision Log with",
-                "        'user-specified' backing",
-                "",
-                "  [ ] Step 3: Decision classification table written?",
-                "      - All architectural choices have backing citations",
-                "      - No 'assumption' rows remain unresolved",
-                "",
-                "  [ ] Step 4: File classification table written?",
-                "      - All new files have backing citations",
-                "      - No 'assumption' rows remain unresolved",
-                "",
-                "If any assumption was resolved via AskUserQuestion:",
-                "  - Update backing to 'user-specified'",
-                "  - Add user's answer as citation",
-                "",
-                "If step 2 was skipped or user never responded: STOP.",
-                "Go back to step 2 and complete assumption audit.",
-                "",
-                "If tables were skipped or assumptions remain: STOP.",
-                "Go back and complete classification before proceeding.",
-                "</decision_audit_verification>",
+                "If any step was skipped: STOP. Go back and complete it.",
             ],
             "next": (
                 "PLANNING PHASE COMPLETE.\n\n"
@@ -203,6 +151,8 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
     if step_number == 1:
         return {
             "actions": [
+                "STEP 1: Context & Scope Discovery",
+                "",
                 "You are an expert architect. Proceed with confidence.",
                 "",
                 "<resource_loading>",
@@ -222,65 +172,74 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "     - Timeless Present Rule for comments",
                 "     - Detection heuristics (change-relative, baseline reference, location directive)",
                 "",
-                "These resources inform decision classification in step 2 and code",
-                "changes in later steps. Read them now.",
+                "These resources inform decision classification in later steps.",
                 "</resource_loading>",
                 "",
                 "PRECONDITION: Confirm plan file path before proceeding.",
                 "",
-                "<step_1_checklist>",
-                "Complete ALL items before invoking step 2:",
+                "<step_1_focus>",
+                "This step focuses on UNDERSTANDING, not deciding.",
                 "",
                 "CONTEXT (understand before proposing):",
-                "  - [ ] What code/systems does this touch?",
-                "  - [ ] What patterns does the codebase follow?",
-                "  - [ ] What prior decisions constrain this work?",
+                "  - What code/systems does this touch?",
+                "  - What patterns does the codebase follow?",
+                "  - What prior decisions constrain this work?",
                 "",
                 "SCOPE (define boundaries):",
-                "  - [ ] What exactly must be accomplished?",
-                "  - [ ] What is OUT of scope?",
+                "  - What exactly must be accomplished?",
+                "  - What is OUT of scope?",
                 "",
-                "APPROACHES (consider alternatives):",
-                "  - [ ] 2-3 options with Advantage/Disadvantage for each",
+                "CONSTRAINTS (discover blockers):",
+                "  - Locate project configuration files (build files, manifests, lock files)",
+                "  - Extract ALL version and compatibility constraints",
+                "  - Note organizational constraints: timeline, expertise, approvals",
+                "  - Note external constraints: services, APIs, data formats",
                 "",
-                "TARGET TECH RESEARCH (if task involves new tech/migration):",
-                "  - [ ] What is canonical/idiomatic usage of target tech?",
-                "  - [ ] Does target tech have different abstractions than source?",
-                "        (e.g., per-class loggers vs centralized, hooks vs classes)",
-                "  - [ ] Document findings for step 2 assumption audit.",
-                "",
-                "  Skip if task doesn't involve adopting new technology/patterns.",
-                "",
-                "CONSTRAINT DISCOVERY:",
-                "  - [ ] Locate project configuration files (build files, manifests, lock files)",
-                "  - [ ] Extract ALL version and compatibility constraints from each",
-                "  - [ ] Organizational constraints: timeline, expertise, approvals",
-                "  - [ ] External constraints: services, APIs, data formats",
-                "  - [ ] Document findings in plan's Constraints & Assumptions",
-                "",
-                "  Features incompatible with discovered constraints are blocking issues.",
-                "",
-                "TEST REQUIREMENTS DISCOVERY:",
-                "  - [ ] Check project docs for test requirements (CLAUDE.md,",
-                "        CONTRIBUTING.md, existing test patterns)",
-                "  - [ ] What test types does the project use/prefer?",
-                "  - [ ] What testing philosophy? (behavior vs implementation)",
-                "  - [ ] Document findings for step 2 test strategy audit.",
-                "",
-                "  If project docs silent, default-conventions domain='testing' applies.",
-                "  If task is documentation-only, skip test requirements.",
-                "",
-                "SUCCESS (observable outcomes):",
-                "  - [ ] Defined testable acceptance criteria",
-                "</step_1_checklist>",
+                "SUCCESS CRITERIA:",
+                "  - Define testable acceptance criteria for the task",
+                "</step_1_focus>",
             ],
-            "next": f"Invoke step {next_step} with your context analysis and approach options."
+            "next": f"Invoke step {next_step} with your context analysis and scope definition."
         }
 
     if step_number == 2:
         return {
             "actions": [
-                "ASSUMPTION SURFACING & USER CONFIRMATION",
+                "STEP 2: Approach Generation",
+                "",
+                "<step_2_focus>",
+                "This step focuses on GENERATING OPTIONS, not selecting.",
+                "",
+                "APPROACHES (consider alternatives):",
+                "  - Generate 2-3 options with Advantage/Disadvantage for each",
+                "  - Include at least one 'minimal change' option if applicable",
+                "  - Include at least one 'idiomatic/modern' option if applicable",
+                "",
+                "TARGET TECH RESEARCH (if task involves new tech/migration):",
+                "  - What is canonical/idiomatic usage of target tech?",
+                "  - Does target tech have different abstractions than source?",
+                "    (e.g., per-class loggers vs centralized, hooks vs classes)",
+                "  - Document findings for assumption audit in next step.",
+                "",
+                "  Skip if task doesn't involve adopting new technology/patterns.",
+                "",
+                "TEST REQUIREMENTS DISCOVERY:",
+                "  - Check project docs for test requirements (CLAUDE.md,",
+                "    CONTRIBUTING.md, existing test patterns)",
+                "  - What test types does the project use/prefer?",
+                "  - What testing philosophy? (behavior vs implementation)",
+                "",
+                "  If project docs silent, default-conventions domain='testing' applies.",
+                "  If task is documentation-only, skip test requirements.",
+                "</step_2_focus>",
+            ],
+            "next": f"Invoke step {next_step} with your approach options and tech research findings."
+        }
+
+    if step_number == 3:
+        return {
+            "actions": [
+                "STEP 3: Assumption Surfacing & User Confirmation",
                 "",
                 "<assumption_surfacing_purpose>",
                 "This step exists because architectural assumptions feel like",
@@ -288,7 +247,7 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "migration strategy, and abstraction boundaries are decisions",
                 "that require explicit user confirmation.",
                 "",
-                "You CANNOT proceed to step 3 without completing this step.",
+                "You CANNOT proceed to step 4 without completing this step.",
                 "</assumption_surfacing_purpose>",
                 "",
                 "<assumption_taxonomy>",
@@ -402,13 +361,13 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "      description: 'Keep Service1.Log() as wrapper over NLog.",
                 "                    Preserves current API but non-idiomatic.'",
                 "",
-                "DO NOT proceed to step 3 until user responds.",
+                "DO NOT proceed to step 4 until user responds.",
                 "Record user's choice in Decision Log:",
                 "  | [choice] | user-specified | User selected: [response] |",
                 "",
                 "If ALL rows have 'N' (no assumptions needing confirmation):",
                 "  State 'No architectural assumptions requiring confirmation.'",
-                "  Proceed to step 3 without AskUserQuestion.",
+                "  Proceed to step 4 without AskUserQuestion.",
                 "</user_confirmation_gate>",
                 "",
                 "<test_strategy_gate>",
@@ -462,18 +421,20 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
             )
         }
 
-    if step_number == 3:
+    if step_number == 4:
         return {
             "actions": [
-                "<step_3_evaluate_first>",
-                "BEFORE deciding, evaluate each approach from step 1:",
+                "STEP 4: Approach Evaluation & Selection",
+                "",
+                "<step_4_evaluate_first>",
+                "BEFORE deciding, evaluate each approach from step 2:",
                 "  | Approach | P(success) | Failure mode | Backtrack cost |",
                 "",
                 "STOP CHECK: If ALL approaches show LOW probability or HIGH",
                 "backtrack cost, STOP. Request clarification from user.",
-                "</step_3_evaluate_first>",
+                "</step_4_evaluate_first>",
                 "",
-                "<step_3_decide>",
+                "<step_4_decide>",
                 "Select approach. Record in Decision Log with MULTI-STEP chain:",
                 "",
                 "  INSUFFICIENT: 'Polling | Webhooks are unreliable'",
@@ -481,9 +442,9 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "                 -> would need fallback anyway -> simpler primary'",
                 "",
                 "Include BOTH architectural AND micro-decisions (timeouts, etc).",
-                "</step_3_decide>",
+                "</step_4_decide>",
                 "",
-                "<step_3_decision_classification>",
+                "<step_4_decision_classification>",
                 "WRITE this table before proceeding (forces explicit backing):",
                 "",
                 "  | Decision | Backing | Citation |",
@@ -497,35 +458,37 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "  4. assumption: 'No backing' -> STOP, use AskUserQuestion NOW",
                 "",
                 "For EACH 'assumption' row: use AskUserQuestion immediately.",
-                "Do not proceed to step 4 with unresolved assumptions.",
-                "</step_3_decision_classification>",
+                "Do not proceed to step 5 with unresolved assumptions.",
+                "</step_4_decision_classification>",
                 "",
-                "<step_3_rejected>",
+                "<step_4_rejected>",
                 "Document rejected alternatives with CONCRETE reasons.",
                 "TW uses this for 'why not X' code comments.",
-                "</step_3_rejected>",
+                "</step_4_rejected>",
                 "",
-                "<step_3_architecture>",
+                "<step_4_architecture>",
                 "Capture in ASCII diagrams:",
                 "  - Component relationships",
                 "  - Data flow",
                 "These go in Invisible Knowledge for README.md.",
-                "</step_3_architecture>",
+                "</step_4_architecture>",
                 "",
-                "<step_3_milestones>",
+                "<step_4_milestones>",
                 "Break into deployable increments:",
                 "  - Each milestone: independently testable",
                 "  - Scope: 1-3 files per milestone",
                 "  - Map dependencies (circular = design problem)",
-                "</step_3_milestones>",
+                "</step_4_milestones>",
             ],
             "next": f"Invoke step {next_step} with your chosen approach (include state evaluation summary), architecture, and milestone structure."
         }
 
-    if step_number == 4:
+    if step_number == 5:
         return {
             "actions": [
-                "<step_4_risks>",
+                "STEP 5: Risks, Milestones & Verification",
+                "",
+                "<step_5_risks>",
                 "Document risks NOW. QR excludes documented risks from findings.",
                 "",
                 "For each risk:",
@@ -549,9 +512,9 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "    worker.go:468 `isIdentical := tag.NumericValue == entry.val` |",
                 "",
                 "Claims without anchors are ASSUMPTIONS. QR will challenge them.",
-                "</step_4_risks>",
+                "</step_5_risks>",
                 "",
-                "<step_4_uncertainty_flags>",
+                "<step_5_uncertainty_flags>",
                 "For EACH milestone, check these conditions -> add flag:",
                 "",
                 "  | Condition                          | Flag                    |",
@@ -561,38 +524,38 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "  | First use of pattern in codebase   | needs conformance check |",
                 "",
                 "Add to milestone: **Flags**: [list]",
-                "</step_4_uncertainty_flags>",
+                "</step_5_uncertainty_flags>",
                 "",
-                "<step_4_refine_milestones>",
+                "<step_5_refine_milestones>",
                 "Verify EACH milestone has:",
                 "",
-                "FILES — exact paths:",
+                "FILES -- exact paths:",
                 "  CORRECT: src/auth/handler.py",
                 "  WRONG:   'auth files'",
                 "",
-                "REQUIREMENTS — specific behaviors:",
+                "REQUIREMENTS -- specific behaviors:",
                 "  CORRECT: 'retry 3x with exponential backoff, max 30s'",
                 "  WRONG:   'handle errors'",
                 "",
-                "ACCEPTANCE CRITERIA — testable pass/fail:",
+                "ACCEPTANCE CRITERIA -- testable pass/fail:",
                 "  CORRECT: 'Returns 429 after 3 failed attempts within 60s'",
                 "  WRONG:   'Handles errors correctly'",
                 "",
-                "CODE CHANGES — diff format for non-trivial logic.",
-                "</step_4_refine_milestones>",
+                "CODE CHANGES -- diff format for non-trivial logic.",
+                "</step_5_refine_milestones>",
                 "",
-                "<step_4_test_verification>",
+                "<step_5_test_verification>",
                 "For EACH implementation milestone, verify test specification:",
                 "",
-                "  - [ ] Tests section present? (or explicit skip reason)",
-                "  - [ ] Test type backed by: user-specified, doc-derived, or",
-                "        default-derived?",
-                "  - [ ] Scenarios cover: normal path, edge cases, error conditions?",
-                "  - [ ] Test files specified with exact paths?",
+                "  - Tests section present? (or explicit skip reason)",
+                "  - Test type backed by: user-specified, doc-derived, or",
+                "    default-derived?",
+                "  - Scenarios cover: normal path, edge cases, error conditions?",
+                "  - Test files specified with exact paths?",
                 "",
                 "For integration tests spanning multiple milestones:",
-                "  - [ ] Placed in last milestone that provides required component?",
-                "  - [ ] Dependencies listed explicitly?",
+                "  - Placed in last milestone that provides required component?",
+                "  - Dependencies listed explicitly?",
                 "",
                 "Test type selection (from default-conventions if no override):",
                 "  - Integration tests: end-user behavior, real dependencies (preferred)",
@@ -601,9 +564,9 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "",
                 "Remember: Milestone is NOT complete until its tests pass.",
                 "Tests provide fast feedback during implementation.",
-                "</step_4_test_verification>",
+                "</step_5_test_verification>",
                 "",
-                "<step_4_file_classification>",
+                "<step_5_file_classification>",
                 "For EACH new file in milestones, WRITE this table:",
                 "",
                 "  | New File | Backing | Citation |",
@@ -620,26 +583,37 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "  Extend existing files unless separation trigger applies.",
                 "",
                 "For EACH 'assumption' row: ask user before finalizing milestones.",
-                "</step_4_file_classification>",
+                "</step_5_file_classification>",
                 "",
-                "<step_4_validate>",
+                "<step_5_validate>",
                 "Cross-check: Does the plan address ALL original requirements?",
-                "</step_4_validate>",
+                "</step_5_validate>",
             ],
             "next": f"Invoke step {next_step} with refined milestones, risks, and uncertainty flags."
         }
 
-    # Steps 4+
+    # Steps 6+
     remaining = total_steps - step_number
     return {
         "actions": [
             "<backtrack_check>",
-            "BEFORE proceeding, verify no dead ends:",
-            "  - Has new information invalidated a prior decision?",
-            "  - Is a milestone now impossible given discovered constraints?",
-            "  - Are you adding complexity to work around a fundamental issue?",
+            "BEFORE proceeding, check for backtrack signals.",
             "",
-            "If YES to any: invoke earlier step with --thoughts explaining change.",
+            "Common patterns (not exhaustive -- apply the principle):",
+            "",
+            "  CONSTRAINT_VIOLATION: discovered incompatibility with project constraints",
+            "    e.g., feature requires Python 3.10 but project targets 3.8",
+            "",
+            "  APPROACH_FAILURE: repeated attempts at same problem failing",
+            "    e.g., third attempted solution for the same error",
+            "",
+            "  SCOPE_CREEP: adding complexity to work around fundamental issue",
+            "    e.g., milestone growing beyond original file scope",
+            "",
+            "The principle: if continuing requires undoing earlier decisions,",
+            "backtrack to where those decisions were made.",
+            "",
+            "If backtracking: invoke earlier step with --thoughts explaining change.",
             "</backtrack_check>",
             "",
             "<gap_analysis>",
@@ -668,17 +642,22 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
     }
 
 
-def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
+def get_review_step_guidance(step_number: int, total_steps: int,
+                              qr_iteration: int = 1, fixing_issues: bool = False) -> dict:
     """Returns guidance for review phase steps.
 
-    Review flow (4 steps):
-      Step 1: QR-Completeness (plan document validation)
-      Step 2: QR-Code (proposed implementation validation)
-      Step 3: TW Scrub (documentation enrichment)
-      Step 4: QR-Docs (documentation quality validation)
+    Review flow (3 steps):
+      Step 1: Parallel QR (Completeness + Code) - MUST spawn both agents
+      Step 2: TW Scrub (documentation enrichment)
+      Step 3: QR-Docs (documentation quality validation)
 
-    Steps 1 and 2 can run in parallel (both restart to planning on failure).
-    Step 4 restarts to step 3 on failure (doc issues only).
+    Step 1 spawns BOTH QR agents in parallel. Both restart to planning on failure.
+    Step 3 restarts to step 2 on failure (doc issues only).
+
+    Three Pillars Pattern applied at steps 1 and 3 (QR checkpoints):
+      1. STATE BANNER: Shows iteration count and mode
+      2. STOP CONDITION: Explicit blocker
+      3. RE-VERIFICATION MODE: Different prompts when fixing issues
     """
     is_complete = step_number >= total_steps
     next_step = step_number + 1
@@ -696,23 +675,41 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
         "Your assessment of plan quality is NOT a valid reason to skip.",
         "The agents exist to catch issues YOU cannot see in your own work.",
         "</review_rule_0>",
+        "",
+        "<delegation_template_guidance>",
+        "Delegation blocks below are SUGGESTED STRUCTURE, not enforced schema.",
+        "",
+        "The template helps agents understand the task. Adapt fields as needed:",
+        "  - <mode>: identifies the review type",
+        "  - <plan_source>: path to the plan file",
+        "  - <task>: specific work to perform",
+        "  - <expected_output>: how to know when done",
+        "",
+        "The structure reduces interpretation errors without rigid enforcement.",
+        "</delegation_template_guidance>",
     ]
 
     if step_number == 1:
+        # Three Pillars: STATE BANNER for QR checkpoint
+        state_banner = get_qr_state_banner("PLAN QR", qr_iteration, fixing_issues)
+        stop_condition = get_qr_stop_condition("BOTH QR agents (Completeness AND Code) return PASS")
+
         return {
-            "actions": rule_0_block + [
+            "actions": state_banner + rule_0_block + [
                 "",
-                "<review_step_1_qr_completeness>",
-                "STEP 1: Validate plan document completeness.",
+                "<review_step_1_parallel_qr>",
+                "STEP 1: Parallel Quality Review (Completeness + Code)",
                 "",
-                "This step runs BEFORE TW to catch incomplete Decision Log entries.",
-                "TW sources ALL comments from Decision Log -- if entries are missing,",
-                "TW cannot add appropriate comments.",
+                "You MUST spawn BOTH quality-reviewer agents in parallel using two",
+                "Task tool calls in a single message. Sequential execution is PROHIBITED.",
                 "",
-                "You may run this step IN PARALLEL with step 2 (QR-Code) since both",
-                "restart to the planning phase on failure.",
+                "Both reviews run BEFORE TW to catch issues early:",
+                "  - QR-Completeness: Validates Decision Log, policy defaults, plan structure",
+                "  - QR-Code: Validates proposed code against actual codebase",
                 "",
-                "MANDATORY: Spawn the quality-reviewer agent.",
+                "---",
+                "",
+                "DELEGATION 1: QR-Completeness",
                 "",
                 "Use the Task tool with these parameters:",
                 "  subagent_type: 'quality-reviewer'",
@@ -734,35 +731,9 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
                 "    </expected_output>",
                 "  </delegation>",
                 "",
-                "If running in parallel with step 2, spawn both agents simultaneously.",
-                "</review_step_1_qr_completeness>",
-            ],
-            "next": (
-                "PARALLEL EXECUTION OPTION:\n"
-                "  You may invoke steps 1 and 2 simultaneously using two Task tool calls\n"
-                "  in a single message. Both QR modes run before TW.\n\n"
-                "If running sequentially, after QR-Completeness returns:\n"
-                "  - PASS -> Invoke step 2\n"
-                "  - NEEDS_CHANGES -> Fix plan, restart planning phase\n\n"
-                "Command for step 2:\n"
-                "  python3 planner.py --phase review --step-number 2 --total-steps 4 \\\n"
-                '    --thoughts "QR-Completeness passed, proceeding to QR-Code"'
-            )
-        }
-
-    if step_number == 2:
-        return {
-            "actions": rule_0_block + [
+                "---",
                 "",
-                "<review_step_2_qr_code>",
-                "STEP 2: Validate proposed implementation against codebase.",
-                "",
-                "This step runs BEFORE TW to catch implementation issues.",
-                "QR-Code MUST read the actual codebase files referenced in the plan.",
-                "",
-                "You may run this step IN PARALLEL with step 1 (QR-Completeness).",
-                "",
-                "MANDATORY: Spawn the quality-reviewer agent.",
+                "DELEGATION 2: QR-Code",
                 "",
                 "Use the Task tool with these parameters:",
                 "  subagent_type: 'quality-reviewer'",
@@ -786,38 +757,50 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
                 "    </expected_output>",
                 "  </delegation>",
                 "",
-                "Wait for the quality-reviewer agent to complete before proceeding.",
-                "</review_step_2_qr_code>",
+                "---",
+                "",
+                "Spawn BOTH delegations in the SAME message using two Task tool calls.",
+                "</review_step_1_parallel_qr>",
+                "",
+            ] + stop_condition + [
                 "",
                 "<pre_tw_gate>",
                 "GATE: Both QR-Completeness AND QR-Code must PASS before TW runs.",
                 "",
                 "If either returns NEEDS_CHANGES:",
-                "  1. Fix the issues in the plan",
-                "  2. Return to planning phase to regenerate affected sections",
-                "  3. Restart review from step 1",
+                "  1. Fix the specific issues identified in the plan file",
+                "  2. Re-invoke this script with --qr-iteration incremented (command in NEXT section)",
+                "  3. Both QR agents run again on the fixed plan",
+                "  4. REPEAT until both return PASS",
                 "",
-                "Do NOT proceed to TW (step 3) until both step 1 and step 2 pass.",
+                "This is a VALIDATION LOOP. You stay in step 1 until both pass.",
+                "The --qr-iteration flag tracks loop iterations for visibility.",
                 "</pre_tw_gate>",
             ],
             "next": (
-                "After QR-Code (and QR-Completeness if parallel) returns:\n\n"
-                "  Both PASS -> Invoke step 3 (TW Scrub)\n"
-                "  Either NEEDS_CHANGES -> Fix plan, restart from step 1\n\n"
-                "Command for step 3:\n"
-                "  python3 planner.py --phase review --step-number 3 --total-steps 4 \\\n"
+                "After BOTH QR agents complete:\n\n"
+                "  Both PASS -> Proceed to step 2\n"
+                "  Either NEEDS_CHANGES -> Fix issues, then RE-VERIFY (step 1 again)\n\n"
+                f"RESTART COMMAND (if either QR returns NEEDS_CHANGES):\n"
+                f"  python3 planner.py --phase review --step-number 1 --total-steps 3 \\\n"
+                f"    --qr-iteration {qr_iteration + 1} --fixing-issues \\\n"
+                f'    --thoughts "Fixed: [list issues fixed]. Re-verifying..."\n\n'
+                "  CRITICAL: You MUST re-run QR after fixing issues.\n"
+                "  Skipping re-verification is PROHIBITED.\n\n"
+                "SUCCESS COMMAND (ONLY after both PASS):\n"
+                "  python3 planner.py --phase review --step-number 2 --total-steps 3 \\\n"
                 '    --thoughts "QR-Completeness and QR-Code passed, proceeding to TW"'
             )
         }
 
-    if step_number == 3:
+    if step_number == 2:
         return {
             "actions": rule_0_block + [
                 "",
-                "<review_step_3_tw_scrub>",
-                "STEP 3: Documentation enrichment by Technical Writer.",
+                "<review_step_2_tw_scrub>",
+                "STEP 2: Documentation enrichment by Technical Writer.",
                 "",
-                "This step runs AFTER QR-Completeness and QR-Code have passed.",
+                "This step runs AFTER both QR agents have passed.",
                 "TW sources all comments from Decision Log (verified complete in step 1).",
                 "",
                 "MANDATORY: Spawn the technical-writer agent.",
@@ -842,21 +825,25 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
                 "  </delegation>",
                 "",
                 "Wait for the technical-writer agent to complete before proceeding.",
-                "</review_step_3_tw_scrub>",
+                "</review_step_2_tw_scrub>",
             ],
             "next": (
-                "After TW completes, invoke step 4:\n"
-                "  python3 planner.py --phase review --step-number 4 --total-steps 4 \\\n"
+                "After TW completes, invoke step 3:\n"
+                "  python3 planner.py --phase review --step-number 3 --total-steps 3 \\\n"
                 '    --thoughts "TW scrub complete, [summary of changes]"'
             )
         }
 
-    if step_number == 4:
+    if step_number == 3:
+        # Three Pillars: STATE BANNER for QR-Docs checkpoint
+        state_banner = get_qr_state_banner("DOC QR", qr_iteration, fixing_issues)
+        stop_condition = get_qr_stop_condition("QR-Docs returns PASS")
+
         return {
-            "actions": rule_0_block + [
+            "actions": state_banner + rule_0_block + [
                 "",
-                "<review_step_4_qr_docs>",
-                "STEP 4: Validate documentation quality.",
+                "<review_step_3_qr_docs>",
+                "STEP 3: Validate documentation quality.",
                 "",
                 "This step runs AFTER TW to verify documentation was done correctly.",
                 "",
@@ -882,34 +869,41 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
                 "  </delegation>",
                 "",
                 "Wait for the quality-reviewer agent to complete before proceeding.",
-                "</review_step_4_qr_docs>",
+                "</review_step_3_qr_docs>",
+                "",
+            ] + stop_condition + [
                 "",
                 "<post_qr_docs_restart>",
                 "RESTART BEHAVIOR for QR-Docs:",
                 "",
-                "Unlike steps 1-2, QR-Docs failures restart to step 3 (TW) only.",
+                "Unlike step 1, QR-Docs failures restart to step 2 (TW) only.",
                 "This is because doc issues don't require plan restructuring.",
                 "",
                 "If QR-Docs returns NEEDS_CHANGES:",
                 "  1. Note the specific doc issues",
-                "  2. Restart from step 3 with <scope> specifying affected sections",
+                "  2. Restart from step 2 with <scope> specifying affected sections",
                 "  3. TW fixes the documentation issues",
-                "  4. Return to step 4 for re-validation",
+                "  4. Return to step 3 for re-validation with --qr-iteration incremented",
                 "",
                 "If QR-Docs returns PASS:",
-                "  Proceed to step 5 (complete).",
+                "  Review phase complete. Plan ready for /plan-execution.",
                 "</post_qr_docs_restart>",
             ],
             "next": (
                 "After QR-Docs returns verdict:\n\n"
-                "  PASS -> Invoke step 5 (complete)\n"
-                "  NEEDS_CHANGES -> Restart from step 3 (TW only)\n\n"
-                "Command to restart TW:\n"
-                "  python3 planner.py --phase review --step-number 3 --total-steps 4 \\\n"
+                "  NEEDS_CHANGES -> Restart from step 2 (TW), then re-verify at step 3\n"
+                "  PASS -> Review phase complete, plan ready for execution\n\n"
+                "Command to restart TW (if NEEDS_CHANGES):\n"
+                "  python3 planner.py --phase review --step-number 2 --total-steps 3 \\\n"
                 '    --thoughts "QR-Docs feedback: [issues]. Restarting TW."\n\n'
-                "Command to complete:\n"
-                "  python3 planner.py --phase review --step-number 5 --total-steps 4 \\\n"
-                '    --thoughts "All review steps passed"'
+                "THEN after TW completes, RE-VERIFY with:\n"
+                f"  python3 planner.py --phase review --step-number 3 --total-steps 3 \\\n"
+                f"    --qr-iteration {qr_iteration + 1} --fixing-issues \\\n"
+                f'    --thoughts "TW fixed doc issues. Re-verifying..."\n\n'
+                "  CRITICAL: You MUST re-run QR-Docs after TW fixes issues.\n"
+                "  Skipping re-verification is PROHIBITED.\n\n"
+                "If PASS: REVIEW PHASE COMPLETE.\n"
+                "Plan is approved and ready for implementation via /plan-execution."
             )
         }
 
@@ -918,11 +912,10 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
             "actions": [
                 "<review_complete_verification>",
                 "Confirm before proceeding to execution:",
-                "  - QR-Completeness verified Decision Log is complete?",
-                "  - QR-Code verified proposed code aligns with codebase?",
-                "  - TW has scrubbed code snippets with WHY comments?",
-                "  - TW has enriched plan prose with rationale?",
-                "  - QR-Docs verified no temporal contamination?",
+                "  - Step 1: Both QR agents passed (Completeness + Code)?",
+                "  - Step 2: TW scrubbed code snippets with WHY comments?",
+                "  - Step 2: TW enriched plan prose with rationale?",
+                "  - Step 3: QR-Docs verified no temporal contamination?",
                 "  - Final verdict is PASS?",
                 "</review_complete_verification>",
             ],
@@ -933,7 +926,7 @@ def get_review_step_guidance(step_number: int, total_steps: int) -> dict:
             )
         }
 
-    # Shouldn't reach here with standard 4-step review, but handle gracefully
+    # Shouldn't reach here with standard 3-step review, but handle gracefully
     return {
         "actions": ["Continue review process as needed."],
         "next": f"Invoke step {next_step} when ready."
@@ -955,8 +948,12 @@ Examples:
   # Backtrack to earlier step if needed
   python3 planner.py --step-number 2 --total-steps 4 --thoughts "New constraint invalidates approach, reconsidering..."
 
-  # Start review (after plan written) - 4 steps: QR-Completeness, QR-Code, TW, QR-Docs
-  python3 planner.py --phase review --step-number 1 --total-steps 4 --thoughts "Plan at plans/auth.md"
+  # Start review (after plan written) - 3 steps: QR (Completeness+Code), TW, QR-Docs
+  python3 planner.py --phase review --step-number 1 --total-steps 3 --thoughts "Plan at plans/auth.md"
+
+  # Re-verify after fixing QR issues (Three Pillars Pattern)
+  python3 planner.py --phase review --step-number 1 --total-steps 3 \\
+    --qr-iteration 2 --fixing-issues --thoughts "Fixed issues, re-verifying..."
 """
     )
 
@@ -966,6 +963,11 @@ Examples:
     parser.add_argument("--step-number", type=int, required=True)
     parser.add_argument("--total-steps", type=int, required=True)
     parser.add_argument("--thoughts", type=str, required=True)
+    # Three Pillars Pattern flags for QR verification loops
+    parser.add_argument("--qr-iteration", type=int, default=1,
+                        help="QR loop iteration (1=initial, 2+=re-verification)")
+    parser.add_argument("--fixing-issues", action="store_true",
+                        help="Flag indicating this is re-verification after fixing QR issues")
 
     args = parser.parse_args()
 
@@ -978,13 +980,21 @@ Examples:
         guidance = get_planning_step_guidance(args.step_number, args.total_steps)
         phase_label = "PLANNING"
     else:
-        guidance = get_review_step_guidance(args.step_number, args.total_steps)
+        guidance = get_review_step_guidance(
+            args.step_number, args.total_steps,
+            qr_iteration=args.qr_iteration,
+            fixing_issues=args.fixing_issues
+        )
         phase_label = "REVIEW"
 
     is_complete = args.step_number >= args.total_steps
 
+    # Build header with QR iteration info for review phase
     print("=" * 80)
-    print(f"PLANNER - {phase_label} PHASE - Step {args.step_number} of {args.total_steps}")
+    if args.phase == "review" and (args.qr_iteration > 1 or args.fixing_issues):
+        print(f"PLANNER - {phase_label} PHASE - Step {args.step_number} of {args.total_steps} [QR iteration {args.qr_iteration}]")
+    else:
+        print(f"PLANNER - {phase_label} PHASE - Step {args.step_number} of {args.total_steps}")
     print("=" * 80)
     print()
     print(f"STATUS: {'phase_complete' if is_complete else 'in_progress'}")

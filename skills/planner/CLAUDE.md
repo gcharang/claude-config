@@ -10,6 +10,9 @@ Planning skill with resources that must stay synced with agent prompts.
 | ------------------------------------- | ---------------------------------------------- | -------------------------------------------- |
 | `SKILL.md`                            | Planning workflow, phases                      | Using the planner skill                      |
 | `scripts/planner.py`                  | Step-by-step planning orchestration            | Debugging planner behavior                   |
+| `scripts/executor.py`                 | Plan execution orchestration                   | Debugging executor behavior                  |
+| `scripts/execute-milestone.py`        | Per-milestone execution with QR gates          | Debugging milestone execution                |
+| `scripts/utils.py`                    | Shared utilities (Three Pillars Pattern)       | Modifying QR verification loop behavior      |
 | `resources/plan-format.md`            | Plan template (injected by script)             | Editing plan structure                       |
 | `resources/temporal-contamination.md` | Detection heuristic for contaminated comments  | Updating TW/QR temporal contamination logic  |
 | `resources/diff-format.md`            | Unified diff spec for code changes             | Updating Developer diff consumption logic    |
@@ -84,3 +87,63 @@ grep -l "default_conventions\|domain: god-object\|domain: test-organization" age
 ```
 
 If grep finds files not listed in sync tables above, update this document.
+
+## Three Pillars Pattern (QR Verification Loops)
+
+The planner skill uses a consistent pattern for all QR verification checkpoints
+to ensure fixes are always re-verified. This pattern is implemented in
+`scripts/utils.py` and used across all three scripts.
+
+### The Pattern
+
+Every QR checkpoint has three mandatory elements:
+
+| Pillar             | Purpose                              | Implementation                  |
+| ------------------ | ------------------------------------ | ------------------------------- |
+| **STATE BANNER**   | Visual header showing loop iteration | `get_qr_state_banner()`         |
+| **STOP CONDITION** | Explicit blocker preventing skip     | `get_qr_stop_condition()`       |
+| **RE-VERIFY MODE** | Different prompts when fixing issues | `--qr-iteration` + `--fixing-*` |
+
+### CLI Flags
+
+All scripts use consistent flags for QR verification loops:
+
+| Flag              | Type    | Default | Purpose                              |
+| ----------------- | ------- | ------- | ------------------------------------ |
+| `--qr-iteration`  | integer | 1       | Loop count (1=initial, 2+=re-verify) |
+| `--fixing-issues` | boolean | false   | Indicates re-work after failed QR    |
+
+### QR Checkpoints
+
+The pattern is applied at four checkpoints:
+
+1. **planner.py review step 1**: Plan QR (Completeness + Code)
+2. **planner.py review step 3**: Doc QR (post-TW validation)
+3. **execute-milestone.py steps 2-3**: Per-milestone QR gate
+4. **executor.py step 4**: Holistic post-implementation QR
+
+### Example Flow
+
+```
+# Initial QR (iteration 1)
+python3 execute-milestone.py --milestone 1 --step 2 --thoughts "Running QR..."
+
+# QR finds issues -> step 3 routes to fix
+python3 execute-milestone.py --milestone 1 --step 3 --qr-result ISSUES ...
+
+# Fix issues (iteration 2)
+python3 execute-milestone.py --milestone 1 --step 1 \
+  --fixing-qr-issues --qr-iteration 2 --thoughts "Fixing issues..."
+
+# RE-VERIFY (iteration 2) -- MANDATORY, cannot skip
+python3 execute-milestone.py --milestone 1 --step 2 \
+  --qr-iteration 2 --thoughts "Re-verifying fixes..."
+```
+
+### Modifying the Pattern
+
+To change QR verification loop behavior:
+
+1. Edit `scripts/utils.py` (single source of truth)
+2. Changes automatically apply to all scripts that import the functions
+3. No agent prompt sync required -- pattern is in scripts, not agent prompts

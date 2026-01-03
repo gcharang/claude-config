@@ -11,13 +11,24 @@ Seven-phase execution workflow with JIT prompt injection:
   Step 6: Documentation (TW pass)
   Step 7: Retrospective (present summary)
 
+Three Pillars Pattern for QR Verification Loops (Step 4):
+  1. STATE BANNER: Visual header showing loop iteration
+  2. STOP CONDITION: Explicit blocker preventing progression
+  3. RE-VERIFICATION MODE: Different prompts for first-run vs retry
+
 Usage:
     python3 executor.py --plan-file PATH --step-number 1 --total-steps 7 --thoughts "..."
+
+    # Re-verification after fixing QR issues (Three Pillars Pattern)
+    python3 executor.py --plan-file PATH --step-number 4 --total-steps 7 \\
+      --qr-iteration 2 --fixing-issues --thoughts "Fixed issues, re-verifying..."
 """
 
 import argparse
 import re
 import sys
+
+from utils import get_qr_state_banner, get_qr_stop_condition
 
 
 def detect_reconciliation_signals(thoughts: str) -> bool:
@@ -244,34 +255,32 @@ def get_step_2_guidance(plan_file: str) -> dict:
     }
 
 
-def get_step_3_guidance(plan_file: str) -> dict:
-    """Step 3: Milestone Execution - delegate to agents, run tests."""
+def get_step_3_guidance(plan_file: str, thoughts: str) -> dict:
+    """Step 3: Milestone Execution - delegate via execute-milestone.py."""
+    # Extract milestone count from thoughts if provided, otherwise use placeholder
+    # The orchestrator should have counted milestones in step 1
+    milestone_match = re.search(r'(\d+)\s*milestones?', thoughts.lower())
+    total_milestones = milestone_match.group(1) if milestone_match else "[N]"
+
     return {
         "actions": [
             "MILESTONE EXECUTION",
             "",
             f"Plan file: {plan_file}",
             "",
-            "Execute milestones through delegation. Parallelize independent work.",
+            "Execute milestones sequentially with per-milestone QR gates.",
             "",
-            "<diff_compliance_validation>",
+            "<execution_workflow>",
             "",
-            "BEFORE delegating each milestone with code changes:",
-            "  1. Read resources/diff-format.md if not already in context",
-            "  2. Verify plan's diffs meet specification:",
-            "     - Context lines are VERBATIM from actual files (not placeholders)",
-            "     - WHY comments explain rationale (not WHAT code does)",
-            "     - No location directives in comments",
+            "Each milestone goes through 3 steps:",
+            "  Step 1: Implementation (delegate to @agent-developer)",
+            "  Step 2: QR Gate (delegate to @agent-quality-reviewer, mode=milestone-review)",
+            "  Step 3: Gate Check (proceed to next milestone or fix issues)",
             "",
-            "AFTER @agent-developer completes, verify:",
-            "  - Context lines from plan were found in target file",
-            "  - WHY comments were transcribed verbatim to code",
-            "  - No location directives remain in implemented code",
-            "  - No temporal contamination leaked (change-relative language)",
+            "The execute-milestone.py script handles this workflow.",
+            "It will return you to executor.py step 4 after all milestones complete.",
             "",
-            "If Developer reports context lines not found, check drift table below.",
-            "",
-            "</diff_compliance_validation>",
+            "</execution_workflow>",
             "",
             "<error_handling>",
             "",
@@ -290,92 +299,65 @@ def get_step_3_guidance(plan_file: str) -> dict:
             "  - Performance or safety characteristics affected",
             "  - Confidence < 80%",
             "",
-            "Context anchor mismatch protocol:",
-            "",
-            "When @agent-developer reports context lines don't match actual code:",
-            "",
-            "  | Mismatch Type               | Action                         |",
-            "  |-----------------------------|--------------------------------|",
-            "  | Whitespace/formatting only  | Proceed with normalized match  |",
-            "  | Minor variable rename       | Proceed, note in execution log |",
-            "  | Code restructured           | Proceed, note deviation        |",
-            "  | Context lines not found     | STOP - escalate to planner     |",
-            "  | Logic fundamentally changed | STOP - escalate to planner     |",
-            "",
             "</error_handling>",
-            "",
-            "<acceptance_testing>",
-            "",
-            "Run after each milestone:",
-            "",
-            "  # Python",
-            "  pytest --strict-markers --strict-config",
-            "  mypy --strict",
-            "",
-            "  # JavaScript/TypeScript",
-            "  tsc --strict --noImplicitAny",
-            "  eslint --max-warnings=0",
-            "",
-            "  # Go",
-            "  go test -race -cover -vet=all",
-            "",
-            "Pass criteria: 100% tests pass, zero linter warnings.",
-            "",
-            "Self-consistency check (for milestones with >3 files):",
-            "  1. Developer's implementation notes claim: [what was implemented]",
-            "  2. Test results demonstrate: [what behavior was verified]",
-            "  3. Acceptance criteria state: [what was required]",
-            "",
-            "All three must align. Discrepancy = investigate before proceeding.",
-            "",
-            "</acceptance_testing>",
         ],
         "next": (
-            "CONTINUE in step 3 until ALL milestones complete:\n"
-            f'  python3 executor.py --plan-file "{plan_file}" --step-number 3 '
-            '--total-steps 7 --thoughts "Completed M1, M2. Executing M3..."'
-            "\n\n"
-            "When ALL milestones are complete, invoke step 4 for quality review:\n"
-            f'  python3 executor.py --plan-file "{plan_file}" --step-number 4 '
-            '--total-steps 7 --thoughts "All milestones complete. '
-            'Modified files: [list]. Ready for QR."'
+            f"Start milestone execution with execute-milestone.py:\n\n"
+            f'  python3 execute-milestone.py --milestone 1 --total-milestones {total_milestones} '
+            f'--step 1 --thoughts "Starting milestone 1..."\n\n'
+            "The execute-milestone.py script will:\n"
+            "  - Guide you through implement -> QR-gate -> proceed for each milestone\n"
+            "  - Return you to executor.py step 4 after all milestones complete"
         ),
     }
 
 
-def get_step_4_guidance(plan_file: str) -> dict:
-    """Step 4: Post-Implementation QR - quality review."""
+def get_step_4_guidance(plan_file: str, qr_iteration: int = 1, fixing_issues: bool = False) -> dict:
+    """Step 4: Post-Implementation QR - quality review.
+
+    Three Pillars Pattern applied:
+      1. STATE BANNER: Shows iteration count and mode
+      2. STOP CONDITION: Explicit blocker
+      3. RE-VERIFICATION MODE: Different prompts when fixing issues
+    """
+    state_banner = get_qr_state_banner("HOLISTIC QR", qr_iteration, fixing_issues)
+    stop_condition = get_qr_stop_condition("Holistic QR returns PASS")
+
+    actions = state_banner + [
+        "POST-IMPLEMENTATION QUALITY REVIEW",
+        "",
+        f"Plan file: {plan_file}",
+        "",
+        "Delegate to @agent-quality-reviewer for comprehensive review.",
+        "",
+        "<qr_delegation>",
+        "",
+        "  Task for @agent-quality-reviewer:",
+        "  Mode: post-implementation",
+        "  Plan Source: [plan_file.md]",
+        "  Files Modified: [list]",
+        "  Reconciled Milestones: [list milestones that were SATISFIED]",
+        "",
+        "  Priority order for findings:",
+        "    1. Issues in reconciled milestones (bypassed execution validation)",
+        "    2. Issues in newly implemented milestones",
+        "    3. Cross-cutting issues",
+        "",
+        "  Checklist:",
+        "    - Every requirement implemented",
+        "    - No unauthorized deviations",
+        "    - Edge cases handled",
+        "    - Performance requirements met",
+        "",
+        "</qr_delegation>",
+        "",
+    ] + stop_condition + [
+        "",
+        "Expected output: PASS or issues list sorted by severity.",
+    ]
+
     return {
-        "actions": [
-            "POST-IMPLEMENTATION QUALITY REVIEW",
-            "",
-            f"Plan file: {plan_file}",
-            "",
-            "Delegate to @agent-quality-reviewer for comprehensive review.",
-            "",
-            "<qr_delegation>",
-            "",
-            "  Task for @agent-quality-reviewer:",
-            "  Mode: post-implementation",
-            "  Plan Source: [plan_file.md]",
-            "  Files Modified: [list]",
-            "  Reconciled Milestones: [list milestones that were SATISFIED]",
-            "",
-            "  Priority order for findings:",
-            "    1. Issues in reconciled milestones (bypassed execution validation)",
-            "    2. Issues in newly implemented milestones",
-            "    3. Cross-cutting issues",
-            "",
-            "  Checklist:",
-            "    - Every requirement implemented",
-            "    - No unauthorized deviations",
-            "    - Edge cases handled",
-            "    - Performance requirements met",
-            "",
-            "</qr_delegation>",
-            "",
-            "Expected output: PASS or issues list sorted by severity.",
-        ],
+        "actions": actions,
         "next": (
             "After QR completes:\n\n"
             "If QR returns ISSUES -> invoke step 5:\n"
@@ -389,7 +371,7 @@ def get_step_4_guidance(plan_file: str) -> dict:
     }
 
 
-def get_step_5_guidance(plan_file: str) -> dict:
+def get_step_5_guidance(plan_file: str, qr_iteration: int = 1) -> dict:
     """Step 5: QR Issue Resolution - present issues, collect decisions, fix."""
     return {
         "actions": [
@@ -441,11 +423,13 @@ def get_step_5_guidance(plan_file: str) -> dict:
             "</issue_resolution_protocol>",
         ],
         "next": (
-            "After ALL fixes are applied, return to step 4 for re-validation:\n\n"
-            f'  python3 executor.py --plan-file "{plan_file}" --step-number 4 '
-            '--total-steps 7 --thoughts "Applied fixes for issues X, Y, Z. '
-            'Re-running QR."'
+            "After ALL fixes are applied, return to step 4 for RE-VERIFICATION:\n\n"
+            f'  python3 executor.py --plan-file "{plan_file}" --step-number 4 \\\n'
+            f"    --qr-iteration {qr_iteration + 1} --fixing-issues \\\n"
+            f'    --total-steps 7 --thoughts "Applied fixes for issues X, Y, Z. Re-verifying..."'
             "\n\n"
+            "  CRITICAL: You MUST re-run holistic QR after fixing issues.\n"
+            "  Skipping re-verification is PROHIBITED.\n\n"
             "This creates a validation loop until QR passes."
         ),
     }
@@ -577,18 +561,19 @@ def get_step_7_guidance(plan_file: str) -> dict:
     }
 
 
-def get_step_guidance(step_number: int, plan_file: str, thoughts: str) -> dict:
+def get_step_guidance(step_number: int, plan_file: str, thoughts: str,
+                      qr_iteration: int = 1, fixing_issues: bool = False) -> dict:
     """Route to appropriate step guidance."""
     if step_number == 1:
         return get_step_1_guidance(plan_file, thoughts)
     elif step_number == 2:
         return get_step_2_guidance(plan_file)
     elif step_number == 3:
-        return get_step_3_guidance(plan_file)
+        return get_step_3_guidance(plan_file, thoughts)
     elif step_number == 4:
-        return get_step_4_guidance(plan_file)
+        return get_step_4_guidance(plan_file, qr_iteration, fixing_issues)
     elif step_number == 5:
-        return get_step_5_guidance(plan_file)
+        return get_step_5_guidance(plan_file, qr_iteration)
     elif step_number == 6:
         return get_step_6_guidance(plan_file)
     elif step_number == 7:
@@ -630,6 +615,11 @@ Examples:
     parser.add_argument(
         "--thoughts", type=str, required=True, help="Your current thinking and status"
     )
+    # Three Pillars Pattern flags for QR verification loops (step 4)
+    parser.add_argument("--qr-iteration", type=int, default=1,
+                        help="QR loop iteration (1=initial, 2+=re-verification)")
+    parser.add_argument("--fixing-issues", action="store_true",
+                        help="Flag indicating this is re-verification after fixing QR issues")
 
     args = parser.parse_args()
 
@@ -640,7 +630,11 @@ Examples:
     if args.total_steps != 7:
         print("Warning: total-steps should be 7 for executor", file=sys.stderr)
 
-    guidance = get_step_guidance(args.step_number, args.plan_file, args.thoughts)
+    guidance = get_step_guidance(
+        args.step_number, args.plan_file, args.thoughts,
+        qr_iteration=args.qr_iteration,
+        fixing_issues=args.fixing_issues
+    )
     is_complete = args.step_number >= 7
 
     step_names = {
@@ -654,9 +648,15 @@ Examples:
     }
 
     print("=" * 80)
-    print(
-        f"EXECUTOR - Step {args.step_number} of 7: {step_names.get(args.step_number, 'Unknown')}"
-    )
+    if args.step_number == 4 and (args.qr_iteration > 1 or args.fixing_issues):
+        print(
+            f"EXECUTOR - Step {args.step_number} of 7: {step_names.get(args.step_number, 'Unknown')} "
+            f"[QR iteration {args.qr_iteration}]"
+        )
+    else:
+        print(
+            f"EXECUTOR - Step {args.step_number} of 7: {step_names.get(args.step_number, 'Unknown')}"
+        )
     print("=" * 80)
     print()
     print(f"STATUS: {'execution_complete' if is_complete else 'in_progress'}")

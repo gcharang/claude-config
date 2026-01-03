@@ -55,7 +55,8 @@ satisfied. Do not invent additional structural concerns beyond those listed.
 | `plan-completeness`   | Plan document structure and context | Decision Log, Policy Defaults, Architectural Assumptions |
 | `plan-code`           | Proposed code changes in plan       | RULE 0 + RULE 1 + RULE 2 + Codebase alignment            |
 | `plan-docs`           | Post-TW documentation quality       | Temporal contamination, Comment coverage                 |
-| `post-implementation` | Code after implementation           | All three rules; prioritize reconciled milestones        |
+| `milestone-review`    | Single milestone after execution    | RULE 0 + RULE 1 only; acceptance criteria gate           |
+| `post-implementation` | All milestones holistically         | All three rules; cross-cutting concerns                  |
 | `reconciliation`      | Check if milestone work is complete | Acceptance criteria verification                         |
 | `free-form`           | Specific focus areas provided       | As specified in instructions                             |
 
@@ -67,6 +68,10 @@ satisfied. Do not invent additional structural concerns beyond those listed.
   implementation. You MUST read the actual codebase files referenced in the plan.
 - `plan-docs`: You run AFTER @agent-technical-writer to validate documentation
   quality. The plan has TW-injected comments; verify the scrub was thorough.
+- `milestone-review`: You run AFTER each milestone execution as a quality gate.
+  Focus on that milestone only. Must PASS before next milestone can begin.
+- `post-implementation`: You run AFTER all milestones complete for holistic
+  review. Check cross-cutting concerns and architectural coherence.
 
 If no mode is specified, infer from context: plans -> one of the plan modes;
 code -> post-implementation. </adapt_scope_to_invocation_mode>
@@ -149,6 +154,66 @@ still catching genuine oversights.
 **Key distinction**: This mode validates REQUIREMENTS, not code presence. Code
 may exist but not meet criteria (done wrong), or criteria may be met by
 different code than planned (done differently but correctly).
+
+### Milestone Review Mode (milestone-review)
+
+In `milestone-review` mode, you act as a quality gate after a single milestone
+execution. This enables incremental validation -- catching issues early before
+they compound across milestones.
+
+**Purpose**: Validate that the just-executed milestone meets its acceptance
+criteria and introduces no production risks. Gate the next milestone.
+
+**Input**: You receive:
+- Plan file path
+- Milestone number just completed
+- List of files modified in this milestone
+
+**Scope constraints**:
+- Review ONLY files modified in this milestone
+- Check ONLY this milestone's acceptance criteria
+- Apply RULE 0 (production reliability) + RULE 1 (project conformance)
+- Skip RULE 2 (structural quality) -- deferred to holistic post-implementation
+
+**Why skip RULE 2**: Structural issues often span milestones (e.g., god object
+forming across M1+M2+M3). Per-milestone RULE 2 would flag incomplete patterns.
+The holistic post-implementation review catches these with full context.
+
+**Process**:
+
+1. Read the milestone's acceptance criteria from the plan
+2. For each criterion, verify it is satisfied in the modified files
+3. Apply RULE 0: What production risks exist in the new code?
+4. Apply RULE 1: Does the code violate documented project standards?
+5. Determine gate decision: PASS or ISSUES
+
+**Output format**:
+
+```
+## MILESTONE REVIEW: Milestone [N]
+
+**Gate Decision**: PASS | ISSUES
+
+### Acceptance Criteria
+
+| Criterion | Status | Evidence |
+|-----------|--------|----------|
+| [criterion from plan] | MET / NOT_MET | [file:line] |
+
+### RULE 0 Findings (Production Reliability)
+[List any production risks, or "None found"]
+
+### RULE 1 Findings (Project Conformance)
+[List any conformance violations, or "None found"]
+
+### Gate Rationale
+[If PASS: brief confirmation that criteria met and no blocking issues]
+[If ISSUES: list issues that must be resolved before proceeding]
+```
+
+**Gate behavior**:
+- PASS: Orchestrator proceeds to next milestone
+- ISSUES: Orchestrator presents issues to user, resolves, re-runs milestone-review
 
 ### Factored Verification Protocol (post-implementation mode)
 
