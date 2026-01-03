@@ -67,7 +67,19 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "",
                 "---",
                 "",
-                "VERIFY 2: Diff Format Compliance",
+                "VERIFY 2 (CRITICAL): Code Changes Presence",
+                "",
+                "STOP CHECK: For EACH implementation milestone:",
+                "  - Does it contain diff blocks or code snippets?",
+                "  - If NO and milestone creates/modifies source files: STOP.",
+                "    Add code changes before proceeding.",
+                "",
+                "Implementation milestones WITHOUT code cannot be approved.",
+                "Only documentation milestones (100% .md/.rst files) may skip code.",
+                "",
+                "---",
+                "",
+                "VERIFY 3: Diff Format Compliance",
                 "",
                 "Re-read resources/diff-format.md before writing any code changes.",
                 "",
@@ -83,7 +95,7 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "",
                 "---",
                 "",
-                "VERIFY 3: Milestone Specification",
+                "VERIFY 4: Milestone Specification",
                 "",
                 "  For EACH milestone:",
                 "  - File paths exact?",
@@ -95,7 +107,7 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "",
                 "---",
                 "",
-                "VERIFY 4: Documentation Milestone",
+                "VERIFY 5: Documentation Milestone",
                 "",
                 "  - Documentation milestone exists?",
                 "  - CLAUDE.md uses TABULAR INDEX format?",
@@ -103,7 +115,7 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "",
                 "---",
                 "",
-                "VERIFY 5: Comment Hygiene",
+                "VERIFY 6: Comment Hygiene",
                 "",
                 "Comments will be transcribed VERBATIM. Write in TIMELESS PRESENT.",
                 "",
@@ -115,7 +127,7 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "",
                 "---",
                 "",
-                "VERIFY 6: Assumption Audit Complete",
+                "VERIFY 7: Assumption Audit Complete",
                 "",
                 "  - Step 2 assumption audit completed (all categories)?",
                 "  - Step 3 decision classification table written?",
@@ -643,6 +655,7 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
 
 
 def get_review_step_guidance(step_number: int, total_steps: int,
+                              plan_file: str,
                               qr_iteration: int = 1, fixing_issues: bool = False) -> dict:
     """Returns guidance for review phase steps.
 
@@ -658,6 +671,13 @@ def get_review_step_guidance(step_number: int, total_steps: int,
       1. STATE BANNER: Shows iteration count and mode
       2. STOP CONDITION: Explicit blocker
       3. RE-VERIFICATION MODE: Different prompts when fixing issues
+
+    Args:
+        step_number: Current step (1-3)
+        total_steps: Total steps (typically 3)
+        plan_file: Path to the plan file being reviewed
+        qr_iteration: Loop iteration for QR verification (1=initial, 2+=re-verify)
+        fixing_issues: Whether this is a re-run after fixing QR issues
     """
     is_complete = step_number >= total_steps
     next_step = step_number + 1
@@ -717,7 +737,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "",
                 "  <delegation>",
                 "    <mode>plan-completeness</mode>",
-                "    <plan_source>[path to plan file]</plan_source>",
+                f"    <plan_source>{plan_file}</plan_source>",
                 "    <task>",
                 "      1. Read ## Planning Context section",
                 "      2. Write CONTEXT FILTER (decisions, rejected alts, risks)",
@@ -727,7 +747,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "      6. Verify plan structure (milestones have acceptance criteria)",
                 "    </task>",
                 "    <expected_output>",
-                "      Verdict: PASS | NEEDS_CHANGES",
+                "      Verdict: PASS | ISSUES",
                 "    </expected_output>",
                 "  </delegation>",
                 "",
@@ -741,7 +761,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "",
                 "  <delegation>",
                 "    <mode>plan-code</mode>",
-                "    <plan_source>[path to plan file]</plan_source>",
+                f"    <plan_source>{plan_file}</plan_source>",
                 "    <task>",
                 "      1. Read ## Planning Context section",
                 "      2. Write CONTEXT FILTER (decisions, rejected alts, risks)",
@@ -753,7 +773,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "      8. Check for anticipated structural issues",
                 "    </task>",
                 "    <expected_output>",
-                "      Verdict: PASS | NEEDS_CHANGES",
+                "      Verdict: PASS | ISSUES",
                 "    </expected_output>",
                 "  </delegation>",
                 "",
@@ -767,7 +787,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "<pre_tw_gate>",
                 "GATE: Both QR-Completeness AND QR-Code must PASS before TW runs.",
                 "",
-                "If either returns NEEDS_CHANGES:",
+                "If either returns ISSUES:",
                 "  1. Fix the specific issues identified in the plan file",
                 "  2. Re-invoke this script with --qr-iteration incremented (command in NEXT section)",
                 "  3. Both QR agents run again on the fixed plan",
@@ -780,22 +800,27 @@ def get_review_step_guidance(step_number: int, total_steps: int,
             "next": (
                 "After BOTH QR agents complete:\n\n"
                 "  Both PASS -> Proceed to step 2\n"
-                "  Either NEEDS_CHANGES -> Fix issues, then RE-VERIFY (step 1 again)\n\n"
-                f"RESTART COMMAND (if either QR returns NEEDS_CHANGES):\n"
-                f"  python3 planner.py --phase review --step-number 1 --total-steps 3 \\\n"
+                "  Either ISSUES -> Fix issues, then RE-VERIFY (step 1 again)\n\n"
+                f"RESTART COMMAND (if either QR returns ISSUES):\n"
+                f'  python3 planner.py --phase review --plan-file "{plan_file}" \\\n'
+                f"    --step-number 1 --total-steps 3 \\\n"
                 f"    --qr-iteration {qr_iteration + 1} --fixing-issues \\\n"
                 f'    --thoughts "Fixed: [list issues fixed]. Re-verifying..."\n\n'
                 "  CRITICAL: You MUST re-run QR after fixing issues.\n"
                 "  Skipping re-verification is PROHIBITED.\n\n"
                 "SUCCESS COMMAND (ONLY after both PASS):\n"
-                "  python3 planner.py --phase review --step-number 2 --total-steps 3 \\\n"
-                '    --thoughts "QR-Completeness and QR-Code passed, proceeding to TW"'
+                f'  python3 planner.py --phase review --plan-file "{plan_file}" \\\n'
+                f'    --step-number 2 --total-steps 3 \\\n'
+                f'    --thoughts "QR-Completeness and QR-Code passed, proceeding to TW"'
             )
         }
 
     if step_number == 2:
+        # Three Pillars: STATE BANNER when re-running TW after QR-Docs feedback
+        state_banner = get_qr_state_banner("TW SCRUB", qr_iteration, fixing_issues) if qr_iteration > 1 else []
+
         return {
-            "actions": rule_0_block + [
+            "actions": state_banner + rule_0_block + [
                 "",
                 "<review_step_2_tw_scrub>",
                 "STEP 2: Documentation enrichment by Technical Writer.",
@@ -811,7 +836,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "",
                 "  <delegation>",
                 "    <mode>plan-scrub</mode>",
-                "    <plan_source>[path to plan file]</plan_source>",
+                f"    <plan_source>{plan_file}</plan_source>",
                 "    <scope>[OPTIONAL: If re-reviewing after QR-Docs feedback, specify",
                 "      which milestones/sections to focus on.]</scope>",
                 "    <task>",
@@ -829,8 +854,10 @@ def get_review_step_guidance(step_number: int, total_steps: int,
             ],
             "next": (
                 "After TW completes, invoke step 3:\n"
-                "  python3 planner.py --phase review --step-number 3 --total-steps 3 \\\n"
-                '    --thoughts "TW scrub complete, [summary of changes]"'
+                f'  python3 planner.py --phase review --plan-file "{plan_file}" \\\n'
+                f'    --step-number 3 --total-steps 3 \\\n'
+                f"    --qr-iteration {qr_iteration} \\\n"
+                f'    --thoughts "TW scrub complete, [summary of changes]"'
             )
         }
 
@@ -855,7 +882,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "",
                 "  <delegation>",
                 "    <mode>plan-docs</mode>",
-                "    <plan_source>[path to plan file]</plan_source>",
+                f"    <plan_source>{plan_file}</plan_source>",
                 "    <scope>[OPTIONAL: If re-reviewing, specify changed sections.]</scope>",
                 "    <task>",
                 "      1. Check all comments for temporal contamination (five questions)",
@@ -864,7 +891,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "      4. Verify coverage of non-obvious code elements",
                 "    </task>",
                 "    <expected_output>",
-                "      Verdict: PASS | NEEDS_CHANGES",
+                "      Verdict: PASS | ISSUES",
                 "    </expected_output>",
                 "  </delegation>",
                 "",
@@ -879,7 +906,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "Unlike step 1, QR-Docs failures restart to step 2 (TW) only.",
                 "This is because doc issues don't require plan restructuring.",
                 "",
-                "If QR-Docs returns NEEDS_CHANGES:",
+                "If QR-Docs returns ISSUES:",
                 "  1. Note the specific doc issues",
                 "  2. Restart from step 2 with <scope> specifying affected sections",
                 "  3. TW fixes the documentation issues",
@@ -891,13 +918,16 @@ def get_review_step_guidance(step_number: int, total_steps: int,
             ],
             "next": (
                 "After QR-Docs returns verdict:\n\n"
-                "  NEEDS_CHANGES -> Restart from step 2 (TW), then re-verify at step 3\n"
+                "  ISSUES -> Restart from step 2 (TW), then re-verify at step 3\n"
                 "  PASS -> Review phase complete, plan ready for execution\n\n"
-                "Command to restart TW (if NEEDS_CHANGES):\n"
-                "  python3 planner.py --phase review --step-number 2 --total-steps 3 \\\n"
-                '    --thoughts "QR-Docs feedback: [issues]. Restarting TW."\n\n'
+                "Command to restart TW (if ISSUES):\n"
+                f'  python3 planner.py --phase review --plan-file "{plan_file}" \\\n'
+                f'    --step-number 2 --total-steps 3 \\\n'
+                f"    --qr-iteration {qr_iteration + 1} \\\n"
+                f'    --thoughts "QR-Docs feedback: [issues]. Restarting TW."\n\n'
                 "THEN after TW completes, RE-VERIFY with:\n"
-                f"  python3 planner.py --phase review --step-number 3 --total-steps 3 \\\n"
+                f'  python3 planner.py --phase review --plan-file "{plan_file}" \\\n'
+                f"    --step-number 3 --total-steps 3 \\\n"
                 f"    --qr-iteration {qr_iteration + 1} --fixing-issues \\\n"
                 f'    --thoughts "TW fixed doc issues. Re-verifying..."\n\n'
                 "  CRITICAL: You MUST re-run QR-Docs after TW fixes issues.\n"
@@ -949,10 +979,12 @@ Examples:
   python3 planner.py --step-number 2 --total-steps 4 --thoughts "New constraint invalidates approach, reconsidering..."
 
   # Start review (after plan written) - 3 steps: QR (Completeness+Code), TW, QR-Docs
-  python3 planner.py --phase review --step-number 1 --total-steps 3 --thoughts "Plan at plans/auth.md"
+  python3 planner.py --phase review --plan-file plans/auth.md \\
+    --step-number 1 --total-steps 3 --thoughts "Starting review..."
 
   # Re-verify after fixing QR issues (Three Pillars Pattern)
-  python3 planner.py --phase review --step-number 1 --total-steps 3 \\
+  python3 planner.py --phase review --plan-file plans/auth.md \\
+    --step-number 1 --total-steps 3 \\
     --qr-iteration 2 --fixing-issues --thoughts "Fixed issues, re-verifying..."
 """
     )
@@ -963,6 +995,8 @@ Examples:
     parser.add_argument("--step-number", type=int, required=True)
     parser.add_argument("--total-steps", type=int, required=True)
     parser.add_argument("--thoughts", type=str, required=True)
+    parser.add_argument("--plan-file", type=str, default=None,
+                        help="Path to plan file (required for review phase)")
     # Three Pillars Pattern flags for QR verification loops
     parser.add_argument("--qr-iteration", type=int, default=1,
                         help="QR loop iteration (1=initial, 2+=re-verification)")
@@ -980,8 +1014,13 @@ Examples:
         guidance = get_planning_step_guidance(args.step_number, args.total_steps)
         phase_label = "PLANNING"
     else:
+        # Review phase requires plan file
+        if not args.plan_file:
+            print("Error: --plan-file is required for review phase", file=sys.stderr)
+            sys.exit(1)
         guidance = get_review_step_guidance(
             args.step_number, args.total_steps,
+            plan_file=args.plan_file,
             qr_iteration=args.qr_iteration,
             fixing_issues=args.fixing_issues
         )

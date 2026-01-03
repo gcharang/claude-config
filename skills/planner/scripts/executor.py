@@ -303,8 +303,9 @@ def get_step_3_guidance(plan_file: str, thoughts: str) -> dict:
         ],
         "next": (
             f"Start milestone execution with execute-milestone.py:\n\n"
-            f'  python3 execute-milestone.py --milestone 1 --total-milestones {total_milestones} '
-            f'--step 1 --thoughts "Starting milestone 1..."\n\n'
+            f'  python3 execute-milestone.py --plan-file "{plan_file}" \\\n'
+            f'    --milestone 1 --total-milestones {total_milestones} \\\n'
+            f'    --step 1 --thoughts "Starting milestone 1..."\n\n'
             "The execute-milestone.py script will:\n"
             "  - Guide you through implement -> QR-gate -> proceed for each milestone\n"
             "  - Return you to executor.py step 4 after all milestones complete"

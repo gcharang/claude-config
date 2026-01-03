@@ -165,11 +165,13 @@ they compound across milestones.
 criteria and introduces no production risks. Gate the next milestone.
 
 **Input**: You receive:
+
 - Plan file path
 - Milestone number just completed
 - List of files modified in this milestone
 
 **Scope constraints**:
+
 - Review ONLY files modified in this milestone
 - Check ONLY this milestone's acceptance criteria
 - Apply RULE 0 (production reliability) + RULE 1 (project conformance)
@@ -212,6 +214,7 @@ The holistic post-implementation review catches these with full context.
 ```
 
 **Gate behavior**:
+
 - PASS: Orchestrator proceeds to next milestone
 - ISSUES: Orchestrator presents issues to user, resolves, re-runs milestone-review
 
@@ -633,6 +636,29 @@ Verify the plan document has required elements:
 | Planning Context        | Decision Log, Constraints, Known Risks present | Flag: "Incomplete Planning Context" |
 | Documentation milestone | Plan includes doc deliverables                 | Flag: "Add documentation milestone" |
 
+### Code Presence Validation
+
+For EACH milestone, answer using OPEN question (not yes/no):
+
+"What code changes does Milestone N contain?"
+
+| Answer Pattern                                              | Action                           |
+| ----------------------------------------------------------- | -------------------------------- |
+| Diff block present                                          | PASS - proceed to code review    |
+| "Skip reason: documentation-only" + all files .md/.rst/.txt | PASS                             |
+| No code AND no skip reason                                  | SHOULD_FIX: Missing code changes |
+| Skip reason for milestone with source files                 | SHOULD_FIX: Invalid skip reason  |
+
+Flag format:
+
+```
+### RULE 1 SHOULD_FIX: Missing code changes
+- **Location**: Milestone N
+- **Issue**: Milestone modifies source files but contains no code changes
+- **Failure Mode / Rationale**: Developer cannot implement without code diffs
+- **Suggested Fix**: Add diff blocks showing implementation, or mark as documentation-only
+```
+
 ---
 
 ## Plan Code Mode (plan-code)
@@ -650,7 +676,11 @@ BEFORE reviewing proposed code changes, you MUST read the actual codebase:
 
 1. For each file referenced in plan milestones:
    - Read the current file content
-   - Verify diff context lines match reality (line numbers may drift)
+   - STOP CHECK: Does the milestone contain diff blocks?
+     - If NO diffs AND milestone creates/modifies source files (.go, .py, .js, etc.):
+       Flag SHOULD_FIX: "Milestone N references [files] but contains no code.
+       Cannot verify implementation without code changes."
+   - If diffs present: Verify diff context lines match reality (line numbers may drift)
    - Note existing patterns, conventions, error handling
 
 2. For each new file proposed:

@@ -223,6 +223,19 @@ Example: "Added mutex to fix race" -> "Mutex serializes concurrent access"
 
 </temporal_contamination>
 
+2.5. **Code presence check** - Before scrubbing code comments, verify code exists:
+
+- Scan each implementation milestone for diff blocks or code snippets
+- If an implementation milestone (modifies source files) has NO code:
+
+   <blocked>
+   <issue>NO_CODE_TO_SCRUB</issue>
+   <context>Milestone N is implementation but contains no code</context>
+   <needed>Return to planner to add code changes before TW scrub</needed>
+   </blocked>
+
+Do NOT proceed with scrubbing if implementation milestones lack code.
+
 3. **Read the entire plan** - With extracted context in mind, identify:
    - Sections that state WHAT but lack WHY (these need enrichment)
    - Code snippets with non-obvious logic (these need comments)

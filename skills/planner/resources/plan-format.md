@@ -143,6 +143,9 @@ Example: HTTP Request --> Validate --> Transform --> Store --> Response | v Log
 
 ## Milestones
 
+Milestone numbering starts at 1 within each plan. Use sequential integers (1, 2, 3),
+not phase-prefixed numbers (2.1, 3.1) unless explicitly managing multi-phase plans.
+
 ### Milestone 1: [Name]
 
 **Files**: [exact paths - e.g., src/auth/handler.py, not "auth files"]
@@ -171,7 +174,13 @@ Example: HTTP Request --> Validate --> Transform --> Store --> Response | v Log
 Skip tests when: user explicitly stated no tests, OR milestone is documentation-only,
 OR project docs prohibit tests for this component. State skip reason explicitly.
 
-**Code Changes** (for non-trivial logic, use unified diff format):
+**Code Changes** (REQUIRED for implementation milestones):
+
+Implementation milestones MUST include unified diff format showing actual code.
+
+Skip code ONLY for documentation-only milestones where ALL files have extensions:
+.md, .rst, .txt, or are CLAUDE.md files. State skip reason explicitly:
+"Skip reason: documentation-only milestone (all files are .md/.rst/.txt)"
 
 See `resources/diff-format.md` for specification.
 
