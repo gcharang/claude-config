@@ -113,11 +113,37 @@ CATEGORY K: IMPLICIT CONTRACT INTEGRITY
   Detection method: Parse names semantically, infer promise, compare to behavior
   Note: LLMs are particularly susceptible to being misled by names
 
+CATEGORY L: DANGLING SPECIFICATION REFERENCES
+  - Entity A references entity B, but B is never defined anywhere
+  - FK references table that has no schema (e.g., api_keys.tenant_id but no tenants table)
+  - UI/API mentions endpoints or types that are not specified
+  - Schema field references enum or type with no definition
+  Detection method:
+    1. Extract DEFINED entities (tables, APIs, types, enums) with locations
+    2. Extract REFERENCED entities (FKs, type usages, API calls) with locations
+    3. Report: referenced but not defined = dangling reference
+  Source pairs: Any specification -> Cross-file entity registry
+  Note: Distinct from I (code-without-docs). L is SPEC-without-SPEC.
+
+CATEGORY M: INCOMPLETE SPECIFICATION DEFINITIONS
+  - Entity is defined but missing components required for implementation
+  - Table schema documented but missing fields that other docs reference
+  - API endpoint defined but missing request/response schema
+  - Proto/schema has fields but lacks types others expect
+  Detection method:
+    1. For each defined entity, extract CLAIMED components
+    2. Cross-reference with EXPECTED components from consuming docs
+    3. Report: expected but not claimed = incomplete definition
+  Source pairs: Definition document <-> Consumer documents
+  Example: rules table shows (id, name, enabled) but API doc expects 'expression' field
+
 SELECTION RULES:
 - Select ALL categories relevant to Step 1 info sources
 - Typical selection is 5-8 dimensions
 - G, H, I, K are especially relevant for LLM-assisted coding
 - J requires cross-referencing multiple claims (more expensive)
+- L, M are critical for design-phase docs and specs-to-be-implemented
+  Select when docs describe systems that need to be built
 """
 
 
@@ -211,6 +237,25 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "  2. Search for keywords related to your dimension",
                 "  3. Check configs, schemas, type definitions",
                 "  4. Look at tests for behavioral claims",
+                "",
+                "FOR OMISSION DIMENSIONS (L, M):",
+                "  Before searching for conflicts, BUILD AN ENTITY REGISTRY:",
+                "",
+                "  5. Extract DEFINED entities from each doc:",
+                "     - Database tables (CREATE TABLE, schema blocks)",
+                "     - API endpoints (route definitions, endpoint specs)",
+                "     - Types/enums (type definitions, enum declarations)",
+                "     Record: entity_name, entity_type, file:line, components[]",
+                "",
+                "  6. Extract REFERENCED entities from each doc:",
+                "     - FK patterns (table_id -> implies 'table' entity)",
+                "     - Type usages (returns UserResponse -> implies UserResponse)",
+                "     - API calls (calls /api/users -> implies endpoint)",
+                "     Record: entity_name, reference_type, file:line",
+                "",
+                "  7. Cross-reference:",
+                "     - REFERENCED but not DEFINED -> Category L finding",
+                "     - DEFINED but missing expected components -> Category M finding",
                 "",
                 "FOR EACH POTENTIAL FINDING, note:",
                 "  - Location A (file:line)",
@@ -318,7 +363,12 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "2. SORT: Order by score descending",
                 "",
                 "Output: C1, C2, ... with location, summary, score, DIMENSION.",
-                "Pass ALL scored candidates to verification.",
+                "",
+                "IMPORTANT: Pass ALL scored candidates to verification.",
+                "  - Do NOT limit to 10 or any arbitrary number",
+                "  - If exploration found 25 candidates, pass all 25",
+                "  - Step 9 will launch agents for every candidate",
+                "  - System handles batching automatically",
                 "",
                 "NOTE: Deduplication happens AFTER Sonnet verification (step 12)",
                 "to leverage richer analysis for merge decisions.",
@@ -332,7 +382,14 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "DEEP-DIVE DISPATCH",
                 "",
                 "Launch Task agents (subagent_type='general-purpose', model='sonnet')",
-                "to verify each candidate. Launch ALL in a SINGLE message for parallelism.",
+                "to verify each candidate.",
+                "",
+                "CRITICAL: Launch ALL candidates in a SINGLE message.",
+                "  - Do NOT self-limit to 10 or any other number",
+                "  - If you have 15 candidates, launch 15 agents",
+                "  - If you have 30 candidates, launch 30 agents",
+                "  - Claude Code automatically queues and batches execution",
+                "  - All agents will complete before step 10 proceeds",
                 "",
                 "Sub-agents will invoke THIS SCRIPT to get their instructions.",
                 "",
@@ -411,10 +468,21 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "     - Active policy being violated?",
                 "       -> TRUE_INCOHERENCE",
                 "",
+                "   FOR OMISSION DIMENSIONS (L, M):",
+                "     - Is the referenced entity defined ANYWHERE in the doc corpus?",
+                "     - If defined, does definition include the referenced component?",
+                "     - Could this be implicit/assumed? (e.g., standard library type)",
+                "     - Would an implementer be blocked by this omission?",
+                "     -> If referenced entity not defined: SPECIFICATION_GAP (dangling)",
+                "     -> If defined but incomplete: SPECIFICATION_GAP (incomplete)",
+                "",
                 "5. DETERMINE VERDICT",
-                "   - TRUE_INCOHERENCE: genuinely conflicting claims",
+                "   - TRUE_INCOHERENCE: genuinely conflicting claims (A says X, B says not-X)",
                 "   - SIGNIFICANT_AMBIGUITY: could confuse readers, clarification needed",
-                "   - DOCUMENTATION_GAP: missing info that should exist",
+                "   - DOCUMENTATION_GAP: missing info that should exist (code without docs)",
+                "   - SPECIFICATION_GAP: entity referenced but not defined, or defined incomplete",
+                "     * Dangling reference: spec references entity not defined anywhere",
+                "     * Incomplete definition: entity defined but missing expected components",
                 "   - FALSE_POSITIVE: not actually a problem",
             ],
             "next": "When done exploring, invoke step 11 with findings in --thoughts"
@@ -432,7 +500,7 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "VERIFICATION RESULT",
                 "",
                 "CANDIDATE: {id}",
-                "VERDICT: TRUE_INCOHERENCE | SIGNIFICANT_AMBIGUITY | DOCUMENTATION_GAP | FALSE_POSITIVE",
+                "VERDICT: TRUE_INCOHERENCE | SIGNIFICANT_AMBIGUITY | DOCUMENTATION_GAP | SPECIFICATION_GAP | FALSE_POSITIVE",
                 "",
                 "SOURCE A:",
                 "  File: [path]",
@@ -465,6 +533,7 @@ def get_step_guidance(step_number, total_steps, script_path=None):
                 "  - TRUE_INCOHERENCE count",
                 "  - SIGNIFICANT_AMBIGUITY count",
                 "  - DOCUMENTATION_GAP count",
+                "  - SPECIFICATION_GAP count",
                 "  - FALSE_POSITIVE count",
                 "  - By severity (critical/high/medium/low)",
                 "",
