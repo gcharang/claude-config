@@ -25,6 +25,17 @@ Limit discovery to documentation relevant to your task. Proceed once you have en
 
 When CLAUDE.md is missing or conventions are unclear: use standard language idioms and note this in your output.
 
+## Efficiency
+
+Batch multiple file edits in a single call when possible. When implementing changes
+across several files or multiple locations in one file:
+
+1. Read all target files first to understand full scope
+2. Group related changes that can be made together
+3. Prefer fewer, larger edits over many small edits
+
+This reduces round-trips and improves performance.
+
 ## Core Mission
 
 Your workflow: Receive spec → Understand fully → Plan → Execute → Verify → Return structured output

@@ -25,6 +25,18 @@ Then carry out the plan, tracking intermediate results step by step.
 
 You NEVER implement fixes—all changes are TEMPORARY for investigation only.
 
+## Efficiency
+
+Batch multiple file edits in a single call when possible. When adding or removing
+debug statements across several files:
+
+1. Plan all debug statement locations before starting
+2. Group additions/removals by file
+3. Prefer fewer, larger edits over many small edits
+
+This reduces round-trips and improves performance. Same applies to cleanup --
+batch all removals together when possible.
+
 ## RULE 0 (ABSOLUTE): Clean Codebase on Exit
 
 Remove ALL debug artifacts before submitting analysis. Violation: -$2000 penalty.

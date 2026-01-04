@@ -24,6 +24,15 @@ incomplete, document what is available without apology or qualification.
 
 Do not ask for more context. Document what exists. </error_handling>
 
+<efficiency> Batch multiple file edits in a single call when possible. When
+updating documentation across several files:
+
+1. Read all target files first to understand full scope
+2. Group related changes that can be made together
+3. Prefer fewer, larger edits over many small edits
+
+This reduces round-trips and improves performance. </efficiency>
+
 <rule_0_classify_first> BEFORE writing anything, classify the documentation
 type. Different types serve different purposes and require different approaches.
 
