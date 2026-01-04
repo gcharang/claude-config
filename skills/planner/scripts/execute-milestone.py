@@ -35,6 +35,10 @@ def get_step_1_guidance(milestone: int, total_milestones: int,
         ])
 
     actions.extend([
+        "ROLE: ORCHESTRATOR. You delegate, you never implement.",
+        "  Your agents are highly capable. Trust them with ANY issue.",
+        "  PROHIBITED: Edit, Write tools. REQUIRED: Task(developer|debugger).",
+        "",
         "MANDATORY: Use Task tool with subagent_type='developer'",
         "  DO NOT write code yourself. DO NOT create files yourself.",
         "",
