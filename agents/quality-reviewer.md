@@ -121,12 +121,12 @@ REQUIRED before any finding:
 
 Before reviewing a milestone, check for **Flags** field and adjust focus:
 
-| Flag | Action |
-|------|--------|
-| `error-handling` | Enumerate all error paths, verify recovery strategies, check for silent failures |
-| `conformance` | Verify pattern alignment, check naming conventions, validate against project docs |
-| `security` | Check authentication/authorization, injection vectors, data exposure, secrets |
-| `performance` | Check hot path allocations, algorithmic complexity, resource lifecycle |
+| Flag             | Action                                                                            |
+| ---------------- | --------------------------------------------------------------------------------- |
+| `error-handling` | Enumerate all error paths, verify recovery strategies, check for silent failures  |
+| `conformance`    | Verify pattern alignment, check naming conventions, validate against project docs |
+| `security`       | Check authentication/authorization, injection vectors, data exposure, secrets     |
+| `performance`    | Check hot path allocations, algorithmic complexity, resource lifecycle            |
 
 Flags are additive--increase scrutiny in flagged areas without reducing other checks.
 
@@ -818,6 +818,18 @@ Identify structural risks NOT addressed in `## Planning Context`:
 | **Parallel implementation** | Plan creates new abstraction instead of extending existing one |
 | **Missing error strategy**  | Plan describes happy path without failure modes                |
 | **Testing gap**             | Plan doesn't mention how new functionality will be tested      |
+| **Type mapping mismatch**   | Struct fields with `db:` tags map to incompatible SQL types    |
+
+### Type Mapping Verification (database code only)
+
+Open question: "What SQL type does each struct field map to? Does the driver auto-convert?"
+
+Common mismatches that cause silent corruption or runtime panics:
+
+- `time.Time` <- SQLite `INTEGER`: Requires custom Scanner (driver returns int64)
+- `time.Time` <- Any DB: Timezone handling varies by driver configuration
+
+Flag as RULE 0 HIGH if type mismatch detected in proposed code.
 
 ### RULE 0/1/2 Application to Proposed Code
 

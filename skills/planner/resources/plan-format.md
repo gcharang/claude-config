@@ -209,9 +209,10 @@ OR project docs prohibit tests for this component. State skip reason explicitly.
 
 Implementation milestones MUST include unified diff format showing actual code.
 
-Skip code ONLY for documentation-only milestones where ALL files have extensions:
-.md, .rst, .txt, or are CLAUDE.md files. State skip reason explicitly:
-"Skip reason: documentation-only milestone (all files are .md/.rst/.txt)"
+Documentation-only milestones (ALL files are .md, .rst, .txt, or CLAUDE.md):
+- Code Changes section states: "Documentation milestones have no code changes."
+- Milestone MUST have `Delegated to:` field (typically `@agent-technical-writer`)
+- Do NOT write "Skip reason" -- documentation milestones are executed by TW, not skipped
 
 See `resources/diff-format.md` for specification.
 
@@ -232,6 +233,10 @@ See `resources/diff-format.md` for specification.
 ### Milestone N: ...
 
 ### Milestone [Last]: Documentation
+
+**Delegated to**: @agent-technical-writer (mode: post-implementation)
+
+**Source**: `## Invisible Knowledge` section of this plan
 
 **Files**:
 
