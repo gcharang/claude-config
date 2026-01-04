@@ -238,10 +238,10 @@ For any CLAUDE.md files in the modified files list, verify format compliance:
 | Check               | PASS                                 | FAIL (RULE 1 HIGH)                              |
 | ------------------- | ------------------------------------ | ----------------------------------------------- |
 | Format              | Tabular index with WHAT/WHEN columns | Prose sections, bullet lists, narrative         |
-| Budget              | ~200 tokens                          | Exceeds budget (indicates prose)                |
+| Size                | As small as possible                 | Large (indicates prose that belongs elsewhere)  |
 | Overview            | One sentence max                     | Multiple sentences or paragraphs                |
 | Forbidden sections  | None present                         | "Key Invariants", "Dependencies", "Constraints" |
-| Invisible Knowledge | In README.md                         | Embedded in CLAUDE.md instead of README.md      |
+| Invisible Knowledge | In README.md (code-adjacent)         | Embedded in CLAUDE.md instead of README.md      |
 
 CLAUDE.md format violations are RULE 1 HIGH: they violate the technical-writer
 specification.
@@ -259,52 +259,66 @@ Example:
 
 ### Invisible Knowledge Audit (post-implementation)
 
-Verify that critical knowledge from the plan is captured in the codebase.
+Verify that critical knowledge from the plan is captured in the codebase **close
+to the implementation**.
 
 **Input**: Plan file path (contains Invisible Knowledge section)
+
+**Proximity principle**: Invisible knowledge must be documented CLOSE to the
+code it describes. External authoritative sources (doc/ directories, wikis)
+do NOT count as "documented" -- knowledge must be in code-adjacent README.md
+or code comments.
 
 **Process**:
 
 1. Read the plan's Invisible Knowledge section (Architecture, Data Flow,
    Tradeoffs, Invariants, Why This Structure)
-2. For EACH knowledge item, ask OPEN question: "Where in the codebase is
+2. For EACH knowledge item, ask OPEN question: "Where CLOSE TO THE CODE is
    [knowledge item] documented?"
-3. Search: README.md files, module docstrings, code comments, CLAUDE.md entries
+3. Search: README.md in same directory as code, module docstrings, code comments
+4. External sources (doc/, wikis) do NOT satisfy the proximity requirement
 
-**Acceptable documentation locations** (knowledge can be in ANY of these):
+**Acceptable documentation locations** (must be code-adjacent):
 
-- README.md in relevant directory (architecture, data flow diagrams)
+- README.md in SAME DIRECTORY as affected code (architecture, data flow)
 - Module-level docstrings (top of file, explaining file purpose)
 - Inline code comments explaining WHY (tradeoffs, invariants)
-- CLAUDE.md index entries (what files contain, when to read)
+- CLAUDE.md index entries ONLY for navigation (what files contain, when to read)
+
+**NOT acceptable** (violates proximity):
+
+- README.md in separate doc/ directory
+- External wikis or documentation systems
+- References to external sources without local summary
 
 **Output format**:
 
-| Knowledge Item                            | Documented In            | Status     |
-| ----------------------------------------- | ------------------------ | ---------- |
-| Architecture diagram                      | internal/rules/README.md | FOUND      |
-| Invariant: ETAG changes when rules change | etag.go:45 comment       | FOUND      |
-| Tradeoff: dotsql vs ORM                   | NOT FOUND                | SHOULD_FIX |
+| Knowledge Item                            | Documented In            | Proximity | Status     |
+| ----------------------------------------- | ------------------------ | --------- | ---------- |
+| Architecture diagram                      | internal/rules/README.md | YES       | FOUND      |
+| Invariant: ETAG changes when rules change | etag.go:45 comment       | YES       | FOUND      |
+| Tradeoff: dotsql vs ORM                   | doc/03-data/README.md    | NO        | SHOULD_FIX |
+| Performance decision                      | NOT FOUND                | N/A       | SHOULD_FIX |
 
-**Flag format for missing knowledge**:
+**Flag format for missing or non-proximate knowledge**:
 
 ```
-### RULE 1 SHOULD_FIX: Invisible knowledge not documented
+### RULE 1 SHOULD_FIX: Invisible knowledge not documented close to code
 - **Location**: Plan Invisible Knowledge section: [item]
-- **Issue**: Critical design rationale not captured in codebase
-- **Failure Mode / Rationale**: Future maintainers lack context for design decisions
-- **Suggested Fix**: Add to [most appropriate location based on knowledge type]
+- **Issue**: Critical design rationale not captured near implementation
+- **Failure Mode / Rationale**: Knowledge in external sources is not discoverable when reading code
+- **Suggested Fix**: Add to README.md in [same directory as code] or code comment at [decision point]
 ```
 
 **Knowledge type to location mapping**:
 
-| Knowledge Type        | Best Location                         |
-| --------------------- | ------------------------------------- |
-| Architecture diagrams | README.md in component directory      |
-| Data flow             | README.md or module docstring         |
-| Tradeoffs             | Code comment where decision manifests |
-| Invariants            | Code comment at enforcement point     |
-| Why This Structure    | README.md or CLAUDE.md                |
+| Knowledge Type        | Required Location                               |
+| --------------------- | ----------------------------------------------- |
+| Architecture diagrams | README.md in SAME DIRECTORY as component code   |
+| Data flow             | README.md in SAME DIRECTORY or module docstring |
+| Tradeoffs             | Code comment where decision manifests           |
+| Invariants            | Code comment at enforcement point               |
+| Why This Structure    | README.md in SAME DIRECTORY                     |
 
 ---
 
@@ -822,24 +836,28 @@ high-quality:
 | WHY-not-WHAT           | Comments explain rationale, not code mechanics    | List comments that restate what code does                    |
 | Coverage               | Non-obvious struct fields/functions have comments | List undocumented non-obvious elements                       |
 | Function docstrings    | ALL functions have docstrings (see below)         | List functions missing docstrings                            |
-| CLAUDE.md format       | Tabular index only, ~200 tokens, no prose         | List prose sections that should be in README.md              |
-| Invisible Knowledge    | Maps to README.md, not embedded in CLAUDE.md      | List Invisible Knowledge embedded in wrong file              |
+| CLAUDE.md format       | Pure tabular index, as small as possible          | List prose sections that should be in README.md              |
+| Invisible Knowledge    | In code-adjacent README.md, not external sources  | List Invisible Knowledge not close to implementation         |
 
 ### CLAUDE.md Format Verification (CRITICAL)
 
 CLAUDE.md must be a lightweight index only. Verify the documentation milestone:
 
-| Check               | PASS                                         | SHOULD_FIX (RULE 1 HIGH)                             |
-| ------------------- | -------------------------------------------- | ---------------------------------------------------- |
-| Format              | Tabular index with WHAT/WHEN columns         | Prose sections, bullet lists, narrative              |
-| Budget              | ~200 tokens                                  | Exceeds budget (indicates prose leakage)             |
-| Overview            | One sentence max                             | Multiple sentences or paragraphs                     |
-| Forbidden sections  | None present                                 | "Key Invariants", "Dependencies", "Constraints", etc |
-| Invisible Knowledge | In README.md (or pending README.md creation) | Embedded in CLAUDE.md instead                        |
+| Check               | PASS                                 | SHOULD_FIX (RULE 1 HIGH)                             |
+| ------------------- | ------------------------------------ | ---------------------------------------------------- |
+| Format              | Tabular index with WHAT/WHEN columns | Prose sections, bullet lists, narrative              |
+| Size                | As small as possible                 | Large (indicates prose that belongs elsewhere)       |
+| Overview            | One sentence max                     | Multiple sentences or paragraphs                     |
+| Forbidden sections  | None present                         | "Key Invariants", "Dependencies", "Constraints", etc |
+| Invisible Knowledge | In code-adjacent README.md           | Embedded in CLAUDE.md or external only               |
 
 **Why RULE 1 HIGH**: CLAUDE.md format violations mean prose that should be in
 README.md is in the wrong place. This is a conformance issue (violates the
 CLAUDE.md = lightweight index rule), not style preference.
+
+**Proximity requirement**: Invisible Knowledge must be in README.md in the SAME
+DIRECTORY as the code it describes. External authoritative sources (doc/, wikis)
+do not satisfy this requirement.
 
 **Stub directory exception**: Directories containing only `.gitkeep` or no code
 files do NOT require CLAUDE.md until code is added. Do not flag missing CLAUDE.md
@@ -1135,8 +1153,9 @@ Produce ONLY this structure. No preamble. No additional commentary.
 - [ ] I checked all code comments for temporal contamination (five questions)
 - [ ] I verified no hidden baselines in comments
 - [ ] I verified comments explain WHY, not WHAT
-- [ ] I verified CLAUDE.md format (tabular index only, ~200 tokens, no prose)
-- [ ] I verified Invisible Knowledge maps to README.md, not CLAUDE.md
+- [ ] I verified CLAUDE.md format (pure tabular index, as small as possible, no prose)
+- [ ] I verified Invisible Knowledge maps to code-adjacent README.md
+- [ ] I verified Invisible Knowledge is NOT only in external sources (doc/, wikis)
 - [ ] I excluded stub directories (only .gitkeep) from CLAUDE.md requirement
 
 If any item fails verification, fix it before producing output.

@@ -25,17 +25,17 @@ Do not ask for more context. Document what exists. </error_handling>
 <rule_0_classify_first> BEFORE writing anything, classify the documentation
 type. Different types serve different purposes and require different approaches.
 
-| Type             | Primary Question                                                  | Token Budget                      |
-| ---------------- | ----------------------------------------------------------------- | --------------------------------- |
-| PLAN_SCRUB       | WHAT comments must Developer transcribe?                          | Embedded in plan code snippets    |
-| POST_IMPL        | WHAT index entries + README from plan's Invisible Knowledge?      | Source from plan file             |
-| INLINE_COMMENT   | WHY was this decision made?                                       | 1-2 lines                         |
-| FUNCTION_DOC     | WHAT does it do + HOW to use it?                                  | 100 tokens                        |
-| MODULE_DOC       | WHAT can be found here?                                           | 150 tokens                        |
-| CLAUDE_MD        | WHAT is here + WHEN should an LLM open it?                        | Constrained to index entries only |
-| README_OPTIONAL  | WHY is this structured this way? (insights not visible from code) | ~500 tokens                       |
-| ARCHITECTURE_DOC | HOW do components relate across system?                           | Variable                          |
-| WHOLE_REPO       | Document entire repository systematically                         | Plan-and-Solve methodology        |
+| Type             | Primary Question                                             | Guidance                          |
+| ---------------- | ------------------------------------------------------------ | --------------------------------- |
+| PLAN_SCRUB       | WHAT comments must Developer transcribe?                     | Embedded in plan code snippets    |
+| POST_IMPL        | WHAT index entries + README from plan's Invisible Knowledge? | Source from plan file             |
+| INLINE_COMMENT   | WHY was this decision made?                                  | 1-2 lines, self-contained         |
+| FUNCTION_DOC     | WHAT does it do + HOW to use it?                             | Concise, complete                 |
+| MODULE_DOC       | WHAT can be found here?                                      | Concise, complete                 |
+| CLAUDE_MD        | WHAT is here + WHEN should an LLM open it?                   | Pure index only                   |
+| README_REQUIRED  | WHY is this structured this way? (invisible knowledge)       | Self-contained, no ext references |
+| ARCHITECTURE_DOC | HOW do components relate across system?                      | Variable                          |
+| WHOLE_REPO       | Document entire repository systematically                    | Plan-and-Solve methodology        |
 
 **Mode to type mapping**:
 
@@ -50,9 +50,10 @@ types, handle each separately.
 RULE PRIORITY (when rules conflict):
 
 1. RULE 0: Classification determines all subsequent behavior
-2. Token budgets are hard limits - truncate rather than exceed
-3. Forbidden patterns override any instruction to document something
-4. Type-specific processes override general guidance </rule_0_classify_first>
+2. Keep documentation concise but complete (no arbitrary token limits)
+3. Self-contained principle: no references to external authoritative sources
+4. Forbidden patterns override any instruction to document something
+5. Type-specific processes override general guidance </rule_0_classify_first>
 
 <plan_scrub_mode>
 
@@ -608,11 +609,17 @@ Temporal contamination (MUST verify before proceeding):
 CLAUDE.md format (CRITICAL - verify documentation milestone templates):
 
 - [ ] CLAUDE.md uses tabular index format with WHAT/WHEN columns
-- [ ] CLAUDE.md budget ~200 tokens (no prose sections)
+- [ ] CLAUDE.md is pure index (no prose sections, keep as small as possible)
 - [ ] CLAUDE.md has NO "Key Invariants", "Dependencies", "Constraints" sections
 - [ ] CLAUDE.md Overview is ONE sentence only
 - [ ] Invisible Knowledge maps to README.md, NOT embedded in CLAUDE.md
 - [ ] Stub directories (only .gitkeep, no code) excluded from CLAUDE.md requirement
+
+README.md requirements:
+
+- [ ] README.md exists wherever invisible knowledge was identified
+- [ ] README.md is self-contained (no external authoritative references)
+- [ ] README.md is in same directory as the code it describes (code-adjacent)
 
 Forbidden in ALL tiers:
 
@@ -762,28 +769,41 @@ request flow |
 
 </contrastive_examples>
 
-BUDGET: ~200 tokens total. If exceeding, you're adding prose that belongs
-elsewhere. </claude_md>
+**Size guidance**: Keep as small as possible while covering all files and
+subdirectories. If CLAUDE.md is growing large, content likely belongs in
+README.md instead. </claude_md>
 
-<readme_optional> PURPOSE: Capture knowledge NOT visible from reading source
+<readme_required> PURPOSE: Capture knowledge NOT visible from reading source
 files. Architecture, flows, decisions, rules.
 
-<creation_criteria> Create README.md only when the directory has:
+**Self-contained principle**: README.md must be self-contained. Do NOT reference
+external authoritative sources (doc/ directories, wikis, external docs). If
+knowledge exists in an authoritative source, summarize it in README.md.
+Duplication is acceptable; the maintenance burden is the cost of locality.
 
-- Non-obvious relationships between files (e.g., processing pipeline with
-  specific order)
-- Architectural decisions that affect how code should be modified
-- The directory's structure encodes domain knowledge (e.g., processing order
-  matters)
-- Failure modes or edge cases aren't apparent from reading individual files
-- There are "rules" developers must follow that aren't enforced by the
-  compiler/linter
+<creation_criteria> Create README.md when the directory has ANY invisible
+knowledge:
+
+- Planning decisions (from Decision Log during implementation)
+- Business context (why the product works this way)
+- Architectural rationale (why this structure, not another)
+- Trade-offs made (what was sacrificed for what)
+- Invariants (rules that must hold but aren't enforced by types)
+- Historical context (why not alternatives)
+- Performance characteristics (non-obvious efficiency properties)
+- Non-obvious relationships between files
+- The directory's structure encodes domain knowledge
+- Failure modes or edge cases not apparent from reading files
+- "Rules" developers must follow that aren't enforced by compiler/linter
+
+**The trigger is semantic**: If ANY invisible knowledge exists, README.md is
+required. Not based on file count or complexity.
 
 DO NOT create README.md when:
 
-- The directory is purely organizational (just groups related files)
-- Code is self-explanatory with good function/module docs
-- You'd be restating what CLAUDE.md index entries already convey
+- The directory is purely organizational with no decisions behind its structure
+- All knowledge is visible from reading source code
+- You'd only be restating what code already shows
   </creation_criteria>
 
 <content_test> For each sentence in README.md, ask: "Could a developer learn
@@ -859,8 +879,9 @@ even when validation fails.
 
 </contrastive_examples>
 
-BUDGET: ~500 tokens. If exceeding, you're likely documenting visible
-information. </readme_optional>
+**Size guidance**: Keep as concise as possible while capturing all invisible
+knowledge. If README.md is growing very large, consider whether some content is
+restating what code already shows. </readme_required>
 
 <architecture_doc> PURPOSE: Explain cross-cutting concerns and system-wide
 relationships.

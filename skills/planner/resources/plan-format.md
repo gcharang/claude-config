@@ -77,8 +77,18 @@ behavioral claims.
 ## Invisible Knowledge
 
 This section captures knowledge NOT deducible from reading the code alone.
-Technical Writer uses this for README.md documentation during
-post-implementation.
+Technical Writer uses this to create README.md files **in the same directory as
+the affected code** during post-implementation.
+
+**Placement principle**: Invisible knowledge must be captured CLOSE to
+implementation. README.md files go in the package/directory containing the
+relevant code, not in a separate documentation directory.
+
+**Self-contained principle**: Code-adjacent documentation must be self-contained.
+Do NOT reference external authoritative sources (doc/ directories, wikis,
+external documentation). If knowledge exists in an authoritative source, it must
+be summarized in the code-adjacent README.md. Duplication is acceptable;
+maintenance burden is the cost of locality.
 
 **The test**: Would a new team member understand this from reading the source
 files? If no, it belongs here.
@@ -204,25 +214,29 @@ See `resources/diff-format.md` for specification.
 
 **Files**:
 
-- `path/to/CLAUDE.md` (index updates)
-- `path/to/README.md` (if Invisible Knowledge section has content)
+- `path/to/CLAUDE.md` (index updates -- in same directory as code)
+- `path/to/README.md` (if Invisible Knowledge section has content -- in same
+  directory as code)
 
 **Requirements**:
 
 CLAUDE.md (LIGHTWEIGHT INDEX ONLY):
 
 - Tabular format with WHAT (contents) and WHEN (task triggers) columns
-- Budget: ~200 tokens maximum
 - Overview section: ONE sentence only
 - NO prose sections (Key Invariants, Dependencies, Constraints, etc.)
 - Prose belongs in README.md, not CLAUDE.md
+- Keep as small as possible while covering all files/subdirectories
+- Root CLAUDE.md may include Build/Test/Development sections
 
 README.md (INVISIBLE KNOWLEDGE):
 
-- Create only if plan's Invisible Knowledge section is non-empty
+- Create whenever the plan's Invisible Knowledge section is non-empty
+- Place in the SAME DIRECTORY as the code it describes (code-adjacent)
 - Include architecture diagrams, data flow, invariants, tradeoffs
 - Include "Why This Structure" explanations
-- Verify diagrams match actual implementation
+- Must be SELF-CONTAINED: do not reference external authoritative sources
+- If knowledge exists elsewhere (doc/, wiki), summarize it here
 
 STUB DIRECTORY EXCEPTION:
 
@@ -231,8 +245,9 @@ STUB DIRECTORY EXCEPTION:
 
 **Acceptance Criteria**:
 
-- CLAUDE.md is tabular index only (~200 tokens, no prose sections)
-- README.md captures knowledge not discoverable from reading source files
+- CLAUDE.md is tabular index only (no prose sections)
+- README.md exists in each directory with invisible knowledge
+- README.md is self-contained (no external references)
 - Architecture diagrams in README.md match plan's Invisible Knowledge section
 
 **Source Material**: `## Invisible Knowledge` section of this plan

@@ -5,7 +5,25 @@ description: Synchronizes CLAUDE.md navigation indexes and README.md architectur
 
 # Doc Sync
 
-Maintains the CLAUDE.md navigation hierarchy and optional README.md architecture docs across a repository. This skill is self-contained and performs all documentation work directly.
+Maintains the CLAUDE.md navigation hierarchy and README.md invisible knowledge
+docs across a repository. This skill is self-contained and performs all
+documentation work directly.
+
+## Core Principles
+
+**Self-contained documentation**: All code-adjacent documentation (CLAUDE.md,
+README.md) must be self-contained. Do NOT reference external authoritative
+sources (doc/ directories, wikis, external documentation). If knowledge exists
+in an authoritative source, it must be summarized locally. Duplication is
+acceptable; the maintenance burden is the cost of locality.
+
+**CLAUDE.md = pure index**: CLAUDE.md files are navigation aids only. They
+contain WHAT is in the directory and WHEN to read each file. All explanatory
+content (architecture, decisions, invariants) belongs in README.md.
+
+**README.md = invisible knowledge**: README.md files capture knowledge NOT
+visible from reading source code. If ANY invisible knowledge exists for a
+directory, README.md is required.
 
 ## Scope Resolution
 
@@ -100,25 +118,37 @@ Given task "add a new validation rule", can an LLM scan the "When to read" colum
 | --------- | ---- | ------------ |
 ```
 
-**Critical constraint:** Subdirectory CLAUDE.md files are PURE INDEX. No prose, no overview sections, no architectural explanations. Those belong in README.md.
+**Critical constraint:** ALL CLAUDE.md files (including subdirectories) are PURE
+INDEX. No prose, no overview sections beyond one sentence, no architectural
+explanations. Those belong in README.md.
 
 ## README.md Specification
 
 ### Creation Criteria (Invisible Knowledge Test)
 
-Create README.md ONLY when the directory contains knowledge NOT visible from reading the code:
+Create README.md when the directory contains ANY invisible knowledge -- knowledge
+NOT visible from reading the code:
 
-- Multiple components interact through non-obvious contracts or protocols
-- Design tradeoffs were made that affect how code should be modified
-- The directory's structure encodes domain knowledge (e.g., processing order matters)
+- Planning decisions (from Decision Log during implementation)
+- Business context (why the product works this way)
+- Architectural rationale (why this structure)
+- Trade-offs made (what was sacrificed for what)
+- Invariants (rules that must hold but aren't in types)
+- Historical context (why not alternatives)
+- Performance characteristics (non-obvious efficiency properties)
+- Multiple components interact through non-obvious contracts
+- The directory's structure encodes domain knowledge
 - Failure modes or edge cases aren't apparent from reading individual files
-- There are "rules" developers must follow that aren't enforced by the compiler/linter
+- "Rules" developers must follow that aren't enforced by compiler/linter
+
+**README.md is required if ANY of the above exist.** The trigger is semantic
+(presence of invisible knowledge), not structural (file count, complexity).
 
 **DO NOT create README.md when:**
 
-- The directory is purely organizational (just groups related files)
-- Code is self-explanatory with good function/module docs
-- You'd be restating what CLAUDE.md index entries already convey
+- The directory is purely organizational with no decisions behind its structure
+- All knowledge is visible from reading source code
+- You'd only be restating what code already shows
 
 ### Content Test
 
@@ -196,18 +226,17 @@ Content that MUST be moved from CLAUDE.md to README.md:
 - Architecture explanations or diagrams
 - Design decision documentation
 - Component interaction descriptions
-- Overview sections with prose (in subdirectory CLAUDE.md files)
+- Overview sections with prose (beyond one sentence)
 - Invariants or rules documentation
 - Any "why" explanations beyond simple triggers
-
-**Forbidden sections in subdirectory CLAUDE.md** (move to README.md):
-
-- "Key Invariants" sections
-- "Dependencies" sections
-- "Constraints" sections
-- "Purpose" sections with prose (beyond one sentence)
+- Key Invariants sections
+- Dependencies sections (explanatory -- index can note dependencies exist)
+- Constraints sections
+- Purpose sections with prose (beyond one sentence)
 - Any bullet-point lists explaining rationale
-- Any section exceeding ~200 tokens total
+
+**Test:** If removing the section leaves CLAUDE.md as just a tabular index with
+a one-sentence overview, the removed content belonged in README.md.
 
 Migration process:
 
@@ -228,23 +257,26 @@ For each directory needing work:
 4. Write "When to read" column: action-oriented triggers
 5. If README.md exists, include it in the Files table
 
-**Creating README.md (only when warranted):**
+**Creating README.md (when invisible knowledge exists):**
 
-1. Verify invisible knowledge criteria are met
-2. Document architecture, design decisions, invariants
+1. Verify invisible knowledge exists (semantic trigger, not structural)
+2. Document architecture, design decisions, invariants, tradeoffs
 3. Apply the content test: remove anything visible from code
-4. Keep under ~500 tokens
+4. Keep as concise as possible while capturing all invisible knowledge
+5. Must be self-contained: do not reference external authoritative sources
 
 ### Phase 5: Verification
 
 After all updates complete, verify:
 
 1. Every directory in scope has CLAUDE.md
-2. All CLAUDE.md files use table-based index format
+2. All CLAUDE.md files use table-based index format (pure navigation)
 3. No drift remains (files <-> index entries match)
-4. No misplaced content in CLAUDE.md (architecture docs moved to README.md)
+4. No misplaced content in CLAUDE.md (all prose moved to README.md)
 5. README.md files are indexed in their parent CLAUDE.md
-6. Subdirectory CLAUDE.md files contain no prose/overview sections
+6. All CLAUDE.md files contain only: one-sentence overview + tabular index
+7. README.md exists wherever invisible knowledge was identified
+8. README.md files are self-contained (no external authoritative references)
 
 ## Output Format
 
@@ -263,9 +295,11 @@ After all updates complete, verify:
 ### Verification
 - Directories audited: [count]
 - CLAUDE.md coverage: [count]/[total] (100%)
+- CLAUDE.md format: [count] pure index / [count] needed migration
 - Drift detected: [count] entries fixed
-- Content migrations: [count] (architecture docs moved to README.md)
-- README.md files: [count] (only where warranted)
+- Content migrations: [count] (prose moved to README.md)
+- README.md files: [count] (wherever invisible knowledge exists)
+- Self-contained: [YES/NO] (no external authoritative references)
 ```
 
 ## Exclusions
