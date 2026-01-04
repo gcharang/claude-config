@@ -20,13 +20,19 @@ for parallel breadth.
 
 ## Technique Selection Guide
 
-| Domain                  | Technique             | Trigger Condition                             | Stacks With                | Conflicts With               | Cost/Tradeoff                    | Effect                                                        |
-| ----------------------- | --------------------- | --------------------------------------------- | -------------------------- | ---------------------------- | -------------------------------- | ------------------------------------------------------------- |
-| **Parallelization**     | Skeleton-of-Thought   | Long-form answers with plannable structure    | Any single-turn technique  | Step-by-step reasoning tasks | N parallel API calls + synthesis | 1.89×–2.39× latency reduction; quality maintained or improved |
-| **Parallelization**     | SoT with Router       | Mixed query types requiring adaptive dispatch | Skeleton-of-Thought        | —                            | Router call overhead             | Enables SoT for suitable queries only                         |
-| **Decomposition**       | Parallel Sampling     | Multiple valid solution paths exist           | USC, Complexity Weighting  | Greedy decoding              | N× token cost                    | Enables consistency-based selection                           |
-| **Role Specialization** | Multi-Role Delegation | Task requires distinct expertise areas        | Any verification technique | Monolithic prompting         | Role setup overhead              | Specialized responses per domain                              |
-| **Orchestration**       | Task Decomposition    | Complex task requiring multiple model types   | Any technique              | Monolithic single-model      | Planning + dispatch overhead     | Enables specialized models per subtask                        |
+| Domain                  | Technique                     | Trigger Condition                                 | Stacks With                        | Conflicts With               | Cost/Tradeoff                            | Effect                                                        |
+| ----------------------- | ----------------------------- | ------------------------------------------------- | ---------------------------------- | ---------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
+| **Parallelization**     | Skeleton-of-Thought           | Long-form answers with plannable structure        | Any single-turn technique          | Step-by-step reasoning tasks | N parallel API calls + synthesis         | 1.89×–2.39× latency reduction; quality maintained or improved |
+| **Parallelization**     | SoT with Router               | Mixed query types requiring adaptive dispatch     | Skeleton-of-Thought                | —                            | Router call overhead                     | Enables SoT for suitable queries only                         |
+| **Decomposition**       | Parallel Sampling             | Multiple valid solution paths exist               | USC, Complexity Weighting          | Greedy decoding              | N× token cost                            | Enables consistency-based selection                           |
+| **Search**              | Tree of Thoughts (BFS)        | Problems requiring exploration with pruning       | State evaluation, backtracking     | Sequential CoT               | b×T LLM calls (beam × steps)             | Game of 24: 4%→74% vs CoT                                     |
+| **Search**              | Tree of Thoughts (DFS)        | Deep exploration with early termination needed    | Value-based pruning                | Parallel expansion           | Variable; supports backtracking          | Crosswords: 15.6%→60% word accuracy                           |
+| **Refinement**          | Explicit Reflection Prompting | Tool returns error; retry needed                  | Tool-augmented workflows           | Immediate retry              | One reflection step per retry            | Concrete diagnosis improves next attempt                      |
+| **Coordination**        | LM² (Decomposer-Solver-Verifier) | Complex reasoning requiring step verification  | Concept generation                 | Monolithic prompting         | 3 models + policy coordination           | MATH: +8.1%; MedQA: +9.7% over baselines                      |
+| **Role Specialization** | Multi-Role Delegation         | Task requires distinct expertise areas            | Any verification technique         | Monolithic prompting         | Role setup overhead                      | Specialized responses per domain                              |
+| **Orchestration**       | Task Decomposition            | Complex task requiring multiple model types       | Any technique                      | Monolithic single-model      | Planning + dispatch overhead             | Enables specialized models per subtask                        |
+| **Human-in-Loop**       | Approval Gates                | Critical tasks requiring human validation         | Any multi-stage pipeline           | Fully autonomous workflows   | Latency for human review                 | 82% plan approval rate in production                          |
+| **Feedback**            | Tool-Augmented Refinement     | Code/structured output requiring validation       | Compiler/linter integration        | —                            | Tool execution + retry loops             | Self-correcting syntactic errors                              |
 
 ---
 
@@ -47,6 +53,16 @@ for parallel breadth.
 7. **Latency Optimization != Quality Optimization** — Parallel techniques
    primarily reduce latency; quality gains are task-dependent (improved on
    knowledge, degraded on reasoning)
+8. **Tree Search for Exploration** — When problems require trying multiple paths,
+   use BFS for breadth or DFS for depth with backtracking
+9. **Explicit Reflection Before Retry** — When tools return errors, prompting for
+   concrete diagnosis before the next attempt improves retry quality
+10. **Verifier Nuance Matters** — Multi-class error feedback (conceptual,
+    computational, procedural) outperforms binary pass/fail signals
+11. **Concepts Before Decomposition** — Generating prerequisite concepts improves
+    out-of-domain generalization
+12. **Human Gates for Quality Control** — Strategic human approval points catch
+    errors without blocking full autonomy
 
 ---
 
@@ -236,7 +252,302 @@ improved quality across mixed query distributions.
 
 ---
 
-## 3. Parallel Sampling for Aggregation
+## 3. Tree of Thoughts (ToT)
+
+A deliberate problem-solving framework that explores multiple reasoning paths
+through tree search. Per Yao et al. (2023): "ToT allows LMs to perform
+deliberate decision making by considering multiple different reasoning paths
+and self-evaluating choices to decide the next course of action, as well as
+looking ahead or backtracking when necessary to make global choices."
+
+**Core concept:**
+
+ToT frames problem-solving as search through a tree where each node represents
+a partial solution state. Unlike Chain-of-Thought (which follows a single
+reasoning path), ToT maintains and explores multiple paths simultaneously,
+using LLM self-evaluation as the search heuristic.
+
+**The four design dimensions:**
+
+1. **Thought decomposition** — How to break intermediate steps into "thoughts"
+2. **Thought generation** — How to generate candidate thoughts at each state
+3. **State evaluation** — How to score states for search prioritization
+4. **Search algorithm** — BFS or DFS depending on problem structure
+
+**Thought decomposition:**
+
+A "thought" should be:
+- Small enough that the LLM can generate diverse, promising samples
+- Large enough that the LLM can evaluate its prospect toward solving the problem
+
+Per the paper's examples:
+
+| Task             | Thought Granularity        |
+| ---------------- | -------------------------- |
+| Game of 24       | One equation (e.g., 4+9=13)|
+| Creative Writing | A paragraph plan           |
+| Crosswords       | One word fill              |
+
+**Thought generation strategies:**
+
+**(a) Sample i.i.d. (for rich thought spaces):**
+
+```
+Generate k independent thoughts from the same prompt.
+Works when thought space is large (e.g., paragraph-level planning).
+```
+
+**(b) Propose sequentially (for constrained thought spaces):**
+
+```
+Generate k thoughts in a single prompt that proposes alternatives.
+Works when thought space is small (e.g., single words, equations).
+Avoids duplication that i.i.d. sampling might produce.
+```
+
+**Propose prompt example (Game of 24):**
+
+```
+[User:] Given the numbers {remaining_numbers}, list all possible next steps
+(one arithmetic operation) that could lead toward making 24.
+
+Possible next steps:
+```
+
+**State evaluation strategies:**
+
+**(a) Value each state independently:**
+
+```
+Prompt the LLM to classify each state as "sure", "likely", or "impossible"
+based on whether it can lead to a solution.
+```
+
+**Value prompt example:**
+
+```
+Evaluate if the given numbers can reach 24 (sure/likely/impossible).
+10 14: 10 + 14 = 24. sure
+3 3 8: 3 * 8 = 24, 24 - 3 = 21. impossible
+...
+{current_numbers}:
+```
+
+**(b) Vote across states:**
+
+```
+Present multiple candidate states and ask which is most promising.
+Better when direct valuation is hard (e.g., creative coherence).
+```
+
+**Vote prompt example:**
+
+```
+Given the instruction and several choices, analyze each choice in detail,
+then conclude "The best choice is {s}" where s is the choice number.
+
+Instruction: {original_task}
+Choices:
+1. {state_1}
+2. {state_2}
+...
+```
+
+**Search algorithms:**
+
+**(a) Breadth-First Search (BFS):**
+
+```python
+# Maintain b best states per step
+def ToT_BFS(x, G, V, T, b):
+    S = {x}  # Initial state
+    for t in range(T):
+        # Generate candidates from all current states
+        S_prime = {(s, z) for s in S for z in G(s, k)}
+        # Evaluate all candidates
+        values = V(S_prime)
+        # Keep top b
+        S = top_b(S_prime, values, b)
+    return best(S)
+```
+
+Use BFS when:
+- Tree depth is limited (T ≤ 3)
+- Early pruning is effective (can eliminate bad states quickly)
+- Want to maintain diversity of solutions
+
+**(b) Depth-First Search (DFS):**
+
+```python
+# Explore most promising path first, backtrack when stuck
+def ToT_DFS(s, t, G, V, T, v_threshold):
+    if t > T:
+        return s  # Terminal
+    for s_prime in sorted(G(s, k), key=V, reverse=True):
+        if V(s_prime) > v_threshold:
+            result = ToT_DFS(s_prime, t+1, G, V, T, v_threshold)
+            if result: return result
+    return None  # Backtrack
+```
+
+Use DFS when:
+- Solution depth is variable (some paths terminate early)
+- State evaluation can reliably identify "impossible" states
+- Want to find first valid solution quickly
+
+**Performance results:**
+
+| Task             | CoT      | ToT (b=5) | Improvement |
+| ---------------- | -------- | --------- | ----------- |
+| Game of 24       | 4%       | 74%       | 18.5×       |
+| Creative Writing | 6.93     | 7.56      | +9%         |
+| Crosswords (word)| 15.6%    | 60%       | 3.8×        |
+
+**Cost considerations:**
+
+Per the paper: "ToT requires significantly more computations than IO or CoT
+prompting." For Game of 24, ToT uses ~5.5k tokens per problem vs ~67 tokens
+for single CoT. The tradeoff is justified when:
+
+- Base accuracy is low (CoT struggles significantly)
+- Task requires exploration (multiple valid approaches exist)
+- Backtracking is valuable (early mistakes are recoverable)
+
+**When NOT to use ToT:**
+
+- Simple tasks where CoT already achieves high accuracy
+- Tasks without clear intermediate states to evaluate
+- Latency-critical applications (ToT is slower than single-pass)
+
+**CORRECT (ToT-suitable — requires exploration):**
+
+```
+Task: Game of 24 with numbers [4, 9, 10, 13]
+- Multiple valid paths exist
+- Each step can be evaluated (does this lead toward 24?)
+- Backtracking is valuable (try different operations)
+```
+
+**INCORRECT (ToT unsuitable — no exploration benefit):**
+
+```
+Task: "What is the capital of France?"
+- Single correct answer
+- No intermediate states to explore
+- Standard prompting suffices
+```
+
+---
+
+## 4. Explicit Reflection Prompting
+
+A within-session technique for improving retry quality when tool execution fails.
+Derived from Reflexion (Shinn et al. 2023), scoped to patterns that work without
+custom orchestration infrastructure.
+
+**Core insight:**
+
+When a tool returns an error or an attempt fails, the default behavior is to
+immediately retry. Inserting an explicit reflection step—forcing the model to
+articulate what went wrong—improves the next attempt. The mechanism: verbalized
+diagnosis becomes explicit context that conditions the next generation.
+
+**The within-session pattern:**
+
+```
+Attempt 1: Generate solution → Execute via tool → Error returned
+Reflection: Explicit analysis of failure cause
+Attempt 2: Generate solution conditioned on reflection → Execute → ...
+```
+
+This differs from full Reflexion (which requires cross-episode memory and custom
+orchestration) in that the conversation context itself serves as memory. No
+external infrastructure needed.
+
+**Reflection prompt template:**
+
+```
+The previous attempt failed with:
+{error_output}
+
+Before generating a new solution:
+1. Identify the specific cause of failure
+2. Explain what assumption or approach was incorrect
+3. Describe concretely how your next attempt will differ
+
+Then provide the revised solution.
+```
+
+**Concrete reflection vs. vague acknowledgment:**
+
+The quality distinction matters. Useful reflections contain specific diagnoses
+and actionable alternatives, not generic statements.
+
+```
+# POOR REFLECTION (vague, non-actionable)
+"The code failed. I should fix the bug and try again."
+"I need to be more careful with the implementation."
+
+# USEFUL REFLECTION (specific, actionable)
+"The code failed because I used 0-indexed iteration but the input is
+1-indexed. The next attempt must adjust loop bounds: start from 1,
+end at n+1 instead of n."
+
+"The test failed because I assumed the input list is non-empty.
+I need to add a guard clause checking len(items) > 0 before accessing
+items[0]."
+```
+
+The prompt should demand specificity. Phrases like "identify the specific cause"
+and "describe concretely how" push toward actionable reflection.
+
+**Tool feedback as evaluator signal:**
+
+In tool-augmented workflows, external tools (compiler, linter, test runner)
+provide structured error signals. These shouldn't just pass through—they should
+be explicitly analyzed in the reflection step.
+
+```
+Tool output:
+TypeError: unsupported operand type(s) for +: 'int' and 'str'
+  File "solution.py", line 12, in process_data
+
+Reflection prompt:
+The error indicates a type mismatch on line 12. The + operator received
+an int and str. Looking at line 12: `total = count + user_input`—the
+user_input variable is a string from input(), not converted to int.
+The fix: wrap user_input in int() before the addition.
+```
+
+**Scope limitations:**
+
+Expect diminishing returns after 2-3 reflection-informed retries within a
+session. If the task isn't solved by then, the problem is likely:
+
+- Missing information the model doesn't have access to
+- Fundamental approach mismatch requiring different strategy
+- Ambiguous requirements needing clarification
+
+The Reflexion paper's multi-trial gains came from cross-episode accumulation
+(learning across many similar problems), which requires persistent memory
+infrastructure. Within a single session, you capture the immediate benefit of
+structured failure analysis but not the accumulated learning effect.
+
+**When to use explicit reflection:**
+
+- Tool returns error that needs diagnosis
+- Previous attempt failed in a non-obvious way
+- Complex multi-step task where error source is unclear
+
+**When NOT to use explicit reflection:**
+
+- Error is trivially obvious (missing import, typo)
+- Already retried 2-3 times without progress
+- Error message is self-explanatory and fix is clear
+
+---
+
+## 5. Parallel Sampling for Aggregation
 
 When multiple valid reasoning paths exist, parallel sampling generates diverse
 candidates for downstream selection or synthesis. This pattern underlies
@@ -286,7 +597,167 @@ between accuracy gains and diminishing returns from additional samples.
 
 ---
 
-## 4. Role-Specialized Subagents
+## 6. LM² (Language Model Multiplex): Coordinated Multi-Model Reasoning
+
+A framework that modularizes decomposition, solution, and verification into
+three coordinated language models. Per Juneja et al. (2024): "LM² modularizes
+the decomposition, solution, and verification into three different language
+models... these models are trained to coordinate using policy learning."
+
+**Core architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                           LM²                               │
+├────────────────┬─────────────────┬──────────────────────────┤
+│   Decomposer   │     Solver      │       Verifier           │
+│   (finetuned)  │   (frozen API)  │      (finetuned)         │
+├────────────────┼─────────────────┼──────────────────────────┤
+│ 1. Generate    │ Answer each     │ Classify error type:     │
+│    concepts    │ subquestion     │ - Conceptual             │
+│ 2. Generate    │ given concepts  │ - Computational          │
+│    subquestions│ and prior       │ - Procedural             │
+│    step-by-step│ context         │ - Misunderstood question │
+│                │                 │ - Position of mistake    │
+│                │                 │ - No mistake             │
+└────────────────┴─────────────────┴──────────────────────────┘
+```
+
+**Key innovation — Concept generation:**
+
+Before decomposing into subquestions, the decomposer generates prerequisite
+concepts (theorems, formulas, domain knowledge) required to solve the problem.
+This primes the solver with relevant knowledge.
+
+**Concept generation prompt:**
+
+```
+I have a question's solution, tell me all the specific concepts, theorems
+and formulas (separated by a comma) used in it.
+
+Question: How many primes are in the row of Pascal's Triangle that starts
+with a 1 followed by a 6?
+
+Answer: [solution with reasoning]
+
+Concepts: Coefficients in Pascal's Triangle, Binomial Coefficients Formula,
+Prime Numbers
+```
+
+**Key innovation — Nuanced verification:**
+
+Instead of binary pass/fail, the verifier classifies errors into 9 categories:
+
+1. Conceptual mistakes (wrong concept applied)
+2. Computational mistakes (calculation errors)
+3. Procedural mistakes (wrong steps followed)
+4. Misunderstood question
+5. Mistake in first step
+6. Mistake in first half
+7. Mistake in second half
+8. Mistake in last step
+9. No mistake
+
+**Verifier prompt:**
+
+```
+You are a teacher grading a student's answer.
+
+Student's answer: {solver_output}
+Correct answer: {ground_truth}
+
+Classify the mistake into categories:
+1. Conceptual Mistakes
+2. Computational Mistakes
+3. Procedural Mistakes
+4. Mistake in understanding the question
+5. Mistake in the first step
+6. Mistake in the first half
+7. Mistake in the second half
+8. Mistake in the last step
+9. No mistake
+
+Provide feedback in <feedback> tags with category numbers.
+```
+
+**Inference process:**
+
+```
+1. Input question Q
+2. Decomposer generates concepts C
+3. Decomposer generates first subquestion SQ₁ given (Q, C)
+4. Solver answers SQ₁ → SA₁
+5. Verifier checks SA₁:
+   - If error in early step/conceptual/procedural/misunderstood:
+     → Regenerate SQ (decomposer adjusts approach)
+   - If computational or later-step error:
+     → Proceed (minor corrections possible later)
+   - If no mistake:
+     → Add (SQ₁, SA₁) to context, continue
+6. Decomposer generates SQ₂ given (Q, C, SQ₁, SA₁)
+7. Repeat until complete
+8. Solver generates final answer given full context
+```
+
+**Why nuanced verification matters:**
+
+Different error types warrant different responses:
+
+| Error Type              | Response Strategy                        |
+| ----------------------- | ---------------------------------------- |
+| Conceptual              | Regenerate subquestion (wrong approach)  |
+| Computational           | Proceed (can be fixed; tool-assisted)    |
+| Procedural              | Regenerate (following wrong process)     |
+| Misunderstood question  | Rephrase subquestion more clearly        |
+| First-step mistake      | High penalty; regenerate immediately     |
+| Later-step mistake      | Lower penalty; may self-correct          |
+
+**Policy learning for coordination:**
+
+The decomposer is trained via PPO to coordinate with the solver and verifier.
+Reward structure penalizes early mistakes more heavily:
+
+```
+R = γᵏ × Σ rᵢ
+
+where:
+- γ < 1 is discount factor (earlier mistakes penalized more)
+- k is subquestion index
+- rᵢ is reward for error type i
+
+Error rewards:
+- Conceptual: -0.15
+- Computational: -0.05
+- Procedural: -0.15
+- Misunderstood: -0.20
+- First step: -0.20
+- First half: -0.12
+- Second half: -0.08
+- Last step: -0.05
+- No mistake: +1.0
+```
+
+**Performance results:**
+
+| Dataset  | Best Baseline | LM²    | Improvement |
+| -------- | ------------- | ------ | ----------- |
+| MATH     | DaSLaM        | +8.1%  | Across subtasks |
+| JEEBench | DaSLaM        | +7.71% | Out-of-domain |
+| MedQA    | DSP           | +9.7%  | Out-of-domain |
+
+**Key finding — Concepts drive generalization:**
+
+Removing concept generation drops accuracy by 17.5% on Chemistry (out-of-domain)
+vs 6% on Math (in-domain). Concepts are critical for generalization.
+
+**Key finding — Finetuned decomposer beats GPT-4:**
+
+A finetuned LLaMA-2 7B decomposer generates more effective concepts than GPT-4
+prompted for the same task, demonstrating the value of task-specific training.
+
+---
+
+## 7. Role-Specialized Subagents
 
 Assigning distinct roles to different LLM calls enables specialized handling of
 subtask types. This pattern appears in Multi-Expert Prompting and multi-agent
@@ -343,7 +814,7 @@ aggregating expert responses in a single turn without iterative refinement."
 
 ---
 
-## 5. Task Decomposition Orchestration
+## 8. Task Decomposition Orchestration
 
 A pattern where a controller LLM decomposes complex tasks and routes subtasks to
 specialized models. Per Shen et al. (2023) in HuggingGPT: "We present
@@ -457,7 +928,127 @@ Execution order:
 
 ---
 
-## 6. Implementation Patterns
+## 9. Human-in-the-Loop Orchestration
+
+A framework that incorporates human feedback at strategic points in multi-agent
+workflows. Per Takerngsaksiri et al. (2025): "Rather than aiming to fully
+automate software development tasks, we designed an LLM-based software
+development agent to collaborate with practitioners, functioning as an assistant
+to help resolve software development tasks."
+
+**Core architecture (HULA pattern):**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    HUMAN-IN-THE-LOOP                        │
+├─────────────────┬─────────────────┬─────────────────────────┤
+│  AI Planner     │   AI Coder      │    Human Agent          │
+│  Agent          │   Agent         │                         │
+├─────────────────┼─────────────────┼─────────────────────────┤
+│ - File          │ - Code          │ - Review plans          │
+│   localization  │   generation    │ - Approve/reject        │
+│ - Plan          │ - Self-refine   │ - Provide guidance      │
+│   generation    │   via tools     │ - Edit outputs          │
+└─────────────────┴─────────────────┴─────────────────────────┘
+```
+
+**The DPDE paradigm:**
+
+Decentralized Planning, Decentralized Execution:
+- Each agent independently responsible for its objective
+- Shared memory (task context) accessible to all agents
+- Minimal inter-agent communication overhead
+- Human feedback incorporated at stage transitions
+
+**Stage-gated workflow:**
+
+```
+Stage 1: Task Setup
+  └─ Human provides task description + selects repository
+
+Stage 2: Planning
+  ├─ AI generates file list → [Human Review Gate]
+  │   └─ Human approves/edits files
+  └─ AI generates change plan → [Human Review Gate]
+      └─ Human approves/edits plan
+
+Stage 3: Coding
+  ├─ AI generates code changes
+  ├─ Tool feedback (linter, compiler) → self-refinement loop
+  └─ [Human Review Gate]
+      └─ Human approves/edits code
+
+Stage 4: Output
+  └─ Human raises PR or creates branch for further work
+```
+
+**Tool-augmented self-refinement:**
+
+```
+while not (code_valid or max_attempts_reached):
+    code = generate_code(plan, context)
+    validation = run_tools(code)  # compiler, linter
+    if validation.errors:
+        context.append(validation.feedback)
+        # Next iteration uses error feedback
+```
+
+**Approval gate patterns:**
+
+**(a) Binary approval:**
+```
+Human reviews output → Approve (proceed) or Reject (regenerate)
+```
+
+**(b) Guided refinement:**
+```
+Human provides specific feedback → AI regenerates with feedback in context
+```
+
+**(c) Direct edit:**
+```
+Human modifies output directly → Workflow continues with edited version
+```
+
+**Production metrics (from Atlassian deployment):**
+
+| Metric                  | Rate    |
+| ----------------------- | ------- |
+| Plan generation success | 79%     |
+| Plan approval rate      | 82%     |
+| Code generation success | 87%     |
+| Raised PR rate          | 25%     |
+| Merged PR rate          | 59%     |
+
+**Key finding — Input quality drives performance:**
+
+HULA achieved 86% file recall on SWE-bench (detailed descriptions, median 295
+tokens) but only 30% on internal dataset (brief descriptions, median 75 tokens).
+Practitioners noted that HULA "promotes good documentation practice" by
+requiring detailed task descriptions.
+
+**Key finding — Human feedback corrects LLM blind spots:**
+
+82% plan approval rate suggests AI-generated plans are mostly acceptable.
+The remaining 18% benefit from human correction before code generation begins,
+preventing downstream errors.
+
+**When to use human-in-the-loop:**
+
+- High-stakes tasks where errors are costly
+- Domains where LLM reliability is uncertain
+- Tasks requiring organizational knowledge not in training data
+- Workflows where human trust/adoption is critical
+
+**When to minimize human involvement:**
+
+- Well-defined, repetitive tasks with clear success criteria
+- Time-critical operations where latency matters
+- Tasks with reliable automated verification (tests, linters)
+
+---
+
+## 10. Implementation Patterns
 
 ### Orchestrator Architecture
 
@@ -529,9 +1120,31 @@ else:
     return fallback_sequential_generation()
 ```
 
+### Memory Management for Multi-Trial Agents
+
+For Reflexion-style agents that learn across trials:
+
+```python
+class EpisodicMemory:
+    def __init__(self, max_reflections=3):
+        self.reflections = []
+        self.max = max_reflections
+
+    def add(self, reflection):
+        self.reflections.append(reflection)
+        if len(self.reflections) > self.max:
+            self.reflections = self.reflections[-self.max:]
+
+    def get_context(self):
+        return "\n\n".join([
+            f"Previous attempt {i+1}:\n{r}"
+            for i, r in enumerate(self.reflections)
+        ])
+```
+
 ---
 
-## 7. Anti-Patterns
+## 11. Anti-Patterns
 
 ### Forcing Parallelism on Sequential Tasks
 
@@ -615,9 +1228,45 @@ Write it very shortly in 1-2 sentences and do not continue with other points!"
 Per SoT: Explicit constraints ("only one point", "do not continue with other
 points") are critical for focused subagent behavior.
 
+### Binary Verification When Nuance is Available
+
+**Anti-pattern:** Using pass/fail signals when richer error information exists.
+
+```
+# PROBLEMATIC
+Verifier outputs: "Incorrect"
+Decomposer has no guidance on what went wrong
+```
+
+```
+# BETTER (per LM²)
+Verifier outputs: "Conceptual mistake in first step: applied wrong formula"
+Decomposer can regenerate subquestion with corrective guidance
+```
+
+### Immediate Retry Without Reflection
+
+**Anti-pattern:** Retrying failed attempts without explicit failure analysis.
+
+```
+# PROBLEMATIC
+Tool returns error → Immediately generate new attempt
+No explicit diagnosis of what went wrong
+```
+
+```
+# BETTER (explicit reflection pattern)
+Tool returns error → Prompt for specific failure analysis →
+Generate new attempt conditioned on reflection
+```
+
+The reflection step forces verbalization of the failure cause, making the
+diagnosis explicit context for the next attempt. Without it, the model may
+repeat similar mistakes or make only superficial changes.
+
 ---
 
-## 8. Technique Combinations
+## 12. Technique Combinations
 
 Subagent orchestration patterns can be combined with quality-improvement
 techniques. The combinations below are **illustrative, not exhaustive**—they
@@ -644,8 +1293,30 @@ Use routing to select among multiple orchestration strategies:
 Router classifies query into:
   - Simple factual → Direct generation
   - Structured long-form → SoT
-  - Complex reasoning → Sequential CoT
+  - Complex reasoning → Sequential CoT or ToT
   - Multi-perspective → Multi-Expert parallel
+```
+
+### ToT + Explicit Reflection
+
+Combine tree search with reflection on failed paths:
+
+```
+ToT search → Best path fails tool verification
+Reflection: "Path failed because X; alternative approach Y"
+Continue ToT search with reflection in context
+→ Pruning informed by explicit failure analysis
+```
+
+### LM² + Human-in-the-Loop
+
+Add human gates to the decomposer-solver-verifier pipeline:
+
+```
+Decomposer → Concepts → [Human Review]
+Decomposer → Subquestions → Solver → Verifier
+If verifier flags critical error → [Human Review]
+Final answer → [Human Approval]
 ```
 
 ### Parallel Sampling + Complexity Weighting
@@ -673,3 +1344,10 @@ Stage 4: Apply USC or majority voting to filtered set
   LLMs for Efficient Parallel Generation." ICLR.
 - Shen, Y., et al. (2023). "HuggingGPT: Solving AI Tasks with ChatGPT and its
   Friends in Hugging Face." arXiv.
+- Shinn, N., et al. (2023). "Reflexion: Language Agents with Verbal
+  Reinforcement Learning." NeurIPS. (Within-session reflection patterns only;
+  cross-episode learning requires custom orchestration.)
+- Takerngsaksiri, W., et al. (2025). "Human-In-the-Loop Software Development
+  Agents." arXiv.
+- Yao, S., et al. (2023). "Tree of Thoughts: Deliberate Problem Solving with
+  Large Language Models." NeurIPS.
