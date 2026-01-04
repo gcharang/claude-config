@@ -13,6 +13,8 @@ the script - do NOT explore or analyze first.
 | `scripts/optimize.py`                          | Complete workflow      | Debugging behavior |
 | `references/prompt-engineering-single-turn.md` | Single-turn techniques | Script instructs   |
 | `references/prompt-engineering-multi-turn.md`  | Multi-turn techniques  | Script instructs   |
+| `references/prompt-engineering-subagents.md`   | Subagent orchestration | Script instructs   |
+| `references/prompt-engineering-hitl.md`        | Human-in-the-loop      | Script instructs   |
 
 ## Key Point
 
