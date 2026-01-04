@@ -298,10 +298,10 @@ Do NOT proceed with scrubbing if implementation milestones lack code.
 
 4.5. **Check milestone flags** - Read the **Flags** field if present:
 
-| Flag | Action |
-|------|--------|
-| `needs-rationale` | Ensure every non-obvious element has WHY comment from Decision Log. Flag gaps aggressively. |
-| `complex-algorithm` | Add Tier 5 algorithm block (strategy, invariants, edge cases) even if code looks simple |
+| Flag                | Action                                                                                      |
+|---------------------|---------------------------------------------------------------------------------------------|
+| `needs-rationale`   | Ensure every non-obvious element has WHY comment from Decision Log. Flag gaps aggressively. |
+| `complex-algorithm` | Add Tier 5 algorithm block (strategy, invariants, edge cases) even if code looks simple     |
 
 Flags signal planner uncertainty--treat flagged milestones as HIGH priority.
 

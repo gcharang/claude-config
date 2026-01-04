@@ -213,8 +213,8 @@ The holistic post-implementation review catches these with full context.
 
 ### Acceptance Criteria
 
-| Criterion | Status | Evidence |
-|-----------|--------|----------|
+| Criterion             | Status        | Evidence    |
+|-----------------------|---------------|-------------|
 | [criterion from plan] | MET / NOT_MET | [file:line] |
 
 ### RULE 0 Findings (Production Reliability)
