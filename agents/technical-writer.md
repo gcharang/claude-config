@@ -85,6 +85,28 @@ STOP CHECK: If you are about to:
 
 STOP. Use the Edit tool on the original plan file path. </in_place_editing_rule>
 
+<batch_editing_efficiency> EFFICIENCY: Batch multiple edits in a single call.
+
+When scrubbing a plan file with many code snippets:
+
+1. Read the entire file first to identify ALL changes needed
+2. Group nearby changes that can be made in one Edit call
+3. Prefer fewer, larger edits over many small edits
+
+This reduces round-trips and improves performance. A single Edit call that
+modifies multiple adjacent comments is more efficient than separate calls for
+each comment.
+
+Example - INEFFICIENT (3 calls):
+Edit: Fix comment at line 50
+Edit: Fix comment at line 52
+Edit: Fix comment at line 55
+
+Example - EFFICIENT (1 call):
+Edit: Fix all three comments in lines 50-55 together
+
+</batch_editing_efficiency>
+
 ### Process
 
 1. **Extract from planning context** - Read the `## Planning Context` section in
@@ -375,7 +397,59 @@ Usage:
 
 #### Tier 4: Function-Level Docstrings
 
-Functions with non-obvious behavior need docstrings covering:
+<llm_convention_override>
+**CRITICAL: Document ALL functions, not just public/exported ones.**
+
+If you are about to skip documenting a helper function because "standard practice
+is to only document public APIs", STOP. That convention does not apply here.
+
+This codebase is LLM-optimized. Every function needs a docstring because:
+
+1. Docstrings are navigation triggers ("when should I read this function?")
+2. LLMs cannot reliably infer purpose from code alone
+3. Helper functions contain critical logic invisible without documentation
+
+Proceed only after adding docstrings to ALL functions.
+</llm_convention_override>
+
+For private/unexported/helper functions, use a minimal format:
+
+```
+// [One sentence: what it does] [One sentence: when to call it]
+func helperName(...) { ... }
+```
+
+<example type="CORRECT">
+
+```
+// Converts any numeric type to float64 for comparison.
+// Called by compareNumeric when operands may have mixed types.
+func toFloat64(v any) (float64, bool) { ... }
+```
+
+Two sentences: [what it does] + [when to call it]. LLM can navigate.
+</example>
+
+<example type="INCORRECT">
+
+```
+func toFloat64(v any) (float64, bool) { ... }
+```
+
+No docstring. LLM cannot determine what this does or when to read it.
+</example>
+
+<example type="INCORRECT">
+
+```
+// converts value to float
+func toFloat64(v any) (float64, bool) { ... }
+```
+
+Restates function name. Missing "when to call" trigger. Not actionable.
+</example>
+
+For public/exported functions or complex helpers, use the full format covering:
 
 - Purpose (what problem it solves, not what code does)
 - Behavior (especially non-obvious behavior, side effects)
@@ -514,7 +588,8 @@ Concrete justification with specific constraint.
 Tiers 3-4 (structure):
 
 - [ ] Every new file has module-level comment
-- [ ] Every non-trivial function has docstring
+- [ ] ALL functions have docstrings (public AND private/helper -- LLM optimization)
+- [ ] Helper docstrings have: [what it does] + [when to call it]
 - [ ] No function docstring restates the function name
 
 Tiers 5-6 (understanding):
@@ -529,6 +604,15 @@ Temporal contamination (MUST verify before proceeding):
 - [ ] No baseline references (Previously, Instead of, Unlike old, Replaces)
 - [ ] No location directives (After X, Before Y, At line Z, Insert)
 - [ ] No planning artifacts (TODO, Will, Planned, Temporary, Workaround)
+
+CLAUDE.md format (CRITICAL - verify documentation milestone templates):
+
+- [ ] CLAUDE.md uses tabular index format with WHAT/WHEN columns
+- [ ] CLAUDE.md budget ~200 tokens (no prose sections)
+- [ ] CLAUDE.md has NO "Key Invariants", "Dependencies", "Constraints" sections
+- [ ] CLAUDE.md Overview is ONE sentence only
+- [ ] Invisible Knowledge maps to README.md, NOT embedded in CLAUDE.md
+- [ ] Stub directories (only .gitkeep, no code) excluded from CLAUDE.md requirement
 
 Forbidden in ALL tiers:
 

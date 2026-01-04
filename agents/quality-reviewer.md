@@ -235,14 +235,19 @@ rather than what exists.
 
 For any CLAUDE.md files in the modified files list, verify format compliance:
 
-| Check    | PASS                                 | FAIL (RULE 1 HIGH)                      |
-| -------- | ------------------------------------ | --------------------------------------- |
-| Format   | Tabular index with WHAT/WHEN columns | Prose sections, bullet lists, narrative |
-| Budget   | ~200 tokens                          | Exceeds budget (indicates prose)        |
-| Overview | One sentence max                     | Multiple sentences or paragraphs        |
+| Check               | PASS                                 | FAIL (RULE 1 HIGH)                              |
+| ------------------- | ------------------------------------ | ----------------------------------------------- |
+| Format              | Tabular index with WHAT/WHEN columns | Prose sections, bullet lists, narrative         |
+| Budget              | ~200 tokens                          | Exceeds budget (indicates prose)                |
+| Overview            | One sentence max                     | Multiple sentences or paragraphs                |
+| Forbidden sections  | None present                         | "Key Invariants", "Dependencies", "Constraints" |
+| Invisible Knowledge | In README.md                         | Embedded in CLAUDE.md instead of README.md      |
 
 CLAUDE.md format violations are RULE 1 HIGH: they violate the technical-writer
 specification.
+
+**Stub directory exception**: Directories containing only `.gitkeep` or no code
+files do NOT require CLAUDE.md. Do not flag missing CLAUDE.md for stub directories.
 
 Example:
 
@@ -251,6 +256,55 @@ Example:
 - Step 2: "Code at auth.py:142 has: counter incremented on failure, comparison
   `if count > 5`, returns 429."
 - Step 3: "Discrepancy: threshold is 5, not 3. Flag as criterion not met."
+
+### Invisible Knowledge Audit (post-implementation)
+
+Verify that critical knowledge from the plan is captured in the codebase.
+
+**Input**: Plan file path (contains Invisible Knowledge section)
+
+**Process**:
+
+1. Read the plan's Invisible Knowledge section (Architecture, Data Flow,
+   Tradeoffs, Invariants, Why This Structure)
+2. For EACH knowledge item, ask OPEN question: "Where in the codebase is
+   [knowledge item] documented?"
+3. Search: README.md files, module docstrings, code comments, CLAUDE.md entries
+
+**Acceptable documentation locations** (knowledge can be in ANY of these):
+
+- README.md in relevant directory (architecture, data flow diagrams)
+- Module-level docstrings (top of file, explaining file purpose)
+- Inline code comments explaining WHY (tradeoffs, invariants)
+- CLAUDE.md index entries (what files contain, when to read)
+
+**Output format**:
+
+| Knowledge Item                            | Documented In            | Status     |
+| ----------------------------------------- | ------------------------ | ---------- |
+| Architecture diagram                      | internal/rules/README.md | FOUND      |
+| Invariant: ETAG changes when rules change | etag.go:45 comment       | FOUND      |
+| Tradeoff: dotsql vs ORM                   | NOT FOUND                | SHOULD_FIX |
+
+**Flag format for missing knowledge**:
+
+```
+### RULE 1 SHOULD_FIX: Invisible knowledge not documented
+- **Location**: Plan Invisible Knowledge section: [item]
+- **Issue**: Critical design rationale not captured in codebase
+- **Failure Mode / Rationale**: Future maintainers lack context for design decisions
+- **Suggested Fix**: Add to [most appropriate location based on knowledge type]
+```
+
+**Knowledge type to location mapping**:
+
+| Knowledge Type        | Best Location                         |
+| --------------------- | ------------------------------------- |
+| Architecture diagrams | README.md in component directory      |
+| Data flow             | README.md or module docstring         |
+| Tradeoffs             | Code comment where decision manifests |
+| Invariants            | Code comment at enforcement point     |
+| Why This Structure    | README.md or CLAUDE.md                |
 
 ---
 
@@ -659,6 +713,30 @@ Flag format:
 - **Suggested Fix**: Add diff blocks showing implementation, or mark as documentation-only
 ```
 
+### Test Code Presence Validation
+
+For EACH milestone with a **Tests** section, answer using OPEN question:
+
+"What test code does Milestone N's Tests section contain?"
+
+| Answer Pattern                                              | Action                             |
+| ----------------------------------------------------------- | ---------------------------------- |
+| Test file paths + test type + scenarios specified           | PASS                               |
+| "Skip reason: documentation-only" (all files .md/.rst/.txt) | PASS                               |
+| Tests section present but empty or placeholder only         | SHOULD_FIX: Empty test spec        |
+| Implementation milestone with no Tests section              | SHOULD_FIX: Missing test spec      |
+| Tests section says "No tests" with explicit rationale       | PASS (explicit skip is acceptable) |
+
+Flag format:
+
+```
+### RULE 1 SHOULD_FIX: Missing test specification
+- **Location**: Milestone N, Tests section
+- **Issue**: Implementation milestone lacks test specification
+- **Failure Mode / Rationale**: Developer cannot verify implementation without test criteria
+- **Suggested Fix**: Add test file paths, test type (integration/property/unit), backing (doc-derived/default-derived), and scenarios
+```
+
 ---
 
 ## Plan Code Mode (plan-code)
@@ -743,6 +821,103 @@ high-quality:
 | Hidden baseline test   | No adjectives without comparison anchor           | List comments with hidden baselines (see below)              |
 | WHY-not-WHAT           | Comments explain rationale, not code mechanics    | List comments that restate what code does                    |
 | Coverage               | Non-obvious struct fields/functions have comments | List undocumented non-obvious elements                       |
+| Function docstrings    | ALL functions have docstrings (see below)         | List functions missing docstrings                            |
+| CLAUDE.md format       | Tabular index only, ~200 tokens, no prose         | List prose sections that should be in README.md              |
+| Invisible Knowledge    | Maps to README.md, not embedded in CLAUDE.md      | List Invisible Knowledge embedded in wrong file              |
+
+### CLAUDE.md Format Verification (CRITICAL)
+
+CLAUDE.md must be a lightweight index only. Verify the documentation milestone:
+
+| Check               | PASS                                         | SHOULD_FIX (RULE 1 HIGH)                             |
+| ------------------- | -------------------------------------------- | ---------------------------------------------------- |
+| Format              | Tabular index with WHAT/WHEN columns         | Prose sections, bullet lists, narrative              |
+| Budget              | ~200 tokens                                  | Exceeds budget (indicates prose leakage)             |
+| Overview            | One sentence max                             | Multiple sentences or paragraphs                     |
+| Forbidden sections  | None present                                 | "Key Invariants", "Dependencies", "Constraints", etc |
+| Invisible Knowledge | In README.md (or pending README.md creation) | Embedded in CLAUDE.md instead                        |
+
+**Why RULE 1 HIGH**: CLAUDE.md format violations mean prose that should be in
+README.md is in the wrong place. This is a conformance issue (violates the
+CLAUDE.md = lightweight index rule), not style preference.
+
+**Stub directory exception**: Directories containing only `.gitkeep` or no code
+files do NOT require CLAUDE.md until code is added. Do not flag missing CLAUDE.md
+for stub directories.
+
+### Function Docstring Coverage (LLM Optimization)
+
+**CRITICAL**: This codebase is optimized for LLM consumption, not standard language
+conventions. ALL functions require docstrings -- not just public/exported ones.
+
+Standard conventions ("only document public APIs") assume human developers can read
+code to understand helpers. LLMs need explicit documentation because:
+
+1. Docstrings serve as navigation triggers ("when should I read this function?")
+2. LLMs cannot reliably infer purpose from implementation alone
+3. Helper functions often contain critical logic
+
+<function_enumeration_required>
+**Verification process (factored--enumerate BEFORE evaluating)**:
+
+STEP 1: Write out every function in the code snippets as a table:
+
+| Function | File | Visibility |
+| -------- | ---- | ---------- |
+
+STEP 2: For EACH row, answer the OPEN question: "What does the docstring say?"
+(Do NOT use yes/no questions like "Does it have a docstring?" -- models agree
+with yes/no framing regardless of truth)
+
+STEP 3: Any row where the answer is "no docstring" or "missing" -> SHOULD_FIX
+
+If you skipped writing the enumeration table, you have not completed verification.
+</function_enumeration_required>
+
+**Minimum docstring format for helpers**:
+
+<example type="CORRECT">
+
+```
+// Converts any numeric type to float64. Called by compareNumeric for mixed-type operands.
+func toFloat64(v any) (float64, bool) { ... }
+```
+
+</example>
+
+<example type="INCORRECT">
+
+```
+func toFloat64(v any) (float64, bool) { ... }
+```
+
+Missing docstring entirely.
+</example>
+
+<example type="INCORRECT">
+
+```
+// helper function
+func toFloat64(v any) (float64, bool) { ... }
+```
+
+Generic label, not actionable. Missing what/when.
+</example>
+
+**Why RULE 1 (not RULE 2)**: Missing docstrings violate the project-level
+constraint that this codebase is LLM-optimized. This is a conformance issue
+(RULE 1), not a structural preference (RULE 2). Undocumented helpers cause
+downstream navigation failures for future LLM agents.
+
+**Flag format**:
+
+```
+### RULE 1 SHOULD_FIX: Missing function docstrings
+- **Location**: [file]
+- **Functions**: [list of undocumented functions]
+- **Issue**: Functions lack docstrings required for LLM navigation
+- **Suggested Fix**: Add docstring with purpose and call trigger for each
+```
 
 ### Temporal Contamination Detection (Factored Verification)
 
@@ -960,6 +1135,9 @@ Produce ONLY this structure. No preamble. No additional commentary.
 - [ ] I checked all code comments for temporal contamination (five questions)
 - [ ] I verified no hidden baselines in comments
 - [ ] I verified comments explain WHY, not WHAT
+- [ ] I verified CLAUDE.md format (tabular index only, ~200 tokens, no prose)
+- [ ] I verified Invisible Knowledge maps to README.md, not CLAUDE.md
+- [ ] I excluded stub directories (only .gitkeep) from CLAUDE.md requirement
 
 If any item fails verification, fix it before producing output.
 </verification_checkpoint>

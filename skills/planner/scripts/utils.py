@@ -67,7 +67,6 @@ def get_qr_stop_condition(gate_description: str) -> list:
 
 def format_restart_command(
     script: str,
-    plan_file: str | None,
     step_or_milestone: int,
     qr_iteration: int,
     thoughts_template: str,
@@ -75,9 +74,12 @@ def format_restart_command(
 ) -> str:
     """Generate a restart command with Three Pillars flags.
 
+    Plan file paths are not included in commands. The invoking agent knows
+    the plan file path from context and substitutes $PLAN_FILE placeholders
+    in delegation templates.
+
     Args:
         script: Script name (planner.py, executor.py, execute-milestone.py)
-        plan_file: Path to plan file (if applicable)
         step_or_milestone: Step or milestone number
         qr_iteration: Current iteration (will be incremented)
         thoughts_template: Template for --thoughts argument
@@ -87,9 +89,6 @@ def format_restart_command(
         Formatted command string
     """
     parts = [f"python3 {script}"]
-
-    if plan_file:
-        parts.append(f'--plan-file "{plan_file}"')
 
     # Handle different argument names for different scripts
     if "execute-milestone" in script:

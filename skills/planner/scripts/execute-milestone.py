@@ -38,7 +38,7 @@ import sys
 from utils import get_qr_state_banner, get_qr_stop_condition
 
 
-def get_step_1_guidance(milestone: int, total_milestones: int, plan_file: str,
+def get_step_1_guidance(milestone: int, total_milestones: int,
                         fixing_qr_issues: bool, qr_iteration: int = 1) -> dict:
     """Step 1: Implementation - delegate to @agent-developer.
 
@@ -85,7 +85,7 @@ def get_step_1_guidance(milestone: int, total_milestones: int, plan_file: str,
         "",
         "  <delegation>",
         "    <agent>@agent-developer</agent>",
-        f"    <plan_source>{plan_file}</plan_source>",
+        "    <plan_source>$PLAN_FILE</plan_source>",
         "    <milestone>[Milestone number and name]</milestone>",
         "    <files>[Exact file paths from milestone]</files>",
         "    <task>[Specific task description]</task>",
@@ -133,8 +133,8 @@ def get_step_1_guidance(milestone: int, total_milestones: int, plan_file: str,
 
     next_step = (
         f"After @agent-developer completes and tests pass, invoke step 2:\n\n"
-        f'  python3 execute-milestone.py --plan-file "{plan_file}" \\\n'
-        f'    --milestone {milestone} --total-milestones {total_milestones} --step 2 \\\n'
+        f"  python3 execute-milestone.py \\\n"
+        f"    --milestone {milestone} --total-milestones {total_milestones} --step 2 \\\n"
         f'    --thoughts "Implementation complete. Modified files: [list]. Running QR gate..."'
     )
 
@@ -144,7 +144,7 @@ def get_step_1_guidance(milestone: int, total_milestones: int, plan_file: str,
     }
 
 
-def get_step_2_guidance(milestone: int, total_milestones: int, plan_file: str,
+def get_step_2_guidance(milestone: int, total_milestones: int,
                         qr_iteration: int = 1) -> dict:
     """Step 2: QR Gate - delegate to @agent-quality-reviewer.
 
@@ -165,7 +165,7 @@ def get_step_2_guidance(milestone: int, total_milestones: int, plan_file: str,
             "",
             "Task for @agent-quality-reviewer:",
             "  Mode: milestone-review",
-            f"  Plan Source: {plan_file}",
+            "  Plan Source: $PLAN_FILE",
             f"  Milestone: {milestone}",
             "  Files Modified: [list files modified in this milestone]",
             "",
@@ -184,20 +184,20 @@ def get_step_2_guidance(milestone: int, total_milestones: int, plan_file: str,
         "next": (
             f"After @agent-quality-reviewer completes, invoke step 3 with QR result:\n\n"
             f"If QR returns PASS:\n"
-            f'  python3 execute-milestone.py --plan-file "{plan_file}" \\\n'
-            f'    --milestone {milestone} --total-milestones {total_milestones} \\\n'
-            f'    --step 3 --qr-result PASS --qr-iteration {qr_iteration} \\\n'
+            f"  python3 execute-milestone.py \\\n"
+            f"    --milestone {milestone} --total-milestones {total_milestones} \\\n"
+            f"    --step 3 --qr-result PASS --qr-iteration {qr_iteration} \\\n"
             f'    --thoughts "QR passed for milestone {milestone}"\n\n'
             f"If QR returns ISSUES:\n"
-            f'  python3 execute-milestone.py --plan-file "{plan_file}" \\\n'
-            f'    --milestone {milestone} --total-milestones {total_milestones} \\\n'
-            f'    --step 3 --qr-result ISSUES --qr-iteration {qr_iteration} \\\n'
+            f"  python3 execute-milestone.py \\\n"
+            f"    --milestone {milestone} --total-milestones {total_milestones} \\\n"
+            f"    --step 3 --qr-result ISSUES --qr-iteration {qr_iteration} \\\n"
             f'    --thoughts "QR found issues: [summary]"'
         ),
     }
 
 
-def get_step_3_guidance(milestone: int, total_milestones: int, plan_file: str,
+def get_step_3_guidance(milestone: int, total_milestones: int,
                         qr_result: str, qr_iteration: int = 1) -> dict:
     """Step 3: Gate Check - route based on QR result.
 
@@ -214,8 +214,8 @@ def get_step_3_guidance(milestone: int, total_milestones: int, plan_file: str,
                 f"QR PASSED for milestone {milestone}.\n\n"
                 f"Progress: {milestone}/{total_milestones} milestones complete.\n\n"
                 f"Invoke next milestone:\n"
-                f'  python3 execute-milestone.py --plan-file "{plan_file}" \\\n'
-                f'    --milestone {next_milestone} --total-milestones {total_milestones} \\\n'
+                f"  python3 execute-milestone.py \\\n"
+                f"    --milestone {next_milestone} --total-milestones {total_milestones} \\\n"
                 f'    --step 1 --thoughts "Starting milestone {next_milestone}..."'
             )
             status = "milestone_complete"
@@ -225,8 +225,8 @@ def get_step_3_guidance(milestone: int, total_milestones: int, plan_file: str,
                 f"QR PASSED for milestone {milestone}.\n\n"
                 f"ALL MILESTONES COMPLETE ({total_milestones}/{total_milestones}).\n\n"
                 f"Invoke holistic quality review (executor step 4):\n"
-                f'  python3 executor.py --plan-file "{plan_file}" \\\n'
-                f'    --step-number 4 --total-steps 7 \\\n'
+                f"  python3 executor.py \\\n"
+                f"    --step-number 4 --total-steps 7 \\\n"
                 f'    --thoughts "All milestones complete. Modified files: [list]. Running holistic QR."'
             )
             status = "all_milestones_complete"
@@ -244,9 +244,9 @@ def get_step_3_guidance(milestone: int, total_milestones: int, plan_file: str,
             f"QR found ISSUES in milestone {milestone}.\n\n"
             f"Issues must be resolved before proceeding.\n\n"
             f"Retry implementation with fixes:\n"
-            f'  python3 execute-milestone.py --plan-file "{plan_file}" \\\n'
-            f'    --milestone {milestone} --total-milestones {total_milestones} \\\n'
-            f'    --step 1 --fixing-qr-issues --qr-iteration {qr_iteration + 1} \\\n'
+            f"  python3 execute-milestone.py \\\n"
+            f"    --milestone {milestone} --total-milestones {total_milestones} \\\n"
+            f"    --step 1 --fixing-qr-issues --qr-iteration {qr_iteration + 1} \\\n"
             f'    --thoughts "Fixing QR issues: [brief summary of issues]"\n\n'
             f"  CRITICAL: After fixing, you MUST re-run QR (step 2) to verify fixes.\n"
             f"  Skipping re-verification is PROHIBITED."
@@ -269,19 +269,19 @@ def get_step_3_guidance(milestone: int, total_milestones: int, plan_file: str,
 
 
 def get_step_guidance(step: int, milestone: int, total_milestones: int,
-                      plan_file: str, qr_result: str, fixing_qr_issues: bool,
+                      qr_result: str, fixing_qr_issues: bool,
                       qr_iteration: int = 1) -> dict:
     """Route to appropriate step guidance."""
     if step == 1:
-        return get_step_1_guidance(milestone, total_milestones, plan_file,
+        return get_step_1_guidance(milestone, total_milestones,
                                    fixing_qr_issues, qr_iteration)
     elif step == 2:
-        return get_step_2_guidance(milestone, total_milestones, plan_file, qr_iteration)
+        return get_step_2_guidance(milestone, total_milestones, qr_iteration)
     elif step == 3:
         if not qr_result:
             print("Error: --qr-result required for step 3", file=sys.stderr)
             sys.exit(1)
-        return get_step_3_guidance(milestone, total_milestones, plan_file,
+        return get_step_3_guidance(milestone, total_milestones,
                                    qr_result, qr_iteration)
     else:
         return {
@@ -298,29 +298,31 @@ def main():
         epilog="""
 Examples:
   # Start milestone implementation
-  python3 execute-milestone.py --plan-file plans/auth.md \\
+  python3 execute-milestone.py \\
     --milestone 1 --total-milestones 3 --step 1 \\
     --thoughts "Starting implementation..."
 
   # After Developer completes
-  python3 execute-milestone.py --plan-file plans/auth.md \\
+  python3 execute-milestone.py \\
     --milestone 1 --total-milestones 3 --step 2 \\
     --thoughts "Implementation complete, running QR gate..."
 
   # After QR passes
-  python3 execute-milestone.py --plan-file plans/auth.md \\
+  python3 execute-milestone.py \\
     --milestone 1 --total-milestones 3 --step 3 \\
     --qr-result PASS --thoughts "QR passed, proceeding to next milestone"
 
   # If QR finds issues
-  python3 execute-milestone.py --plan-file plans/auth.md \\
+  python3 execute-milestone.py \\
     --milestone 1 --total-milestones 3 --step 1 \\
     --fixing-qr-issues --thoughts "Fixing QR issues: missing error handling"
+
+Note: Output uses $PLAN_FILE placeholder. Substitute with actual path from context.
 """,
     )
 
     parser.add_argument(
-        "--plan-file", type=str, required=True, help="Path to the plan file"
+        "--plan-file", type=str, default=None, help="Deprecated: plan file inferred from context"
     )
     parser.add_argument(
         "--milestone", type=int, required=True, help="Milestone number to execute"
@@ -361,7 +363,7 @@ Examples:
 
     guidance = get_step_guidance(
         args.step, args.milestone, args.total_milestones,
-        args.plan_file, args.qr_result, args.fixing_qr_issues, args.qr_iteration
+        args.qr_result, args.fixing_qr_issues, args.qr_iteration
     )
 
     status = guidance.get("status", "in_progress")
@@ -384,6 +386,9 @@ Examples:
             f"{step_names.get(args.step, 'Unknown')}"
         )
     print("=" * 70)
+    print()
+    print("PLACEHOLDER: $PLAN_FILE")
+    print("  Substitute with actual plan file path from your context.")
     print()
     print(f"STATUS: {status}")
     print()

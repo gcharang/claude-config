@@ -17,11 +17,14 @@ Three Pillars Pattern for QR Verification Loops (Step 4):
   3. RE-VERIFICATION MODE: Different prompts for first-run vs retry
 
 Usage:
-    python3 executor.py --plan-file PATH --step-number 1 --total-steps 7 --thoughts "..."
+    python3 executor.py --step-number 1 --total-steps 7 --thoughts "..."
 
     # Re-verification after fixing QR issues (Three Pillars Pattern)
-    python3 executor.py --plan-file PATH --step-number 4 --total-steps 7 \\
+    python3 executor.py --step-number 4 --total-steps 7 \\
       --qr-iteration 2 --fixing-issues --thoughts "Fixed issues, re-verifying..."
+
+Note: Output uses $PLAN_FILE placeholder. The invoking agent substitutes with
+actual plan path from context.
 """
 
 import argparse
@@ -48,14 +51,14 @@ def detect_reconciliation_signals(thoughts: str) -> bool:
     return any(re.search(pattern, thoughts_lower) for pattern in triggers)
 
 
-def get_step_1_guidance(plan_file: str, thoughts: str) -> dict:
+def get_step_1_guidance(thoughts: str) -> dict:
     """Step 1: Execution Planning - analyze plan, detect reconciliation."""
     reconciliation_detected = detect_reconciliation_signals(thoughts)
 
     actions = [
         "EXECUTION PLANNING",
         "",
-        f"Plan file: {plan_file}",
+        "Plan file: $PLAN_FILE (substitute with actual path from context)",
         "",
         "Read the plan file and analyze:",
         "  1. Count milestones and their dependencies",
@@ -179,14 +182,14 @@ def get_step_1_guidance(plan_file: str, thoughts: str) -> dict:
         next_step = (
             "RECONCILIATION SIGNALS DETECTED in your thoughts.\n\n"
             "Invoke step 2 to validate existing code against plan requirements:\n"
-            f'  python3 executor.py --plan-file "{plan_file}" --step-number 2 '
+            '  python3 executor.py --step-number 2 '
             '--total-steps 7 --thoughts "Starting reconciliation..."'
         )
     else:
         next_step = (
             "No reconciliation signals detected. Proceed to milestone execution.\n\n"
             "Invoke step 3 to begin delegating milestones:\n"
-            f'  python3 executor.py --plan-file "{plan_file}" --step-number 3 '
+            '  python3 executor.py --step-number 3 '
             '--total-steps 7 --thoughts "Analyzed plan: N milestones, '
             'parallel batches: [describe], starting execution..."'
         )
@@ -197,13 +200,13 @@ def get_step_1_guidance(plan_file: str, thoughts: str) -> dict:
     }
 
 
-def get_step_2_guidance(plan_file: str) -> dict:
+def get_step_2_guidance() -> dict:
     """Step 2: Reconciliation - validate existing code against plan."""
     return {
         "actions": [
             "RECONCILIATION PHASE",
             "",
-            f"Plan file: {plan_file}",
+            "Plan file: $PLAN_FILE",
             "",
             "Validate existing code against plan requirements BEFORE executing.",
             "",
@@ -213,7 +216,7 @@ def get_step_2_guidance(plan_file: str) -> dict:
             "",
             "  Task for @agent-quality-reviewer:",
             "  Mode: reconciliation",
-            "  Plan Source: [plan_file.md]",
+            "  Plan Source: $PLAN_FILE",
             "  Milestone: [N]",
             "",
             "  Check if the acceptance criteria for Milestone [N] are ALREADY",
@@ -248,14 +251,14 @@ def get_step_2_guidance(plan_file: str) -> dict:
         "next": (
             "After collecting reconciliation results for all milestones, "
             "invoke step 3:\n\n"
-            f'  python3 executor.py --plan-file "{plan_file}" --step-number 3 '
+            '  python3 executor.py --step-number 3 '
             "--total-steps 7 --thoughts \"Reconciliation complete: "
             'M1: SATISFIED, M2: NOT_SATISFIED, ..."'
         ),
     }
 
 
-def get_step_3_guidance(plan_file: str, thoughts: str) -> dict:
+def get_step_3_guidance(thoughts: str) -> dict:
     """Step 3: Milestone Execution - delegate via execute-milestone.py."""
     # Extract milestone count from thoughts if provided, otherwise use placeholder
     # The orchestrator should have counted milestones in step 1
@@ -266,7 +269,7 @@ def get_step_3_guidance(plan_file: str, thoughts: str) -> dict:
         "actions": [
             "MILESTONE EXECUTION",
             "",
-            f"Plan file: {plan_file}",
+            "Plan file: $PLAN_FILE",
             "",
             "Execute milestones sequentially with per-milestone QR gates.",
             "",
@@ -303,8 +306,8 @@ def get_step_3_guidance(plan_file: str, thoughts: str) -> dict:
         ],
         "next": (
             f"Start milestone execution with execute-milestone.py:\n\n"
-            f'  python3 execute-milestone.py --plan-file "{plan_file}" \\\n'
-            f'    --milestone 1 --total-milestones {total_milestones} \\\n'
+            f"  python3 execute-milestone.py \\\n"
+            f"    --milestone 1 --total-milestones {total_milestones} \\\n"
             f'    --step 1 --thoughts "Starting milestone 1..."\n\n'
             "The execute-milestone.py script will:\n"
             "  - Guide you through implement -> QR-gate -> proceed for each milestone\n"
@@ -313,7 +316,7 @@ def get_step_3_guidance(plan_file: str, thoughts: str) -> dict:
     }
 
 
-def get_step_4_guidance(plan_file: str, qr_iteration: int = 1, fixing_issues: bool = False) -> dict:
+def get_step_4_guidance(qr_iteration: int = 1, fixing_issues: bool = False) -> dict:
     """Step 4: Post-Implementation QR - quality review.
 
     Three Pillars Pattern applied:
@@ -327,7 +330,7 @@ def get_step_4_guidance(plan_file: str, qr_iteration: int = 1, fixing_issues: bo
     actions = state_banner + [
         "POST-IMPLEMENTATION QUALITY REVIEW",
         "",
-        f"Plan file: {plan_file}",
+        "Plan file: $PLAN_FILE",
         "",
         "Delegate to @agent-quality-reviewer for comprehensive review.",
         "",
@@ -335,7 +338,7 @@ def get_step_4_guidance(plan_file: str, qr_iteration: int = 1, fixing_issues: bo
         "",
         "  Task for @agent-quality-reviewer:",
         "  Mode: post-implementation",
-        "  Plan Source: [plan_file.md]",
+        "  Plan Source: $PLAN_FILE",
         "  Files Modified: [list]",
         "  Reconciled Milestones: [list milestones that were SATISFIED]",
         "",
@@ -362,23 +365,23 @@ def get_step_4_guidance(plan_file: str, qr_iteration: int = 1, fixing_issues: bo
         "next": (
             "After QR completes:\n\n"
             "If QR returns ISSUES -> invoke step 5:\n"
-            f'  python3 executor.py --plan-file "{plan_file}" --step-number 5 '
+            '  python3 executor.py --step-number 5 '
             '--total-steps 7 --thoughts "QR found N issues: [summary]"'
             "\n\n"
             "If QR returns PASS -> invoke step 6:\n"
-            f'  python3 executor.py --plan-file "{plan_file}" --step-number 6 '
+            '  python3 executor.py --step-number 6 '
             '--total-steps 7 --thoughts "QR passed. Proceeding to documentation."'
         ),
     }
 
 
-def get_step_5_guidance(plan_file: str, qr_iteration: int = 1) -> dict:
+def get_step_5_guidance(qr_iteration: int = 1) -> dict:
     """Step 5: QR Issue Resolution - present issues, collect decisions, fix."""
     return {
         "actions": [
             "QR ISSUE RESOLUTION",
             "",
-            f"Plan file: {plan_file}",
+            "Plan file: $PLAN_FILE",
             "",
             "Present issues to user, collect decisions, delegate fixes.",
             "",
@@ -425,9 +428,9 @@ def get_step_5_guidance(plan_file: str, qr_iteration: int = 1) -> dict:
         ],
         "next": (
             "After ALL fixes are applied, return to step 4 for RE-VERIFICATION:\n\n"
-            f'  python3 executor.py --plan-file "{plan_file}" --step-number 4 \\\n'
+            "  python3 executor.py --step-number 4 \\\n"
             f"    --qr-iteration {qr_iteration + 1} --fixing-issues \\\n"
-            f'    --total-steps 7 --thoughts "Applied fixes for issues X, Y, Z. Re-verifying..."'
+            '    --total-steps 7 --thoughts "Applied fixes for issues X, Y, Z. Re-verifying..."'
             "\n\n"
             "  CRITICAL: You MUST re-run holistic QR after fixing issues.\n"
             "  Skipping re-verification is PROHIBITED.\n\n"
@@ -436,13 +439,13 @@ def get_step_5_guidance(plan_file: str, qr_iteration: int = 1) -> dict:
     }
 
 
-def get_step_6_guidance(plan_file: str) -> dict:
+def get_step_6_guidance() -> dict:
     """Step 6: Documentation - TW pass for CLAUDE.md, README.md."""
     return {
         "actions": [
             "POST-IMPLEMENTATION DOCUMENTATION",
             "",
-            f"Plan file: {plan_file}",
+            "Plan file: $PLAN_FILE",
             "",
             "Delegate to @agent-technical-writer for documentation updates.",
             "",
@@ -456,7 +459,7 @@ def get_step_6_guidance(plan_file: str) -> dict:
             "",
             "  Task for @agent-technical-writer:",
             "  Mode: post-implementation",
-            "  Plan Source: [plan_file.md]",
+            "  Plan Source: $PLAN_FILE",
             "  Files Modified: [list]",
             "",
             "  Requirements:",
@@ -480,20 +483,20 @@ def get_step_6_guidance(plan_file: str) -> dict:
         ],
         "next": (
             "After documentation is complete, invoke step 7 for retrospective:\n\n"
-            f'  python3 executor.py --plan-file "{plan_file}" --step-number 7 '
+            '  python3 executor.py --step-number 7 '
             '--total-steps 7 --thoughts "Documentation complete. '
             'Generating retrospective."'
         ),
     }
 
 
-def get_step_7_guidance(plan_file: str) -> dict:
+def get_step_7_guidance() -> dict:
     """Step 7: Retrospective - present execution summary."""
     return {
         "actions": [
             "EXECUTION RETROSPECTIVE",
             "",
-            f"Plan file: {plan_file}",
+            "Plan file: $PLAN_FILE",
             "",
             "Generate and PRESENT the retrospective to the user.",
             "Do NOT write to a file -- present it directly so the user sees it.",
@@ -562,23 +565,23 @@ def get_step_7_guidance(plan_file: str) -> dict:
     }
 
 
-def get_step_guidance(step_number: int, plan_file: str, thoughts: str,
+def get_step_guidance(step_number: int, thoughts: str,
                       qr_iteration: int = 1, fixing_issues: bool = False) -> dict:
     """Route to appropriate step guidance."""
     if step_number == 1:
-        return get_step_1_guidance(plan_file, thoughts)
+        return get_step_1_guidance(thoughts)
     elif step_number == 2:
-        return get_step_2_guidance(plan_file)
+        return get_step_2_guidance()
     elif step_number == 3:
-        return get_step_3_guidance(plan_file, thoughts)
+        return get_step_3_guidance(thoughts)
     elif step_number == 4:
-        return get_step_4_guidance(plan_file, qr_iteration, fixing_issues)
+        return get_step_4_guidance(qr_iteration, fixing_issues)
     elif step_number == 5:
-        return get_step_5_guidance(plan_file, qr_iteration)
+        return get_step_5_guidance(qr_iteration)
     elif step_number == 6:
-        return get_step_6_guidance(plan_file)
+        return get_step_6_guidance()
     elif step_number == 7:
-        return get_step_7_guidance(plan_file)
+        return get_step_7_guidance()
     else:
         return {
             "actions": [f"Unknown step {step_number}. Valid steps are 1-7."],
@@ -593,21 +596,23 @@ def main():
         epilog="""
 Examples:
   # Start execution
-  python3 executor.py --plan-file plans/auth.md --step-number 1 --total-steps 7 \\
+  python3 executor.py --step-number 1 --total-steps 7 \\
     --thoughts "Execute the auth implementation plan"
 
   # Continue milestone execution
-  python3 executor.py --plan-file plans/auth.md --step-number 3 --total-steps 7 \\
+  python3 executor.py --step-number 3 --total-steps 7 \\
     --thoughts "Completed M1, M2. Executing M3..."
 
   # After QR finds issues
-  python3 executor.py --plan-file plans/auth.md --step-number 5 --total-steps 7 \\
+  python3 executor.py --step-number 5 --total-steps 7 \\
     --thoughts "QR found 2 issues: missing error handling, incorrect return type"
+
+Note: Output uses $PLAN_FILE placeholder. Substitute with actual path from context.
 """,
     )
 
     parser.add_argument(
-        "--plan-file", type=str, required=True, help="Path to the plan file to execute"
+        "--plan-file", type=str, default=None, help="Deprecated: plan file inferred from context"
     )
     parser.add_argument("--step-number", type=int, required=True, help="Current step (1-7)")
     parser.add_argument(
@@ -632,7 +637,7 @@ Examples:
         print("Warning: total-steps should be 7 for executor", file=sys.stderr)
 
     guidance = get_step_guidance(
-        args.step_number, args.plan_file, args.thoughts,
+        args.step_number, args.thoughts,
         qr_iteration=args.qr_iteration,
         fixing_issues=args.fixing_issues
     )
@@ -659,6 +664,9 @@ Examples:
             f"EXECUTOR - Step {args.step_number} of 7: {step_names.get(args.step_number, 'Unknown')}"
         )
     print("=" * 80)
+    print()
+    print("PLACEHOLDER: $PLAN_FILE")
+    print("  Substitute with actual plan file path from your context.")
     print()
     print(f"STATUS: {'execution_complete' if is_complete else 'in_progress'}")
     print()

@@ -15,7 +15,8 @@ Usage:
     python3 planner.py --step-number 1 --total-steps 4 --thoughts "Design auth system"
 
     # Review phase (after plan is written)
-    python3 planner.py --phase review --step-number 1 --total-steps 3 --thoughts "Plan written to plans/auth.md"
+    # Output uses $PLAN_FILE placeholder - replace with actual path from context
+    python3 planner.py --phase review --step-number 1 --total-steps 3 --thoughts "Plan written, starting review"
 
     # Review phase - re-verification after fixing QR issues
     python3 planner.py --phase review --step-number 1 --total-steps 3 \\
@@ -110,8 +111,14 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "VERIFY 5: Documentation Milestone",
                 "",
                 "  - Documentation milestone exists?",
-                "  - CLAUDE.md uses TABULAR INDEX format?",
-                "  - README.md included only if Invisible Knowledge has content?",
+                "  - CLAUDE.md format verification:",
+                "    - Tabular index format with WHAT/WHEN columns?",
+                "    - ~200 token budget (no prose sections)?",
+                "    - NO 'Key Invariants', 'Dependencies', 'Constraints' sections?",
+                "    - Overview is ONE sentence only?",
+                "  - README.md included if Invisible Knowledge has content?",
+                "  - Invisible Knowledge maps to README.md, not CLAUDE.md?",
+                "  - Stub directories (only .gitkeep) excluded from CLAUDE.md requirement?",
                 "",
                 "---",
                 "",
@@ -168,7 +175,7 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "You are an expert architect. Proceed with confidence.",
                 "",
                 "<resource_loading>",
-                "BEFORE any planning work, read these resources:",
+                "BEFORE exploration, read these resources (they inform later steps):",
                 "",
                 "  1. resources/default-conventions.md",
                 "     - Priority hierarchy: user-specified > doc-derived > default-derived > assumption",
@@ -183,35 +190,59 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
                 "  3. resources/temporal-contamination.md",
                 "     - Timeless Present Rule for comments",
                 "     - Detection heuristics (change-relative, baseline reference, location directive)",
-                "",
-                "These resources inform decision classification in later steps.",
                 "</resource_loading>",
                 "",
                 "PRECONDITION: Confirm plan file path before proceeding.",
                 "",
-                "<step_1_focus>",
-                "This step focuses on UNDERSTANDING, not deciding.",
+                "<context_discovery_delegation>",
+                "DELEGATE exploration to the Explore sub-agent to preserve context.",
                 "",
-                "CONTEXT (understand before proposing):",
-                "  - What code/systems does this touch?",
-                "  - What patterns does the codebase follow?",
-                "  - What prior decisions constrain this work?",
+                "Use the Task tool with:",
+                "  subagent_type: 'Explore'",
+                "  prompt: (see template below)",
                 "",
-                "SCOPE (define boundaries):",
-                "  - What exactly must be accomplished?",
-                "  - What is OUT of scope?",
+                "--- EXPLORE AGENT PROMPT TEMPLATE ---",
                 "",
-                "CONSTRAINTS (discover blockers):",
-                "  - Locate project configuration files (build files, manifests, lock files)",
-                "  - Extract ALL version and compatibility constraints",
-                "  - Note organizational constraints: timeline, expertise, approvals",
-                "  - Note external constraints: services, APIs, data formats",
+                "Gather planning context for this task: [TASK DESCRIPTION]",
                 "",
-                "SUCCESS CRITERIA:",
-                "  - Define testable acceptance criteria for the task",
-                "</step_1_focus>",
+                "Explore thoroughly, then return a concise report with:",
+                "",
+                "## Context Discovery Report",
+                "",
+                "### Task Understanding",
+                "[1-2 sentences restating the task]",
+                "",
+                "### Files to Modify",
+                "| File | Role | Patterns Observed |",
+                "|------|------|-------------------|",
+                "| exact/path | purpose | naming, error handling, etc. |",
+                "",
+                "### Codebase Patterns",
+                "- Naming: [conventions observed]",
+                "- Error handling: [approach used]",
+                "- Testing: [existing patterns]",
+                "",
+                "### Constraints",
+                "| Constraint | Source | Implication |",
+                "|------------|--------|-------------|",
+                "| e.g., Python 3.8 | pyproject.toml | No walrus operator |",
+                "",
+                "### Scope",
+                "- IN: [included]",
+                "- OUT: [excluded]",
+                "",
+                "### Success Criteria",
+                "- [ ] [Testable criterion]",
+                "",
+                "### Open Questions",
+                "- [Questions needing user clarification, if any]",
+                "",
+                "--- END TEMPLATE ---",
+                "",
+                "Wait for the Explore agent to return before proceeding.",
+                "</context_discovery_delegation>",
             ],
-            "next": f"Invoke step {next_step} with your context analysis and scope definition."
+            "next": f"Invoke step {next_step} with the Explore agent's findings."
         }
 
     if step_number == 2:
@@ -655,7 +686,6 @@ def get_planning_step_guidance(step_number: int, total_steps: int) -> dict:
 
 
 def get_review_step_guidance(step_number: int, total_steps: int,
-                              plan_file: str,
                               qr_iteration: int = 1, fixing_issues: bool = False) -> dict:
     """Returns guidance for review phase steps.
 
@@ -672,10 +702,12 @@ def get_review_step_guidance(step_number: int, total_steps: int,
       2. STOP CONDITION: Explicit blocker
       3. RE-VERIFICATION MODE: Different prompts when fixing issues
 
+    Plan file path: Commands use $PLAN_FILE placeholder. The invoking agent
+    knows the actual path from context and substitutes it.
+
     Args:
         step_number: Current step (1-3)
         total_steps: Total steps (typically 3)
-        plan_file: Path to the plan file being reviewed
         qr_iteration: Loop iteration for QR verification (1=initial, 2+=re-verify)
         fixing_issues: Whether this is a re-run after fixing QR issues
     """
@@ -737,7 +769,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "",
                 "  <delegation>",
                 "    <mode>plan-completeness</mode>",
-                f"    <plan_source>{plan_file}</plan_source>",
+                "    <plan_source>$PLAN_FILE</plan_source>",
                 "    <task>",
                 "      1. Read ## Planning Context section",
                 "      2. Write CONTEXT FILTER (decisions, rejected alts, risks)",
@@ -761,7 +793,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "",
                 "  <delegation>",
                 "    <mode>plan-code</mode>",
-                f"    <plan_source>{plan_file}</plan_source>",
+                "    <plan_source>$PLAN_FILE</plan_source>",
                 "    <task>",
                 "      1. Read ## Planning Context section",
                 "      2. Write CONTEXT FILTER (decisions, rejected alts, risks)",
@@ -784,6 +816,21 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "",
             ] + stop_condition + [
                 "",
+                "<mandatory_success_gate>",
+                "============================================",
+                ">>> MANDATORY: INVOKE TW AFTER BOTH PASS <<<",
+                "============================================",
+                "",
+                "After QR-Completeness AND QR-Code both return PASS:",
+                "",
+                "  1. You MUST invoke step 2 (TW scrub) - skipping is PROHIBITED",
+                "  2. TW sources comments from Decision Log you just validated",
+                "  3. Without TW, code ships without WHY documentation",
+                "",
+                "This gate exists because agents historically skip TW after",
+                "successful QR loops. The work is NOT complete until TW runs.",
+                "</mandatory_success_gate>",
+                "",
                 "<pre_tw_gate>",
                 "GATE: Both QR-Completeness AND QR-Code must PASS before TW runs.",
                 "",
@@ -801,17 +848,17 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "After BOTH QR agents complete:\n\n"
                 "  Both PASS -> Proceed to step 2\n"
                 "  Either ISSUES -> Fix issues, then RE-VERIFY (step 1 again)\n\n"
-                f"RESTART COMMAND (if either QR returns ISSUES):\n"
-                f'  python3 planner.py --phase review --plan-file "{plan_file}" \\\n'
-                f"    --step-number 1 --total-steps 3 \\\n"
+                "RESTART COMMAND (if either QR returns ISSUES):\n"
+                "  python3 planner.py --phase review \\\n"
+                "    --step-number 1 --total-steps 3 \\\n"
                 f"    --qr-iteration {qr_iteration + 1} --fixing-issues \\\n"
-                f'    --thoughts "Fixed: [list issues fixed]. Re-verifying..."\n\n'
+                '    --thoughts "Fixed: [list issues fixed]. Re-verifying..."\n\n'
                 "  CRITICAL: You MUST re-run QR after fixing issues.\n"
                 "  Skipping re-verification is PROHIBITED.\n\n"
                 "SUCCESS COMMAND (ONLY after both PASS):\n"
-                f'  python3 planner.py --phase review --plan-file "{plan_file}" \\\n'
-                f'    --step-number 2 --total-steps 3 \\\n'
-                f'    --thoughts "QR-Completeness and QR-Code passed, proceeding to TW"'
+                "  python3 planner.py --phase review \\\n"
+                "    --step-number 2 --total-steps 3 \\\n"
+                '    --thoughts "QR-Completeness and QR-Code passed, proceeding to TW"'
             )
         }
 
@@ -836,7 +883,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "",
                 "  <delegation>",
                 "    <mode>plan-scrub</mode>",
-                f"    <plan_source>{plan_file}</plan_source>",
+                "    <plan_source>$PLAN_FILE</plan_source>",
                 "    <scope>[OPTIONAL: If re-reviewing after QR-Docs feedback, specify",
                 "      which milestones/sections to focus on.]</scope>",
                 "    <task>",
@@ -854,10 +901,10 @@ def get_review_step_guidance(step_number: int, total_steps: int,
             ],
             "next": (
                 "After TW completes, invoke step 3:\n"
-                f'  python3 planner.py --phase review --plan-file "{plan_file}" \\\n'
-                f'    --step-number 3 --total-steps 3 \\\n'
+                "  python3 planner.py --phase review \\\n"
+                "    --step-number 3 --total-steps 3 \\\n"
                 f"    --qr-iteration {qr_iteration} \\\n"
-                f'    --thoughts "TW scrub complete, [summary of changes]"'
+                '    --thoughts "TW scrub complete, [summary of changes]"'
             )
         }
 
@@ -882,7 +929,7 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "",
                 "  <delegation>",
                 "    <mode>plan-docs</mode>",
-                f"    <plan_source>{plan_file}</plan_source>",
+                "    <plan_source>$PLAN_FILE</plan_source>",
                 "    <scope>[OPTIONAL: If re-reviewing, specify changed sections.]</scope>",
                 "    <task>",
                 "      1. Check all comments for temporal contamination (five questions)",
@@ -921,15 +968,15 @@ def get_review_step_guidance(step_number: int, total_steps: int,
                 "  ISSUES -> Restart from step 2 (TW), then re-verify at step 3\n"
                 "  PASS -> Review phase complete, plan ready for execution\n\n"
                 "Command to restart TW (if ISSUES):\n"
-                f'  python3 planner.py --phase review --plan-file "{plan_file}" \\\n'
-                f'    --step-number 2 --total-steps 3 \\\n'
+                "  python3 planner.py --phase review \\\n"
+                "    --step-number 2 --total-steps 3 \\\n"
                 f"    --qr-iteration {qr_iteration + 1} \\\n"
-                f'    --thoughts "QR-Docs feedback: [issues]. Restarting TW."\n\n'
+                '    --thoughts "QR-Docs feedback: [issues]. Restarting TW."\n\n'
                 "THEN after TW completes, RE-VERIFY with:\n"
-                f'  python3 planner.py --phase review --plan-file "{plan_file}" \\\n'
-                f"    --step-number 3 --total-steps 3 \\\n"
+                "  python3 planner.py --phase review \\\n"
+                "    --step-number 3 --total-steps 3 \\\n"
                 f"    --qr-iteration {qr_iteration + 1} --fixing-issues \\\n"
-                f'    --thoughts "TW fixed doc issues. Re-verifying..."\n\n'
+                '    --thoughts "TW fixed doc issues. Re-verifying..."\n\n'
                 "  CRITICAL: You MUST re-run QR-Docs after TW fixes issues.\n"
                 "  Skipping re-verification is PROHIBITED.\n\n"
                 "If PASS: REVIEW PHASE COMPLETE.\n"
@@ -979,11 +1026,12 @@ Examples:
   python3 planner.py --step-number 2 --total-steps 4 --thoughts "New constraint invalidates approach, reconsidering..."
 
   # Start review (after plan written) - 3 steps: QR (Completeness+Code), TW, QR-Docs
-  python3 planner.py --phase review --plan-file plans/auth.md \\
+  # Note: $PLAN_FILE in output should be replaced with actual plan path from context
+  python3 planner.py --phase review \\
     --step-number 1 --total-steps 3 --thoughts "Starting review..."
 
   # Re-verify after fixing QR issues (Three Pillars Pattern)
-  python3 planner.py --phase review --plan-file plans/auth.md \\
+  python3 planner.py --phase review \\
     --step-number 1 --total-steps 3 \\
     --qr-iteration 2 --fixing-issues --thoughts "Fixed issues, re-verifying..."
 """
@@ -996,7 +1044,7 @@ Examples:
     parser.add_argument("--total-steps", type=int, required=True)
     parser.add_argument("--thoughts", type=str, required=True)
     parser.add_argument("--plan-file", type=str, default=None,
-                        help="Path to plan file (required for review phase)")
+                        help="Deprecated: plan file path now inferred from context")
     # Three Pillars Pattern flags for QR verification loops
     parser.add_argument("--qr-iteration", type=int, default=1,
                         help="QR loop iteration (1=initial, 2+=re-verification)")
@@ -1014,13 +1062,8 @@ Examples:
         guidance = get_planning_step_guidance(args.step_number, args.total_steps)
         phase_label = "PLANNING"
     else:
-        # Review phase requires plan file
-        if not args.plan_file:
-            print("Error: --plan-file is required for review phase", file=sys.stderr)
-            sys.exit(1)
         guidance = get_review_step_guidance(
             args.step_number, args.total_steps,
-            plan_file=args.plan_file,
             qr_iteration=args.qr_iteration,
             fixing_issues=args.fixing_issues
         )
@@ -1036,6 +1079,13 @@ Examples:
         print(f"PLANNER - {phase_label} PHASE - Step {args.step_number} of {args.total_steps}")
     print("=" * 80)
     print()
+
+    # Placeholder note for review phase
+    if args.phase == "review":
+        print("PLACEHOLDER: $PLAN_FILE")
+        print("  Delegation templates use $PLAN_FILE as placeholder.")
+        print("  Replace with actual plan file path from your context.")
+        print()
     print(f"STATUS: {'phase_complete' if is_complete else 'in_progress'}")
     print()
     print("YOUR THOUGHTS:")

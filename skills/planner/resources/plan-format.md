@@ -209,16 +209,29 @@ See `resources/diff-format.md` for specification.
 
 **Requirements**:
 
-- Update CLAUDE.md index entries for all new/modified files
-- Each entry has WHAT (contents) and WHEN (task triggers)
-- If plan's Invisible Knowledge section is non-empty:
-  - Create/update README.md with architecture diagrams from plan
-  - Include tradeoffs, invariants, "why this structure" content
-  - Verify diagrams match actual implementation
+CLAUDE.md (LIGHTWEIGHT INDEX ONLY):
+
+- Tabular format with WHAT (contents) and WHEN (task triggers) columns
+- Budget: ~200 tokens maximum
+- Overview section: ONE sentence only
+- NO prose sections (Key Invariants, Dependencies, Constraints, etc.)
+- Prose belongs in README.md, not CLAUDE.md
+
+README.md (INVISIBLE KNOWLEDGE):
+
+- Create only if plan's Invisible Knowledge section is non-empty
+- Include architecture diagrams, data flow, invariants, tradeoffs
+- Include "Why This Structure" explanations
+- Verify diagrams match actual implementation
+
+STUB DIRECTORY EXCEPTION:
+
+- Directories containing only `.gitkeep` or no code files do NOT require
+  CLAUDE.md until code is added
 
 **Acceptance Criteria**:
 
-- CLAUDE.md enables LLM to locate relevant code for debugging/modification tasks
+- CLAUDE.md is tabular index only (~200 tokens, no prose sections)
 - README.md captures knowledge not discoverable from reading source files
 - Architecture diagrams in README.md match plan's Invisible Knowledge section
 

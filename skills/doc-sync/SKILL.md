@@ -200,6 +200,15 @@ Content that MUST be moved from CLAUDE.md to README.md:
 - Invariants or rules documentation
 - Any "why" explanations beyond simple triggers
 
+**Forbidden sections in subdirectory CLAUDE.md** (move to README.md):
+
+- "Key Invariants" sections
+- "Dependencies" sections
+- "Constraints" sections
+- "Purpose" sections with prose (beyond one sentence)
+- Any bullet-point lists explaining rationale
+- Any section exceeding ~200 tokens total
+
 Migration process:
 
 1. Identify misplaced content in CLAUDE.md
@@ -261,12 +270,19 @@ After all updates complete, verify:
 
 ## Exclusions
 
-DO NOT index:
+DO NOT create CLAUDE.md for:
 
-- Generated files (dist/, build/, _.generated._, compiled outputs)
+- Generated files directories (dist/, build/, compiled outputs)
 - Vendored dependencies (node_modules/, vendor/, third_party/)
 - Git internals (.git/)
 - IDE/editor configs (.idea/, .vscode/ unless project-specific settings)
+- **Stub directories** (contain only `.gitkeep` or no code files) - these do not
+  require CLAUDE.md until code is added
+
+DO NOT index (skip these files in CLAUDE.md):
+
+- Generated files (_.generated._, compiled outputs)
+- Vendored dependency files
 
 DO index:
 
