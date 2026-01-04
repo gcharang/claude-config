@@ -84,11 +84,11 @@ the affected code** during post-implementation.
 implementation. README.md files go in the package/directory containing the
 relevant code, not in a separate documentation directory.
 
-**Self-contained principle**: Code-adjacent documentation must be self-contained.
-Do NOT reference external authoritative sources (doc/ directories, wikis,
-external documentation). If knowledge exists in an authoritative source, it must
-be summarized in the code-adjacent README.md. Duplication is acceptable;
-maintenance burden is the cost of locality.
+**Self-contained principle**: Code-adjacent documentation must be
+self-contained. Do NOT reference external authoritative sources (doc/
+directories, wikis, external documentation). If knowledge exists in an
+authoritative source, it must be summarized in the code-adjacent README.md.
+Duplication is acceptable; maintenance burden is the cost of locality.
 
 **The test**: Would a new team member understand this from reading the source
 files? If no, it belongs here.
@@ -205,16 +205,29 @@ Add flags when:
 Skip tests when: user explicitly stated no tests, OR milestone is documentation-only,
 OR project docs prohibit tests for this component. State skip reason explicitly.
 
-**Code Changes** (REQUIRED for implementation milestones):
+**Code Intent** (you write this):
 
-Implementation milestones MUST include unified diff format showing actual code.
+Describe WHAT changes are needed. Do NOT include exact code or diffs.
+Do NOT read source files -- Developer handles that.
 
-Documentation-only milestones (ALL files are .md, .rst, .txt, or CLAUDE.md):
-- Code Changes section states: "Documentation milestones have no code changes."
-- Milestone MUST have `Delegated to:` field (typically `@agent-technical-writer`)
-- Do NOT write "Skip reason" -- documentation milestones are executed by TW, not skipped
+Include:
+- Functions/structs to add or modify (names, purposes)
+- Behavior to implement
+- Key decisions (reference Decision Log entries by name)
 
-See `resources/diff-format.md` for specification.
+Example:
+```
+**Code Intent**:
+- New file `pool.go`: Pool struct with Open(), Close(), Acquire(), Release()
+- Modify `config.go`: Add PoolConfig struct after existing Config
+- Connection timeout: 500ms (Decision: "95th percentile latency coverage")
+```
+
+**Code Changes** (filled by Developer agent):
+
+After plan is written, spawn Developer to convert Code Intent to unified diffs.
+Developer reads actual files and produces accurate context lines.
+See `resources/diff-format.md` for diff specification.
 
 ```diff
 --- a/path/to/file.py
@@ -228,7 +241,11 @@ See `resources/diff-format.md` for specification.
 
    # More context to anchor the insertion point
    more_existing_code()
-````
+```
+
+Documentation-only milestones (ALL files are .md, .rst, .txt, or CLAUDE.md):
+- Code Intent/Changes section states: "Documentation milestone - no code changes."
+- Milestone MUST have `Delegated to:` field (typically `@agent-technical-writer`)
 
 ### Milestone N: ...
 
@@ -306,7 +323,3 @@ M1 ---> M2
 ```
 
 Independent milestones can execute in parallel during /plan-execution.
-
-```
-
-```

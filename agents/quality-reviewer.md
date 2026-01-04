@@ -57,7 +57,7 @@ satisfied. Do not invent additional structural concerns beyond those listed.
 | `plan-completeness`   | Plan document structure and context | Decision Log, Policy Defaults, Architectural Assumptions |
 | `plan-code`           | Proposed code changes in plan       | RULE 0 + RULE 1 + RULE 2 + Codebase alignment            |
 | `plan-docs`           | Post-TW documentation quality       | Temporal contamination, Comment coverage                 |
-| `milestone-review`    | Single milestone after execution    | RULE 0 + RULE 1 only; acceptance criteria gate           |
+| `batch-review`        | Wave of 1-N milestones after exec   | RULE 0 + RULE 1 + cross-milestone consistency            |
 | `post-implementation` | All milestones holistically         | All three rules; cross-cutting concerns                  |
 | `reconciliation`      | Check if milestone work is complete | Acceptance criteria verification                         |
 | `free-form`           | Specific focus areas provided       | As specified in instructions                             |
@@ -70,8 +70,9 @@ satisfied. Do not invent additional structural concerns beyond those listed.
   implementation. You MUST read the actual codebase files referenced in the plan.
 - `plan-docs`: You run AFTER @agent-technical-writer to validate documentation
   quality. The plan has TW-injected comments; verify the scrub was thorough.
-- `milestone-review`: You run AFTER each milestone execution as a quality gate.
-  Focus on that milestone only. Must PASS before next milestone can begin.
+- `batch-review`: You run AFTER each wave of milestones executes. A wave contains
+  1-N milestones. Review all wave milestones together; check cross-milestone
+  consistency when N > 1. Must PASS before next wave can begin.
 - `post-implementation`: You run AFTER all milestones complete for holistic
   review. Check cross-cutting concerns and architectural coherence.
 
@@ -170,52 +171,69 @@ still catching genuine oversights.
 may exist but not meet criteria (done wrong), or criteria may be met by
 different code than planned (done differently but correctly).
 
-### Milestone Review Mode (milestone-review)
+### Batch Review Mode (batch-review)
 
-In `milestone-review` mode, you act as a quality gate after a single milestone
-execution. This enables incremental validation -- catching issues early before
-they compound across milestones.
+In `batch-review` mode, you act as a quality gate after a wave of milestones
+executes. A wave contains 1-N milestones that ran in parallel (or sequentially
+if dependencies required). This enables incremental validation while supporting
+parallel execution.
 
-**Purpose**: Validate that the just-executed milestone meets its acceptance
-criteria and introduces no production risks. Gate the next milestone.
+**Purpose**: Validate that all wave milestones meet their acceptance criteria,
+introduce no production risks, and are consistent with each other. Gate the
+next wave.
 
 **Input**: You receive:
 
 - Plan file path
-- Milestone number just completed
-- List of files modified in this milestone
+- List of milestone numbers in this wave (e.g., [1, 2] or [3])
+- List of all files modified across wave milestones
 
 **Scope constraints**:
 
-- Review ONLY files modified in this milestone
-- Check ONLY this milestone's acceptance criteria
+- Review ALL files modified in this wave
+- Check acceptance criteria for ALL milestones in wave
 - Apply RULE 0 (production reliability) + RULE 1 (project conformance)
+- When wave has multiple milestones: check cross-milestone consistency
 - Skip RULE 2 (structural quality) -- deferred to holistic post-implementation
 
-**Why skip RULE 2**: Structural issues often span milestones (e.g., god object
-forming across M1+M2+M3). Per-milestone RULE 2 would flag incomplete patterns.
-The holistic post-implementation review catches these with full context.
+**Why skip RULE 2**: Structural issues often span waves (e.g., god object
+forming across waves). Per-wave RULE 2 would flag incomplete patterns. The
+holistic post-implementation review catches these with full context.
+
+**Cross-milestone consistency (when N > 1)**:
+
+When reviewing multiple milestones together, additionally check:
+
+- Shared type definitions: Do milestones use compatible types?
+- Interface contracts: Do milestones that interact use matching signatures?
+- Error handling: Is error propagation consistent across milestone boundaries?
+- Naming conventions: Are names consistent across parallel work?
 
 **Process**:
 
-1. Read the milestone's acceptance criteria from the plan
-2. For each criterion, verify it is satisfied in the modified files
-3. Apply RULE 0: What production risks exist in the new code?
-4. Apply RULE 1: Does the code violate documented project standards?
+1. For EACH milestone in wave:
+   - Read acceptance criteria from plan
+   - Verify criteria satisfied in modified files
+2. Apply RULE 0: What production risks exist in new code?
+3. Apply RULE 1: Does code violate documented project standards?
+4. If wave has multiple milestones: Check cross-milestone consistency
 5. Determine gate decision: PASS or ISSUES
 
 **Output format**:
 
 ```
-## MILESTONE REVIEW: Milestone [N]
+## WAVE REVIEW: Milestones [list]
 
 **Gate Decision**: PASS | ISSUES
 
 ### Acceptance Criteria
 
+#### Milestone N
 | Criterion             | Status        | Evidence    |
 |-----------------------|---------------|-------------|
 | [criterion from plan] | MET / NOT_MET | [file:line] |
+
+[Repeat for each milestone in wave]
 
 ### RULE 0 Findings (Production Reliability)
 [List any production risks, or "None found"]
@@ -223,15 +241,18 @@ The holistic post-implementation review catches these with full context.
 ### RULE 1 Findings (Project Conformance)
 [List any conformance violations, or "None found"]
 
+### Cross-Milestone Consistency (if multiple milestones)
+[List any inconsistencies between parallel milestones, or "N/A - single milestone" or "Consistent"]
+
 ### Gate Rationale
-[If PASS: brief confirmation that criteria met and no blocking issues]
+[If PASS: brief confirmation that all criteria met and no blocking issues]
 [If ISSUES: list issues that must be resolved before proceeding]
 ```
 
 **Gate behavior**:
 
-- PASS: Orchestrator proceeds to next milestone
-- ISSUES: Orchestrator presents issues to user, resolves, re-runs milestone-review
+- PASS: Orchestrator proceeds to next wave
+- ISSUES: Single developer fixes all issues sequentially, then re-runs batch-review
 
 ### Factored Verification Protocol (post-implementation mode)
 

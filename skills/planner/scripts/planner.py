@@ -37,16 +37,16 @@ undocumented code.
 - Rejected alternatives listed with concrete reasons?
 - Known risks have mitigations with file:line anchors for any behavioral claims?
 
-### VERIFY 2: Code Changes Presence
+### VERIFY 2: Code Intent Presence
 
 STOP CHECK: For EACH implementation milestone:
 
-- Does it contain diff blocks or code snippets?
-- If NO and milestone creates/modifies source files: STOP. Add code changes
+- Does it contain a Code Intent section describing WHAT to change?
+- If NO and milestone creates/modifies source files: STOP. Add Code Intent
   before proceeding.
 
-Implementation milestones WITHOUT code cannot be approved. Only documentation
-milestones (100% .md/.rst files) may skip code.
+Implementation milestones WITHOUT Code Intent cannot be approved. Only
+documentation milestones (100% .md/.rst files) may skip Code Intent.
 
 ### VERIFY 3: Invisible Knowledge Capture (BLOCKING)
 
@@ -69,20 +69,17 @@ comments can convey, it MUST be in Invisible Knowledge.
 
 ## PHASE 2: FORMAT
 
-### VERIFY 4: Diff Format Compliance
+### VERIFY 4: Code Intent Clarity
 
-Re-read resources/diff-format.md before writing any code changes.
+For EACH implementation milestone:
 
-For EACH diff block:
+- File paths exact (src/auth/handler.py not 'auth files')?
+- Code Intent describes WHAT to change (functions, structs, behavior)?
+- Key decisions reference Decision Log entries?
+- NO diff blocks present (Developer fills those after plan is written)?
 
-- File path exact (src/auth/handler.py not 'auth files')?
-- Context lines: 2-3 lines copied VERBATIM from actual file?
-- WHY comments explain rationale, not WHAT code does?
-- No location directives in comments?
-- No hidden baselines ('[adjective] compared to what?')?
-
-FORBIDDEN: '...', '[existing code]', summaries, placeholders. If you haven't
-read the target file, read it now.
+Code Intent should be clear enough for Developer to produce diffs without
+ambiguity. If intent is vague, clarify it now.
 
 ### VERIFY 5: Milestone Specification
 
@@ -149,6 +146,11 @@ PLANNING_STEPS = {
             "    - Codebase patterns (naming, errors, tests)",
             "    - Constraints and scope (IN/OUT)",
             "    - Success criteria",
+            "",
+            "CONTEXT EFFICIENCY:",
+            "  Do NOT read source files directly.",
+            "  Explore provides summaries. Developer reads files for diffs later.",
+            "  This keeps your context focused on planning decisions.",
         ],
     },
     2: {
@@ -199,7 +201,7 @@ PLANNING_STEPS = {
             "  - Files: exact paths (each file in ONE milestone only)",
             "  - Requirements: specific behaviors",
             "  - Acceptance: testable pass/fail criteria",
-            "  - Code: diff format for non-trivial logic",
+            "  - Code Intent: WHAT to change (Developer converts to diffs)",
             "  - Tests: type, backing, scenarios",
             "",
             "PARALLELIZATION:",
@@ -210,14 +212,21 @@ PLANNING_STEPS = {
             "  Draw dependency diagram showing parallel waves",
             "",
             "RISKS: | Risk | Mitigation | Anchor (file:line if behavioral claim) |",
+            "",
+            "AFTER WRITING PLAN - Developer delegation:",
+            "  Spawn developer agent:",
+            "    'Convert Code Intent to Code Changes for all implementation milestones.",
+            "     Read target files, write unified diffs, edit plan in-place.",
+            "     ONLY produce diffs. Do not modify other plan sections.'",
+            "  Do NOT read source files yourself.",
         ],
     },
     5: {
         "title": "Final Verification",
         "actions": [
             "Complete ALL verification checks (see checklist below):",
-            "  Phase 1 (BLOCKING): Decision Log, Code Changes, Invisible Knowledge",
-            "  Phase 2 (FORMAT): Diff compliance, Milestone spec",
+            "  Phase 1 (BLOCKING): Decision Log, Code Intent, Invisible Knowledge",
+            "  Phase 2 (FORMAT): Code Intent clarity, Milestone spec",
             "  Phase 3 (DOCS): Documentation milestone, Comment hygiene",
             "",
             "STOP if any Phase 1 check fails. Fix before proceeding.",
@@ -290,6 +299,12 @@ def get_planning_guidance(step: int, total_steps: int) -> dict:
             "actions": actions,
             "next": (
                 f"Write plan using this format:\n\n{plan_format}\n\n"
+                "AFTER WRITING PLAN - Developer delegation:\n"
+                "  Spawn developer agent:\n"
+                "    'Convert Code Intent to Code Changes for all implementation milestones.\n"
+                "     Read target files, write unified diffs, edit plan in-place.\n"
+                "     ONLY produce diffs. Do not modify other plan sections.'\n"
+                "  Do NOT read source files yourself.\n\n"
                 "Then invoke review phase:\n"
                 "  python3 planner.py --phase review --step 1 --total-steps 3"
             ),

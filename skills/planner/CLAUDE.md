@@ -11,7 +11,7 @@ Planning skill with resources that must stay synced with agent prompts.
 | `SKILL.md`                            | Planning workflow, phases                      | Using the planner skill                      |
 | `scripts/planner.py`                  | Step-by-step planning orchestration            | Debugging planner behavior                   |
 | `scripts/executor.py`                 | Plan execution orchestration                   | Debugging executor behavior                  |
-| `scripts/execute-milestone.py`        | Per-milestone execution with QR gates          | Debugging milestone execution                |
+| `scripts/execute-milestones.py`       | Wave execution with batch QR gates             | Debugging wave execution                     |
 | `scripts/utils.py`                    | Shared utilities (Three Pillars Pattern)       | Modifying QR verification loop behavior      |
 | `resources/plan-format.md`            | Plan template (injected by script)             | Editing plan structure                       |
 | `resources/temporal-contamination.md` | Detection heuristic for contaminated comments  | Updating TW/QR temporal contamination logic  |
@@ -119,25 +119,25 @@ The pattern is applied at four checkpoints:
 
 1. **planner.py review step 1**: Plan QR (Completeness + Code)
 2. **planner.py review step 3**: Doc QR (post-TW validation)
-3. **execute-milestone.py steps 2-3**: Per-milestone QR gate
+3. **execute-milestones.py steps 2-3**: Batch QR gate (per wave)
 4. **executor.py step 4**: Holistic post-implementation QR
 
 ### Example Flow
 
 ```
-# Initial QR (iteration 1)
-python3 execute-milestone.py --milestone 1 --step 2 --thoughts "Running QR..."
+# Wave with milestones 1,2 - Initial batch QR (iteration 1)
+python3 execute-milestones.py --milestones 1,2 --total-milestones 4 --step 2
 
-# QR finds issues -> step 3 routes to fix
-python3 execute-milestone.py --milestone 1 --step 3 --qr-result ISSUES ...
+# Batch QR finds issues -> step 3 routes to fix
+python3 execute-milestones.py --milestones 1,2 --total-milestones 4 --step 3 --qr-result ISSUES
 
-# Fix issues (iteration 2)
-python3 execute-milestone.py --milestone 1 --step 1 \
-  --fixing-qr-issues --qr-iteration 2 --thoughts "Fixing issues..."
+# Single developer fixes all issues (iteration 2)
+python3 execute-milestones.py --milestones 1,2 --total-milestones 4 --step 1 \
+  --fixing-qr-issues --qr-iteration 2
 
 # RE-VERIFY (iteration 2) -- MANDATORY, cannot skip
-python3 execute-milestone.py --milestone 1 --step 2 \
-  --qr-iteration 2 --thoughts "Re-verifying fixes..."
+python3 execute-milestones.py --milestones 1,2 --total-milestones 4 --step 2 \
+  --qr-iteration 2
 ```
 
 ### Modifying the Pattern

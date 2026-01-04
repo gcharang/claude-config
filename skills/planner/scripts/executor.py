@@ -28,17 +28,33 @@ STEPS = {
             "Plan file: $PLAN_FILE (substitute from context)",
             "",
             "ANALYZE plan:",
-            "  - Count milestones and dependencies",
-            "  - Identify parallelization opportunities",
+            "  - Count milestones and parse dependency diagram",
+            "  - Group milestones into WAVES for execution",
             "  - Set up TodoWrite tracking",
+            "",
+            "WAVE ANALYSIS:",
+            "  Parse the plan's 'Milestone Dependencies' diagram.",
+            "  Group into waves: milestones at same depth = one wave.",
+            "",
+            "  Example diagram:",
+            "    M0 (foundation)",
+            "     |",
+            "     +---> M1 (auth)     \\",
+            "     |                    } Wave 2 (parallel)",
+            "     +---> M2 (users)    /",
+            "     |",
+            "     +---> M3 (posts) ----> M4 (feed)",
+            "            Wave 3          Wave 4",
+            "",
+            "  Output format:",
+            "    Wave 1: [0]       (foundation, sequential)",
+            "    Wave 2: [1, 2]    (parallel)",
+            "    Wave 3: [3]       (sequential)",
+            "    Wave 4: [4]       (sequential)",
             "",
             "WORKFLOW:",
             "  This step is ANALYSIS ONLY. Do NOT delegate yet.",
-            "  Delegation happens via execute-milestone.py (see MANDATORY ACTION below).",
-            "",
-            "PARALLELIZATION ANALYSIS:",
-            "  Parallel when: different files, no data dependencies",
-            "  Sequential when: same file, imports, shared state",
+            "  Delegation happens via execute-milestones.py (see MANDATORY ACTION below).",
         ],
     },
     2: {
@@ -58,14 +74,19 @@ STEPS = {
         ],
     },
     3: {
-        "title": "Milestone Execution",
+        "title": "Wave Execution",
         "actions": [
-            "Execute milestones with per-milestone QR gates.",
+            "Execute waves with batch QR after each wave.",
             "",
-            "Use execute-milestone.py for each milestone:",
-            "  Step 1: Implementation (Task tool, subagent_type='developer')",
-            "  Step 2: QR Gate (Task tool, subagent_type='quality-reviewer')",
-            "  Step 3: Gate Check (proceed or fix)",
+            "Use execute-milestones.py for each WAVE:",
+            "  Step 1: Implementation (parallel Task calls for wave milestones)",
+            "  Step 2: Batch QR (single QR reviews all wave milestones)",
+            "  Step 3: Gate Check (proceed to next wave or fix)",
+            "",
+            "WAVE EXECUTION PATTERN:",
+            "  Wave 1: [1,2] -> parallel dev -> batch QR -> PASS",
+            "  Wave 2: [3]   -> dev -> batch QR -> PASS",
+            "  Wave 3: [4]   -> dev -> batch QR -> PASS -> Step 4",
             "",
             "ERROR HANDLING (you NEVER fix code yourself):",
             "  Clear problem + solution: Task(developer) immediately",
@@ -184,20 +205,20 @@ def format_output(step: int, total_steps: int,
             lines.append("RUN THIS COMMAND NOW:")
             lines.append(f"  python3 executor.py --step 2 --total-steps {total_steps} --reconciliation-check")
         else:
-            lines.append("You MUST invoke execute-milestone.py for milestone execution.")
+            lines.append("You MUST invoke execute-milestones.py for wave execution.")
             lines.append("DO NOT delegate directly. The script orchestrates dev/QR loops.")
             lines.append("")
-            lines.append("RUN THIS COMMAND NOW:")
+            lines.append("RUN FIRST WAVE NOW:")
             if milestone_count > 0:
-                lines.append(f"  python3 execute-milestone.py --milestone 1 --total-milestones {milestone_count} --step 1")
+                lines.append(f"  python3 execute-milestones.py --milestones <wave1> --total-milestones {milestone_count} --step 1")
             else:
-                lines.append("  python3 execute-milestone.py --milestone 1 --total-milestones N --step 1")
-                lines.append("  (Replace N with actual milestone count from plan)")
+                lines.append("  python3 execute-milestones.py --milestones <wave1> --total-milestones N --step 1")
+            lines.append("  (Replace <wave1> with first wave milestones, e.g., '1' or '1,2')")
         lines.append("")
-        lines.append("After EACH milestone completes, invoke next milestone until all done.")
+        lines.append("After EACH wave completes, invoke next wave until all done.")
         lines.append("=" * 70)
     elif step == 3:
-        lines.append("NEXT: Step 4 (Post-Implementation QR) after all milestones complete")
+        lines.append("NEXT: Step 4 (Post-Implementation QR) after all waves complete")
     elif step == 4:
         lines.append("NEXT: Step 5 if ISSUES, Step 6 if PASS")
     elif step == 5:
