@@ -160,7 +160,28 @@ not phase-prefixed numbers (2.1, 3.1) unless explicitly managing multi-phase pla
 
 **Files**: [exact paths - e.g., src/auth/handler.py, not "auth files"]
 
-**Flags** (if applicable): [needs TW rationale, needs error handling review, needs conformance check]
+**Flags** (optional):
+
+- `flag-name`: optional focus note
+- `another-flag`
+
+| Flag | Consumer | Effect |
+|------|----------|--------|
+| `error-handling` | QR | Extra RULE 0 scrutiny on error paths |
+| `conformance` | QR | Extra RULE 1 scrutiny on project patterns |
+| `security` | QR | Focus on auth, injection, data exposure |
+| `performance` | QR | Focus on hot paths, allocations, complexity |
+| `needs-rationale` | TW | Add extra WHY comments from Decision Log |
+| `complex-algorithm` | TW | Add Tier 5 block for non-obvious logic |
+
+Add flags when:
+
+- Multiple valid approaches existed -> `conformance`
+- Error paths involve retries, fallbacks, recovery -> `error-handling`
+- Code touches auth, user input, external data -> `security`
+- Hot path or non-obvious complexity -> `performance`
+- Thresholds, timeouts, magic numbers need justification -> `needs-rationale`
+- Algorithm strategy not obvious from code -> `complex-algorithm`
 
 **Requirements**:
 

@@ -296,6 +296,15 @@ Do NOT proceed with scrubbing if implementation milestones lack code.
 <priority_stop> If scrubbing LOW priority code before completing HIGH, STOP.
 </priority_stop>
 
+4.5. **Check milestone flags** - Read the **Flags** field if present:
+
+| Flag | Action |
+|------|--------|
+| `needs-rationale` | Ensure every non-obvious element has WHY comment from Decision Log. Flag gaps aggressively. |
+| `complex-algorithm` | Add Tier 5 algorithm block (strategy, invariants, edge cases) even if code looks simple |
+
+Flags signal planner uncertainty--treat flagged milestones as HIGH priority.
+
 5. **Enrich plan prose** - For HIGH and MEDIUM priority sections lacking
    rationale:
    - Integrate relevant decision context naturally into the prose

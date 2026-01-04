@@ -117,6 +117,19 @@ REQUIRED before any finding:
 2. Write CONTEXT FILTER (decisions, rejected alternatives, risks)
 3. Only then examine milestones </planning_context_stop>
 
+### Milestone Flags (plan-code and milestone-review modes)
+
+Before reviewing a milestone, check for **Flags** field and adjust focus:
+
+| Flag | Action |
+|------|--------|
+| `error-handling` | Enumerate all error paths, verify recovery strategies, check for silent failures |
+| `conformance` | Verify pattern alignment, check naming conventions, validate against project docs |
+| `security` | Check authentication/authorization, injection vectors, data exposure, secrets |
+| `performance` | Check hot path allocations, algorithmic complexity, resource lifecycle |
+
+Flags are additive--increase scrutiny in flagged areas without reducing other checks.
+
 ### Reconciliation Mode (reconciliation)
 
 In `reconciliation` mode, you check whether a milestone's work is already
