@@ -19,3 +19,5 @@
 # Always ignore these, even in tracked directories
 .DS_Store
 **/.DS_Store
+
+**/__pycache__
