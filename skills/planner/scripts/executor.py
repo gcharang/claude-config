@@ -32,27 +32,13 @@ STEPS = {
             "  - Identify parallelization opportunities",
             "  - Set up TodoWrite tracking",
             "",
-            "RULES:",
-            "  RULE 0: MANDATORY DELEGATION - NO EXCEPTIONS",
-            "    You MUST use the Task tool to delegate ALL code work.",
-            "    DO NOT write code yourself. DO NOT create files yourself.",
-            "    DO NOT rationalize exceptions based on plan completeness.",
+            "WORKFLOW:",
+            "  This step is ANALYSIS ONLY. Do NOT delegate yet.",
+            "  Delegation happens via execute-milestone.py (see MANDATORY ACTION below).",
             "",
-            "    Task tool invocations:",
-            "      subagent_type='developer'  -> code implementation",
-            "      subagent_type='debugger'   -> bug diagnosis",
-            "      subagent_type='technical-writer' -> documentation",
-            "",
-            "  RULE 1: Parallelization",
-            "    Parallel when: different files, no data dependencies",
-            "    Sequential when: same file, imports, shared state",
-            "",
-            "DELEGATION:",
-            "  Use Task tool with prompt containing:",
-            "    - Plan file path: $PLAN_FILE",
-            "    - Milestone number and name",
-            "    - Exact file paths to create/modify",
-            "    - Acceptance criteria from plan",
+            "PARALLELIZATION ANALYSIS:",
+            "  Parallel when: different files, no data dependencies",
+            "  Sequential when: same file, imports, shared state",
         ],
     },
     2: {
@@ -190,12 +176,26 @@ def format_output(step: int, total_steps: int,
     if is_complete:
         lines.append("EXECUTION COMPLETE - Present retrospective to user.")
     elif step == 1:
+        lines.append("")
+        lines.append("=" * 70)
+        lines.append("MANDATORY NEXT ACTION (DO NOT SKIP)")
+        lines.append("=" * 70)
         if reconciliation_check:
-            lines.append("NEXT: Step 2 (Reconciliation)")
+            lines.append("RUN THIS COMMAND NOW:")
+            lines.append(f"  python3 executor.py --step 2 --total-steps {total_steps} --reconciliation-check")
         else:
-            lines.append("NEXT: Step 3 (Milestone Execution)")
+            lines.append("You MUST invoke execute-milestone.py for milestone execution.")
+            lines.append("DO NOT delegate directly. The script orchestrates dev/QR loops.")
+            lines.append("")
+            lines.append("RUN THIS COMMAND NOW:")
             if milestone_count > 0:
                 lines.append(f"  python3 execute-milestone.py --milestone 1 --total-milestones {milestone_count} --step 1")
+            else:
+                lines.append("  python3 execute-milestone.py --milestone 1 --total-milestones N --step 1")
+                lines.append("  (Replace N with actual milestone count from plan)")
+        lines.append("")
+        lines.append("After EACH milestone completes, invoke next milestone until all done.")
+        lines.append("=" * 70)
     elif step == 3:
         lines.append("NEXT: Step 4 (Post-Implementation QR) after all milestones complete")
     elif step == 4:
