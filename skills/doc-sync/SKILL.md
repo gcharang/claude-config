@@ -1,6 +1,6 @@
 ---
 name: doc-sync
-description: Synchronizes CLAUDE.md navigation indexes and README.md architecture docs across a repository. Use when asked to "sync docs", "update CLAUDE.md files", "ensure documentation is in sync", "audit documentation", or when documentation maintenance is needed after code changes.
+description: Synchronizes docs across a repository. Use when user asks to sync docs.
 ---
 
 # Doc Sync

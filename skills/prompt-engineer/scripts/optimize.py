@@ -1,553 +1,205 @@
 #!/usr/bin/env python3
 """
-Prompt Engineer Skill - Multi-turn prompt optimization workflow.
+Prompt Engineer Skill - Compact multi-turn prompt optimization workflow.
 
-Guides prompt optimization through nine phases:
-  1. Triage     - Assess complexity, route to lightweight or full process
-  2. Understand - Blind problem identification (NO references yet)
-  3. Plan       - Consult references, match techniques, generate visual cards
-  4. Verify     - Factored verification of FACTS (open questions, cross-check)
-  5. Feedback   - Generate actionable critique from verification results
-  6. Refine     - Apply feedback to update the plan
-  7. Approval   - Present refined plan to human, HARD GATE
-  8. Execute    - Apply approved changes to prompt
-  9. Integrate  - Coherence check, anti-pattern audit, quality verification
+Five-phase workflow:
+  1. Assess    - Triage complexity + blind problem identification
+  2. Plan      - Match techniques, propose changes with evidence
+  3. Refine    - Self-Refine loop (verify -> feedback -> update)
+  4. Approve   - Present to human, HARD GATE
+  5. Execute   - Apply changes + integration check
 
 Research grounding:
-  - Self-Refine (Madaan 2023): Separate feedback from refinement for 5-40%
-    improvement. Feedback must be "actionable and specific."
-  - CoVe (Dhuliawala 2023): Factored verification improves accuracy 17%->70%.
-    Use OPEN questions, not yes/no ("model tends to agree whether right or wrong")
-  - Factor+Revise: Explicit cross-check achieves +7.7 FACTSCORE points over
-    factored verification alone.
-  - Separation of Concerns: "Each turn has a distinct cognitive goal. Mixing
-    these goals within a single turn reduces effectiveness."
+  - Self-Refine (Madaan 2023): Separate feedback from refinement
+  - CoVe (Dhuliawala 2023): Factored verification with OPEN questions
+  - Technique matching requires quoted trigger conditions from references
 
 Usage:
-    python3 optimize.py --step 1 --total-steps 9 --thoughts "Prompt: agents/developer.md"
+    python3 optimize.py --step 1 --total-steps 5
+    python3 optimize.py --step 2 --total-steps 5
 """
 
 import argparse
 import sys
 
 
-def get_step_1_guidance():
-    """Step 1: Triage - Assess complexity and route appropriately."""
-    return {
-        "title": "Triage",
+STEPS = {
+    1: {
+        "title": "Assess",
+        "brief": "Triage + blind identification (NO references yet)",
         "actions": [
-            "Assess the prompt complexity:",
+            "READ the prompt file. Classify complexity:",
+            "  SIMPLE: <20 lines, single purpose, no conditionals",
+            "  COMPLEX: multiple sections, conditionals, tool orchestration",
             "",
-            "SIMPLE prompts (use lightweight 3-step process):",
-            "  - Under 20 lines",
-            "  - Single clear purpose (one tool, one behavior)",
-            "  - No conditional logic or branching",
-            "  - No inter-section dependencies",
+            "Document OPERATING CONTEXT:",
+            "  - Interaction: single-shot or conversational?",
+            "  - Agent type: tool-use, coding, analysis, general?",
+            "  - Failure modes: what goes wrong when this fails?",
             "",
-            "COMPLEX prompts (use full 9-step process):",
-            "  - Multiple sections serving different functions",
-            "  - Conditional behaviors or rule hierarchies",
-            "  - Tool orchestration or multi-step workflows",
-            "  - Known failure modes that need addressing",
+            "BLIND identification at THREE LEVELS (quote line evidence):",
             "",
-            "If SIMPLE: Note 'LIGHTWEIGHT' and proceed with abbreviated analysis",
-            "If COMPLEX: Note 'FULL PROCESS' and proceed to step 2",
+            "  STRUCTURAL: workflow patterns, multi-turn, orchestration",
+            "  BEHAVIORAL: identity, confidence, emphasis hierarchy",
+            "  STYLISTIC: hedging, missing examples, format clarity",
             "",
-            "Read the prompt file now. Do NOT read references yet.",
+            "List ALL opportunities with 'Lines X-Y: [issue]' format.",
+            "Do NOT read references yet - prevents pattern-shopping.",
         ],
-        "state_requirements": [
-            "PROMPT_PATH: path to the prompt being optimized",
-            "COMPLEXITY: SIMPLE or COMPLEX",
-            "PROMPT_SUMMARY: 2-3 sentences describing purpose",
-            "PROMPT_LENGTH: approximate line count",
+    },
+    2: {
+        "title": "Plan",
+        "brief": "Match techniques to opportunities",
+        "read": [
+            "references/prompt-engineering-single-turn.md (always)",
+            "references/prompt-engineering-multi-turn.md (if STRUCTURAL)",
+            "references/prompt-engineering-subagents.md (if orchestration)",
         ],
-    }
-
-
-def get_step_2_guidance():
-    """Step 2: Understand - Multi-level opportunity identification."""
-    return {
-        "title": "Understand (Multi-Level)",
         "actions": [
-            "CRITICAL: Do NOT read the reference documents yet.",
-            "This step uses BLIND identification to prevent pattern-shopping.",
+            "For EACH opportunity from step 1:",
+            "  1. Find matching technique in references",
+            "  2. QUOTE the trigger condition",
+            "  3. QUOTE the expected effect",
+            "  4. Note stacking compatibility",
             "",
-            "Document the prompt's OPERATING CONTEXT:",
-            "  - Interaction model: single-shot or conversational?",
-            "  - Agent type: tool-use, coding, analysis, or general?",
-            "  - Workflow type: standalone, orchestrator/subagent, or human-in-the-loop?",
-            "  - Token constraints: brevity critical or thoroughness preferred?",
-            "  - Failure modes: what goes wrong when this prompt fails?",
+            "PROACTIVE SCAN (even if no opportunity identified):",
+            "  - No examples? -> Contrastive Examples, Few-Shot",
+            "  - Reasoning needed? -> Plan-and-Solve, RE2",
+            "  - Long prompt? -> Document Positioning",
             "",
-            "Identify opportunities at THREE LEVELS (list ALL at each level):",
-            "",
-            "LEVEL 1 - STRUCTURAL (macro/workflow):",
-            "  Could the prompt benefit from:",
-            "  - Multi-turn patterns (Self-Refine, CoVe, iterative refinement)?",
-            "  - Subagent orchestration (parallel execution, role specialization)?",
-            "  - Human-in-the-loop gates (plan review, pre-execution checkpoints)?",
-            "  - Workflow restructuring (different step ordering, decomposition)?",
-            "  Quote evidence: 'Lines X-Y suggest [structural opportunity]'",
-            "",
-            "LEVEL 2 - BEHAVIORAL (role/execution):",
-            "  Are there gaps in:",
-            "  - Identity/role establishment?",
-            "  - Confidence building or error normalization?",
-            "  - Emphasis hierarchy or rule precedence?",
-            "  - Pre-work context analysis?",
-            "  Quote evidence: 'Lines X-Y show [behavioral gap]'",
-            "",
-            "LEVEL 3 - STYLISTIC (wording/format):",
-            "  Are there improvements for:",
-            "  - Hedging language -> affirmative directives?",
-            "  - Missing examples (contrastive, few-shot)?",
-            "  - Output format clarity (XML structure, format strictness)?",
-            "  - Reasoning triggers (CoT, Plan-and-Solve)?",
-            "  Quote evidence: 'Lines X-Y contain [stylistic issue]'",
-            "",
-            "IMPORTANT: Do NOT stop at a minimum count. List ALL opportunities",
-            "at each level. Comprehensive identification enables better optimization.",
+            "Format each change:",
+            "  === CHANGE N: [title] ===",
+            "  Level: STRUCTURAL/BEHAVIORAL/STYLISTIC",
+            "  Line: [numbers]",
+            "  Technique: [name] | Trigger: \"[quoted]\" | Effect: [quoted]",
+            "  BEFORE: [original]",
+            "  AFTER: [modified]",
+            "  TRADEOFF: [downside or None]",
         ],
-        "state_requirements": [
-            "OPERATING_CONTEXT: interaction model, agent type, workflow type, constraints",
-            "STRUCTURAL_OPPORTUNITIES: workflow/macro-level improvements with evidence",
-            "BEHAVIORAL_OPPORTUNITIES: role/execution improvements with evidence",
-            "STYLISTIC_OPPORTUNITIES: wording/format improvements with evidence",
-            "Each opportunity must have: line reference, quoted text, description",
-        ],
-    }
-
-
-def get_step_3_guidance():
-    """Step 3: Plan - Consult references, match techniques, synthesize."""
-    return {
-        "title": "Plan + Synthesize",
-        "actions": [
-            "NOW read the reference documents:",
-            "  - references/prompt-engineering-single-turn.md (always)",
-            "  - references/prompt-engineering-multi-turn.md (if STRUCTURAL opportunities identified)",
-            "  - references/prompt-engineering-subagents.md (if orchestration opportunities)",
-            "  - references/prompt-engineering-hitl.md (if human-in-the-loop opportunities)",
-            "",
-            "PART A - Match techniques to opportunities:",
-            "",
-            "For EACH opportunity from Step 2 (all three levels):",
-            "1. Locate matching technique(s) in the references",
-            "2. QUOTE the trigger condition from Technique Selection Guide",
-            "3. QUOTE the expected effect",
-            "4. Note stacking compatibility (from 'Stacks With' column)",
-            "",
-            "PART B - Proactive technique scan:",
-            "",
-            "Even if no opportunity was identified, scan for techniques that could help:",
-            "  - Does the prompt lack examples? -> Consider Contrastive Examples, Few-Shot",
-            "  - Is reasoning required? -> Consider Plan-and-Solve, RE2",
-            "  - Could verification help? -> Consider Embedded Verification, CoVe",
-            "  - Is the prompt long? -> Consider Document Positioning, Quote Extraction",
-            "",
-            "PART C - Synthesize compound changes:",
-            "",
-            "Review all matched techniques. COMBINE compatible techniques into",
-            "compound changes where they reinforce each other:",
-            "  - Example: Affirmative Directives + Contrastive Examples (same section)",
-            "  - Example: Plan-and-Solve + RE2 (stacking confirmed in reference)",
-            "  - Example: Identity + Emotional Stimuli (both behavioral, compatible)",
-            "",
-            "A compound change applies MULTIPLE techniques in ONE transformation.",
-            "Mark compound changes with [COMPOUND] tag.",
-            "",
-            "Format each proposed change using this template:",
-            "",
-            "=== CHANGE N: [short title] ===",
-            "Level: [STRUCTURAL / BEHAVIORAL / STYLISTIC]",
-            "Line: [line numbers]",
-            "Technique(s): [name(s) from reference]",
-            "Trigger: \"[quoted trigger condition from reference]\"",
-            "Effect: [expected improvement, quoted from reference]",
-            "[COMPOUND] (if multiple techniques combined)",
-            "",
-            "  BEFORE:",
-            "  - [original line 1]",
-            "  - [original line 2, if applicable]",
-            "",
-            "  AFTER:",
-            "  + [modified line 1]",
-            "  + [modified line 2, if applicable]",
-            "",
-            "  [TRADEOFF] [specific downside or 'None identified']",
-            "",
-            "Order changes by level: STRUCTURAL first, then BEHAVIORAL, then STYLISTIC.",
-            "If you cannot quote a trigger condition that matches, do NOT force-apply.",
-        ],
-        "state_requirements": [
-            "OPPORTUNITIES: (from step 2, all three levels)",
-            "PROPOSED_CHANGES: list using === CHANGE N === template, each with:",
-            "  - Level (STRUCTURAL/BEHAVIORAL/STYLISTIC)",
-            "  - Line numbers",
-            "  - Technique name(s)",
-            "  - Trigger condition QUOTED from reference",
-            "  - Effect QUOTED from reference",
-            "  - [COMPOUND] tag if multiple techniques",
-            "  - BEFORE (- prefixed lines)",
-            "  - AFTER (+ prefixed lines)",
-            "  - [TRADEOFF] explicit downside",
-            "SYNTHESIS_NOTES: which techniques were combined and why",
-            "PROACTIVE_ADDITIONS: techniques added from Part B scan",
-        ],
-    }
-
-
-def get_step_4_guidance():
-    """Step 4: Verify - Factored verification of facts."""
-    return {
-        "title": "Verify (Factored)",
-        "actions": [
-            "FACTORED VERIFICATION: Answer questions WITHOUT seeing your proposals.",
-            "",
-            "For EACH proposed technique, generate OPEN verification questions:",
-            "",
-            "  WRONG (yes/no): 'Is Affirmative Directives applicable here?'",
-            "  RIGHT (open):   'What is the trigger condition for Affirmative Directives?'",
-            "",
-            "  WRONG (yes/no): 'Does the prompt have hedging language?'",
-            "  RIGHT (open):   'What hedging phrases appear in lines 10-20?'",
-            "",
-            "Answer each question INDEPENDENTLY:",
-            "  - Pretend you have NOT seen your proposals",
-            "  - Answer from the reference or prompt text directly",
-            "  - Do NOT defend your choices; seek truth",
-            "",
-            "Then CROSS-CHECK: Compare answers to your claims:",
-            "",
-            "  TECHNIQUE: [name]",
-            "  CLAIMED TRIGGER: \"[what you quoted in step 3]\"",
-            "  VERIFIED TRIGGER: \"[what the reference actually says]\"",
-            "  MATCH: CONSISTENT / INCONSISTENT / PARTIAL",
-            "",
-            "  CLAIMED PROBLEM: \"[quoted prompt text in step 3]\"",
-            "  VERIFIED TEXT: \"[what the prompt actually says at that line]\"",
-            "  MATCH: CONSISTENT / INCONSISTENT / PARTIAL",
-        ],
-        "state_requirements": [
-            "VERIFICATION_QS: open questions for each technique",
-            "VERIFICATION_ANSWERS: factored answers (without seeing proposals)",
-            "CROSS_CHECK: for each technique:",
-            "  - Claimed vs verified trigger condition",
-            "  - Claimed vs verified prompt text",
-            "  - Match status: CONSISTENT / INCONSISTENT / PARTIAL",
-        ],
-    }
-
-
-def get_step_5_guidance():
-    """Step 5: Feedback - Generate actionable critique."""
-    return {
-        "title": "Feedback",
-        "actions": [
-            "Generate FEEDBACK based on verification results.",
-            "",
-            "Self-Refine research requires feedback to be:",
-            "  - ACTIONABLE: contains concrete action to improve",
-            "  - SPECIFIC: identifies concrete phrases to change",
-            "",
-            "WRONG (vague): 'The technique selection could be improved.'",
-            "RIGHT (actionable): 'Change 3 claims Affirmative Directives but the",
-            "  prompt text at line 15 is already affirmative. Remove this change.'",
-            "",
-            "For each INCONSISTENT or PARTIAL match from Step 4:",
-            "",
-            "  ISSUE: [specific problem from cross-check]",
-            "  ACTION: [concrete fix]",
-            "    - Replace technique with [alternative]",
-            "    - Modify BEFORE/AFTER to [specific change]",
-            "    - Remove change entirely because [reason]",
-            "",
-            "For CONSISTENT matches: Note 'VERIFIED - no changes needed'",
-            "",
-            "Do NOT apply feedback yet. Only generate critique.",
-        ],
-        "state_requirements": [
-            "CROSS_CHECK: (from step 4)",
-            "FEEDBACK: for each proposed change:",
-            "  - STATUS: VERIFIED / NEEDS_REVISION / REMOVE",
-            "  - If NEEDS_REVISION: specific actionable fix",
-            "  - If REMOVE: reason for removal",
-        ],
-    }
-
-
-def get_step_6_guidance():
-    """Step 6: Refine - Apply feedback to update plan."""
-    return {
+    },
+    3: {
         "title": "Refine",
+        "brief": "Self-Refine: verify -> feedback -> update",
         "actions": [
-            "Apply the feedback from Step 5 to update your proposed changes.",
+            "VERIFY each proposed technique (factored, OPEN questions):",
             "",
-            "For each change marked VERIFIED: Keep unchanged",
+            "  For each technique, answer WITHOUT looking at your proposal:",
+            "    'What is the trigger condition for [technique]?' (not yes/no)",
+            "    'What text appears at lines X-Y?' (not 'does it have...')",
             "",
-            "For each change marked NEEDS_REVISION:",
-            "  - Apply the specific fix from feedback",
-            "  - Update the BEFORE/AFTER text",
-            "  - Verify the trigger condition still matches",
+            "  Cross-check: CLAIMED vs VERIFIED",
+            "    CONSISTENT -> keep",
+            "    INCONSISTENT -> revise or remove",
             "",
-            "For each change marked REMOVE: Delete from proposal",
+            "FEEDBACK (specific, actionable):",
+            "  BAD:  'Could be improved'",
+            "  GOOD: 'Change 3 claims hedging but line 15 is already affirmative'",
             "",
-            "After applying all feedback, verify:",
-            "  - No stacking conflicts between remaining techniques",
-            "  - All BEFORE/AFTER transformations are consistent",
-            "  - No duplicate or overlapping changes",
-            "",
-            "Produce the REFINED PLAN ready for human approval.",
+            "UPDATE proposals based on feedback.",
+            "Remove changes with mismatched triggers.",
+            "Verify no stacking conflicts remain.",
         ],
-        "state_requirements": [
-            "REFINED_CHANGES: updated list of visual cards",
-            "CHANGES_MADE: what was revised or removed and why",
-            "FINAL_STACKING_CHECK: confirm no conflicts",
-        ],
-    }
-
-
-def get_step_7_guidance():
-    """Step 7: Approval - Present to human, hard gate."""
-    return {
-        "title": "Approval Gate",
+    },
+    4: {
+        "title": "Approve",
+        "brief": "Present refined plan to user - HARD GATE",
         "actions": [
-            "Present the REFINED PLAN to the user for approval.",
-            "",
-            "Use this EXACT format:",
+            "Present using this format:",
             "",
             "PROPOSED CHANGES",
             "================",
             "",
-            "Group changes by level. Start with a summary table:",
+            "| # | Line | Opportunity | Technique | Risk |",
+            "|---|------|-------------|-----------|------|",
             "",
-            "STRUCTURAL CHANGES (workflow/macro):",
-            " #  | Line | Opportunity          | Technique(s)         | Risk",
-            "----+------+----------------------+----------------------+------",
-            " 1  |  all | No verification      | CoVe pattern         | Med",
-            "----+------+----------------------+----------------------+------",
+            "Then each change in detail (=== CHANGE N ===)",
             "",
-            "BEHAVIORAL CHANGES (role/execution):",
-            " #  | Line | Opportunity          | Technique(s)         | Risk",
-            "----+------+----------------------+----------------------+------",
-            " 2  |  1-5 | Weak identity        | Identity + Emotional | Low",
-            "----+------+----------------------+----------------------+------",
+            "VERIFICATION SUMMARY:",
+            "  - Changes verified: N",
+            "  - Changes revised: M",
+            "  - Changes removed: K",
             "",
-            "STYLISTIC CHANGES (wording/format):",
-            " #  | Line | Opportunity          | Technique(s)         | Risk",
-            "----+------+----------------------+----------------------+------",
-            " 3  |   12 | Hedging language     | Affirmative Direct.  | Low",
-            " 4  |   28 | Missing examples     | Contrastive Examples | Low",
-            "----+------+----------------------+----------------------+------",
+            "ANTI-PATTERNS CHECKED:",
+            "  - Hedging Spiral: [OK/FOUND]",
+            "  - Everything-Is-Critical: [OK/FOUND]",
+            "  - Negative Instruction: [OK/FOUND]",
             "",
-            "Mark compound changes with [COMPOUND] in technique column.",
-            "",
-            "Then show each change in detail:",
-            "",
-            "=== CHANGE 1: [title] ===",
-            "Level: [STRUCTURAL/BEHAVIORAL/STYLISTIC]",
-            "Line: [numbers]",
-            "Technique(s): [name(s)]",
-            "Effect: [improvement]",
-            "[COMPOUND] (if applicable)",
-            "",
-            "  BEFORE:",
-            "  - [original text]",
-            "",
-            "  AFTER:",
-            "  + [modified text]",
-            "",
-            "  [TRADEOFF] [downside or 'None']",
-            "",
-            "After all changes, include:",
-            "",
-            "VERIFICATION SUMMARY",
-            "--------------------",
-            "- [N] changes verified against reference",
-            "- [M] changes revised based on verification",
-            "- [K] changes removed (trigger mismatch)",
-            "- [C] compound changes (multiple techniques combined)",
-            "",
-            "COVERAGE SUMMARY",
-            "----------------",
-            "- STRUCTURAL: [N] changes proposed",
-            "- BEHAVIORAL: [N] changes proposed",
-            "- STYLISTIC:  [N] changes proposed",
-            "",
-            "ANTI-PATTERNS CHECKED",
-            "---------------------",
-            "- Hedging Spiral:         [OK] / [FOUND: ...]",
-            "- Everything-Is-Critical: [OK] / [FOUND: ...]",
-            "- Negative Instruction:   [OK] / [FOUND: ...]",
-            "",
-            "---",
-            "Does this plan look reasonable? Confirm to proceed.",
-            "",
-            "HARD GATE: Do NOT proceed to Step 8 without explicit user approval.",
+            "HARD GATE: Do NOT proceed without explicit user approval.",
         ],
-        "state_requirements": [
-            "REFINED_CHANGES: (from step 6)",
-            "APPROVAL_PRESENTATION: formatted summary with level grouping",
-            "COVERAGE_BY_LEVEL: count of changes per level",
-            "USER_APPROVAL: must be obtained before step 8",
-        ],
-    }
-
-
-def get_step_8_guidance():
-    """Step 8: Execute - Apply approved changes."""
-    return {
+    },
+    5: {
         "title": "Execute",
+        "brief": "Apply approved changes + integration check",
         "actions": [
-            "Apply the approved changes to the prompt.",
+            "Apply each approved change to the prompt file.",
             "",
-            "Work through changes in logical order (by prompt section).",
+            "INTEGRATION CHECKS after all changes:",
+            "  - Cross-section references correct?",
+            "  - Terminology consistent throughout?",
+            "  - Priority markers not overused? (max 2-3 CRITICAL/NEVER)",
             "",
-            "For each approved change:",
-            "  1. Locate the target text in the prompt",
-            "  2. Apply the BEFORE -> AFTER transformation",
-            "  3. Verify the modification matches what was approved",
+            "ANTI-PATTERN FINAL AUDIT:",
+            "  - Hedging Spiral: accumulated uncertainty?",
+            "  - Everything-Is-Critical: emphasis overuse?",
+            "  - Negative Instruction: 'don't' instead of 'do'?",
             "",
-            "No additional approval needed per change - plan was approved in Step 7.",
-            "",
-            "If a conflict is discovered during execution:",
-            "  - STOP and present the conflict to user",
-            "  - Wait for resolution before continuing",
-            "",
-            "After all changes applied, proceed to integration.",
+            "Present final optimized prompt with change summary.",
         ],
-        "state_requirements": [
-            "APPROVED_CHANGES: (from step 7)",
-            "APPLIED_CHANGES: list of what was modified",
-            "EXECUTION_NOTES: any issues encountered",
-        ],
-    }
+    },
+}
 
 
-def get_step_9_guidance():
-    """Step 9: Integrate - Coherence and quality verification."""
-    return {
-        "title": "Integrate",
-        "actions": [
-            "Verify the optimized prompt holistically.",
-            "",
-            "COHERENCE CHECKS:",
-            "  - Cross-section references: do sections reference each other correctly?",
-            "  - Terminology consistency: same terms throughout?",
-            "  - Priority consistency: do multiple sections align on priorities?",
-            "  - Flow and ordering: logical progression?",
-            "",
-            "EMPHASIS AUDIT:",
-            "  - Count CRITICAL, IMPORTANT, NEVER, ALWAYS markers",
-            "  - If more than 2-3 highest-level markers, reconsider",
-            "",
-            "ANTI-PATTERN FINAL CHECK:",
-            "  - Hedging Spiral: accumulated uncertainty language?",
-            "  - Everything-Is-Critical: overuse of emphasis?",
-            "  - Negative Instruction Trap: 'don't' instead of 'do'?",
-            "  - Implicit Category Trap: examples without principles?",
-            "",
-            "QUALITY VERIFICATION (open questions):",
-            "  - 'What behavior will this produce in edge cases?'",
-            "  - 'How would an agent interpret this if skimming?'",
-            "  - 'What could go wrong with this phrasing?'",
-            "",
-            "Present the final optimized prompt with summary of changes.",
-        ],
-        "state_requirements": [],  # Final step
-    }
-
-
-def get_guidance(step: int, total_steps: int):
-    """Dispatch to appropriate guidance based on step number."""
-    guidance_map = {
-        1: get_step_1_guidance,
-        2: get_step_2_guidance,
-        3: get_step_3_guidance,
-        4: get_step_4_guidance,
-        5: get_step_5_guidance,
-        6: get_step_6_guidance,
-        7: get_step_7_guidance,
-        8: get_step_8_guidance,
-        9: get_step_9_guidance,
-    }
-
-    if step in guidance_map:
-        return guidance_map[step]()
-
-    # Extra steps beyond 9 continue integration/verification
-    return get_step_9_guidance()
-
-
-def format_output(step: int, total_steps: int, thoughts: str) -> str:
-    """Format output for display."""
-    guidance = get_guidance(step, total_steps)
+def format_output(step: int, total_steps: int) -> str:
+    """Format compact output for display."""
+    info = STEPS.get(step, STEPS[5])  # Default to Execute for extra steps
     is_complete = step >= total_steps
 
     lines = [
-        "=" * 70,
-        f"PROMPT ENGINEER - Step {step}/{total_steps}: {guidance['title']}",
-        "=" * 70,
+        f"PROMPT ENGINEER - Step {step}/{total_steps}: {info['title']}",
+        f"  {info['brief']}",
         "",
-        "ACCUMULATED STATE:",
-        thoughts[:1200] + "..." if len(thoughts) > 1200 else thoughts,
-        "",
-        "ACTIONS:",
     ]
-    lines.extend(f"  {action}" for action in guidance["actions"])
 
-    state_reqs = guidance.get("state_requirements", [])
-    if not is_complete and state_reqs:
+    if "read" in info:
+        lines.append("READ:")
+        lines.extend(f"  - {r}" for r in info["read"])
         lines.append("")
-        lines.append("NEXT STEP STATE MUST INCLUDE:")
-        lines.extend(f"  - {item}" for item in state_reqs)
+
+    lines.append("DO:")
+    for action in info["actions"]:
+        if action:
+            lines.append(f"  {action}")
+        else:
+            lines.append("")
 
     lines.append("")
 
     if is_complete:
-        lines.extend([
-            "COMPLETE - Present to user:",
-            "  1. Summary of optimization process",
-            "  2. Techniques applied with reference sections",
-            "  3. Quality improvements (top 3)",
-            "  4. What was preserved from original",
-            "  5. Final optimized prompt",
-        ])
+        lines.append("COMPLETE - Present optimized prompt to user.")
     else:
-        next_guidance = get_guidance(step + 1, total_steps)
-        lines.extend([
-            f"NEXT: Step {step + 1} - {next_guidance['title']}",
-            f"REMAINING: {total_steps - step} step(s)",
-            "",
-            "ADJUST: increase --total-steps if more verification needed (min 9)",
-        ])
+        next_info = STEPS.get(step + 1, STEPS[5])
+        lines.append(f"NEXT: Step {step + 1} - {next_info['title']}")
 
-    lines.extend(["", "=" * 70])
     return "\n".join(lines)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Prompt Engineer - Multi-turn optimization workflow",
-        epilog=(
-            "Phases: triage (1) -> understand (2) -> plan (3) -> "
-            "verify (4) -> feedback (5) -> refine (6) -> "
-            "approval (7) -> execute (8) -> integrate (9)"
-        ),
+        description="Prompt Engineer - Compact optimization workflow",
+        epilog="Phases: assess (1) -> plan (2) -> refine (3) -> approve (4) -> execute (5)",
     )
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument("--total-steps", type=int, required=True)
-    parser.add_argument("--thoughts", type=str, required=True)
     args = parser.parse_args()
 
     if args.step < 1:
         sys.exit("ERROR: --step must be >= 1")
-    if args.total_steps < 9:
-        sys.exit("ERROR: --total-steps must be >= 9 (requires 9 phases)")
+    if args.total_steps < 5:
+        sys.exit("ERROR: --total-steps must be >= 5")
     if args.step > args.total_steps:
         sys.exit("ERROR: --step cannot exceed --total-steps")
 
-    print(format_output(args.step, args.total_steps, args.thoughts))
+    print(format_output(args.step, args.total_steps))
 
 
 if __name__ == "__main__":

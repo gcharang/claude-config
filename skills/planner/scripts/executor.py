@@ -2,689 +2,232 @@
 """
 Plan Executor - Execute approved plans through delegation.
 
-Seven-phase execution workflow with JIT prompt injection:
-  Step 1: Execution Planning (analyze plan, detect reconciliation)
-  Step 2: Reconciliation (conditional, validate existing code)
-  Step 3: Milestone Execution (delegate to agents, run tests)
-  Step 4: Post-Implementation QR (quality review)
-  Step 5: QR Issue Resolution (conditional, fix issues)
-  Step 6: Documentation (TW pass)
-  Step 7: Retrospective (present summary)
-
-Three Pillars Pattern for QR Verification Loops (Step 4):
-  1. STATE BANNER: Visual header showing loop iteration
-  2. STOP CONDITION: Explicit blocker preventing progression
-  3. RE-VERIFICATION MODE: Different prompts for first-run vs retry
+Seven-step workflow:
+  1. Execution Planning - analyze plan, detect reconciliation
+  2. Reconciliation - validate existing code (conditional)
+  3. Milestone Execution - delegate via execute-milestone.py
+  4. Post-Implementation QR - holistic quality review
+  5. QR Issue Resolution - fix issues (conditional)
+  6. Documentation - TW pass
+  7. Retrospective - present summary
 
 Usage:
-    python3 executor.py --step-number 1 --total-steps 7 --thoughts "..."
-
-    # Re-verification after fixing QR issues (Three Pillars Pattern)
-    python3 executor.py --step-number 4 --total-steps 7 \\
-      --qr-iteration 2 --fixing-issues --thoughts "Fixed issues, re-verifying..."
-
-Note: Output uses $PLAN_FILE placeholder. The invoking agent substitutes with
-actual plan path from context.
+    python3 executor.py --step 1 --total-steps 7
 """
 
 import argparse
-import re
 import sys
 
 from utils import get_qr_state_banner, get_qr_stop_condition
 
 
-def detect_reconciliation_signals(thoughts: str) -> bool:
-    """Check if user's thoughts contain reconciliation triggers."""
-    triggers = [
-        r"\balready\s+(implemented|done|complete)",
-        r"\bpartially\s+complete",
-        r"\bhalfway\s+done",
-        r"\bresume\b",
-        r"\bcontinue\s+from\b",
-        r"\bpick\s+up\s+where\b",
-        r"\bcheck\s+what'?s\s+done\b",
-        r"\bverify\s+existing\b",
-        r"\bprior\s+work\b",
-    ]
-    thoughts_lower = thoughts.lower()
-    return any(re.search(pattern, thoughts_lower) for pattern in triggers)
-
-
-def get_step_1_guidance(thoughts: str) -> dict:
-    """Step 1: Execution Planning - analyze plan, detect reconciliation."""
-    reconciliation_detected = detect_reconciliation_signals(thoughts)
-
-    actions = [
-        "EXECUTION PLANNING",
-        "",
-        "Plan file: $PLAN_FILE (substitute with actual path from context)",
-        "",
-        "Read the plan file and analyze:",
-        "  1. Count milestones and their dependencies",
-        "  2. Identify file targets per milestone",
-        "  3. Determine parallelization opportunities",
-        "  4. Set up TodoWrite tracking for all milestones",
-        "",
-        "<execution_rules>",
-        "",
-        "RULE 0 (ABSOLUTE): Delegate ALL code work to specialized agents",
-        "",
-        "Your role: coordinate, validate, orchestrate. Agents implement code.",
-        "",
-        "Delegation routing:",
-        "  - New function needed -> @agent-developer",
-        "  - Bug to fix -> @agent-debugger (diagnose) then @agent-developer (fix)",
-        "  - Any source file modification -> @agent-developer",
-        "  - Documentation files -> @agent-technical-writer",
-        "",
-        "Exception (trivial only): Fixes under 5 lines where delegation overhead",
-        "exceeds fix complexity (missing import, typo correction).",
-        "",
-        "---",
-        "",
-        "RULE 1: Execution Protocol",
-        "",
-        "Before ANY phase:",
-        "  1. Use TodoWrite to track all plan phases",
-        "  2. Analyze dependencies to identify parallelizable work",
-        "  3. Delegate implementation to specialized agents",
-        "  4. Validate each increment before proceeding",
-        "",
-        "You plan HOW to execute (parallelization, sequencing). You do NOT plan",
-        "WHAT to execute -- that's the plan's job.",
-        "",
-        "---",
-        "",
-        "RULE 1.5: Model Selection",
-        "",
-        "Agent defaults (sonnet) are calibrated for quality. Adjust upward only.",
-        "",
-        "  | Action               | Allowed | Rationale                        |",
-        "  |----------------------|---------|----------------------------------|",
-        "  | Upgrade to opus      | YES     | Challenging tasks need reasoning |",
-        "  | Use default (sonnet) | YES     | Baseline for all delegations     |",
-        "  | Keep at sonnet+      | ALWAYS  | Maintains quality baseline       |",
-        "",
-        "</execution_rules>",
-        "",
-        "<dependency_analysis>",
-        "",
-        "Parallelizable when ALL conditions met:",
-        "  - Different target files",
-        "  - No data dependencies",
-        "  - No shared state (globals, configs, resources)",
-        "",
-        "Sequential when ANY condition true:",
-        "  - Same file modified by multiple tasks",
-        "  - Task B imports or depends on Task A's output",
-        "  - Shared database tables or external resources",
-        "",
-        "Before delegating ANY batch:",
-        "  1. List tasks with their target files",
-        "  2. Identify file dependencies (same file = sequential)",
-        "  3. Identify data dependencies (imports = sequential)",
-        "  4. Group independent tasks into parallel batches",
-        "  5. Separate batches with sync points",
-        "",
-        "</dependency_analysis>",
-        "",
-        "<milestone_type_detection>",
-        "",
-        "Before delegating ANY milestone, identify its type from file extensions:",
-        "",
-        "  | Milestone Type | Recognition Signal              | Delegate To             |",
-        "  |----------------|--------------------------------|-------------------------|",
-        "  | Documentation  | ALL files are *.md or *.rst    | @agent-technical-writer |",
-        "  | Code           | ANY file is source code        | @agent-developer        |",
-        "",
-        "Mixed milestones: Split delegation -- @agent-developer first (code),",
-        "then @agent-technical-writer (docs) after code completes.",
-        "",
-        "</milestone_type_detection>",
-        "",
-        "<delegation_format>",
-        "",
-        "EVERY delegation MUST use this structure:",
-        "",
-        "  <delegation>",
-        "    <agent>@agent-[developer|debugger|technical-writer|quality-reviewer]</agent>",
-        "    <mode>[For TW/QR: plan-scrub|post-implementation|plan-review|reconciliation]</mode>",
-        "    <plan_source>[Absolute path to plan file]</plan_source>",
-        "    <milestone>[Milestone number and name]</milestone>",
-        "    <files>[Exact file paths from milestone]</files>",
-        "    <task>[Specific task description]</task>",
-        "    <acceptance_criteria>",
-        "      - [Criterion 1 from plan]",
-        "      - [Criterion 2 from plan]",
-        "    </acceptance_criteria>",
-        "  </delegation>",
-        "",
-        "For parallel delegations, wrap multiple blocks:",
-        "",
-        "  <parallel_batch>",
-        "    <rationale>[Why these can run in parallel]</rationale>",
-        "    <sync_point>[Command to run after all complete]</sync_point>",
-        "    <delegation>...</delegation>",
-        "    <delegation>...</delegation>",
-        "  </parallel_batch>",
-        "",
-        "Agent limits:",
-        "  - @agent-developer: Maximum 4 parallel",
-        "  - @agent-debugger: Maximum 2 parallel",
-        "  - @agent-quality-reviewer: ALWAYS sequential",
-        "  - @agent-technical-writer: Can parallel across independent modules",
-        "",
-        "</delegation_format>",
-    ]
-
-    if reconciliation_detected:
-        next_step = (
-            "RECONCILIATION SIGNALS DETECTED in your thoughts.\n\n"
-            "Invoke step 2 to validate existing code against plan requirements:\n"
-            '  python3 executor.py --step-number 2 '
-            '--total-steps 7 --thoughts "Starting reconciliation..."'
-        )
-    else:
-        next_step = (
-            "No reconciliation signals detected. Proceed to milestone execution.\n\n"
-            "Invoke step 3 to begin delegating milestones:\n"
-            '  python3 executor.py --step-number 3 '
-            '--total-steps 7 --thoughts "Analyzed plan: N milestones, '
-            'parallel batches: [describe], starting execution..."'
-        )
-
-    return {
-        "actions": actions,
-        "next": next_step,
-    }
-
-
-def get_step_2_guidance() -> dict:
-    """Step 2: Reconciliation - validate existing code against plan."""
-    return {
+STEPS = {
+    1: {
+        "title": "Execution Planning",
         "actions": [
-            "RECONCILIATION PHASE",
+            "Plan file: $PLAN_FILE (substitute from context)",
             "",
-            "Plan file: $PLAN_FILE",
+            "ANALYZE plan:",
+            "  - Count milestones and dependencies",
+            "  - Identify parallelization opportunities",
+            "  - Set up TodoWrite tracking",
             "",
+            "RULES:",
+            "  RULE 0: Delegate ALL code work to agents",
+            "    - @agent-developer: new functions, file modifications",
+            "    - @agent-debugger: bug diagnosis",
+            "    - @agent-technical-writer: documentation",
+            "    Exception: fixes under 5 lines",
+            "",
+            "  RULE 1: Parallelization",
+            "    Parallel when: different files, no data dependencies",
+            "    Sequential when: same file, imports, shared state",
+            "",
+            "DELEGATION FORMAT:",
+            "  <delegation>",
+            "    <agent>@agent-[developer|debugger|technical-writer]</agent>",
+            "    <plan_source>$PLAN_FILE</plan_source>",
+            "    <milestone>[number and name]</milestone>",
+            "    <files>[exact paths]</files>",
+            "    <task>[description]</task>",
+            "    <acceptance_criteria>[from plan]</acceptance_criteria>",
+            "  </delegation>",
+        ],
+    },
+    2: {
+        "title": "Reconciliation",
+        "actions": [
             "Validate existing code against plan requirements BEFORE executing.",
             "",
-            "<reconciliation_protocol>",
-            "",
             "Delegate to @agent-quality-reviewer for each milestone:",
-            "",
-            "  Task for @agent-quality-reviewer:",
             "  Mode: reconciliation",
-            "  Plan Source: $PLAN_FILE",
-            "  Milestone: [N]",
-            "",
-            "  Check if the acceptance criteria for Milestone [N] are ALREADY",
-            "  satisfied in the current codebase. Validate REQUIREMENTS, not just",
-            "  code presence.",
-            "",
+            "  Check: Are acceptance criteria ALREADY satisfied?",
             "  Return: SATISFIED | NOT_SATISFIED | PARTIALLY_SATISFIED",
             "",
-            "---",
-            "",
-            "Execution based on reconciliation result:",
-            "",
-            "  | Result              | Action                                    |",
-            "  |---------------------|-------------------------------------------|",
-            "  | SATISFIED           | Skip execution, record as already complete|",
-            "  | NOT_SATISFIED       | Execute milestone normally                |",
-            "  | PARTIALLY_SATISFIED | Execute only the missing parts            |",
-            "",
-            "---",
-            "",
-            "Why requirements-based (not diff-based):",
-            "",
-            "Checking if code from the diff exists misses critical cases:",
-            "  - Code added but incorrect (doesn't meet acceptance criteria)",
-            "  - Code added but incomplete (partial implementation)",
-            "  - Requirements met by different code than planned (valid alternative)",
-            "",
-            "Checking acceptance criteria catches all of these.",
-            "",
-            "</reconciliation_protocol>",
+            "Routing:",
+            "  SATISFIED -> Skip execution, record as complete",
+            "  NOT_SATISFIED -> Execute milestone normally",
+            "  PARTIALLY_SATISFIED -> Execute only missing parts",
         ],
-        "next": (
-            "After collecting reconciliation results for all milestones, "
-            "invoke step 3:\n\n"
-            '  python3 executor.py --step-number 3 '
-            "--total-steps 7 --thoughts \"Reconciliation complete: "
-            'M1: SATISFIED, M2: NOT_SATISFIED, ..."'
-        ),
-    }
-
-
-def get_step_3_guidance(thoughts: str) -> dict:
-    """Step 3: Milestone Execution - delegate via execute-milestone.py."""
-    # Extract milestone count from thoughts if provided, otherwise use placeholder
-    # The orchestrator should have counted milestones in step 1
-    milestone_match = re.search(r'(\d+)\s*milestones?', thoughts.lower())
-    total_milestones = milestone_match.group(1) if milestone_match else "[N]"
-
-    return {
+    },
+    3: {
+        "title": "Milestone Execution",
         "actions": [
-            "MILESTONE EXECUTION",
+            "Execute milestones with per-milestone QR gates.",
             "",
-            "Plan file: $PLAN_FILE",
-            "",
-            "Execute milestones sequentially with per-milestone QR gates.",
-            "",
-            "<execution_workflow>",
-            "",
-            "Each milestone goes through 3 steps:",
+            "Use execute-milestone.py for each milestone:",
             "  Step 1: Implementation (delegate to @agent-developer)",
-            "  Step 2: QR Gate (delegate to @agent-quality-reviewer, mode=milestone-review)",
-            "  Step 3: Gate Check (proceed to next milestone or fix issues)",
+            "  Step 2: QR Gate (mode: milestone-review)",
+            "  Step 3: Gate Check (proceed or fix)",
             "",
-            "The execute-milestone.py script handles this workflow.",
-            "It will return you to executor.py step 4 after all milestones complete.",
-            "",
-            "</execution_workflow>",
-            "",
-            "<error_handling>",
-            "",
-            "Error classification:",
-            "",
-            "  | Severity | Signals                          | Action                  |",
-            "  |----------|----------------------------------|-------------------------|",
-            "  | Critical | Segfault, data corruption        | STOP, @agent-debugger   |",
-            "  | High     | Test failures, missing deps      | @agent-debugger         |",
-            "  | Medium   | Type errors, lint failures       | Auto-fix, then debugger |",
-            "  | Low      | Warnings, style issues           | Note and continue       |",
-            "",
-            "Escalation triggers -- STOP and report when:",
-            "  - Fix would change fundamental approach",
-            "  - Three attempted solutions failed",
-            "  - Performance or safety characteristics affected",
-            "  - Confidence < 80%",
-            "",
-            "</error_handling>",
+            "ERROR HANDLING:",
+            "  Critical (segfault, corruption): STOP, @agent-debugger",
+            "  High (test failures): @agent-debugger",
+            "  Medium (type errors): Auto-fix, then debugger",
+            "  Low (warnings): Note and continue",
         ],
-        "next": (
-            f"Start milestone execution with execute-milestone.py:\n\n"
-            f"  python3 execute-milestone.py \\\n"
-            f"    --milestone 1 --total-milestones {total_milestones} \\\n"
-            f'    --step 1 --thoughts "Starting milestone 1..."\n\n'
-            "The execute-milestone.py script will:\n"
-            "  - Guide you through implement -> QR-gate -> proceed for each milestone\n"
-            "  - Return you to executor.py step 4 after all milestones complete"
-        ),
-    }
-
-
-def get_step_4_guidance(qr_iteration: int = 1, fixing_issues: bool = False) -> dict:
-    """Step 4: Post-Implementation QR - quality review.
-
-    Three Pillars Pattern applied:
-      1. STATE BANNER: Shows iteration count and mode
-      2. STOP CONDITION: Explicit blocker
-      3. RE-VERIFICATION MODE: Different prompts when fixing issues
-    """
-    state_banner = get_qr_state_banner("HOLISTIC QR", qr_iteration, fixing_issues)
-    stop_condition = get_qr_stop_condition("Holistic QR returns PASS")
-
-    actions = state_banner + [
-        "POST-IMPLEMENTATION QUALITY REVIEW",
-        "",
-        "Plan file: $PLAN_FILE",
-        "",
-        "Delegate to @agent-quality-reviewer for comprehensive review.",
-        "",
-        "<qr_delegation>",
-        "",
-        "  Task for @agent-quality-reviewer:",
-        "  Mode: post-implementation",
-        "  Plan Source: $PLAN_FILE",
-        "  Files Modified: [list]",
-        "  Reconciled Milestones: [list milestones that were SATISFIED]",
-        "",
-        "  Priority order for findings:",
-        "    1. Issues in reconciled milestones (bypassed execution validation)",
-        "    2. Issues in newly implemented milestones",
-        "    3. Cross-cutting issues",
-        "",
-        "  Checklist:",
-        "    - Every requirement implemented",
-        "    - No unauthorized deviations",
-        "    - Edge cases handled",
-        "    - Performance requirements met",
-        "",
-        "</qr_delegation>",
-        "",
-    ] + stop_condition + [
-        "",
-        "Expected output: PASS or issues list sorted by severity.",
-    ]
-
-    return {
-        "actions": actions,
-        "next": (
-            "After QR completes:\n\n"
-            "If QR returns ISSUES -> invoke step 5:\n"
-            '  python3 executor.py --step-number 5 '
-            '--total-steps 7 --thoughts "QR found N issues: [summary]"'
-            "\n\n"
-            "If QR returns PASS -> invoke step 6:\n"
-            '  python3 executor.py --step-number 6 '
-            '--total-steps 7 --thoughts "QR passed. Proceeding to documentation."'
-        ),
-    }
-
-
-def get_step_5_guidance(qr_iteration: int = 1) -> dict:
-    """Step 5: QR Issue Resolution - present issues, collect decisions, fix."""
-    return {
+    },
+    4: {
+        "title": "Post-Implementation QR",
         "actions": [
-            "QR ISSUE RESOLUTION",
+            "Delegate to @agent-quality-reviewer for holistic review.",
+            "  Mode: post-implementation",
+            "  Files: [all modified files]",
             "",
-            "Plan file: $PLAN_FILE",
+            "Priority: reconciled milestones > new milestones > cross-cutting",
             "",
+            "Expected output: PASS or issues sorted by severity.",
+        ],
+    },
+    5: {
+        "title": "QR Issue Resolution",
+        "actions": [
             "Present issues to user, collect decisions, delegate fixes.",
             "",
-            "<issue_resolution_protocol>",
+            "For EACH issue:",
+            "  Present: severity, category, file, problem, evidence",
+            "  AskUserQuestion: Fix | Skip | Alternative",
             "",
-            "Phase 1: Collect Decisions",
-            "",
-            "Sort findings by severity (critical -> high -> medium -> low).",
-            "For EACH issue, present:",
-            "",
-            "  ## Issue [N] of [Total] ([severity])",
-            "",
-            "  **Category**: [production-reliability | project-conformance | structural-quality]",
-            "  **File**: [affected file path]",
-            "  **Location**: [function/line if applicable]",
-            "",
-            "  **Problem**:",
-            "  [Clear description of what is wrong and why it matters]",
-            "",
-            "  **Evidence**:",
-            "  [Specific code/behavior that demonstrates the issue]",
-            "",
-            "Then use AskUserQuestion with options:",
-            "  - **Fix**: Delegate to @agent-developer to resolve",
-            "  - **Skip**: Accept the issue as-is",
-            "  - **Alternative**: User provides different approach",
-            "",
-            "Repeat for each issue. Do NOT execute any fixes during this phase.",
-            "",
-            "---",
-            "",
-            "Phase 2: Execute Decisions",
-            "",
-            "After ALL decisions are collected:",
-            "",
-            "  1. Summarize the decisions",
-            "  2. Execute fixes:",
-            "     - 'Fix' decisions: Delegate to @agent-developer",
-            "     - 'Skip' decisions: Record in retrospective as accepted risk",
-            "     - 'Alternative' decisions: Apply user's specified approach",
-            "  3. Parallelize where possible (different files, no dependencies)",
-            "",
-            "</issue_resolution_protocol>",
+            "After ALL decisions collected:",
+            "  Execute fixes (parallelize where possible)",
+            "  Return to step 4 for re-verification",
         ],
-        "next": (
-            "After ALL fixes are applied, return to step 4 for RE-VERIFICATION:\n\n"
-            "  python3 executor.py --step-number 4 \\\n"
-            f"    --qr-iteration {qr_iteration + 1} --fixing-issues \\\n"
-            '    --total-steps 7 --thoughts "Applied fixes for issues X, Y, Z. Re-verifying..."'
-            "\n\n"
-            "  CRITICAL: You MUST re-run holistic QR after fixing issues.\n"
-            "  Skipping re-verification is PROHIBITED.\n\n"
-            "This creates a validation loop until QR passes."
-        ),
-    }
-
-
-def get_step_6_guidance() -> dict:
-    """Step 6: Documentation - TW pass for CLAUDE.md, README.md."""
-    return {
+    },
+    6: {
+        "title": "Documentation",
         "actions": [
-            "POST-IMPLEMENTATION DOCUMENTATION",
-            "",
-            "Plan file: $PLAN_FILE",
-            "",
-            "Delegate to @agent-technical-writer for documentation updates.",
-            "",
-            "<tw_delegation>",
-            "",
-            "Skip condition: If ALL milestones contained only documentation files",
-            "(*.md/*.rst), TW already handled this during milestone execution.",
-            "Proceed directly to step 7.",
-            "",
-            "For code-primary plans:",
-            "",
-            "  Task for @agent-technical-writer:",
+            "Delegate to @agent-technical-writer:",
             "  Mode: post-implementation",
-            "  Plan Source: $PLAN_FILE",
-            "  Files Modified: [list]",
+            "  Files: [all modified files]",
             "",
-            "  Requirements:",
-            "    - Create/update CLAUDE.md index entries",
-            "    - Create README.md if architectural complexity warrants",
-            "    - Add module-level docstrings where missing",
-            "    - Verify transcribed comments are accurate",
+            "Requirements:",
+            "  - Create/update CLAUDE.md index entries",
+            "  - Create README.md if warranted",
+            "  - Add module-level docstrings where missing",
             "",
-            "</tw_delegation>",
-            "",
-            "<final_checklist>",
-            "",
-            "Execution is NOT complete until:",
-            "  - [ ] All todos completed",
-            "  - [ ] Quality review passed (no unresolved issues)",
-            "  - [ ] Documentation delegated for ALL modified files",
-            "  - [ ] Documentation tasks completed",
-            "  - [ ] Self-consistency checks passed for complex milestones",
-            "",
-            "</final_checklist>",
+            "Skip if ALL milestones were documentation-only.",
         ],
-        "next": (
-            "After documentation is complete, invoke step 7 for retrospective:\n\n"
-            '  python3 executor.py --step-number 7 '
-            '--total-steps 7 --thoughts "Documentation complete. '
-            'Generating retrospective."'
-        ),
-    }
-
-
-def get_step_7_guidance() -> dict:
-    """Step 7: Retrospective - present execution summary."""
-    return {
+    },
+    7: {
+        "title": "Retrospective",
         "actions": [
+            "PRESENT retrospective to user (do not write to file):",
+            "",
             "EXECUTION RETROSPECTIVE",
-            "",
-            "Plan file: $PLAN_FILE",
-            "",
-            "Generate and PRESENT the retrospective to the user.",
-            "Do NOT write to a file -- present it directly so the user sees it.",
-            "",
-            "<retrospective_format>",
-            "",
-            "================================================================================",
-            "EXECUTION RETROSPECTIVE",
-            "================================================================================",
-            "",
-            "Plan: [plan file path]",
+            "=======================",
+            "Plan: [path]",
             "Status: COMPLETED | BLOCKED | ABORTED",
             "",
-            "## Milestone Outcomes",
-            "",
-            "| Milestone  | Status               | Notes                              |",
-            "| ---------- | -------------------- | ---------------------------------- |",
-            "| 1: [name]  | EXECUTED             | -                                  |",
-            "| 2: [name]  | SKIPPED (RECONCILED) | Already satisfied before execution |",
-            "| 3: [name]  | BLOCKED              | [reason]                           |",
-            "",
-            "## Reconciliation Summary",
-            "",
-            "If reconciliation was run:",
-            "  - Milestones already complete: [count]",
-            "  - Milestones executed: [count]",
-            "  - Milestones with partial work detected: [count]",
-            "",
-            "If reconciliation was skipped:",
-            '  - "Reconciliation skipped (no prior work indicated)"',
-            "",
-            "## Plan Accuracy Issues",
-            "",
-            "[List any problems with the plan discovered during execution]",
-            "  - [file] Context anchor drift: expected X, found Y",
-            "  - Milestone [N] requirements were ambiguous: [what]",
-            "  - Missing dependency: [what was assumed but didn't exist]",
-            "",
-            'If none: "No plan accuracy issues encountered."',
-            "",
-            "## Deviations from Plan",
-            "",
-            "| Deviation      | Category        | Approved By      |",
-            "| -------------- | --------------- | ---------------- |",
-            "| [what changed] | Trivial / Minor | [who or 'auto']  |",
-            "",
-            'If none: "No deviations from plan."',
-            "",
-            "## Quality Review Summary",
-            "",
-            "  - Production reliability: [count] issues",
-            "  - Project conformance: [count] issues",
-            "  - Structural quality: [count] suggestions",
-            "",
-            "## Feedback for Future Plans",
-            "",
-            "[Actionable improvements based on execution experience]",
-            "  - [ ] [specific suggestion]",
-            "  - [ ] [specific suggestion]",
-            "",
-            "================================================================================",
-            "",
-            "</retrospective_format>",
+            "Milestone Outcomes: | Milestone | Status | Notes |",
+            "Reconciliation Summary: [if run]",
+            "Plan Accuracy Issues: [if any]",
+            "Deviations from Plan: [if any]",
+            "Quality Review Summary: [counts by category]",
+            "Feedback for Future Plans: [actionable suggestions]",
         ],
-        "next": "EXECUTION COMPLETE.\n\nPresent the retrospective to the user.",
-    }
+    },
+}
 
 
-def get_step_guidance(step_number: int, thoughts: str,
-                      qr_iteration: int = 1, fixing_issues: bool = False) -> dict:
-    """Route to appropriate step guidance."""
-    if step_number == 1:
-        return get_step_1_guidance(thoughts)
-    elif step_number == 2:
-        return get_step_2_guidance()
-    elif step_number == 3:
-        return get_step_3_guidance(thoughts)
-    elif step_number == 4:
-        return get_step_4_guidance(qr_iteration, fixing_issues)
-    elif step_number == 5:
-        return get_step_5_guidance(qr_iteration)
-    elif step_number == 6:
-        return get_step_6_guidance()
-    elif step_number == 7:
-        return get_step_7_guidance()
+def format_output(step: int, total_steps: int,
+                  qr_iteration: int, fixing_issues: bool,
+                  reconciliation_check: bool, milestone_count: int) -> str:
+    """Format output for display."""
+    info = STEPS.get(step, STEPS[7])
+    is_complete = step >= total_steps
+
+    lines = [
+        f"EXECUTOR - Step {step}/{total_steps}: {info['title']}",
+        "",
+        "DO:",
+    ]
+
+    # Add QR banner for step 4
+    if step == 4:
+        banner = get_qr_state_banner("HOLISTIC QR", qr_iteration, fixing_issues)
+        stop = get_qr_stop_condition("Holistic QR returns PASS", qr_iteration)
+        for line in banner:
+            if line:
+                lines.append(f"  {line}")
+        lines.append("")
+
+    for action in info["actions"]:
+        if action:
+            lines.append(f"  {action}")
+        else:
+            lines.append("")
+
+    if step == 4:
+        lines.append("")
+        for line in stop:
+            if line:
+                lines.append(f"  {line}")
+
+    lines.append("")
+
+    # Next step guidance
+    if is_complete:
+        lines.append("EXECUTION COMPLETE - Present retrospective to user.")
+    elif step == 1:
+        if reconciliation_check:
+            lines.append("NEXT: Step 2 (Reconciliation)")
+        else:
+            lines.append("NEXT: Step 3 (Milestone Execution)")
+            if milestone_count > 0:
+                lines.append(f"  python3 execute-milestone.py --milestone 1 --total-milestones {milestone_count} --step 1")
+    elif step == 3:
+        lines.append("NEXT: Step 4 (Post-Implementation QR) after all milestones complete")
+    elif step == 4:
+        lines.append("NEXT: Step 5 if ISSUES, Step 6 if PASS")
+    elif step == 5:
+        lines.append(f"NEXT: Return to Step 4 for re-verification (--qr-iteration {qr_iteration + 1})")
     else:
-        return {
-            "actions": [f"Unknown step {step_number}. Valid steps are 1-7."],
-            "next": "Re-invoke with a valid step number.",
-        }
+        lines.append(f"NEXT: Step {step + 1}")
+
+    return "\n".join(lines)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plan Executor - Execute approved plans through delegation",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Start execution
-  python3 executor.py --step-number 1 --total-steps 7 \\
-    --thoughts "Execute the auth implementation plan"
-
-  # Continue milestone execution
-  python3 executor.py --step-number 3 --total-steps 7 \\
-    --thoughts "Completed M1, M2. Executing M3..."
-
-  # After QR finds issues
-  python3 executor.py --step-number 5 --total-steps 7 \\
-    --thoughts "QR found 2 issues: missing error handling, incorrect return type"
-
-Note: Output uses $PLAN_FILE placeholder. Substitute with actual path from context.
-""",
+        description="Plan Executor - Execute approved plans",
+        epilog="Steps: plan -> reconcile -> execute -> QR -> fix -> docs -> retrospective",
     )
 
-    parser.add_argument(
-        "--plan-file", type=str, default=None, help="Deprecated: plan file inferred from context"
-    )
-    parser.add_argument("--step-number", type=int, required=True, help="Current step (1-7)")
-    parser.add_argument(
-        "--total-steps", type=int, required=True, help="Total steps (always 7)"
-    )
-    parser.add_argument(
-        "--thoughts", type=str, required=True, help="Your current thinking and status"
-    )
-    # Three Pillars Pattern flags for QR verification loops (step 4)
-    parser.add_argument("--qr-iteration", type=int, default=1,
-                        help="QR loop iteration (1=initial, 2+=re-verification)")
-    parser.add_argument("--fixing-issues", action="store_true",
-                        help="Flag indicating this is re-verification after fixing QR issues")
+    parser.add_argument("--step", type=int, required=True)
+    parser.add_argument("--total-steps", type=int, required=True)
+    parser.add_argument("--qr-iteration", type=int, default=1)
+    parser.add_argument("--fixing-issues", action="store_true")
+    parser.add_argument("--reconciliation-check", action="store_true")
+    parser.add_argument("--milestone-count", type=int, default=0)
 
     args = parser.parse_args()
 
-    if args.step_number < 1 or args.step_number > 7:
-        print("Error: step-number must be between 1 and 7", file=sys.stderr)
-        sys.exit(1)
+    if args.step < 1 or args.step > 7:
+        sys.exit("Error: step must be 1-7")
 
-    if args.total_steps != 7:
-        print("Warning: total-steps should be 7 for executor", file=sys.stderr)
-
-    guidance = get_step_guidance(
-        args.step_number, args.thoughts,
-        qr_iteration=args.qr_iteration,
-        fixing_issues=args.fixing_issues
-    )
-    is_complete = args.step_number >= 7
-
-    step_names = {
-        1: "Execution Planning",
-        2: "Reconciliation",
-        3: "Milestone Execution",
-        4: "Post-Implementation QR",
-        5: "QR Issue Resolution",
-        6: "Documentation",
-        7: "Retrospective",
-    }
-
-    print("=" * 80)
-    if args.step_number == 4 and (args.qr_iteration > 1 or args.fixing_issues):
-        print(
-            f"EXECUTOR - Step {args.step_number} of 7: {step_names.get(args.step_number, 'Unknown')} "
-            f"[QR iteration {args.qr_iteration}]"
-        )
-    else:
-        print(
-            f"EXECUTOR - Step {args.step_number} of 7: {step_names.get(args.step_number, 'Unknown')}"
-        )
-    print("=" * 80)
-    print()
-    print("PLACEHOLDER: $PLAN_FILE")
-    print("  Substitute with actual plan file path from your context.")
-    print()
-    print(f"STATUS: {'execution_complete' if is_complete else 'in_progress'}")
-    print()
-    print("YOUR THOUGHTS:")
-    print(args.thoughts)
-    print()
-
-    if guidance["actions"]:
-        print("GUIDANCE:")
-        print()
-        for action in guidance["actions"]:
-            print(action)
-        print()
-
-    print("NEXT:")
-    print(guidance["next"])
-    print()
-    print("=" * 80)
+    print(format_output(args.step, args.total_steps,
+                        args.qr_iteration, args.fixing_issues,
+                        args.reconciliation_check, args.milestone_count))
 
 
 if __name__ == "__main__":

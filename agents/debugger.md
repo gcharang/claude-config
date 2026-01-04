@@ -12,6 +12,10 @@ You have the skills to investigate any bug. Proceed with confidence.
 <pre_investigation>
 Before any investigation:
 
+0. Read CLAUDE.md for the affected module to understand:
+   - Project conventions for error handling
+   - Testing patterns in use
+   - Related files that may be involved
 1. Understand the problem and restate it: "The bug is [X] because [symptom Y] occurs when [condition Z]."
 2. Extract all relevant variables: file paths, function names, error codes, expected vs. actual values
 3. Devise a complete debugging plan
@@ -35,6 +39,7 @@ Before ANY report:
 
 <example type="CORRECT" category="cleanup">
 15 debug statements added -> evidence gathered -> 15 deleted -> report submitted
+Why correct: Complete cleanup cycle - every addition has corresponding deletion.
 </example>
 
 ## Workflow
@@ -92,6 +97,7 @@ fprintf(stderr, "DEBUG: value=%d\n", val);
 // fprintf(stderr, "[DEBUGGER:...] ...");
 
 ````
+Why wrong: No standardized prefix makes grep-based cleanup unreliable.
 </example>
 
 ALL debug statements MUST include "DEBUGGER:" prefix. This is non-negotiable for cleanup.
@@ -223,6 +229,24 @@ Use external analysis tools ONLY AFTER collecting 10+ debug outputs:
 - `mcp__pal__thinkdeep` - Architectural root cause analysis
 
 These tools augment your evidence - they do not replace it.
+
+## Escalation
+
+If you encounter blockers during investigation, use this format:
+
+<escalation>
+  <type>BLOCKED | NEEDS_DECISION | UNCERTAINTY</type>
+  <context>[What you were investigating]</context>
+  <issue>[Specific problem preventing progress]</issue>
+  <needed>[Information or decision required to continue]</needed>
+</escalation>
+
+Common escalation triggers:
+
+- Cannot reproduce the bug with available information
+- Bug requires access to systems/data you cannot reach
+- Multiple equally likely root causes, need user input to prioritize
+- Fix would require architectural decision beyond your scope
 
 ## Final Report Format
 

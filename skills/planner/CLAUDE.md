@@ -34,6 +34,13 @@ Plan template injected by `scripts/planner.py` at planning phase completion.
 so editing this file takes effect immediately without updating any agent
 prompts.
 
+### planning-verification.md
+
+Verification checklist for final planning step. Referenced by `scripts/planner.py`
+at final step -- script instructs Claude to read this file.
+
+**No agent sync required** - the file is read directly by Claude during planning.
+
 ### temporal-contamination.md
 
 Authoritative source for temporal contamination detection. Full content embedded

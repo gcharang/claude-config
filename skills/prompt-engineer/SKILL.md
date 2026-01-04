@@ -11,16 +11,12 @@ workflow.
 ## Invocation
 
 ```bash
-python3 scripts/optimize.py \
-  --step 1 \
-  --total-steps 9 \
-  --thoughts "Prompt: <path or description>"
+python3 scripts/optimize.py --step 1 --total-steps 5
 ```
 
-| Argument        | Required | Description                               |
-| --------------- | -------- | ----------------------------------------- |
-| `--step`        | Yes      | Current step (starts at 1)                |
-| `--total-steps` | Yes      | Minimum 9; adjust as script instructs     |
-| `--thoughts`    | Yes      | Accumulated state from all previous steps |
+| Argument        | Required | Description                 |
+| --------------- | -------- | --------------------------- |
+| `--step`        | Yes      | Current step (starts at 1)  |
+| `--total-steps` | Yes      | Minimum 5; adjust if needed |
 
 Do NOT analyze or explore first. Run the script and follow its output.

@@ -18,6 +18,5 @@ the script - do NOT explore or analyze first.
 
 ## Key Point
 
-The script IS the workflow. It handles triage, blind problem identification,
-planning, factored verification, feedback, refinement, and integration. Do NOT
-analyze before invoking. Run the script and obey its output.
+The script IS the workflow (5 steps: assess -> plan -> refine -> approve ->
+execute). Do NOT analyze before invoking. Run the script and obey its output.

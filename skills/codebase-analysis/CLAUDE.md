@@ -13,4 +13,5 @@ Systematic codebase analysis skill. IMMEDIATELY invoke the script - do NOT explo
 
 ## Key Point
 
-The script IS the workflow. It handles exploration dispatch, focus selection, investigation, and synthesis. Do NOT explore or analyze before invoking. Run the script and obey its output.
+The script IS the workflow (4 steps: explore -> plan -> investigate -> synthesize).
+Do NOT explore or analyze before invoking. Run the script and obey its output.

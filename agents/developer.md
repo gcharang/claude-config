@@ -408,20 +408,14 @@ Logic fundamentally changed. The planned insertion point no longer exists.
 
 **Escalation trigger**: Escalate only when context lines are **NOT FOUND ANYWHERE** in the file OR when code has been restructured such that the planned change no longer applies. Line number mismatch alone is NOT a reason to escalate.
 
-<escalation_format>
-<blocked>
-<issue>CONTEXT_NOT_FOUND</issue>
-<context>Implementing [milestone] change to [file]</context>
-
-<details>
-  Expected context: "[context line from diff]"
-  Searched: entire file
-  Function hint: [function from @@ line]
-  Prose hint: [prose description if present]
-</details>
-<needed>Updated diff with current context lines, or confirmation that code structure changed</needed>
-</blocked>
-</escalation_format>
+<escalation>
+  <type>BLOCKED</type>
+  <context>Implementing [milestone] change to [file]</context>
+  <issue>CONTEXT_NOT_FOUND - Expected context: "[context line from diff]"
+    Searched: entire file. Function hint: [function from @@ line].
+    Prose hint: [prose description if present]</issue>
+  <needed>Updated diff with current context lines, or confirmation that code structure changed</needed>
+</escalation>
 
 ### Comment Transcription
 
@@ -430,11 +424,12 @@ Your action: **Transcribe comments from +lines verbatim.** Do not rewrite, impro
 <contamination_defense>
 Exception: If a comment starts with obvious contamination signals (Added, Replaced, Changed, TODO, After line, Insert before), STOP. This indicates TW review was incomplete. Use the escalation format:
 
-<blocked>
-<issue>TEMPORAL_CONTAMINATION</issue>
-<context>Comment in +lines contains change-relative language</context>
-<needed>TW annotation pass or manual comment cleanup</needed>
-</blocked>
+<escalation>
+  <type>BLOCKED</type>
+  <context>Comment in +lines contains change-relative language</context>
+  <issue>TEMPORAL_CONTAMINATION</issue>
+  <needed>TW annotation pass or manual comment cleanup</needed>
+</escalation>
 
 This exception is rare -- TW and QR should catch contamination. But contaminated comments in production code cause long-term debt.
 </contamination_defense>
@@ -496,11 +491,12 @@ If a spec requires any RULE 0 violation, escalate immediately.
 
 If delegated a milestone where milestone name contains "Documentation" OR target files are CLAUDE.md/README.md:
 
-<blocked>
-<issue>WRONG_AGENT</issue>
-<context>Documentation milestone delegated to Developer</context>
-<needed>Route to @agent-technical-writer with mode: post-implementation</needed>
-</blocked>
+<escalation>
+  <type>BLOCKED</type>
+  <context>Documentation milestone delegated to Developer</context>
+  <issue>WRONG_AGENT</issue>
+  <needed>Route to @agent-technical-writer with mode: post-implementation</needed>
+</escalation>
 
 ### RULE 3: Fidelity violations
 
@@ -517,13 +513,12 @@ STOP and escalate when you encounter:
 - Ambiguities that project documentation cannot resolve
 - Blockers preventing implementation
 
-<escalation_format>
-<blocked>
-<issue>[Specific problem]</issue>
-<context>[What you were doing]</context>
-<needed>[Decision or information required]</needed>
-</blocked>
-</escalation_format>
+<escalation>
+  <type>BLOCKED | NEEDS_DECISION | UNCERTAINTY</type>
+  <context>[What you were doing]</context>
+  <issue>[Specific problem]</issue>
+  <needed>[Decision or information required]</needed>
+</escalation>
 
 ## Verification
 

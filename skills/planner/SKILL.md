@@ -8,16 +8,16 @@ description: Interactive planning and execution for complex tasks. Use when user
 Two-phase workflow: **planning** (create plans) and **execution** (implement
 plans).
 
-## Invocation Routing
+## Activation
 
-| User Intent                                 | Script      | Invocation                                                                         |
-| ------------------------------------------- | ----------- | ---------------------------------------------------------------------------------- |
-| "plan", "design", "architect", "break down" | planner.py  | `python3 scripts/planner.py --step-number 1 --total-steps 5 --thoughts "..."`      |
-| "review plan" (after plan written)          | planner.py  | `python3 scripts/planner.py --phase review --step-number 1 --total-steps 3 ...`    |
-| "execute", "implement", "run plan"          | executor.py | `python3 scripts/executor.py --plan-file PATH --step-number 1 --total-steps 7 ...` |
+When this skill activates, IMMEDIATELY invoke the corresponding script. The
+script IS the workflow.
 
-Scripts inject step-specific guidance via JIT prompt injection. Invoke the
-script and follow its REQUIRED ACTIONS output.
+| Mode      | Intent                             | Command                                                                |
+| --------- | ---------------------------------- | ---------------------------------------------------------------------- |
+| planning  | "plan", "design", "architect"      | `python3 scripts/planner.py --phase planning --step 1 --total-steps 4` |
+| review    | "review plan" (after plan written) | `python3 scripts/planner.py --phase review --step 1 --total-steps 3`   |
+| execution | "execute", "implement", "run plan" | `python3 scripts/executor.py --step 1 --total-steps 7`                 |
 
 ## When to Use
 
@@ -35,35 +35,37 @@ Skip when task is:
 
 ## Resources
 
-| Resource                              | Contents                                   | Read When                                       |
-| ------------------------------------- | ------------------------------------------ | ----------------------------------------------- |
-| `resources/diff-format.md`            | Unified diff specification for plans       | Writing code changes in milestones              |
-| `resources/temporal-contamination.md` | Comment hygiene detection heuristics       | Writing comments in code snippets               |
-| `resources/default-conventions.md`    | Priority hierarchy, structural conventions | Making decisions without explicit user guidance |
-| `resources/plan-format.md`            | Plan template structure                    | Completing planning phase (injected by script)  |
-
-**Resource loading rule**: Scripts will prompt you to read specific resources at
-decision points. When prompted, read the full resource before proceeding.
+| Resource                              | Contents                     | Read When                                       |
+| ------------------------------------- | ---------------------------- | ----------------------------------------------- |
+| `resources/diff-format.md`            | Unified diff specification   | Writing code changes in milestones              |
+| `resources/temporal-contamination.md` | Comment hygiene heuristics   | Writing comments in code snippets               |
+| `resources/default-conventions.md`    | Structural conventions       | Making decisions without explicit user guidance |
+| `resources/plan-format.md`            | Plan template structure      | Completing planning phase (injected by script)  |
+| `resources/planning-verification.md`  | Final verification checklist | Final planning step (script prompts to read)    |
 
 ## Workflow Summary
 
-**Planning phase**: 5+ steps with focused concerns per step:
+**Planning phase**: 4+ steps:
 
-1. Context & Scope Discovery -- understand before proposing
-2. Approach Generation -- generate options, not select
-3. Assumption Surfacing -- user confirmation of architectural choices
-4. Approach Evaluation & Selection -- evaluate and decide
-5. Risks, Milestones & Verification -- document risks, refine milestones
-6. (optional) Gap analysis and developer walkthrough
+1. Context Discovery - explore, gather requirements
+2. Approach Generation - generate options with tradeoffs
+3. Assumption Surfacing - user confirmation of choices
+4. Approach Selection & Milestones - decide, write milestones
 
-Final step writes plan to file.
+**Review phase**: 3 steps:
 
-**Review phase**: 3 steps -- (1) parallel QR for completeness + code, (2) TW
-scrub, (3) QR-Docs validation. Step 1 MUST spawn both QR agents in parallel.
+1. Parallel QR (completeness + code)
+2. TW documentation scrub
+3. QR-Docs validation
 
-**Execution phase**: 7 steps -- analyze plan, reconcile existing code, delegate
-milestones to agents, QR validation, issue resolution, documentation,
-retrospective.
+**Execution phase**: 7 steps:
 
-All procedural details are injected by the scripts. Invoke the appropriate
-script and follow its output.
+1. Execution planning
+2. Reconciliation (conditional)
+3. Milestone execution via execute-milestone.py
+4. Post-implementation QR
+5. QR issue resolution (conditional)
+6. Documentation
+7. Retrospective
+
+Scripts inject step-specific guidance. Invoke and follow output.

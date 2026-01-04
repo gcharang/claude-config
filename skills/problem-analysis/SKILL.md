@@ -11,16 +11,12 @@ workflow.
 ## Invocation
 
 ```bash
-python3 scripts/analyze.py \
-  --step 1 \
-  --total-steps 7 \
-  --thoughts "Problem: <describe>"
+python3 scripts/analyze.py --step 1 --total-steps 4
 ```
 
-| Argument        | Required | Description                               |
-| --------------- | -------- | ----------------------------------------- |
-| `--step`        | Yes      | Current step (starts at 1)                |
-| `--total-steps` | Yes      | Minimum 7; adjust as script instructs     |
-| `--thoughts`    | Yes      | Accumulated state from all previous steps |
+| Argument        | Required | Description                 |
+| --------------- | -------- | --------------------------- |
+| `--step`        | Yes      | Current step (starts at 1)  |
+| `--total-steps` | Yes      | Minimum 4; adjust if needed |
 
 Do NOT analyze or explore first. Run the script and follow its output.

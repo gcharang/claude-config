@@ -14,6 +14,5 @@ explore first.
 
 ## Key Point
 
-The script IS the workflow. It handles decomposition, solution generation,
-critique, verification, and synthesis. Do NOT analyze before invoking. Run the
-script and obey its output.
+The script IS the workflow (4 steps: define -> explore -> verify -> synthesize).
+Do NOT analyze before invoking. Run the script and obey its output.

@@ -42,27 +42,64 @@ def get_qr_state_banner(step_name: str, qr_iteration: int, fixing_issues: bool) 
         ]
 
 
-def get_qr_stop_condition(gate_description: str) -> list:
+def get_qr_stop_condition(gate_description: str, qr_iteration: int = 1) -> list:
     """Generate the Three Pillars STOP CONDITION block.
 
     Args:
         gate_description: What must happen before proceeding
             (e.g., "BOTH QR agents return PASS", "Milestone QR returns PASS")
+        qr_iteration: Current QR loop iteration (for iteration limit check)
 
     Returns:
         List of strings to be included in script output
     """
-    return [
+    base_block = [
         "<stop_condition>",
         "STOP. You MUST NOT proceed until:",
         f"  1. {gate_description}",
         "  2. If QR returned ISSUES, you have FIXED them AND RE-RUN this step",
         "  3. Current QR result is PASS",
         "",
+        "It is normal for QR to find issues on the first pass. Multiple QR",
+        "iterations are expected behavior, not failure. Focus on addressing",
+        "specific issues identified.",
+        "",
         "Skipping re-verification after fixes is PROHIBITED.",
         "The QR agent exists to catch issues YOU cannot see in your own work.",
-        "</stop_condition>",
     ]
+
+    # Add iteration limit guidance
+    if qr_iteration >= 3:
+        base_block.extend([
+            "",
+            "<iteration_limit_reached>",
+            "ITERATION LIMIT: You have reached 3 QR iterations at this checkpoint.",
+            "",
+            "Use AskUserQuestion to present the situation:",
+            "  question: 'QR has found issues across 3 iterations. How should we proceed?'",
+            "  header: 'QR Loop'",
+            "  options:",
+            "    - label: 'Continue iterating'",
+            "      description: 'Keep fixing issues until QR passes'",
+            "    - label: 'Skip this check'",
+            "      description: 'Accept current state, document remaining issues'",
+            "    - label: 'Abort execution'",
+            "      description: 'Stop and review the plan'",
+            "",
+            "If user selects 'Continue iterating': proceed with iteration 4+.",
+            "If user selects 'Skip': document issues in retrospective and continue.",
+            "If user selects 'Abort': stop execution and report status.",
+            "</iteration_limit_reached>",
+        ])
+    else:
+        base_block.extend([
+            "",
+            f"ITERATION LIMIT: Maximum 3 QR iterations before checkpoint.",
+            f"Current iteration: {qr_iteration}. After 3 iterations, will ask user how to proceed.",
+        ])
+
+    base_block.append("</stop_condition>")
+    return base_block
 
 
 def format_restart_command(
