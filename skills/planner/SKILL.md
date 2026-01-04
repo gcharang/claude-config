@@ -35,13 +35,12 @@ Skip when task is:
 
 ## Resources
 
-| Resource                              | Contents                     | Read When                                       |
-| ------------------------------------- | ---------------------------- | ----------------------------------------------- |
-| `resources/diff-format.md`            | Unified diff specification   | Writing code changes in milestones              |
-| `resources/temporal-contamination.md` | Comment hygiene heuristics   | Writing comments in code snippets               |
-| `resources/default-conventions.md`    | Structural conventions       | Making decisions without explicit user guidance |
-| `resources/plan-format.md`            | Plan template structure      | Completing planning phase (injected by script)  |
-| `resources/planning-verification.md`  | Final verification checklist | Final planning step (script prompts to read)    |
+| Resource                              | Contents                   | Read When                                       |
+| ------------------------------------- | -------------------------- | ----------------------------------------------- |
+| `resources/diff-format.md`            | Unified diff specification | Writing code changes in milestones              |
+| `resources/temporal-contamination.md` | Comment hygiene heuristics | Writing comments in code snippets               |
+| `resources/default-conventions.md`    | Structural conventions     | Making decisions without explicit user guidance |
+| `resources/plan-format.md`            | Plan template structure    | Completing planning phase (injected by script)  |
 
 ## Workflow Summary
 
