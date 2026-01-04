@@ -235,13 +235,14 @@ rather than what exists.
 
 For any CLAUDE.md files in the modified files list, verify format compliance:
 
-| Check               | PASS                                 | FAIL (RULE 1 HIGH)                              |
-| ------------------- | ------------------------------------ | ----------------------------------------------- |
-| Format              | Tabular index with WHAT/WHEN columns | Prose sections, bullet lists, narrative         |
-| Size                | As small as possible                 | Large (indicates prose that belongs elsewhere)  |
-| Overview            | One sentence max                     | Multiple sentences or paragraphs                |
-| Forbidden sections  | None present                         | "Key Invariants", "Dependencies", "Constraints" |
-| Invisible Knowledge | In README.md (code-adjacent)         | Embedded in CLAUDE.md instead of README.md      |
+| Check               | PASS                                       | FAIL (RULE 1 HIGH)                              |
+| ------------------- | ------------------------------------------ | ----------------------------------------------- |
+| Format              | Tabular index with WHAT/WHEN columns       | Prose sections, bullet lists, narrative         |
+| Size                | As small as possible                       | Large (indicates prose that belongs elsewhere)  |
+| Overview            | One sentence max                           | Multiple sentences or paragraphs                |
+| Forbidden sections  | None present                               | "Key Invariants", "Dependencies", "Constraints" |
+| Operational         | Commands only (Build, Test, Regen, Deploy) | Explanatory prose about why build works         |
+| Invisible Knowledge | In README.md (code-adjacent)               | Embedded in CLAUDE.md instead of README.md      |
 
 CLAUDE.md format violations are RULE 1 HIGH: they violate the technical-writer
 specification.
@@ -836,24 +837,25 @@ high-quality:
 | WHY-not-WHAT           | Comments explain rationale, not code mechanics    | List comments that restate what code does                    |
 | Coverage               | Non-obvious struct fields/functions have comments | List undocumented non-obvious elements                       |
 | Function docstrings    | ALL functions have docstrings (see below)         | List functions missing docstrings                            |
-| CLAUDE.md format       | Pure tabular index, as small as possible          | List prose sections that should be in README.md              |
+| CLAUDE.md format       | Tabular index + operational commands only         | List prose sections that should be in README.md              |
 | Invisible Knowledge    | In code-adjacent README.md, not external sources  | List Invisible Knowledge not close to implementation         |
 
 ### CLAUDE.md Format Verification (CRITICAL)
 
 CLAUDE.md must be a lightweight index only. Verify the documentation milestone:
 
-| Check               | PASS                                 | SHOULD_FIX (RULE 1 HIGH)                             |
-| ------------------- | ------------------------------------ | ---------------------------------------------------- |
-| Format              | Tabular index with WHAT/WHEN columns | Prose sections, bullet lists, narrative              |
-| Size                | As small as possible                 | Large (indicates prose that belongs elsewhere)       |
-| Overview            | One sentence max                     | Multiple sentences or paragraphs                     |
-| Forbidden sections  | None present                         | "Key Invariants", "Dependencies", "Constraints", etc |
-| Invisible Knowledge | In code-adjacent README.md           | Embedded in CLAUDE.md or external only               |
+| Check               | PASS                                       | SHOULD_FIX (RULE 1 HIGH)                             |
+| ------------------- | ------------------------------------------ | ---------------------------------------------------- |
+| Format              | Tabular index with WHAT/WHEN columns       | Prose sections, bullet lists, narrative              |
+| Size                | As small as possible                       | Large (indicates prose that belongs elsewhere)       |
+| Overview            | One sentence max                           | Multiple sentences or paragraphs                     |
+| Forbidden sections  | None present                               | "Key Invariants", "Dependencies", "Constraints", etc |
+| Operational         | Commands only (Build, Test, Regen, Deploy) | Explanatory prose about why build works              |
+| Invisible Knowledge | In code-adjacent README.md                 | Embedded in CLAUDE.md or external only               |
 
-**Why RULE 1 HIGH**: CLAUDE.md format violations mean prose that should be in
-README.md is in the wrong place. This is a conformance issue (violates the
-CLAUDE.md = lightweight index rule), not style preference.
+**Why RULE 1 HIGH**: CLAUDE.md format violations mean explanatory prose that
+should be in README.md is in the wrong place. Operational sections (commands)
+are OK. This is a conformance issue, not style preference.
 
 **Proximity requirement**: Invisible Knowledge must be in README.md in the SAME
 DIRECTORY as the code it describes. External authoritative sources (doc/, wikis)
@@ -1153,7 +1155,7 @@ Produce ONLY this structure. No preamble. No additional commentary.
 - [ ] I checked all code comments for temporal contamination (five questions)
 - [ ] I verified no hidden baselines in comments
 - [ ] I verified comments explain WHY, not WHAT
-- [ ] I verified CLAUDE.md format (pure tabular index, as small as possible, no prose)
+- [ ] I verified CLAUDE.md format (tabular index + operational commands only, no explanatory prose)
 - [ ] I verified Invisible Knowledge maps to code-adjacent README.md
 - [ ] I verified Invisible Knowledge is NOT only in external sources (doc/, wikis)
 - [ ] I excluded stub directories (only .gitkeep) from CLAUDE.md requirement

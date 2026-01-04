@@ -118,9 +118,23 @@ Given task "add a new validation rule", can an LLM scan the "When to read" colum
 | --------- | ---- | ------------ |
 ```
 
-**Critical constraint:** ALL CLAUDE.md files (including subdirectories) are PURE
-INDEX. No prose, no overview sections beyond one sentence, no architectural
-explanations. Those belong in README.md.
+**Critical constraint:** CLAUDE.md files are navigation aids, not explanatory
+documents. They contain:
+
+- File/directory index (REQUIRED): tabular format with What/When columns
+- One-sentence overview (OPTIONAL): what this directory is
+- Operational sections (OPTIONAL): Build, Test, Regenerate, Deploy, or similar
+  commands specific to this directory's artifacts
+
+They do NOT contain:
+
+- Architectural explanations (-> README.md)
+- Design decisions or rationale (-> README.md)
+- Invariants or constraints (-> README.md)
+- Multi-paragraph prose (-> README.md)
+
+Operational sections must be copy-pasteable commands with minimal context, not
+explanatory prose about why the build works a certain way.
 
 ## README.md Specification
 
@@ -235,8 +249,17 @@ Content that MUST be moved from CLAUDE.md to README.md:
 - Purpose sections with prose (beyond one sentence)
 - Any bullet-point lists explaining rationale
 
-**Test:** If removing the section leaves CLAUDE.md as just a tabular index with
-a one-sentence overview, the removed content belonged in README.md.
+Content that MAY stay in CLAUDE.md (operational sections):
+
+- Build commands specific to this directory
+- Test commands specific to this directory
+- Regeneration/sync commands (e.g., protobuf regeneration)
+- Deploy commands
+- Other copy-pasteable procedural commands
+
+**Test:** Ask "is this explaining WHY or telling HOW?" Explanatory content
+(architecture, decisions, rationale) goes to README.md. Operational content
+(commands, procedures) stays in CLAUDE.md.
 
 Migration process:
 
@@ -272,9 +295,9 @@ After all updates complete, verify:
 1. Every directory in scope has CLAUDE.md
 2. All CLAUDE.md files use table-based index format (pure navigation)
 3. No drift remains (files <-> index entries match)
-4. No misplaced content in CLAUDE.md (all prose moved to README.md)
+4. No misplaced content in CLAUDE.md (explanatory prose moved to README.md)
 5. README.md files are indexed in their parent CLAUDE.md
-6. All CLAUDE.md files contain only: one-sentence overview + tabular index
+6. CLAUDE.md contains only: one-sentence overview + tabular index + operational sections
 7. README.md exists wherever invisible knowledge was identified
 8. README.md files are self-contained (no external authoritative references)
 

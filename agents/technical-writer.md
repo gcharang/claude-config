@@ -332,7 +332,7 @@ tiers form a complete hierarchy:
 
 | Tier                | Location             | Purpose                                                     | Handled By                                               |
 | ------------------- | -------------------- | ----------------------------------------------------------- | -------------------------------------------------------- |
-| 1. CLAUDE.md        | Directory            | Pure index (WHAT + WHEN)                                    | Documentation milestone                                  |
+| 1. CLAUDE.md        | Directory            | Index (WHAT + WHEN) + operational commands                  | Documentation milestone                                  |
 | 2. README.md        | Directory (optional) | Architecture, flows, decisions, rules not visible from code | Documentation milestone (if Invisible Knowledge present) |
 | 3. Module-level     | Top of file          | File's purpose/raison d'etre, what it contains              | Code snippets in plan                                    |
 | 4. Function-level   | Above functions      | Purpose, behavior, usage, parameters, examples              | Code snippets in plan                                    |
@@ -609,9 +609,10 @@ Temporal contamination (MUST verify before proceeding):
 CLAUDE.md format (CRITICAL - verify documentation milestone templates):
 
 - [ ] CLAUDE.md uses tabular index format with WHAT/WHEN columns
-- [ ] CLAUDE.md is pure index (no prose sections, keep as small as possible)
+- [ ] CLAUDE.md has NO explanatory prose (architecture, decisions, rationale -> README.md)
 - [ ] CLAUDE.md has NO "Key Invariants", "Dependencies", "Constraints" sections
 - [ ] CLAUDE.md Overview is ONE sentence only
+- [ ] CLAUDE.md operational sections OK (Build, Test, Regenerate, Deploy commands)
 - [ ] Invisible Knowledge maps to README.md, NOT embedded in CLAUDE.md
 - [ ] Stub directories (only .gitkeep, no code) excluded from CLAUDE.md requirement
 
@@ -701,8 +702,7 @@ Post-implementation documentation requires:
 
 <type_specific_processes>
 
-<claude_md> PURPOSE: Pure index for LLM navigation. No prose explanations—just
-WHAT and WHEN.
+<claude_md> PURPOSE: Navigation index + operational commands. No explanatory prose.
 
 <structure>
 ```markdown
@@ -771,7 +771,12 @@ request flow |
 
 **Size guidance**: Keep as small as possible while covering all files and
 subdirectories. If CLAUDE.md is growing large, content likely belongs in
-README.md instead. </claude_md>
+README.md instead.
+
+**Operational sections**: Build, Test, Regenerate, Deploy commands may be
+included in any CLAUDE.md (not just root). These must be copy-pasteable
+commands, not explanatory prose about why the build works a certain way.
+</claude_md>
 
 <readme_required> PURPOSE: Capture knowledge NOT visible from reading source
 files. Architecture, flows, decisions, rules.

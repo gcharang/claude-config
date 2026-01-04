@@ -220,14 +220,13 @@ See `resources/diff-format.md` for specification.
 
 **Requirements**:
 
-CLAUDE.md (LIGHTWEIGHT INDEX ONLY):
+CLAUDE.md (NAVIGATION + OPERATIONAL):
 
 - Tabular format with WHAT (contents) and WHEN (task triggers) columns
 - Overview section: ONE sentence only
-- NO prose sections (Key Invariants, Dependencies, Constraints, etc.)
-- Prose belongs in README.md, not CLAUDE.md
+- NO explanatory prose (architecture, decisions, rationale -> README.md)
+- Operational sections OK: Build, Test, Regenerate, Deploy commands
 - Keep as small as possible while covering all files/subdirectories
-- Root CLAUDE.md may include Build/Test/Development sections
 
 README.md (INVISIBLE KNOWLEDGE):
 
