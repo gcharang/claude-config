@@ -257,7 +257,11 @@ REVIEW_STEPS = {
             "  Check: Temporal contamination, hidden baselines, WHY not WHAT",
             "",
             "GATE: Must PASS for plan approval.",
-            "If ISSUES: Return to step 2 (TW) with scope, then re-verify.",
+            "",
+            "If ISSUES:",
+            "  FORBIDDEN: Editing plan files directly - you are the orchestrator",
+            "  REQUIRED: Spawn TW agent with QR findings as scope",
+            "  TW fixes issues in-place, then re-invoke this step (--qr-iteration 2)",
         ],
     },
 }
@@ -313,7 +317,7 @@ def get_review_guidance(step: int, total_steps: int,
         )
         return {
             "title": f"Re-Verify (iteration {qr_iteration})",
-            "actions": banner + ["", "Re-spawn same agent(s). Expect PASS after fixes."] + stop,
+            "actions": banner + ["", "Re-spawn QR-docs. If still ISSUES, spawn TW again to fix."] + stop,
             "next": "Proceed to next step on PASS, or fix and re-verify on ISSUES.",
         }
 
