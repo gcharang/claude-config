@@ -20,19 +20,24 @@ for parallel breadth.
 
 ## Technique Selection Guide
 
-| Domain                  | Technique                     | Trigger Condition                                 | Stacks With                        | Conflicts With               | Cost/Tradeoff                            | Effect                                                        |
-| ----------------------- | ----------------------------- | ------------------------------------------------- | ---------------------------------- | ---------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
-| **Parallelization**     | Skeleton-of-Thought           | Long-form answers with plannable structure        | Any single-turn technique          | Step-by-step reasoning tasks | N parallel API calls + synthesis         | 1.89×–2.39× latency reduction; quality maintained or improved |
-| **Parallelization**     | SoT with Router               | Mixed query types requiring adaptive dispatch     | Skeleton-of-Thought                | —                            | Router call overhead                     | Enables SoT for suitable queries only                         |
-| **Decomposition**       | Parallel Sampling             | Multiple valid solution paths exist               | USC, Complexity Weighting          | Greedy decoding              | N× token cost                            | Enables consistency-based selection                           |
-| **Search**              | Tree of Thoughts (BFS)        | Problems requiring exploration with pruning       | State evaluation, backtracking     | Sequential CoT               | b×T LLM calls (beam × steps)             | Game of 24: 4%→74% vs CoT                                     |
-| **Search**              | Tree of Thoughts (DFS)        | Deep exploration with early termination needed    | Value-based pruning                | Parallel expansion           | Variable; supports backtracking          | Crosswords: 15.6%→60% word accuracy                           |
-| **Refinement**          | Explicit Reflection Prompting | Tool returns error; retry needed                  | Tool-augmented workflows           | Immediate retry              | One reflection step per retry            | Concrete diagnosis improves next attempt                      |
-| **Coordination**        | LM² (Decomposer-Solver-Verifier) | Complex reasoning requiring step verification  | Concept generation                 | Monolithic prompting         | 3 models + policy coordination           | MATH: +8.1%; MedQA: +9.7% over baselines                      |
-| **Role Specialization** | Multi-Role Delegation         | Task requires distinct expertise areas            | Any verification technique         | Monolithic prompting         | Role setup overhead                      | Specialized responses per domain                              |
-| **Orchestration**       | Task Decomposition            | Complex task requiring multiple model types       | Any technique                      | Monolithic single-model      | Planning + dispatch overhead             | Enables specialized models per subtask                        |
-| **Human-in-Loop**       | Approval Gates                | Critical tasks requiring human validation         | Any multi-stage pipeline           | Fully autonomous workflows   | Latency for human review                 | 82% plan approval rate in production                          |
-| **Feedback**            | Tool-Augmented Refinement     | Code/structured output requiring validation       | Compiler/linter integration        | —                            | Tool execution + retry loops             | Self-correcting syntactic errors                              |
+| Domain                  | Technique                        | Trigger Condition                                   | Stacks With                          | Conflicts With                 | Cost/Tradeoff                              | Effect                                                          |
+| ----------------------- | -------------------------------- | --------------------------------------------------- | ------------------------------------ | ------------------------------ | ------------------------------------------ | --------------------------------------------------------------- |
+| **Parallelization**     | Skeleton-of-Thought              | Long-form answers with plannable structure          | Any single-turn technique            | Step-by-step reasoning tasks   | N parallel API calls + synthesis           | 1.89×–2.39× latency reduction; quality maintained or improved   |
+| **Parallelization**     | SoT with Router                  | Mixed query types requiring adaptive dispatch       | Skeleton-of-Thought                  | —                              | Router call overhead                       | Enables SoT for suitable queries only                           |
+| **Decomposition**       | Least-to-Most Prompting          | Complex problems harder than examples               | Any verification technique           | Single-turn CoT                | 2+ sequential LLM calls                    | SCAN: 99.7% vs 16% standard; enables length generalization      |
+| **Decomposition**       | Parallel Sampling                | Multiple valid solution paths exist                 | USC, Complexity Weighting            | Greedy decoding                | N× token cost                              | Enables consistency-based selection                             |
+| **Search**              | Tree of Thoughts (BFS)           | Problems requiring exploration with pruning         | State evaluation, backtracking       | Sequential CoT                 | b×T LLM calls (beam × steps)               | Game of 24: 4%→74% vs CoT                                       |
+| **Search**              | Tree of Thoughts (DFS)           | Deep exploration with early termination needed      | Value-based pruning                  | Parallel expansion             | Variable; supports backtracking            | Crosswords: 15.6%→60% word accuracy                             |
+| **Refinement**          | Explicit Reflection Prompting    | Tool returns error; retry needed                    | Tool-augmented workflows             | Immediate retry                | One reflection step per retry              | Concrete diagnosis improves next attempt                        |
+| **Refinement**          | Self-Contrast                    | Self-evaluation unreliable; need implicit verify    | Multi-perspective generation         | Single-path reflection         | 3-stage: perspectives + contrast + reflect | GSM8K +7.8%; reduces invalid reflections 30.8%                  |
+| **Refinement**          | Anticipatory Reflection          | Agent tasks with potential early failures           | Tree search, plan execution          | Post-hoc only reflection       | R backup actions per step                  | WebArena: 23.5% success; 45% fewer plan revisions               |
+| **Verification**        | Multi-Perspective Self-Consistency | Code generation requiring implicit verification   | Solution + spec + test generation    | Single-perspective voting      | 3-partite graph construction               | HumanEval +15.91%; CodeContests +9.37%                          |
+| **Coordination**        | LM² (Decomposer-Solver-Verifier) | Complex reasoning requiring step verification       | Concept generation                   | Monolithic prompting           | 3 models + policy coordination             | MATH: +8.1%; MedQA: +9.7% over baselines                        |
+| **Coordination**        | Multi-Expert Prompting           | Open-ended tasks benefiting from diverse expertise  | NGT aggregation                      | Single-expert prompting        | n experts + 7-subtask aggregation          | TruthfulQA: 89.35% SOTA; +8.69% over best baseline              |
+| **Role Specialization** | Multi-Role Delegation            | Task requires distinct expertise areas              | Any verification technique           | Monolithic prompting           | Role setup overhead                        | Specialized responses per domain                                |
+| **Orchestration**       | Task Decomposition               | Complex task requiring multiple model types         | Any technique                        | Monolithic single-model        | Planning + dispatch overhead               | Enables specialized models per subtask                          |
+| **Human-in-Loop**       | Approval Gates                   | Critical tasks requiring human validation           | Any multi-stage pipeline             | Fully autonomous workflows     | Latency for human review                   | 82% plan approval rate in production                            |
+| **Feedback**            | Tool-Augmented Refinement        | Code/structured output requiring validation         | Compiler/linter integration          | —                              | Tool execution + retry loops               | Self-correcting syntactic errors                                |
 
 ---
 
@@ -63,6 +68,18 @@ for parallel breadth.
     out-of-domain generalization
 12. **Human Gates for Quality Control** — Strategic human approval points catch
     errors without blocking full autonomy
+13. **Least-to-Most for Hard Problems** — Explicit two-stage decomposition enables
+    solving problems harder than demonstration examples
+14. **Contrast Dissimilar Solutions** — Comparing different (even both incorrect)
+    solutions yields better reflection than evaluating single solutions
+15. **Anticipate Failures Before Acting** — Generating backup actions before
+    execution reduces plan revisions by 45%
+16. **Multi-Perspective Verification** — Solution + specification + test case
+    consistency outperforms single-perspective voting
+17. **Three Experts Optimal** — Multi-expert aggregation peaks at 3 experts;
+    more experts can reduce truthfulness
+18. **Self Red-Team Against Overconfidence** — Prompting to consider "why opponent
+    could win" reduces confidence escalation from 10.34% to 3.05%
 
 ---
 
@@ -439,7 +456,12 @@ Task: "What is the capital of France?"
 
 ---
 
-## 4. Explicit Reflection Prompting
+## 4. Reflection and Introspection Patterns
+
+This section covers techniques for improving retry quality and enabling agents
+to learn from failures within a session.
+
+### 4.1 Explicit Reflection Prompting
 
 A within-session technique for improving retry quality when tool execution fails.
 Derived from Reflexion (Shinn et al. 2023), scoped to patterns that work without
@@ -501,24 +523,6 @@ items[0]."
 The prompt should demand specificity. Phrases like "identify the specific cause"
 and "describe concretely how" push toward actionable reflection.
 
-**Tool feedback as evaluator signal:**
-
-In tool-augmented workflows, external tools (compiler, linter, test runner)
-provide structured error signals. These shouldn't just pass through—they should
-be explicitly analyzed in the reflection step.
-
-```
-Tool output:
-TypeError: unsupported operand type(s) for +: 'int' and 'str'
-  File "solution.py", line 12, in process_data
-
-Reflection prompt:
-The error indicates a type mismatch on line 12. The + operator received
-an int and str. Looking at line 12: `total = count + user_input`—the
-user_input variable is a string from input(), not converted to int.
-The fix: wrap user_input in int() before the addition.
-```
-
 **Scope limitations:**
 
 Expect diminishing returns after 2-3 reflection-informed retries within a
@@ -533,21 +537,620 @@ The Reflexion paper's multi-trial gains came from cross-episode accumulation
 infrastructure. Within a single session, you capture the immediate benefit of
 structured failure analysis but not the accumulated learning effect.
 
-**When to use explicit reflection:**
+### 4.2 Anticipatory Reflection (Devil's Advocate)
 
-- Tool returns error that needs diagnosis
-- Previous attempt failed in a non-obvious way
-- Complex multi-step task where error source is unclear
+A three-fold introspection pattern that proactively prepares for failures before
+they occur. Per Wang et al. (2024): "We introduce a novel approach that equips
+LLM agents with introspection, enhancing consistency and adaptability in solving
+complex tasks."
 
-**When NOT to use explicit reflection:**
+**Core innovation:**
 
-- Error is trivially obvious (missing import, typo)
-- Already retried 2-3 times without progress
-- Error message is self-explanatory and fix is clear
+Instead of reflecting only after failures (post-hoc), anticipatory reflection
+generates backup actions _before_ execution. If the primary action fails, the
+agent can immediately try alternatives without regenerating a new plan.
+
+**The three-layer introspection:**
+
+```
+Layer 1 (Pre-Action): Before executing action aₜ
+  → Generate R alternative "remedy" actions [a¹ₜ, a²ₜ, ..., aᴿₜ]
+  → Push all to stack with primary action on top
+
+Layer 2 (Post-Action): After executing action aₜ
+  → Evaluate: Does result align with subtask objective?
+  → If misaligned: Pop next remedy from stack, backtrack
+
+Layer 3 (Plan Revision): Upon plan failure (stack empty, task incomplete)
+  → Review full action history and notes
+  → Generate refined plan for next episode
+```
+
+**Anticipatory reflection prompt:**
+
+```
+You are about to execute: {action}
+
+If your action above is not correct, the next action should be:
+[Generate R alternative actions]
+```
+
+**Post-action alignment prompt:**
+
+```
+Current subtask: {subtask_objective}
+Action taken: {action}
+Resulting state: {new_state}
+
+Does the new state align with the subtask objective?
+Answer: [yes/no]
+If no, explain what went wrong.
+```
+
+**Why this works:**
+
+Traditional reflection performs trials sequentially—one error corrected per
+full pass. Anticipatory reflection branches at decision points, enabling
+multiple alternatives to be tried within a single plan execution. This reduces
+the need for costly plan revisions.
+
+**Performance results (WebArena):**
+
+| Method                    | Success Rate | Plan Revisions |
+| ------------------------- | ------------ | -------------- |
+| Plan + Act (no reflection)| 19.8%        | 2.03           |
+| Plan + Act + Reflection   | 20.0%        | 1.89           |
+| LATS (tree search)        | 22.7%        | 1.16           |
+| Anticipatory Reflection   | 23.5%        | 0.64           |
+
+**Key finding — Efficiency gain:**
+
+Anticipatory reflection reduces plan revisions by 45% compared to standard
+reflection approaches. The number of actions per trial increases (6.39 → 7.07),
+indicating more thorough plan execution before revision.
+
+**When to use anticipatory reflection:**
+
+- Agent tasks with multiple valid action paths
+- Environments where backtracking is inexpensive
+- Tasks where early mistakes are recoverable
+
+**When NOT to use:**
+
+- Single-path deterministic tasks
+- Tasks where actions have irreversible consequences
+- Simple tasks where standard prompting suffices
 
 ---
 
-## 5. Parallel Sampling for Aggregation
+## 5. Least-to-Most Prompting
+
+A two-stage decomposition technique that enables solving problems harder than
+the demonstration examples. Per Zhou et al. (2023): "The key idea in this
+strategy is to break down a complex problem into a series of simpler subproblems
+and then solve them in sequence."
+
+**Core distinction from Plan-and-Solve:**
+
+Plan-and-Solve generates plan and solution in a single LLM call. Least-to-Most
+uses **separate LLM calls** for decomposition and solving, with each subproblem
+solution becoming context for the next. This staged approach enables length
+generalization—solving problems requiring more steps than examples demonstrate.
+
+**The two-stage process:**
+
+```
+Stage 1 (Decomposition):
+  Input: Problem + few-shot decomposition examples
+  Output: Ordered list of subproblems (easiest to hardest)
+
+Stage 2 (Sequential Solving):
+  For each subproblem in order:
+    Input: Few-shot solving examples + previously solved subproblems + current subproblem
+    Output: Solution to current subproblem
+    → Append solution to context for next iteration
+```
+
+**Decomposition prompt template:**
+
+```
+Q: "think, machine, learning"
+A: "think", "think, machine", "think, machine, learning"
+
+Q: {problem}
+A:
+```
+
+The decomposition creates a sequence where each element builds on the previous.
+
+**Sequential solving prompt template:**
+
+```
+Q: "think, machine"
+A: The last letter of "think" is "k". The last letter of "machine" is "e".
+   Concatenating "k", "e" leads to "ke". So, "think, machine" outputs "ke".
+
+Q: "think, machine, learning"
+A: "think, machine" outputs "ke". The last letter of "learning" is "g".
+   Concatenating "ke", "g" leads to "keg". So, "think, machine, learning"
+   outputs "keg".
+
+[Previous subproblem solutions appended here]
+
+Q: {current_subproblem}
+A:
+```
+
+**Critical insight — Context accumulation:**
+
+Each solved subproblem is appended to the context before solving the next. This
+creates a chain where later subproblems can reference earlier solutions. The
+pattern is analogous to induction: demonstrate base case + recursive step, then
+the model generalizes.
+
+**Performance results:**
+
+| Task                    | Chain-of-Thought | Least-to-Most | Improvement |
+| ----------------------- | ---------------- | ------------- | ----------- |
+| Last-letter (12 words)  | 7.7%             | 94.0%         | 12.2×       |
+| SCAN (length split)     | 16.0%            | 99.7%         | 6.2×        |
+| DROP (non-football)     | 74.77%           | 82.45%        | +7.68pp     |
+| GSM8K (≥5 steps)        | 39.07%           | 45.23%        | +6.16pp     |
+
+**Why this enables generalization:**
+
+Per the paper: "Given a new list, we first append it to the exemplar... to
+obtain the list's decomposition. Then, we construct for each sublist S a
+solution prompt, which consists of the exemplars, followed by the previous
+sublist/response pairs (if any), followed by S."
+
+The exemplars demonstrate the pattern; context accumulation enables applying
+it to arbitrarily long sequences.
+
+**Limitation — Domain-specific decomposition:**
+
+Per the paper: "Decomposition prompts typically don't generalize well across
+different domains. For instance, a prompt that demonstrates decomposing math
+word problems isn't effective for teaching large language models to break down
+common sense reasoning problems."
+
+Each domain requires its own decomposition examples.
+
+**When to use Least-to-Most:**
+
+- Problems harder than demonstration examples
+- Tasks requiring compositional generalization
+- Sequential problems where later steps depend on earlier ones
+
+**When to use Plan-and-Solve instead:**
+
+- Problems at similar complexity to examples
+- Token efficiency is critical (single call preferred)
+- Decomposition pattern is straightforward
+
+**CORRECT (Least-to-Most suitable — compositional):**
+
+```
+Task: Translate "jump around left twice" to actions
+
+Decomposition:
+1. "jump left" → TURN LEFT JUMP
+2. "jump around left" → (TURN LEFT JUMP) × 4
+3. "jump around left twice" → ((TURN LEFT JUMP) × 4) × 2
+
+Each subproblem solution feeds into the next.
+```
+
+**INCORRECT (Least-to-Most overhead unjustified):**
+
+```
+Task: "What is 2 + 3?"
+
+Simple enough that single-turn CoT suffices.
+Decomposition overhead provides no benefit.
+```
+
+---
+
+## 6. Self-Contrast: Contrastive Reflection
+
+A three-stage technique that improves reflection quality by contrasting multiple
+solution perspectives rather than directly evaluating a single solution. Per
+Zhang et al. (2024): "Self-Contrast adaptively explores diverse solving
+perspectives tailored to the request, contrasts the differences, and summarizes
+these discrepancies into a checklist which could be used to re-examine and
+eliminate discrepancies."
+
+**The problem with direct self-evaluation:**
+
+Standard reflection asks the model to evaluate its own solution. Research shows
+this produces:
+- **Overconfident feedback** (46.7%): Insisting previous solution is correct
+- **Inconsistent feedback** (45.7%): Different evaluations on repeated attempts
+- **Accurate identification** (only 6.9%): Correctly identifying actual errors
+
+**Core insight:**
+
+Contrasting _differences between_ solutions is easier and more reliable than
+directly evaluating correctness. Even when both solutions are wrong, if their
+errors differ, the contrast reveals potential issues.
+
+**The three-stage process:**
+
+```
+Stage 1 (Create Diverse Perspectives):
+  Input: Problem
+  Action: LLM generates N different solving prompts (perspectives)
+  Output: N solutions from N perspectives
+
+Stage 2 (Contrast Discrepancies):
+  Input: Pairs of solutions with significant differences
+  Action: LLM identifies specific differences and reasons
+  Output: Difference analysis + checklist for re-examination
+
+Stage 3 (Eliminate Discrepancies):
+  Input: Original solutions + difference analysis + checklist
+  Action: LLM reflects using checklist, revises solutions
+  Output: Consistent, refined solution
+```
+
+**Self-curated perspective generation prompt:**
+
+```
+Given the user's request, design {N} different prompts that approach solving
+this problem from distinct perspectives. Each perspective should have:
+- A unique role, personality, or thinking style
+- A different methodology or angle
+
+Request: {problem}
+
+Generate perspectives:
+```
+
+**Contrastive analysis prompt:**
+
+```
+Compare the following two solutions and identify their differences:
+
+Solution 1: {solution_1}
+Solution 2: {solution_2}
+
+Analysis questions:
+1. What are the different solving objectives between the solutions?
+2. Where are the differences in their solution steps?
+3. Why are the answers different?
+
+Based on these differences, generate a checklist for re-examining:
+Checklist:
+□ {directive_1}
+□ {directive_2}
+...
+```
+
+**Reflection with checklist prompt:**
+
+```
+Given a problem, multiple inconsistent solutions, their differences, and
+a checklist. Revise the inconsistent solving steps for each solution,
+eliminate the differences, and output a new solving process.
+
+Guidance:
+1. Check carefully according to the checklist requirements
+2. Ensure all revised solutions have the same answer
+
+Problem: {problem}
+Solutions: {solutions}
+Differences: {differences}
+Checklist: {checklist}
+
+Revised solution:
+```
+
+**Performance results:**
+
+| Model   | Benchmark | Self-Reflection | Self-Contrast | Improvement |
+| ------- | --------- | --------------- | ------------- | ----------- |
+| GPT-3.5 | GSM8K     | -0.8%           | +7.8%         | +8.6pp      |
+| GPT-3.5 | SVAMP     | +0.7%           | +9.2%         | +8.5pp      |
+| L-70B   | GSM8K     | -1.2%           | +11.6%        | +12.8pp     |
+
+**Key finding — Contrasting incorrect solutions is instructive:**
+
+Per the paper's controlled experiment:
+
+| Strategy                                    | Accuracy |
+| ------------------------------------------- | -------- |
+| Self-evaluate one incorrect solution        | 70.1%    |
+| Contrast correct + incorrect               | 83.6%    |
+| Contrast two incorrect (similar errors)     | 70.9%    |
+| Contrast two incorrect (different errors)   | 75.5%    |
+
+Contrasting solutions with _different_ errors improves reflection even when
+both are wrong. The errors "cancel out" through comparison.
+
+**Key finding — Invalid and toxic reflections reduced:**
+
+| Metric              | Self-Reflection | Self-Contrast | Reduction |
+| ------------------- | --------------- | ------------- | --------- |
+| Invalid (✗→✗)       | 269 cases       | 186 cases     | 30.8%     |
+| Toxic (✓→✗)         | 52 cases        | 11 cases      | 78.9%     |
+
+Self-Contrast substantially reduces both failed corrections and accidental
+degradations of correct answers.
+
+**When to use Self-Contrast:**
+
+- Tasks where self-evaluation produces overconfident/inconsistent feedback
+- Problems with multiple valid solving approaches
+- Scenarios where diverse perspectives yield different solutions
+
+**When NOT to use:**
+
+- Tasks with single deterministic solution path
+- Time-critical applications (3-stage overhead)
+- Very simple problems where direct evaluation suffices
+
+---
+
+## 7. Multi-Perspective Self-Consistency (MPSC)
+
+A graph-based verification framework that evaluates code solutions through three
+complementary perspectives: solutions, specifications, and test cases. Per Huang
+et al. (2024): "We propose the Multi-Perspective Self-Consistency (MPSC)
+framework that incorporates both inter- and intra-consistency across outputs
+from multiple perspectives."
+
+**Core concept:**
+
+Instead of generating only solutions and voting, MPSC generates three types of
+outputs that can verify each other:
+- **Solutions**: Code implementing the functionality
+- **Specifications**: Pre/post-conditions describing valid behavior
+- **Test cases**: Input-output pairs demonstrating expected behavior
+
+These form a 3-partite graph where edges represent agreement between perspectives.
+
+**The three perspectives:**
+
+```
+Solution:        def median(l): return sorted(l)[len(l)//2]
+Specification:   preconditions(l): assert isinstance(l, list)
+                 postconditions(l, out): assert num_greater == num_less
+Test case:       assert median([-10, 4, 6, 1000, 10, 20]) == 8.0
+```
+
+**Inter-consistency measurement:**
+
+Edges connect outputs from different perspectives based on agreement:
+- Solution ↔ Test case: Does solution pass the test?
+- Solution ↔ Specification: Does solution satisfy pre/post-conditions?
+- Specification ↔ Test case: Does test case satisfy the specification?
+
+```python
+# Solution ↔ Test case consistency
+def check_solution_test(solution, test_case):
+    try:
+        output = solution(test_case['input'])
+        return output == test_case['output']
+    except:
+        return False
+
+# Solution ↔ Specification consistency
+def check_solution_spec(solution, spec, casual_inputs):
+    pass_results = []
+    for input in casual_inputs:
+        try:
+            output = solution(input)
+            spec.postconditions(input, output)
+            pass_results.append(True)
+        except:
+            pass_results.append(False)
+    return sum(pass_results) / len(pass_results)
+```
+
+**Intra-consistency measurement:**
+
+Within each perspective, outputs are grouped by structural equivalence—outputs
+with identical edge patterns to other perspectives are considered consistent.
+
+**Graph-based selection:**
+
+```
+1. Generate I solutions, J specifications, K test cases
+2. Construct 3-partite graph with inter-consistency edges
+3. Compute intra-consistency scores within each perspective
+4. Optimize score function balancing inter- and intra-consistency
+5. Select solution with highest score
+```
+
+**Performance results:**
+
+| Benchmark    | ChatGPT | +MPSC   | Improvement |
+| ------------ | ------- | ------- | ----------- |
+| HumanEval    | 68.38%  | 84.29%  | +15.91pp    |
+| HumanEval+   | 58.75%  | 73.47%  | +14.72pp    |
+| MBPP         | 66.80%  | 73.23%  | +6.43pp     |
+| CodeContests | 2.57%   | 11.94%  | +9.37pp     |
+
+MPSC with ChatGPT surpasses GPT-4 baseline on HumanEval.
+
+**Key finding — Verification property quality doesn't drive gains:**
+
+| Perspective   | Accuracy |
+| ------------- | -------- |
+| Solutions     | 68.38%   |
+| Specifications| 45.93%   |
+| Test cases    | 63.82%   |
+
+Specifications and test cases are individually _worse_ than solutions, yet MPSC
+improves results. The gains come from consistency relationships, not from using
+better verification properties.
+
+**Ablation — Both perspectives matter:**
+
+| Configuration         | HumanEval |
+| --------------------- | --------- |
+| Full MPSC             | 83.38%    |
+| w/o Specification     | 82.32%    |
+| w/o Test case         | 78.30%    |
+| w/o Both (baseline)   | 68.38%    |
+
+Test cases contribute more than specifications, likely because generating
+accurate test cases is simpler than abstracting comprehensive specifications.
+
+**When to use MPSC:**
+
+- Code generation tasks
+- Tasks where execution-based verification is possible
+- Scenarios benefiting from implicit consistency checking
+
+**When NOT to use:**
+
+- Non-code tasks without executable verification
+- Tasks where specification/test generation is unreliable
+- Latency-critical applications (graph construction overhead)
+
+---
+
+## 8. Multi-Expert Prompting
+
+A single-turn aggregation technique that simulates multiple domain experts and
+combines their responses using the Nominal Group Technique (NGT). Per Long et
+al. (2024): "Multi-expert Prompting guides an LLM to fulfill an input instruction
+by simulating multiple experts, aggregating their responses, and selecting the
+best among individual and aggregated responses."
+
+**Core architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     MULTI-EXPERT PROMPTING                          │
+├─────────────────────────────┬───────────────────────────────────────┤
+│  Step 1: Expert Generation  │  Step 2: Response Aggregation (NGT)   │
+├─────────────────────────────┼───────────────────────────────────────┤
+│ Generate n expert identities│ S1: Generate consensus viewpoints     │
+│ (one-sentence descriptions) │ S2: Identify conflicting viewpoints   │
+│                             │ S3: Resolve conflicts using knowledge │
+│ Each expert responds        │ S4: Collect unique viewpoints         │
+│ independently to instruction│ S5: Gather all viewpoints             │
+│                             │ S6: Generate aggregated response      │
+│                             │ S7: Select best (individual or agg.)  │
+└─────────────────────────────┴───────────────────────────────────────┘
+```
+
+**Expert generation prompt:**
+
+```
+Given the following instruction, generate {n} diverse expert identities
+that are best suited to answer it. For each expert, provide:
+- Expert name/role
+- One-sentence description of their expertise
+
+Instruction: {instruction}
+
+Experts:
+```
+
+**Key insight — Short descriptions suffice:**
+
+Per the paper: "One-sentence description for an expert identity is effective,
+compared to a paragraph-long description as used in ExpertPrompting." The
+performance difference is negligible, making short descriptions more efficient.
+
+**Expert response generation:**
+
+```
+You are {expert_identity}: {expert_description}
+
+Given your expertise, respond to the following instruction:
+{instruction}
+
+Response:
+```
+
+**Seven-subtask aggregation (NGT-based):**
+
+```
+Given {n} expert responses to: {instruction}
+
+Expert 1 ({identity_1}): {response_1}
+Expert 2 ({identity_2}): {response_2}
+...
+Expert n ({identity_n}): {response_n}
+
+Perform the following subtasks:
+
+S1. Generate consensus: List viewpoints that all experts agree on.
+
+S2. Identify conflicts: List viewpoints where experts disagree.
+
+S3. Resolve conflicts: For each conflict, determine the most accurate
+    viewpoint using your knowledge.
+
+S4. Collect unique viewpoints: List valuable viewpoints mentioned by
+    only one expert.
+
+S5. Gather all viewpoints: Combine S1, S3 (resolved), and S4.
+
+S6. Generate aggregated response: Compose a comprehensive response
+    integrating all gathered viewpoints.
+
+S7. Select best response: Choose the most factual and useful response
+    from [Expert 1, Expert 2, ..., Expert n, Aggregated].
+
+Final response:
+```
+
+**Performance results:**
+
+| Model   | Baseline Best | Multi-Expert | Improvement |
+| ------- | ------------- | ------------ | ----------- |
+| ChatGPT | 80.66%        | 89.35%       | +8.69pp     |
+| Mistral | 81.88%        | 87.15%       | +5.27pp     |
+
+Multi-Expert achieves SOTA on TruthfulQA-Generation (89.35%), surpassing
+previous best of 87.97%.
+
+**Key finding — Three experts is optimal:**
+
+| # Experts | TruthfulQA | FactualityPrompt | BOLD  |
+| --------- | ---------- | ---------------- | ----- |
+| 1         | 80.05%     | 5.13/10.75       | 0.129 |
+| 2         | 88.00%     | 5.17/9.57        | 0.000 |
+| 3 (Ours)  | 89.35%     | 4.54/9.45        | 0.000 |
+| 5         | 85.92%     | 4.90/10.89       | 0.000 |
+| 10        | 84.82%     | 6.24/10.41       | 0.000 |
+
+More than 3 experts can reduce truthfulness—excessive input may divert from
+optimal output. However, ≥2 experts significantly decreases toxicity.
+
+**Key finding — Aggregated response usually selected:**
+
+| Dataset          | Aggregated Selected |
+| ---------------- | ------------------- |
+| TruthfulQA       | 95.44%              |
+| FactualityPrompt | 92.40%              |
+| BOLD             | 100%                |
+| ExpertQA         | 97.53%              |
+
+In >90% of cases, the aggregated response is selected over individual expert
+responses, validating the aggregation quality.
+
+**When to use Multi-Expert:**
+
+- Open-ended questions benefiting from multiple viewpoints
+- Tasks requiring balanced perspectives (ethics, policy)
+- Scenarios where single-expert bias is problematic
+
+**When NOT to use:**
+
+- Tasks with single correct factual answer
+- Time-critical applications (aggregation overhead)
+- Domains where LLM expert simulation is unreliable
+
+---
+
+## 9. Parallel Sampling for Aggregation
 
 When multiple valid reasoning paths exist, parallel sampling generates diverse
 candidates for downstream selection or synthesis. This pattern underlies
@@ -597,7 +1200,7 @@ between accuracy gains and diminishing returns from additional samples.
 
 ---
 
-## 6. LM² (Language Model Multiplex): Coordinated Multi-Model Reasoning
+## 10. LM² (Language Model Multiplex): Coordinated Multi-Model Reasoning
 
 A framework that modularizes decomposition, solution, and verification into
 three coordinated language models. Per Juneja et al. (2024): "LM² modularizes
@@ -607,20 +1210,20 @@ models... these models are trained to coordinate using policy learning."
 **Core architecture:**
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                           LM²                               │
-├────────────────┬─────────────────┬──────────────────────────┤
-│   Decomposer   │     Solver      │       Verifier           │
-│   (finetuned)  │   (frozen API)  │      (finetuned)         │
-├────────────────┼─────────────────┼──────────────────────────┤
-│ 1. Generate    │ Answer each     │ Classify error type:     │
-│    concepts    │ subquestion     │ - Conceptual             │
-│ 2. Generate    │ given concepts  │ - Computational          │
-│    subquestions│ and prior       │ - Procedural             │
-│    step-by-step│ context         │ - Misunderstood question │
-│                │                 │ - Position of mistake    │
-│                │                 │ - No mistake             │
-└────────────────┴─────────────────┴──────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                           LM²                                    │
+├────────────────┬─────────────────┬──────────────────────────────┤
+│   Decomposer   │     Solver      │       Verifier               │
+│   (finetuned)  │   (frozen API)  │      (finetuned)             │
+├────────────────┼─────────────────┼──────────────────────────────┤
+│ 1. Generate    │ Answer each     │ Classify error type:         │
+│    concepts    │ subquestion     │ - Conceptual                 │
+│ 2. Generate    │ given concepts  │ - Computational              │
+│    subquestions│ and prior       │ - Procedural                 │
+│    step-by-step│ context         │ - Misunderstood question     │
+│                │                 │ - Position of mistake        │
+│                │                 │ - No mistake                 │
+└────────────────┴─────────────────┴──────────────────────────────┘
 ```
 
 **Key innovation — Concept generation:**
@@ -712,31 +1315,6 @@ Different error types warrant different responses:
 | First-step mistake      | High penalty; regenerate immediately     |
 | Later-step mistake      | Lower penalty; may self-correct          |
 
-**Policy learning for coordination:**
-
-The decomposer is trained via PPO to coordinate with the solver and verifier.
-Reward structure penalizes early mistakes more heavily:
-
-```
-R = γᵏ × Σ rᵢ
-
-where:
-- γ < 1 is discount factor (earlier mistakes penalized more)
-- k is subquestion index
-- rᵢ is reward for error type i
-
-Error rewards:
-- Conceptual: -0.15
-- Computational: -0.05
-- Procedural: -0.15
-- Misunderstood: -0.20
-- First step: -0.20
-- First half: -0.12
-- Second half: -0.08
-- Last step: -0.05
-- No mistake: +1.0
-```
-
 **Performance results:**
 
 | Dataset  | Best Baseline | LM²    | Improvement |
@@ -750,14 +1328,9 @@ Error rewards:
 Removing concept generation drops accuracy by 17.5% on Chemistry (out-of-domain)
 vs 6% on Math (in-domain). Concepts are critical for generalization.
 
-**Key finding — Finetuned decomposer beats GPT-4:**
-
-A finetuned LLaMA-2 7B decomposer generates more effective concepts than GPT-4
-prompted for the same task, demonstrating the value of task-specific training.
-
 ---
 
-## 7. Role-Specialized Subagents
+## 11. Role-Specialized Subagents
 
 Assigning distinct roles to different LLM calls enables specialized handling of
 subtask types. This pattern appears in Multi-Expert Prompting and multi-agent
@@ -814,7 +1387,7 @@ aggregating expert responses in a single turn without iterative refinement."
 
 ---
 
-## 8. Task Decomposition Orchestration
+## 12. Task Decomposition Orchestration
 
 A pattern where a controller LLM decomposes complex tasks and routes subtasks to
 specialized models. Per Shen et al. (2023) in HuggingGPT: "We present
@@ -928,7 +1501,7 @@ Execution order:
 
 ---
 
-## 9. Human-in-the-Loop Orchestration
+## 13. Human-in-the-Loop Orchestration
 
 A framework that incorporates human feedback at strategic points in multi-agent
 workflows. Per Takerngsaksiri et al. (2025): "Rather than aiming to fully
@@ -939,17 +1512,17 @@ to help resolve software development tasks."
 **Core architecture (HULA pattern):**
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    HUMAN-IN-THE-LOOP                        │
-├─────────────────┬─────────────────┬─────────────────────────┤
-│  AI Planner     │   AI Coder      │    Human Agent          │
-│  Agent          │   Agent         │                         │
-├─────────────────┼─────────────────┼─────────────────────────┤
-│ - File          │ - Code          │ - Review plans          │
-│   localization  │   generation    │ - Approve/reject        │
-│ - Plan          │ - Self-refine   │ - Provide guidance      │
-│   generation    │   via tools     │ - Edit outputs          │
-└─────────────────┴─────────────────┴─────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    HUMAN-IN-THE-LOOP                             │
+├─────────────────┬─────────────────┬─────────────────────────────┤
+│  AI Planner     │   AI Coder      │    Human Agent              │
+│  Agent          │   Agent         │                             │
+├─────────────────┼─────────────────┼─────────────────────────────┤
+│ - File          │ - Code          │ - Review plans              │
+│   localization  │   generation    │ - Approve/reject            │
+│ - Plan          │ - Self-refine   │ - Provide guidance          │
+│   generation    │   via tools     │ - Edit outputs              │
+└─────────────────┴─────────────────┴─────────────────────────────┘
 ```
 
 **The DPDE paradigm:**
@@ -1048,7 +1621,7 @@ preventing downstream errors.
 
 ---
 
-## 10. Implementation Patterns
+## 14. Implementation Patterns
 
 ### Orchestrator Architecture
 
@@ -1144,7 +1717,7 @@ class EpisodicMemory:
 
 ---
 
-## 11. Anti-Patterns
+## 15. Anti-Patterns
 
 ### Forcing Parallelism on Sequential Tasks
 
@@ -1264,9 +1837,60 @@ The reflection step forces verbalization of the failure cause, making the
 diagnosis explicit context for the next attempt. Without it, the model may
 repeat similar mistakes or make only superficial changes.
 
+### Overconfidence in Multi-Agent Debate
+
+**Anti-pattern:** Using debate frameworks without accounting for systematic
+confidence escalation.
+
+Per Prasad & Nguyen (2025): LLMs exhibit concerning patterns in adversarial
+debate settings:
+- Initial overconfidence: 72.9% average vs rational 50% baseline
+- Confidence escalation: Increases to 83.3% by final round
+- Mutual impossibility: 61.7% of debates end with both sides claiming ≥75%
+
+```
+# PROBLEMATIC
+Agent A argues position → Agent B counter-argues →
+Multiple rounds → Both agents increasingly confident
+Neither recognizes weakening of their position
+```
+
+```
+# BETTER (Self Red-Teaming mitigation)
+Add to debate prompts: "Think through why you will win, but also
+explicitly consider why your opponent could win."
+
+Result: Escalation reduced from 10.34% to 3.05%
+```
+
+### Direct Self-Evaluation for Reflection
+
+**Anti-pattern:** Asking models to directly evaluate their own solutions.
+
+Per Zhang et al. (2024): Direct self-evaluation produces:
+- Overconfident feedback: 46.7%
+- Inconsistent feedback: 45.7%
+- Accurate identification: only 6.9%
+
+```
+# PROBLEMATIC
+"Review your solution and identify any errors."
+→ Model: "The solution is correct." (overconfident)
+```
+
+```
+# BETTER (Self-Contrast)
+Generate multiple solutions from different perspectives →
+Contrast differences between solutions →
+Generate checklist from discrepancies →
+Reflect using checklist
+
+Result: Invalid reflections reduced 30.8%, toxic reflections reduced 78.9%
+```
+
 ---
 
-## 12. Technique Combinations
+## 16. Technique Combinations
 
 Subagent orchestration patterns can be combined with quality-improvement
 techniques. The combinations below are **illustrative, not exhaustive**—they
@@ -1295,17 +1919,38 @@ Router classifies query into:
   - Structured long-form → SoT
   - Complex reasoning → Sequential CoT or ToT
   - Multi-perspective → Multi-Expert parallel
+  - Code generation → MPSC (solution + spec + test)
 ```
 
-### ToT + Explicit Reflection
+### ToT + Anticipatory Reflection
 
-Combine tree search with reflection on failed paths:
+Combine tree search with pre-emptive backup generation:
 
 ```
-ToT search → Best path fails tool verification
-Reflection: "Path failed because X; alternative approach Y"
-Continue ToT search with reflection in context
-→ Pruning informed by explicit failure analysis
+At each ToT node:
+  Generate primary action + R backup actions
+  Push all to stack with primary on top
+
+If primary fails evaluation:
+  Pop next backup without regenerating plan
+  Continue ToT search
+
+Result: Fewer plan revisions, more thorough exploration
+```
+
+### Least-to-Most + Self-Contrast
+
+Apply contrastive verification to decomposition results:
+
+```
+Stage 1: Decompose problem into subproblems
+Stage 2: For each subproblem:
+  - Generate solutions from multiple perspectives
+  - Contrast differences
+  - Generate checklist
+  - Reflect and revise
+Stage 3: Accumulate verified solutions
+Stage 4: Solve final problem with full context
 ```
 
 ### LM² + Human-in-the-Loop
@@ -1319,15 +1964,46 @@ If verifier flags critical error → [Human Review]
 Final answer → [Human Approval]
 ```
 
-### Parallel Sampling + Complexity Weighting
+### Parallel Sampling + MPSC
 
-Combine parallel generation with quality-based filtering:
+Combine parallel generation with multi-perspective verification:
 
 ```
-Stage 1: Generate N responses in parallel
-Stage 2: Score each by reasoning complexity
-Stage 3: Filter to top K by complexity
-Stage 4: Apply USC or majority voting to filtered set
+Stage 1: Generate N solutions in parallel
+Stage 2: Generate M specifications in parallel
+Stage 3: Generate K test cases in parallel
+Stage 4: Construct 3-partite consistency graph
+Stage 5: Select solution with highest inter+intra consistency
+```
+
+### Multi-Expert + Self-Contrast
+
+Use contrastive analysis within expert aggregation:
+
+```
+Stage 1: Generate n expert identities
+Stage 2: Each expert responds independently
+Stage 3: Contrast pairs of expert responses
+Stage 4: Generate checklist from discrepancies
+Stage 5: NGT aggregation with checklist-informed conflict resolution
+Stage 6: Select best response
+```
+
+### Anticipatory Reflection + Self Red-Teaming
+
+Combine backup generation with confidence calibration:
+
+```
+Before each action:
+  Generate primary action
+  Generate R backup actions
+
+  For confidence calibration:
+    "Why might this action succeed?"
+    "Why might this action fail?"
+    "Why might an alternative be better?"
+
+  Adjust action ranking based on red-teaming
 ```
 
 ---
@@ -1336,12 +2012,16 @@ Stage 4: Apply USC or majority voting to filtered set
 
 - Chen, X., et al. (2023). "Universal Self-Consistency for Large Language Model
   Generation." arXiv.
+- Huang, B., et al. (2024). "Enhancing Large Language Models in Coding Through
+  Multi-Perspective Self-Consistency." ACL.
 - Juneja, G., Dutta, S., & Chakraborty, T. (2024). "LM²: A Simple Society of
   Language Models Solves Complex Reasoning." arXiv.
 - Long, D.X., et al. (2024). "Multi-expert Prompting Improves Reliability,
-  Safety and Usefulness of Large Language Models." arXiv.
+  Safety and Usefulness of Large Language Models." EMNLP.
 - Ning, X., Lin, Z., Zhou, Z., et al. (2024). "Skeleton-of-Thought: Prompting
   LLMs for Efficient Parallel Generation." ICLR.
+- Prasad, P.S. & Nguyen, M.N. (2025). "When Two LLMs Debate, Both Think They'll
+  Win." arXiv.
 - Shen, Y., et al. (2023). "HuggingGPT: Solving AI Tasks with ChatGPT and its
   Friends in Hugging Face." arXiv.
 - Shinn, N., et al. (2023). "Reflexion: Language Agents with Verbal
@@ -1349,5 +2029,11 @@ Stage 4: Apply USC or majority voting to filtered set
   cross-episode learning requires custom orchestration.)
 - Takerngsaksiri, W., et al. (2025). "Human-In-the-Loop Software Development
   Agents." arXiv.
+- Wang, H., et al. (2024). "Devil's Advocate: Anticipatory Reflection for LLM
+  Agents." arXiv.
 - Yao, S., et al. (2023). "Tree of Thoughts: Deliberate Problem Solving with
   Large Language Models." NeurIPS.
+- Zhang, W., et al. (2024). "Self-Contrast: Better Reflection Through
+  Inconsistent Solving Perspectives." arXiv.
+- Zhou, D., et al. (2023). "Least-to-Most Prompting Enables Complex Reasoning
+  in Large Language Models." ICLR.
