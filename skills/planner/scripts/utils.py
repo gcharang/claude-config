@@ -2,16 +2,21 @@
 """
 Shared utilities for planner scripts.
 
-Three Pillars Pattern for QR Verification Loops:
-  1. STATE BANNER: Visual header showing loop iteration
-  2. STOP CONDITION: Explicit blocker preventing progression
-  3. RE-VERIFICATION MODE: Different prompts for first-run vs retry
+QR Gate Pattern for Verification Loops:
+  Every QR step is followed by a GATE step that:
+  1. Takes --qr-status=pass|fail as input
+  2. Outputs the EXACT next command to invoke
+  3. Leaves no room for interpretation
+
+  Work steps that follow a FAIL gate take --qr-fail flag to focus on fixing.
 
 This pattern is applied consistently across:
-  - planner.py (review phase steps 1 and 3)
-  - executor.py (step 4: holistic QR)
-  - execute-milestone.py (steps 2-3: per-milestone QR)
+  - planner.py (review phase: sequential QR with gates)
+  - executor.py (step 4-5: holistic QR with gate)
+  - execute-milestones.py (steps 2-3: batch QR with gate)
 """
+
+from typing import Callable
 
 
 def get_qr_state_banner(step_name: str, qr_iteration: int, fixing_issues: bool) -> list:
@@ -149,3 +154,119 @@ def format_restart_command(
     parts.append(f'--thoughts "{thoughts_template}"')
 
     return " \\\n    ".join(parts)
+
+
+def format_qr_gate_output(
+    gate_name: str,
+    qr_status: str,
+    script_name: str,
+    pass_command: str | Callable[[], str],
+    fail_command: str | Callable[[int], str],
+    qr_iteration: int = 1,
+    work_agent: str = "developer",
+) -> str:
+    """Generate QR gate step output with explicit routing.
+
+    Gate steps are the ONLY place where QR results are interpreted.
+    They output the EXACT command to invoke next, leaving no room
+    for the main agent to interpret or take shortcuts.
+
+    Args:
+        gate_name: Name of this gate (e.g., "QR-COMPLETENESS", "QR-CODE", "WAVE QR")
+        qr_status: "pass" or "fail" (from --qr-status argument)
+        script_name: Script to invoke (e.g., "planner.py", "executor.py")
+        pass_command: Command string or callable returning command if PASS
+        fail_command: Command string or callable(qr_iteration) returning command if FAIL
+        qr_iteration: Current QR iteration (1 = first attempt)
+        work_agent: Agent that does the work on FAIL (for messaging)
+
+    Returns:
+        Formatted gate output string
+    """
+    lines = [
+        f"QR GATE: {gate_name}",
+        f"Result: {qr_status.upper()}",
+        "",
+    ]
+
+    if qr_status.lower() == "pass":
+        cmd = pass_command() if callable(pass_command) else pass_command
+        lines.extend([
+            "=" * 60,
+            "GATE PASSED",
+            "=" * 60,
+            "",
+            "NEXT (MANDATORY - invoke this exact command):",
+            f"  {cmd}",
+        ])
+    else:
+        # FAIL case
+        next_iteration = qr_iteration + 1
+        cmd = fail_command(next_iteration) if callable(fail_command) else fail_command
+
+        lines.extend([
+            "=" * 60,
+            f"GATE FAILED (iteration {qr_iteration})",
+            "=" * 60,
+            "",
+        ])
+
+        # Add iteration limit check
+        if next_iteration > 3:
+            lines.extend([
+                "<iteration_limit_reached>",
+                f"QR has failed {qr_iteration} times at this checkpoint.",
+                "",
+                "Use AskUserQuestion:",
+                "  question: 'QR has found issues across 3 iterations. How to proceed?'",
+                "  header: 'QR Loop'",
+                "  options:",
+                "    - label: 'Continue iterating'",
+                "      description: 'Keep fixing until QR passes'",
+                "    - label: 'Skip this check'",
+                "      description: 'Accept current state, note remaining issues'",
+                "    - label: 'Abort'",
+                "      description: 'Stop and review'",
+                "</iteration_limit_reached>",
+                "",
+                "If user chooses 'Continue iterating':",
+            ])
+
+        lines.extend([
+            "DELEGATION REQUIRED:",
+            "  You are the ORCHESTRATOR. You NEVER fix code or docs yourself.",
+            f"  Spawn {work_agent} agent with the QR findings.",
+            f"  The {work_agent} will address the issues.",
+            "",
+            f"After {work_agent} completes, invoke this exact command:",
+            f"  {cmd}",
+            "",
+            "FORBIDDEN:",
+            "  - Using Edit/Write tools yourself",
+            "  - Proceeding without re-running QR",
+            "  - Interpreting 'minor issues' as skippable",
+        ])
+
+    return "\n".join(lines)
+
+
+def get_iteration_limit_guidance(qr_iteration: int) -> list[str]:
+    """Get guidance text for iteration limit scenarios.
+
+    Args:
+        qr_iteration: Current iteration number
+
+    Returns:
+        List of guidance lines (empty if under limit)
+    """
+    if qr_iteration < 3:
+        return [
+            f"Iteration: {qr_iteration}/3 (will ask user after 3 failures)",
+        ]
+    else:
+        return [
+            "<iteration_limit>",
+            f"Iteration {qr_iteration}: User confirmation required.",
+            "Use AskUserQuestion before proceeding.",
+            "</iteration_limit>",
+        ]

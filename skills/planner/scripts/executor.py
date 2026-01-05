@@ -2,12 +2,12 @@
 """
 Plan Executor - Execute approved plans through delegation.
 
-Seven-step workflow:
+Eight-step workflow:
   1. Execution Planning - analyze plan, detect reconciliation
   2. Reconciliation - validate existing code (conditional)
   3. Milestone Execution - delegate via execute-milestone.py
   4. Post-Implementation QR - holistic quality review
-  5. QR Issue Resolution - fix issues (conditional)
+  5. QR Gate - route based on QR result
   6. Documentation - TW pass
   7. Retrospective - present summary
 
@@ -18,7 +18,7 @@ Usage:
 import argparse
 import sys
 
-from utils import get_qr_state_banner, get_qr_stop_condition
+from utils import format_qr_gate_output, get_qr_state_banner
 
 
 STEPS = {
@@ -104,23 +104,10 @@ STEPS = {
             "",
             "Priority: reconciled milestones > new milestones > cross-cutting",
             "",
-            "Expected output: PASS or issues sorted by severity.",
+            "Expected output: PASS or ISSUES.",
         ],
     },
-    5: {
-        "title": "QR Issue Resolution",
-        "actions": [
-            "Present issues to user, collect decisions, delegate fixes.",
-            "",
-            "For EACH issue:",
-            "  Present: severity, category, file, problem, evidence",
-            "  AskUserQuestion: Fix | Skip | Alternative",
-            "",
-            "After ALL decisions collected:",
-            "  Execute fixes (parallelize where possible)",
-            "  Return to step 4 for re-verification",
-        ],
-    },
+    # Step 5 is the gate - handled separately in format_output
     6: {
         "title": "Documentation",
         "actions": [
@@ -157,10 +144,35 @@ STEPS = {
 }
 
 
+def format_step_5_gate(qr_status: str, qr_iteration: int) -> str:
+    """Format step 5 gate output using shared function."""
+    pass_cmd = "python3 executor.py --step 6 --total-steps 7"
+
+    def fail_cmd(iteration: int) -> str:
+        return f"python3 executor.py --step 4 --total-steps 7 --qr-fail --qr-iteration {iteration}"
+
+    return format_qr_gate_output(
+        gate_name="HOLISTIC QR",
+        qr_status=qr_status,
+        script_name="executor.py",
+        pass_command=pass_cmd,
+        fail_command=fail_cmd,
+        qr_iteration=qr_iteration,
+        work_agent="developer",
+    )
+
+
 def format_output(step: int, total_steps: int,
-                  qr_iteration: int, fixing_issues: bool,
+                  qr_iteration: int, qr_fail: bool, qr_status: str,
                   reconciliation_check: bool, milestone_count: int) -> str:
     """Format output for display."""
+
+    # Step 5 is the gate - uses shared function
+    if step == 5:
+        if not qr_status:
+            return "Error: --qr-status required for step 5"
+        return format_step_5_gate(qr_status, qr_iteration)
+
     info = STEPS.get(step, STEPS[7])
     is_complete = step >= total_steps
 
@@ -172,8 +184,7 @@ def format_output(step: int, total_steps: int,
 
     # Add QR banner for step 4
     if step == 4:
-        banner = get_qr_state_banner("HOLISTIC QR", qr_iteration, fixing_issues)
-        stop = get_qr_stop_condition("Holistic QR returns PASS", qr_iteration)
+        banner = get_qr_state_banner("HOLISTIC QR", qr_iteration, qr_fail)
         for line in banner:
             if line:
                 lines.append(f"  {line}")
@@ -184,12 +195,6 @@ def format_output(step: int, total_steps: int,
             lines.append(f"  {action}")
         else:
             lines.append("")
-
-    if step == 4:
-        lines.append("")
-        for line in stop:
-            if line:
-                lines.append(f"  {line}")
 
     lines.append("")
 
@@ -220,9 +225,7 @@ def format_output(step: int, total_steps: int,
     elif step == 3:
         lines.append("NEXT: Step 4 (Post-Implementation QR) after all waves complete")
     elif step == 4:
-        lines.append("NEXT: Step 5 if ISSUES, Step 6 if PASS")
-    elif step == 5:
-        lines.append(f"NEXT: Return to Step 4 for re-verification (--qr-iteration {qr_iteration + 1})")
+        lines.append("NEXT: Step 5 (QR Gate) with --qr-status pass|fail")
     else:
         lines.append(f"NEXT: Step {step + 1}")
 
@@ -232,13 +235,16 @@ def format_output(step: int, total_steps: int,
 def main():
     parser = argparse.ArgumentParser(
         description="Plan Executor - Execute approved plans",
-        epilog="Steps: plan -> reconcile -> execute -> QR -> fix -> docs -> retrospective",
+        epilog="Steps: plan -> reconcile -> execute -> QR -> gate -> docs -> retrospective",
     )
 
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument("--total-steps", type=int, required=True)
     parser.add_argument("--qr-iteration", type=int, default=1)
-    parser.add_argument("--fixing-issues", action="store_true")
+    parser.add_argument("--qr-fail", action="store_true",
+                        help="QR step is re-verifying after fixes")
+    parser.add_argument("--qr-status", type=str, choices=["pass", "fail"],
+                        help="QR result for gate step (step 5)")
     parser.add_argument("--reconciliation-check", action="store_true")
     parser.add_argument("--milestone-count", type=int, default=0)
 
@@ -247,8 +253,11 @@ def main():
     if args.step < 1 or args.step > 7:
         sys.exit("Error: step must be 1-7")
 
+    if args.step == 5 and not args.qr_status:
+        sys.exit("Error: --qr-status required for step 5")
+
     print(format_output(args.step, args.total_steps,
-                        args.qr_iteration, args.fixing_issues,
+                        args.qr_iteration, args.qr_fail, args.qr_status,
                         args.reconciliation_check, args.milestone_count))
 
 

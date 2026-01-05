@@ -15,7 +15,7 @@ Usage:
 import argparse
 import sys
 
-from utils import get_qr_state_banner, get_qr_stop_condition
+from utils import format_qr_gate_output, get_qr_state_banner
 
 
 def parse_milestones(milestones_str: str) -> list[int]:
@@ -31,7 +31,7 @@ def format_milestone_list(milestones: list[int]) -> str:
 
 
 def get_step_1_guidance(milestones: list[int], total_milestones: int,
-                        fixing_qr_issues: bool, qr_iteration: int) -> dict:
+                        qr_fail: bool, qr_iteration: int) -> dict:
     """Step 1: Implementation (parallel for wave)."""
     ms_display = format_milestone_list(milestones)
     is_parallel = len(milestones) > 1
@@ -41,7 +41,7 @@ def get_step_1_guidance(milestones: list[int], total_milestones: int,
         "",
     ]
 
-    if fixing_qr_issues or qr_iteration > 1:
+    if qr_fail or qr_iteration > 1:
         actions.extend([
             f"===[ QR FIX MODE (iteration {qr_iteration}) ]===",
             "Fix ONLY the issues QR flagged. Do NOT re-implement.",
@@ -58,7 +58,7 @@ def get_step_1_guidance(milestones: list[int], total_milestones: int,
         "",
     ])
 
-    if is_parallel and not fixing_qr_issues:
+    if is_parallel and not qr_fail:
         actions.extend([
             "PARALLEL EXECUTION:",
             f"  Spawn {len(milestones)} developer agents IN ONE MESSAGE:",
@@ -78,7 +78,7 @@ def get_step_1_guidance(milestones: list[int], total_milestones: int,
             "  Wait for ALL agents to complete before proceeding.",
         ])
     else:
-        if fixing_qr_issues:
+        if qr_fail:
             actions.extend([
                 "SEQUENTIAL FIX (single developer):",
                 "  Use Task tool with subagent_type='developer'",
@@ -135,80 +135,77 @@ def get_step_2_guidance(milestones: list[int], total_milestones: int,
 
     return {
         "actions": actions,
-        "next": "Step 3 (Gate Check) with --qr-result PASS|ISSUES",
+        "next": "Step 3 (Gate Check) with --qr-status pass|fail",
     }
 
 
 def get_step_3_guidance(milestones: list[int], total_milestones: int,
-                        qr_result: str, qr_iteration: int,
-                        next_wave: str) -> dict:
-    """Step 3: Gate Check."""
+                        qr_status: str, qr_iteration: int,
+                        next_wave: str) -> str:
+    """Step 3: Gate Check - uses shared gate function."""
     ms_display = format_milestone_list(milestones)
+    ms_str = ",".join(str(m) for m in milestones)
     max_milestone = max(milestones)
 
-    actions = [
+    # Determine pass command
+    if max_milestone < total_milestones:
+        if next_wave:
+            pass_cmd = (
+                f"python3 execute-milestones.py --milestones {next_wave} "
+                f"--total-milestones {total_milestones} --step 1"
+            )
+        else:
+            pass_cmd = "Invoke next wave (from executor.py wave analysis)"
+    else:
+        pass_cmd = "python3 executor.py --step 5 --total-steps 8"
+
+    # Determine fail command (takes iteration as parameter)
+    def fail_cmd(iteration: int) -> str:
+        return (
+            f"python3 execute-milestones.py --milestones {ms_str} "
+            f"--total-milestones {total_milestones} --step 1 "
+            f"--qr-fail --qr-iteration {iteration}"
+        )
+
+    # Use shared gate function
+    gate_output = format_qr_gate_output(
+        gate_name=f"WAVE QR ({ms_display})",
+        qr_status=qr_status,
+        script_name="execute-milestones.py",
+        pass_command=pass_cmd,
+        fail_command=fail_cmd,
+        qr_iteration=qr_iteration,
+        work_agent="developer",
+    )
+
+    # Add wave progress header
+    header = [
         f"Wave: {ms_display} (of {total_milestones} total)",
-        f"QR Result: {qr_result}",
+        f"Progress: {max_milestone}/{total_milestones} milestones",
         "",
     ]
 
-    if qr_result == "PASS":
-        if max_milestone < total_milestones:
-            if next_wave:
-                next_step = (
-                    f"Wave PASSED. Progress: {max_milestone}/{total_milestones}\n"
-                    f"  python3 execute-milestones.py --milestones {next_wave} "
-                    f"--total-milestones {total_milestones} --step 1"
-                )
-            else:
-                next_step = (
-                    f"Wave PASSED. Progress: {max_milestone}/{total_milestones}\n"
-                    f"  Invoke next wave (from executor.py wave analysis)"
-                )
-        else:
-            next_step = (
-                f"ALL MILESTONES COMPLETE ({total_milestones}/{total_milestones})\n"
-                f"  python3 executor.py --step 4 --total-steps 7"
-            )
-    else:
-        stop = get_qr_stop_condition(f"Wave QR ({ms_display}) returns PASS", qr_iteration)
-        actions.extend(stop)
-        actions.extend([
-            "",
-            "FIX PROCESS:",
-            "  1. Single developer fixes ALL issues sequentially",
-            "  2. Developer sees full QR feedback for context",
-            "  3. After fixes complete, re-run Batch QR",
-        ])
-        ms_str = ",".join(str(m) for m in milestones)
-        next_step = (
-            f"FIX ISSUES then retry:\n"
-            f"  python3 execute-milestones.py --milestones {ms_str} "
-            f"--total-milestones {total_milestones} --step 1 "
-            f"--fixing-qr-issues --qr-iteration {qr_iteration + 1}"
-        )
-
-    return {
-        "actions": actions,
-        "next": next_step,
-    }
+    return "\n".join(header) + "\n" + gate_output
 
 
 def format_output(step: int, milestones: list[int], total_milestones: int,
-                  qr_result: str, fixing_qr_issues: bool, qr_iteration: int,
+                  qr_status: str, qr_fail: bool, qr_iteration: int,
                   next_wave: str) -> str:
     """Format output for display."""
     step_names = {1: "Implementation", 2: "Batch QR", 3: "Gate Check"}
     ms_display = format_milestone_list(milestones)
 
+    # Step 3 uses the gate function directly
+    if step == 3:
+        if not qr_status:
+            return "Error: --qr-status required for step 3"
+        return get_step_3_guidance(milestones, total_milestones, qr_status, qr_iteration, next_wave)
+
+    # Steps 1 and 2 use the dict-based format
     if step == 1:
-        guidance = get_step_1_guidance(milestones, total_milestones, fixing_qr_issues, qr_iteration)
-    elif step == 2:
-        guidance = get_step_2_guidance(milestones, total_milestones, qr_iteration)
+        guidance = get_step_1_guidance(milestones, total_milestones, qr_fail, qr_iteration)
     else:
-        if not qr_result:
-            return "Error: --qr-result required for step 3"
-        guidance = get_step_3_guidance(milestones, total_milestones, qr_result, qr_iteration, next_wave)
+        guidance = get_step_2_guidance(milestones, total_milestones, qr_iteration)
 
     lines = [
         f"WAVE ({ms_display}) - Step {step}/3: {step_names[step]}",
@@ -232,15 +229,17 @@ def format_output(step: int, milestones: list[int], total_milestones: int,
 def main():
     parser = argparse.ArgumentParser(
         description="Wave Executor - Execute milestone waves with batch QR",
-        epilog="Steps: implement (parallel) -> batch QR -> proceed or fix (sequential)",
+        epilog="Steps: implement (parallel) -> batch QR -> gate check",
     )
 
     parser.add_argument("--milestones", type=str, required=True,
                         help="Comma-separated milestone numbers (e.g., '1,2,3')")
     parser.add_argument("--total-milestones", type=int, required=True)
     parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--qr-result", type=str, choices=["PASS", "ISSUES"])
-    parser.add_argument("--fixing-qr-issues", action="store_true")
+    parser.add_argument("--qr-status", type=str, choices=["pass", "fail"],
+                        help="QR result for gate step (step 3)")
+    parser.add_argument("--qr-fail", action="store_true",
+                        help="Work step is fixing QR issues")
     parser.add_argument("--qr-iteration", type=int, default=1)
     parser.add_argument("--next-wave", type=str, default="",
                         help="Next wave milestones (e.g., '3,4') for navigation")
@@ -250,8 +249,8 @@ def main():
     if args.step < 1 or args.step > 3:
         sys.exit("Error: step must be 1-3")
 
-    if args.step == 3 and not args.qr_result:
-        sys.exit("Error: --qr-result required for step 3")
+    if args.step == 3 and not args.qr_status:
+        sys.exit("Error: --qr-status required for step 3")
 
     try:
         milestones = parse_milestones(args.milestones)
@@ -259,7 +258,7 @@ def main():
         sys.exit("Error: --milestones must be comma-separated integers (e.g., '1,2,3')")
 
     print(format_output(args.step, milestones, args.total_milestones,
-                        args.qr_result, args.fixing_qr_issues, args.qr_iteration,
+                        args.qr_status, args.qr_fail, args.qr_iteration,
                         args.next_wave))
 
 
