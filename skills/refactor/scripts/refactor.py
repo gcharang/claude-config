@@ -29,15 +29,18 @@ REFACTORING PHILOSOPHY (apply throughout):
 
 
 # Dimensions for parallel exploration
+# Format: (id, title, focus, impact_weight)
+# impact_weight: 3=structural (architecture, modules), 2=cross-cutting (types, errors), 1=local
 DIMENSIONS = [
-    ("naming", "Naming & Semantics"),
-    ("extraction", "Extraction & Composition"),
-    ("testability", "Testability"),
-    ("types", "Type & Interface Design"),
-    ("errors", "Error Handling"),
-    ("modules", "Module Boundaries"),
-    ("modernization", "Modernization"),
-    ("architecture", "Architecture"),
+    ("naming", "Naming & Semantics", "Names that mislead, obscure intent, or operate at wrong abstraction level", 1),
+    ("extraction", "Extraction & Composition", "Code that resists change due to duplication, mixed responsibilities, or complexity", 1),
+    ("testability", "Testability", "Code that is difficult to test in isolation", 1),
+    ("types", "Type & Interface Design", "Missing domain concepts, primitive obsession, leaky abstractions", 2),
+    ("errors", "Error Handling", "Inconsistent, swallowed, or poorly-located error handling", 2),
+    ("modules", "Module Boundaries", "Circular dependencies, wrong cohesion, layer violations", 3),
+    ("modernization", "Modernization", "Outdated patterns, deprecated APIs, missed language features", 1),
+    ("architecture", "Architecture", "Wrong boundaries, scaling bottlenecks, structural constraints", 3),
+    ("readability", "Readability & LLM Comprehension", "Code that requires external context to understand, especially for LLMs", 1),
 ]
 
 
@@ -89,9 +92,9 @@ def format_invoke_after(command: str) -> str:
 
 def format_parallel_dispatch(explore_script_path: str) -> str:
     """Format the parallel dispatch block for step 1."""
-    lines = ['<parallel_dispatch agent="Explore" model="sonnet" count="8">']
+    lines = [f'<parallel_dispatch agent="Explore" model="sonnet" count="{len(DIMENSIONS)}">']
     lines.append("  <instruction>")
-    lines.append("    Launch 8 Explore sub-agents IN PARALLEL (single message, 8 Task tool calls).")
+    lines.append(f"    Launch {len(DIMENSIONS)} Explore sub-agents IN PARALLEL (single message, {len(DIMENSIONS)} Task tool calls).")
     lines.append("    Each agent explores ONE dimension. Use model='sonnet' for efficiency.")
     lines.append("  </instruction>")
     lines.append("")
@@ -103,8 +106,8 @@ def format_parallel_dispatch(explore_script_path: str) -> str:
     lines.append("  </template>")
     lines.append("")
     lines.append("  <dimensions>")
-    for dim_id, dim_title in DIMENSIONS:
-        lines.append(f'    <dim id="{dim_id}">{dim_title}</dim>')
+    for dim_id, dim_title, dim_focus, _ in DIMENSIONS:
+        lines.append(f'    <dim id="{dim_id}" focus="{dim_focus}">{dim_title}</dim>')
     lines.append("  </dimensions>")
     lines.append("</parallel_dispatch>")
     return "\n".join(lines)
@@ -131,6 +134,30 @@ def format_forbidden(actions: list[str]) -> str:
     return "\n".join(lines)
 
 
+def format_dimension_retrieval(dimensions_script_path: str) -> str:
+    """Format the dimension retrieval block for Step 3."""
+    lines = ['<retrieve_dimension_context>']
+    lines.append("  BEFORE cross-checking, retrieve full context for each selected dimension.")
+    lines.append("  This provides heuristics and detection questions to guide verification.")
+    lines.append("")
+    lines.append("  For EACH dimension in SELECTED_DIMENSIONS from Step 2, invoke:")
+    lines.append(f"    python3 {dimensions_script_path} --dimension $DIM_ID")
+    lines.append("")
+    lines.append("  Example for 3 selected dimensions (naming, architecture, types):")
+    lines.append(f"    python3 {dimensions_script_path} --dimension naming")
+    lines.append(f"    python3 {dimensions_script_path} --dimension architecture")
+    lines.append(f"    python3 {dimensions_script_path} --dimension types")
+    lines.append("")
+    lines.append("  The output contains:")
+    lines.append("    - heuristics: What patterns to look for")
+    lines.append("    - detection_questions: Questions to ask when verifying")
+    lines.append("    - examples: Before/after patterns")
+    lines.append("")
+    lines.append("  Use this context to guide your cross-checking in this step.")
+    lines.append("</retrieve_dimension_context>")
+    return "\n".join(lines)
+
+
 # =============================================================================
 # Step Definitions
 # =============================================================================
@@ -147,28 +174,34 @@ STEPS = {
         "actions": [
             "Review ALL dimension findings from Step 1.",
             "",
-            "For each dimension, note:",
-            "  - Severity: none / low / medium / high",
-            "  - Finding count",
-            "  - Evidence quality",
+            "DIMENSION REFERENCE (focus + impact weight):",
+            "  architecture (3): Wrong boundaries, scaling bottlenecks, structural constraints",
+            "  modules (3):      Circular dependencies, wrong cohesion, layer violations",
+            "  types (2):        Missing domain concepts, primitive obsession, leaky abstractions",
+            "  errors (2):       Inconsistent, swallowed, or poorly-located error handling",
+            "  naming (1):       Names that mislead, obscure intent, or wrong abstraction level",
+            "  extraction (1):   Code resisting change: duplication, mixed responsibilities",
+            "  testability (1):  Code difficult to test in isolation",
+            "  modernization (1): Outdated patterns, deprecated APIs, missed language features",
+            "  readability (1):  Code requiring external context to understand",
             "",
-            "RANK dimensions by potential impact:",
+            "SELECTION HEURISTIC (pick 3-5 dimensions max):",
             "",
-            "  | Dimension | Severity | Count | Worth Deep Dive? |",
-            "  |-----------|----------|-------|------------------|",
+            "  1. Eliminate dimensions with severity=none",
+            "  2. Compute score = severity_score * count * impact_weight",
+            "     where severity_score: high=3, medium=2, low=1",
+            "  3. Rank by score descending",
+            "  4. ARCHITECTURE ESCAPE HATCH: If architecture or modules is high severity,",
+            "     include it regardless of rank (structural issues affect everything)",
+            "  5. Take top 3-5; trim if more",
             "",
-            "SELECT top 2-3 dimensions for deep dive based on:",
-            "  - Highest severity",
-            "  - Most findings",
-            "  - Best evidence quality",
+            "BUILD RANKING TABLE:",
             "",
-            "ARCHITECTURE ESCAPE HATCH:",
-            "  If architecture dimension shows CRITICAL issues",
-            "  (wrong boundaries affecting everything), fast-track it.",
-            "  Don't polish naming in code that will be restructured.",
+            "  | Dimension | Severity | Count | Weight | Score | Selected? |",
+            "  |-----------|----------|-------|--------|-------|-----------|",
             "",
             "OUTPUT:",
-            "  SELECTED_DIMENSIONS: [list of 2-3 dimension IDs]",
+            "  SELECTED_DIMENSIONS: [list of 3-5 dimension IDs, ordered by score]",
             "  RATIONALE: Why these dimensions matter most",
             "  DEFERRED: [dimensions with low/no findings]",
         ],
@@ -176,12 +209,14 @@ STEPS = {
     3: {
         "title": "Deep Dive",
         "brief": "Detailed analysis of selected dimensions",
+        "needs_dimension_retrieval": True,  # Flag for format_output
         "actions": [
             "For EACH selected dimension from Step 2:",
             "",
-            "CROSS-CHECK findings:",
+            "CROSS-CHECK findings using the retrieved heuristics:",
             "  - Re-read the code locations",
             "  - Verify evidence is accurate",
+            "  - Apply detection questions from dimension definition",
             "  - Confirm issue is real (not false positive)",
             "",
             "TRACE to root causes:",
@@ -312,7 +347,9 @@ def format_output(step: int, total_steps: int) -> str:
     info = STEPS.get(step, STEPS[6])
     is_complete = step >= total_steps
     script_path = os.path.abspath(__file__)
-    explore_script_path = os.path.join(os.path.dirname(script_path), "explore.py")
+    script_dir = os.path.dirname(script_path)
+    explore_script_path = os.path.join(script_dir, "explore.py")
+    dimensions_script_path = os.path.join(script_dir, "dimensions.py")
 
     parts = []
 
@@ -323,6 +360,11 @@ def format_output(step: int, total_steps: int) -> str:
     # XML mandate for step 1
     if step == 1:
         parts.append(format_xml_mandate())
+        parts.append("")
+
+    # Dimension retrieval for step 3
+    if step == 3:
+        parts.append(format_dimension_retrieval(dimensions_script_path))
         parts.append("")
 
     # Build actions
@@ -339,7 +381,7 @@ def format_output(step: int, total_steps: int) -> str:
         actions.append("")
         actions.append(format_parallel_dispatch(explore_script_path))
         actions.append("")
-        actions.append("WAIT for all 8 agents to complete before proceeding.")
+        actions.append(f"WAIT for all {len(DIMENSIONS)} agents to complete before proceeding.")
         actions.append("")
         actions.append(format_expected_output({
             "Per dimension": "FINDINGS with severity (none/low/medium/high)",
