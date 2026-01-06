@@ -6,12 +6,6 @@ This document synthesizes practical prompt engineering patterns for **orchestrat
 
 **Prerequisite**: Assumes familiarity with single-turn techniques (CoT, Plan-and-Solve) and multi-turn refinement patterns (Self-Refine, CoVe).
 
-**Related guides:**
-
-- `prompt-engineering-single-turn.md` -- foundational techniques for individual LLM calls
-- `prompt-engineering-multi-turn.md` -- iterative refinement and verification patterns
-- `prompt-engineering-hitl.md` -- human-in-the-loop workflow integration patterns
-
 **Notation**: `S1`, `S2` denote Subagent 1, Subagent 2--concurrent or specialized LLM calls. `O` denotes the Orchestrator.
 
 ---
