@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""
+QR Reconciliation - Step-based workflow for quality-reviewer agent.
+
+Determines if a milestone's acceptance criteria are already satisfied in the
+current codebase. Supports resumable plan execution by detecting prior work.
+
+Usage:
+    python3 qr/reconciliation.py --step 1 --total-steps 4 --milestone 1
+
+Sub-agents invoke this script immediately upon receiving their prompt.
+The script provides step-by-step guidance; the agent follows exactly.
+"""
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from shared import (
+    format_step_output,
+    format_expected_output,
+    format_routing,
+    format_open_question_guidance,
+)
+
+
+def get_step_guidance(step: int, total_steps: int, script_path: str, **kwargs) -> dict:
+    """Return guidance for the given step.
+
+    Args:
+        step: Current step number (1-indexed)
+        total_steps: Total number of steps in this workflow
+        script_path: Absolute path to this script (for sub-agent invocation)
+        **kwargs: Additional context (milestone number)
+    """
+    milestone = kwargs.get("milestone", "N")
+
+    # Step 1: Task Description
+    if step == 1:
+        return {
+            "title": "Task Description",
+            "actions": [
+                f"TASK: Determine if Milestone {milestone}'s acceptance criteria are",
+                "already satisfied in the current codebase.",
+                "",
+                "PURPOSE:",
+                "  - Support resumable plan execution",
+                "  - Detect prior work that matches requirements",
+                "  - Enable skipping already-completed milestones",
+                "",
+                "SCOPE:",
+                "  - This is NOT a full RULE 0/1/2 review",
+                "  - Focus ONLY on: Are the requirements met?",
+                "  - Full quality review happens at post-implementation",
+                "",
+                "CONTEXT:",
+                "  Plan file: (from your prompt)",
+                f"  Milestone: {milestone}",
+                "",
+                "KEY DISTINCTION:",
+                "  Validate REQUIREMENTS, not code presence.",
+                "  - Code may exist but not meet criteria (done wrong)",
+                "  - Criteria may be met by different code than planned (done differently but correctly)",
+            ],
+            "next": f"python3 {script_path} --step 2 --total-steps {total_steps} --milestone {milestone}",
+        }
+
+    # Step 2: Extract Criteria
+    if step == 2:
+        return {
+            "title": "Extract Acceptance Criteria",
+            "actions": [
+                f"READ Milestone {milestone} from the plan file.",
+                "",
+                "EXTRACT acceptance criteria into a checklist:",
+                "",
+                "```",
+                f"MILESTONE {milestone} ACCEPTANCE CRITERIA:",
+                "  1. [First criterion from plan]",
+                "  2. [Second criterion from plan]",
+                "  3. [Third criterion from plan]",
+                "  ... (list ALL criteria)",
+                "```",
+                "",
+                "WRITE this checklist before proceeding.",
+                "Do NOT evaluate yet -- extraction only at this step.",
+                "",
+                "NOTE: If milestone has no explicit acceptance criteria,",
+                "infer testable criteria from the milestone description.",
+            ],
+            "next": f"python3 {script_path} --step 3 --total-steps {total_steps} --milestone {milestone}",
+        }
+
+    # Step 3: Verify Against Codebase
+    if step == 3:
+        return {
+            "title": "Verify Against Codebase",
+            "actions": [
+                "FACTORED VERIFICATION (check criteria against actual code):",
+                "",
+                format_open_question_guidance(),
+                "",
+                "For EACH criterion from Step 2:",
+                "",
+                "  1. STATE what you expect to find:",
+                "     'Criterion: [X]'",
+                "     'Expected: [specific code/behavior/file to find]'",
+                "",
+                "  2. SEARCH the codebase:",
+                "     - Use Grep to find relevant code",
+                "     - Use Read to examine candidate files",
+                "     - Check if behavior matches criterion",
+                "",
+                "  3. RECORD finding:",
+                "     'Found: [file:line] or NOT FOUND'",
+                "     'Status: MET | NOT_MET'",
+                "",
+                "IMPORTANT:",
+                "  - Verify behavior, not just code existence",
+                "  - Code may exist but not satisfy the criterion",
+                "  - Different implementation can satisfy same requirement",
+            ],
+            "next": f"python3 {script_path} --step 4 --total-steps {total_steps} --milestone {milestone}",
+        }
+
+    # Step 4: Format Output (final step)
+    if step >= total_steps:
+        return {
+            "title": "Format Output",
+            "actions": [
+                "OUTPUT FORMAT:",
+                "",
+                "```",
+                f"## RECONCILIATION: Milestone {milestone}",
+                "",
+                "**Status**: SATISFIED | NOT_SATISFIED | PARTIALLY_SATISFIED",
+                "",
+                "### Acceptance Criteria Check",
+                "",
+                "| Criterion | Status | Evidence |",
+                "|-----------|--------|----------|",
+                "| [criterion from plan] | MET / NOT_MET | [file:line or 'not found'] |",
+                "| [criterion from plan] | MET / NOT_MET | [file:line or 'not found'] |",
+                "",
+                "### Summary",
+                "[If PARTIALLY_SATISFIED: list what's done and what's missing]",
+                "[If NOT_SATISFIED: brief note on what needs to be implemented]",
+                "```",
+                "",
+                "STATUS DEFINITIONS:",
+                "  SATISFIED: ALL criteria MET -> Skip execution",
+                "  NOT_SATISFIED: NO criteria MET -> Execute fully",
+                "  PARTIALLY_SATISFIED: SOME criteria MET -> Execute missing parts",
+            ],
+            "next": "Return result to orchestrator. Sub-agent task complete.",
+        }
+
+    # Fallback
+    return {"title": "Unknown", "actions": ["Check step number"], "next": ""}
+
+
+if __name__ == "__main__":
+    from shared import mode_main
+    mode_main(
+        __file__,
+        get_step_guidance,
+        "QR Reconciliation - Verify if milestone work is complete",
+        extra_args=[
+            (["--milestone"], {"type": int, "required": True, "help": "Milestone number to reconcile"})
+        ]
+    )

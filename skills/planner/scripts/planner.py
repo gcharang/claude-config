@@ -1,25 +1,46 @@
 #!/usr/bin/env python3
 """
-Interactive Sequential Planner - Two-phase planning workflow.
+Interactive Sequential Planner - Unified 12-step planning workflow.
 
-PLANNING PHASE: Step-based planning with context discovery (4 steps).
-REVIEW PHASE: Sequential QR with gates before execution (8 steps).
+Steps 1-4:  Planning (context, approaches, assumptions, milestones)
+Steps 5-12: Review (QR gates, developer diffs, TW scrub)
 
-Review phase flow:
-  1. QR-Completeness -> 2. Gate -> 3. Developer Diffs ->
-  4. QR-Code -> 5. Gate -> 6. TW Scrub ->
-  7. QR-Docs -> 8. Gate -> Plan Approved
+Flow:
+  1. Context Discovery
+  2. Approach Generation
+  3. Assumption Surfacing
+  4. Approach Selection & Milestones
+  5. QR-Completeness -> 6. Gate
+  7. Developer Fills Diffs
+  8. QR-Code -> 9. Gate
+  10. TW Documentation Scrub
+  11. QR-Docs -> 12. Gate -> Plan Approved
 
 Usage:
-    python3 planner.py --phase planning --step 1 --total-steps 4
-    python3 planner.py --phase review --step 1 --total-steps 8
+    python3 planner.py --step 1 --total-steps 12
 """
 
 import argparse
 import sys
 from pathlib import Path
 
-from utils import format_qr_gate_output, get_qr_state_banner
+from shared import (
+    QRState,
+    GateConfig,
+    get_mode_script_path,
+    get_reverification_context,
+    format_step_output,
+    format_gate_step,
+    format_invoke_after,
+    format_step_header,
+    format_current_action,
+    format_subagent_dispatch,
+    format_state_banner,
+    format_post_qr_routing,
+    format_orchestrator_constraint,
+    format_qr_banner,
+    add_qr_args,
+)
 
 
 PLANNING_VERIFICATION = """\
@@ -138,7 +159,9 @@ def get_plan_format() -> str:
     return format_path.read_text()
 
 
-PLANNING_STEPS = {
+# Unified step definitions (1-12)
+STEPS = {
+    # Planning steps (1-4)
     1: {
         "title": "Context Discovery",
         "actions": [
@@ -195,6 +218,8 @@ PLANNING_STEPS = {
     },
     4: {
         "title": "Approach Selection & Milestones",
+        "include_verification": True,
+        "include_plan_format": True,
         "actions": [
             "EVALUATE approaches: P(success), failure mode, backtrack cost",
             "",
@@ -206,7 +231,7 @@ PLANNING_STEPS = {
             "  - Files: exact paths (each file in ONE milestone only)",
             "  - Requirements: specific behaviors",
             "  - Acceptance: testable pass/fail criteria",
-            "  - Code Intent: WHAT to change (Developer converts to diffs in review phase)",
+            "  - Code Intent: WHAT to change (Developer converts to diffs in step 7)",
             "  - Tests: type, backing, scenarios",
             "",
             "PARALLELIZATION:",
@@ -219,230 +244,256 @@ PLANNING_STEPS = {
             "RISKS: | Risk | Mitigation | Anchor (file:line if behavioral claim) |",
             "",
             "Write plan with Code Intent (no diffs yet).",
-            "Developer fills diffs during review phase step 3.",
+            "Developer fills diffs in step 7.",
         ],
     },
+    # Review steps (5-12) - was review steps 1-8
     5: {
-        "title": "Final Verification",
-        "actions": [
-            "Complete ALL verification checks (see checklist below):",
-            "  Phase 1 (BLOCKING): Decision Log, Code Intent, Invisible Knowledge",
-            "  Phase 2 (FORMAT): Code Intent clarity, Milestone spec",
-            "  Phase 3 (DOCS): Documentation milestone, Comment hygiene",
-            "",
-            "STOP if any Phase 1 check fails. Fix before proceeding.",
-        ],
-        "include_verification": True,
-    },
-}
-
-
-REVIEW_STEPS = {
-    1: {
         "title": "QR-Completeness",
         "is_qr": True,
         "qr_name": "QR-COMPLETENESS",
-        "actions": [
-            "SPAWN quality-reviewer agent:",
-            "  mode: plan-completeness",
-            "  Check: Decision Log, policy defaults, plan structure",
+        "is_dispatch": True,
+        "dispatch_agent": "quality-reviewer",
+        "mode_script": "qr/plan-completeness.py",
+        "mode_total_steps": 5,
+        "context_vars": {"PLAN_FILE": "path to the plan being reviewed"},
+        "post_dispatch": [
+            "The sub-agent MUST invoke the script and follow its guidance.",
             "",
             "Expected output: PASS or ISSUES",
         ],
+        "post_qr_routing": {"self_fix": True},
     },
-    # Step 2 is gate - handled by format_review_gate
-    3: {
+    # Step 6 is gate - handled by GATES dict
+    7: {
         "title": "Developer Fills Diffs",
         "is_work": True,
         "work_agent": "developer",
-        "actions": [
-            "SPAWN developer agent:",
-            "  'Convert Code Intent to Code Changes for all implementation milestones.",
-            "   Read target files, write unified diffs, edit plan in-place.",
-            "   ONLY produce diffs. Do not modify other plan sections.'",
-            "",
+        "is_dispatch": True,
+        "dispatch_agent": "developer",
+        "mode_script": "dev/fill-diffs.py",
+        "mode_total_steps": 4,
+        "context_vars": {"PLAN_FILE": "path to the plan being reviewed"},
+        "post_dispatch": [
+            "The sub-agent MUST invoke the script and follow its guidance.",
             "Developer edits plan file IN-PLACE.",
-            "Wait for completion before proceeding to QR-Code.",
         ],
     },
-    4: {
+    8: {
         "title": "QR-Code",
         "is_qr": True,
         "qr_name": "QR-CODE",
-        "actions": [
-            "SPAWN quality-reviewer agent:",
-            "  mode: plan-code",
-            "  Check: Diff context matches codebase, RULE 0/1/2",
+        "is_dispatch": True,
+        "dispatch_agent": "quality-reviewer",
+        "mode_script": "qr/plan-code.py",
+        "mode_total_steps": 6,
+        "context_vars": {"PLAN_FILE": "path to the plan being reviewed"},
+        "post_dispatch": [
+            "The sub-agent MUST invoke the script and follow its guidance.",
             "",
             "Expected output: PASS or ISSUES",
         ],
+        "post_qr_routing": {"self_fix": False, "fix_target": "developer"},
     },
-    # Step 5 is gate - handled by format_review_gate
-    6: {
+    # Step 9 is gate - handled by GATES dict
+    10: {
         "title": "TW Documentation Scrub",
         "is_work": True,
         "work_agent": "technical-writer",
-        "actions": [
-            "SPAWN technical-writer agent:",
-            "  mode: plan-scrub",
-            "  Task: Add WHY comments from Decision Log, enrich prose",
-            "",
+        "is_dispatch": True,
+        "dispatch_agent": "technical-writer",
+        "mode_script": "tw/plan-scrub.py",
+        "mode_total_steps": 6,
+        "context_vars": {"PLAN_FILE": "path to the plan being reviewed"},
+        "post_dispatch": [
+            "The sub-agent MUST invoke the script and follow its guidance.",
             "TW edits plan file IN-PLACE.",
-            "Wait for completion before proceeding to QR-Docs.",
+            "",
+            "Expected output: COMPLETE or BLOCKED",
         ],
     },
-    7: {
+    11: {
         "title": "QR-Docs",
         "is_qr": True,
         "qr_name": "QR-DOCS",
-        "actions": [
-            "SPAWN quality-reviewer agent:",
-            "  mode: plan-docs",
-            "  Check: Temporal contamination, hidden baselines, WHY not WHAT",
+        "is_dispatch": True,
+        "dispatch_agent": "quality-reviewer",
+        "mode_script": "qr/plan-docs.py",
+        "mode_total_steps": 4,
+        "context_vars": {"PLAN_FILE": "path to the plan being reviewed"},
+        "post_dispatch": [
+            "The sub-agent MUST invoke the script and follow its guidance.",
             "",
             "Expected output: PASS or ISSUES",
         ],
+        "post_qr_routing": {"self_fix": False, "fix_target": "technical-writer"},
     },
-    # Step 8 is gate - handled by format_review_gate
+    # Step 12 is gate - handled by GATES dict
 }
 
 
-def get_planning_guidance(step: int, total_steps: int) -> dict:
-    """Returns guidance for planning phase steps."""
-    is_complete = step >= total_steps
-
-    if is_complete:
-        plan_format = get_plan_format()
-        info = PLANNING_STEPS.get(5, PLANNING_STEPS[4])
-        actions = list(info["actions"])
-        if info.get("include_verification"):
-            actions.append("")
-            actions.append(PLANNING_VERIFICATION)
-        return {
-            "title": "Planning Complete",
-            "actions": actions,
-            "next": (
-                f"Write plan using this format:\n\n{plan_format}\n\n"
-                "Plan should have Code Intent (no diffs yet).\n"
-                "Developer fills diffs during review phase step 3.\n\n"
-                "Invoke review phase:\n"
-                "  python3 planner.py --phase review --step 1 --total-steps 8"
-            ),
-        }
-
-    info = PLANNING_STEPS.get(step, PLANNING_STEPS[4])
-    actions = list(info["actions"])
-    if info.get("include_verification"):
-        actions.append("")
-        actions.append(PLANNING_VERIFICATION)
-    return {
-        "title": info["title"],
-        "actions": actions,
-        "next": f"Step {step + 1}: {PLANNING_STEPS.get(step + 1, PLANNING_STEPS[4])['title']}",
-    }
+# Gate configurations (steps 6, 9, 12)
+GATES = {
+    6: GateConfig(
+        qr_name="QR-COMPLETENESS",
+        work_step=5,
+        pass_step=7,
+        pass_message="Proceed to step 7 (Developer Fills Diffs).",
+        self_fix=True,
+    ),
+    9: GateConfig(
+        qr_name="QR-CODE",
+        work_step=7,
+        pass_step=10,
+        pass_message="Proceed to step 10 (TW Documentation Scrub).",
+        self_fix=False,
+        fix_target="developer",
+    ),
+    12: GateConfig(
+        qr_name="QR-DOCS",
+        work_step=10,
+        pass_step=None,
+        pass_message="PLAN APPROVED. Ready for /plan-execution.",
+        self_fix=False,
+        fix_target="technical-writer",
+    ),
+}
 
 
-def format_review_gate(step: int, qr_status: str, qr_iteration: int) -> str:
-    """Format gate step output for review phase."""
-    # Gate step mapping: gate_step -> (qr_name, work_step, pass_step, work_agent)
-    # Note: QR-Completeness fixes are done by main agent (plan structure is main agent's work)
-    gate_config = {
-        2: ("QR-COMPLETENESS", 1, 3, "yourself (fix Decision Log, plan structure issues)"),
-        5: ("QR-CODE", 3, 6, "developer"),
-        8: ("QR-DOCS", 6, None, "technical-writer"),  # None = plan approved
-    }
-
-    qr_name, work_step, pass_step, work_agent = gate_config[step]
-
-    if pass_step:
-        pass_cmd = f"python3 planner.py --phase review --step {pass_step} --total-steps 8"
-    else:
-        pass_cmd = "PLAN APPROVED. Ready for /plan-execution."
-
-    def fail_cmd(iteration: int) -> str:
-        return (
-            f"python3 planner.py --phase review --step {work_step} --total-steps 8 "
-            f"--qr-fail --qr-iteration {iteration}"
-        )
-
-    return format_qr_gate_output(
-        gate_name=qr_name,
-        qr_status=qr_status,
-        script_name="planner.py",
-        pass_command=pass_cmd,
-        fail_command=fail_cmd,
-        qr_iteration=qr_iteration,
-        work_agent=work_agent,
+def format_gate(step: int, qr: QRState) -> str:
+    """Format gate step output using XML format."""
+    gate = GATES[step]
+    return format_gate_step(
+        script="planner",
+        step=step,
+        total=12,
+        gate=gate,
+        qr=qr,
+        cmd_template="python3 planner.py",
     )
 
 
-def get_review_guidance(step: int, total_steps: int,
-                         qr_iteration: int = 1, qr_fail: bool = False,
-                         qr_status: str = None) -> dict | str:
-    """Returns guidance for review phase steps."""
+def get_step_guidance(step: int, total_steps: int,
+                      qr_iteration: int = 1, qr_fail: bool = False,
+                      qr_status: str = None) -> dict | str:
+    """Returns guidance for a step."""
 
-    # Gate steps (2, 5, 8) use shared gate function
-    if step in (2, 5, 8):
+    # Construct QRState from parameters
+    qr = QRState(iteration=qr_iteration, failed=qr_fail, status=qr_status)
+
+    # Gate steps (6, 9, 12) use shared gate function
+    if step in (6, 9, 12):
         if not qr_status:
             return {"error": f"--qr-status required for gate step {step}"}
-        return format_review_gate(step, qr_status, qr_iteration)
+        return format_gate(step, qr)
 
-    info = REVIEW_STEPS.get(step)
+    info = STEPS.get(step)
     if not info:
         return {"error": f"Invalid step {step}"}
 
     # Build actions
-    actions = []
+    actions = list(info.get("actions", []))
+
+    # Add verification checklist for step 4
+    if info.get("include_verification"):
+        actions.append("")
+        actions.append(PLANNING_VERIFICATION)
+
+    # Add plan format for step 4
+    if info.get("include_plan_format"):
+        plan_format = get_plan_format()
+        actions.extend([
+            "",
+            "Write plan using this format:",
+            "",
+            plan_format,
+        ])
 
     # Add QR banner for QR steps
     if info.get("is_qr"):
         qr_name = info.get("qr_name", "QR")
-        banner = get_qr_state_banner(qr_name, qr_iteration, qr_fail)
-        actions.extend(banner)
+        actions.insert(0, format_qr_banner(qr_name, qr))
+        actions.insert(1, "")
 
     # Add fix mode banner for work steps with --qr-fail
-    if info.get("is_work") and qr_fail:
+    if info.get("is_work") and qr.failed:
         work_agent = info.get("work_agent", "agent")
-        actions.extend([
-            f"===[ FIX MODE (iteration {qr_iteration}) ]===",
-            f"QR found issues. Spawn {work_agent} with QR findings.",
-            f"The {work_agent} will address the specific issues identified.",
-            "After fixes, proceed to next QR step.",
-            "======================================",
-            "",
-        ])
+        banner = format_state_banner(
+            "FIX_MODE", qr.iteration, "fixing",
+            [
+                f"QR found issues. Spawn {work_agent} with QR findings.",
+                f"The {work_agent} will address the specific issues identified.",
+                "After fixes, proceed to next QR step.",
+            ]
+        )
+        actions.insert(0, banner)
+        actions.insert(1, "")
 
-    actions.extend(info["actions"])
+    # Generate dispatch block for dispatch steps
+    if info.get("is_dispatch"):
+        mode_script = get_mode_script_path(info["mode_script"])
+        mode_total_steps = info.get("mode_total_steps", 5)
+        dispatch_agent = info.get("dispatch_agent", "agent")
+        context_vars = info.get("context_vars", {})
+
+        # Add orchestrator constraint before dispatch
+        actions.append(format_orchestrator_constraint())
+        actions.append("")
+
+        # Use free-form mode for work steps in fix mode
+        use_free_form = info.get("is_work") and qr.failed
+
+        dispatch_block = format_subagent_dispatch(
+            agent=dispatch_agent,
+            context_vars=context_vars,
+            invoke_cmd=f"python3 {mode_script} --step 1 --total-steps {mode_total_steps}",
+            free_form=use_free_form,
+        )
+        actions.append(dispatch_block)
+        actions.append("")
+
+        # Add post-dispatch instructions
+        if not use_free_form:
+            post_dispatch = info.get("post_dispatch", [])
+            actions.extend(post_dispatch)
+
+        # Add post-QR routing block for QR steps
+        post_qr_config = info.get("post_qr_routing")
+        if post_qr_config:
+            routing_block = format_post_qr_routing(
+                self_fix=post_qr_config.get("self_fix", False),
+                fix_target=post_qr_config.get("fix_target", "developer"),
+            )
+            actions.append(routing_block)
 
     # Determine next step
     next_step = step + 1
-    next_titles = {
-        1: "QR-Completeness Gate",
-        3: "QR-Code",
-        4: "QR-Code Gate",
-        6: "QR-Docs",
-        7: "QR-Docs Gate",
-    }
-    next_title = next_titles.get(step, REVIEW_STEPS.get(next_step, {}).get("title", "Next"))
 
-    return {
-        "title": info["title"],
-        "actions": actions,
-        "next": f"Step {next_step} ({next_title}) with --qr-status pass|fail" if step in (1, 4, 7) else f"Step {next_step}: {next_title}",
-    }
-
-
-def format_output(phase: str, step: int, total_steps: int,
-                  qr_iteration: int, qr_fail: bool, qr_status: str) -> str:
-    """Format output for display."""
-    if phase == "planning":
-        guidance = get_planning_guidance(step, total_steps)
-        phase_label = "PLANNING"
+    # QR steps (5, 8, 11) use branching (if_pass/if_fail)
+    if step in (5, 8, 11):
+        base_cmd = f"python3 planner.py --step {next_step} --total-steps {total_steps}"
+        return {
+            "title": info["title"],
+            "actions": actions,
+            "if_pass": f"{base_cmd} --qr-status pass",
+            "if_fail": f"{base_cmd} --qr-status fail",
+        }
     else:
-        guidance = get_review_guidance(step, total_steps, qr_iteration, qr_fail, qr_status)
-        phase_label = "REVIEW"
+        # Non-QR steps use simple next command
+        next_cmd = f"python3 planner.py --step {next_step} --total-steps {total_steps}"
+        return {
+            "title": info["title"],
+            "actions": actions,
+            "next": next_cmd,
+        }
 
-    # Gate steps return string directly
+
+def format_output(step: int, total_steps: int,
+                  qr_iteration: int, qr_fail: bool, qr_status: str) -> str:
+    """Format output for display using XML format."""
+    guidance = get_step_guidance(step, total_steps, qr_iteration, qr_fail, qr_status)
+
+    # Gate steps return string directly (already XML formatted)
     if isinstance(guidance, str):
         return guidance
 
@@ -450,40 +501,29 @@ def format_output(phase: str, step: int, total_steps: int,
     if "error" in guidance:
         return f"Error: {guidance['error']}"
 
-    lines = [
-        f"PLANNER - {phase_label} - Step {step}/{total_steps}: {guidance['title']}",
-        "",
-        "DO:",
-    ]
-
-    for action in guidance["actions"]:
-        if action:
-            lines.append(f"  {action}")
-        else:
-            lines.append("")
-
-    lines.append("")
-    lines.append("NEXT:")
-    lines.append(f"  {guidance['next']}")
-
-    return "\n".join(lines)
+    # Use format_step_output for consistent XML formatting
+    return format_step_output(
+        script="planner",
+        step=step,
+        total=total_steps,
+        title=guidance["title"],
+        actions=guidance["actions"],
+        next_command=guidance.get("next"),
+        if_pass=guidance.get("if_pass"),
+        if_fail=guidance.get("if_fail"),
+        is_step_one=(step == 1),
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Interactive Sequential Planner (Two-Phase)",
-        epilog="planning: 4 steps | review: 8 steps with gates",
+        description="Interactive Sequential Planner (12-step unified workflow)",
+        epilog="Steps 1-4: planning | Steps 5-12: review with QR gates",
     )
 
-    parser.add_argument("--phase", type=str, default="planning",
-                        choices=["planning", "review"])
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument("--total-steps", type=int, required=True)
-    parser.add_argument("--qr-iteration", type=int, default=1)
-    parser.add_argument("--qr-fail", action="store_true",
-                        help="Work step is fixing QR issues")
-    parser.add_argument("--qr-status", type=str, choices=["pass", "fail"],
-                        help="QR result for gate steps (2, 5, 8)")
+    add_qr_args(parser)
 
     args = parser.parse_args()
 
@@ -491,17 +531,16 @@ def main():
         print("Error: step and total-steps must be >= 1", file=sys.stderr)
         sys.exit(1)
 
-    min_steps = 4 if args.phase == "planning" else 8
-    if args.total_steps < min_steps:
-        print(f"Error: {args.phase} phase requires at least {min_steps} steps", file=sys.stderr)
+    if args.total_steps < 12:
+        print("Error: workflow requires at least 12 steps", file=sys.stderr)
         sys.exit(1)
 
     # Gate steps require --qr-status
-    if args.phase == "review" and args.step in (2, 5, 8) and not args.qr_status:
+    if args.step in (6, 9, 12) and not args.qr_status:
         print(f"Error: --qr-status required for gate step {args.step}", file=sys.stderr)
         sys.exit(1)
 
-    print(format_output(args.phase, args.step, args.total_steps,
+    print(format_output(args.step, args.total_steps,
                         args.qr_iteration, args.qr_fail, args.qr_status))
 
 

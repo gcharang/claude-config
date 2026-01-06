@@ -6,144 +6,115 @@ Planning skill with resources that must stay synced with agent prompts.
 
 ## Index
 
-| File/Directory                        | Contents                                       | Read When                                    |
-| ------------------------------------- | ---------------------------------------------- | -------------------------------------------- |
-| `SKILL.md`                            | Planning workflow, phases                      | Using the planner skill                      |
-| `scripts/planner.py`                  | Step-by-step planning orchestration            | Debugging planner behavior                   |
-| `scripts/executor.py`                 | Plan execution orchestration                   | Debugging executor behavior                  |
-| `scripts/execute-milestones.py`       | Wave execution with batch QR gates             | Debugging wave execution                     |
-| `scripts/utils.py`                    | Shared utilities (Three Pillars Pattern)       | Modifying QR verification loop behavior      |
-| `resources/plan-format.md`            | Plan template (injected by script)             | Editing plan structure                       |
-| `resources/temporal-contamination.md` | Detection heuristic for contaminated comments  | Updating TW/QR temporal contamination logic  |
-| `resources/diff-format.md`            | Unified diff spec for code changes             | Updating Developer diff consumption logic    |
-| `resources/default-conventions.md`    | Default structural conventions (4-tier system) | Updating QR RULE 2 or planner decision audit |
+| File/Directory                        | Contents                                      | Read When                                    |
+| ------------------------------------- | --------------------------------------------- | -------------------------------------------- |
+| `SKILL.md`                            | Planning workflow activation                  | Using the planner skill                      |
+| `scripts/planner.py`                  | 12-step planning orchestration                | Debugging planner behavior                   |
+| `scripts/executor.py`                 | Plan execution orchestration                  | Debugging executor behavior                  |
+| `scripts/wave-executor.py`            | Wave execution with batch QR gates            | Debugging wave execution                     |
+| `scripts/qr/plan-completeness.py`     | QR-Completeness workflow                      | Debugging QR-Completeness validation         |
+| `scripts/qr/plan-code.py`             | QR-Code workflow                              | Debugging QR-Code validation                 |
+| `scripts/qr/plan-docs.py`             | QR-Docs workflow                              | Debugging QR-Docs validation                 |
+| `scripts/qr/batch-review.py`          | QR wave batch review workflow                 | Debugging QR batch wave verification         |
+| `scripts/qr/post-impl.py`             | QR post-implementation workflow               | Debugging QR post-implementation review      |
+| `scripts/qr/reconciliation.py`        | QR reconciliation workflow                    | Debugging QR reconciliation verification     |
+| `scripts/dev/fill-diffs.py`           | Developer diff creation workflow              | Debugging Developer diff creation            |
+| `scripts/tw/plan-scrub.py`            | TW plan scrub workflow                        | Debugging TW documentation scrub             |
+| `scripts/tw/post-impl.py`             | TW post-implementation workflow               | Debugging TW post-implementation docs        |
+| `scripts/shared/`                     | Shared utilities (domain, formatting, cli)    | Modifying QR verification loop behavior      |
+| `resources/plan-format.md`            | Plan template (injected by script)            | Editing plan structure                       |
+| `resources/temporal-contamination.md` | Detection heuristic for contaminated comments | Updating TW/QR temporal contamination logic  |
+| `resources/diff-format.md`            | Unified diff spec for code changes            | Updating Developer diff consumption logic    |
+| `resources/default-conventions.md`    | Default structural conventions (4-tier)       | Updating QR RULE 2 or planner decision audit |
+
+## Script Organization
+
+Scripts are organized by the agent that invokes them:
+
+```
+scripts/
+  planner.py              # Main agent - 12-step unified workflow
+  executor.py             # Main agent - execution orchestration
+  wave-executor.py        # Main agent - wave execution
+  qr/                     # quality-reviewer agent
+    plan-completeness.py
+    plan-code.py
+    plan-docs.py
+    batch-review.py
+    post-impl.py
+    reconciliation.py
+  dev/                    # developer agent
+    fill-diffs.py
+  tw/                     # technical-writer agent
+    plan-scrub.py
+    post-impl.py
+  shared/                 # Shared utilities
+    domain.py
+    formatting.py
+    cli.py
+    resources.py
+```
 
 ## Resource Sync Requirements
 
-Resources are **authoritative sources**.
+Resources are **authoritative sources**. Mode scripts inject resources at
+runtime via `get_resource()` -- no manual sync required for most resources.
 
-- **SKILL.md** references resources directly (main Claude can read files)
-- **Agent prompts** embed resources 1:1 (sub-agents cannot access files
-  reliably)
+### Script-Injected Resources (No Manual Sync)
 
-### plan-format.md
+| Resource                    | Injected By                           |
+| --------------------------- | ------------------------------------- |
+| `plan-format.md`            | `planner.py` at step 4                |
+| `temporal-contamination.md` | `tw/plan-scrub.py`, `qr/plan-docs.py` |
+| `diff-format.md`            | `dev/fill-diffs.py`                   |
 
-Plan template injected by `scripts/planner.py` at planning phase completion.
+**When updating**: Edit the resource file. Changes take effect immediately --
+scripts read resources at runtime.
 
-**No agent sync required** - the script reads and outputs the format directly,
-so editing this file takes effect immediately without updating any agent
-prompts.
+### Agent-Embedded Resources (Manual Sync Required)
 
-### temporal-contamination.md
+These resources are embedded in agent prompts because they're used in free-form
+mode (no script invocation):
 
-Authoritative source for temporal contamination detection. Full content embedded
-1:1.
-
-| Synced To                    | Embedded Section           |
-| ---------------------------- | -------------------------- |
-| `agents/technical-writer.md` | `<temporal_contamination>` |
-| `agents/quality-reviewer.md` | `<temporal_contamination>` |
-
-**When updating**: Modify `resources/temporal-contamination.md` first, then copy
-content into both `<temporal_contamination>` sections.
-
-### diff-format.md
-
-Authoritative source for unified diff format. Full content embedded 1:1.
-
-| Synced To             | Embedded Section |
-| --------------------- | ---------------- |
-| `agents/developer.md` | `<diff_format>`  |
-
-**When updating**: Modify `resources/diff-format.md` first, then copy content
-into `<diff_format>` section.
-
-### default-conventions.md
-
-Authoritative source for default structural conventions (four-tier decision
-backing system). Embedded 1:1 in QR for RULE 2 enforcement; referenced by
-planner.py for decision audit.
-
-| Synced To                    | Embedded Section        |
-| ---------------------------- | ----------------------- |
-| `agents/quality-reviewer.md` | `<default_conventions>` |
+| Resource                 | Synced To                    | Embedded Section        |
+| ------------------------ | ---------------------------- | ----------------------- |
+| `default-conventions.md` | `agents/quality-reviewer.md` | `<default_conventions>` |
 
 **When updating**: Modify `resources/default-conventions.md` first, then copy
 full content verbatim into `<default_conventions>` section in QR.
-
-## Sync Verification
-
-After modifying a resource, verify sync:
-
-```bash
-# Check temporal-contamination.md references
-grep -l "temporal.contamination\|four detection questions\|change-relative\|baseline reference" agents/*.md
-
-# Check diff-format.md references
-grep -l "context lines\|AUTHORITATIVE\|APPROXIMATE\|context anchor" agents/*.md
-
-# Check default-conventions.md references
-grep -l "default_conventions\|domain: god-object\|domain: test-organization" agents/*.md
-```
-
-If grep finds files not listed in sync tables above, update this document.
 
 ## Three Pillars Pattern (QR Verification Loops)
 
 The planner skill uses a consistent pattern for all QR verification checkpoints
 to ensure fixes are always re-verified. This pattern is implemented in
-`scripts/utils.py` and used across all three scripts.
+`scripts/shared/formatting.py`.
 
 ### The Pattern
 
 Every QR checkpoint has three mandatory elements:
 
-| Pillar             | Purpose                              | Implementation                  |
-| ------------------ | ------------------------------------ | ------------------------------- |
-| **STATE BANNER**   | Visual header showing loop iteration | `get_qr_state_banner()`         |
-| **STOP CONDITION** | Explicit blocker preventing skip     | `get_qr_stop_condition()`       |
-| **RE-VERIFY MODE** | Different prompts when fixing issues | `--qr-iteration` + `--fixing-*` |
+| Pillar             | Purpose                              | Implementation           |
+| ------------------ | ------------------------------------ | ------------------------ |
+| **STATE BANNER**   | Visual header showing loop iteration | `format_qr_banner()`     |
+| **STOP CONDITION** | Explicit blocker preventing skip     | `format_gate_step()`     |
+| **RE-VERIFY MODE** | Different prompts when fixing issues | `--qr-iteration` + flags |
 
 ### CLI Flags
 
 All scripts use consistent flags for QR verification loops:
 
-| Flag              | Type    | Default | Purpose                              |
-| ----------------- | ------- | ------- | ------------------------------------ |
-| `--qr-iteration`  | integer | 1       | Loop count (1=initial, 2+=re-verify) |
-| `--fixing-issues` | boolean | false   | Indicates re-work after failed QR    |
+| Flag             | Type    | Default | Purpose                              |
+| ---------------- | ------- | ------- | ------------------------------------ |
+| `--qr-iteration` | integer | 1       | Loop count (1=initial, 2+=re-verify) |
+| `--qr-fail`      | boolean | false   | Indicates re-work after failed QR    |
+| `--qr-status`    | string  | none    | Gate input: "pass" or "fail"         |
 
 ### QR Checkpoints
 
-The pattern is applied at four checkpoints:
+The pattern is applied at these checkpoints:
 
-1. **planner.py review step 1**: Plan QR (Completeness + Code)
-2. **planner.py review step 3**: Doc QR (post-TW validation)
-3. **execute-milestones.py steps 2-3**: Batch QR gate (per wave)
-4. **executor.py step 4**: Holistic post-implementation QR
-
-### Example Flow
-
-```
-# Wave with milestones 1,2 - Initial batch QR (iteration 1)
-python3 execute-milestones.py --milestones 1,2 --total-milestones 4 --step 2
-
-# Batch QR finds issues -> step 3 routes to fix
-python3 execute-milestones.py --milestones 1,2 --total-milestones 4 --step 3 --qr-result ISSUES
-
-# Single developer fixes all issues (iteration 2)
-python3 execute-milestones.py --milestones 1,2 --total-milestones 4 --step 1 \
-  --fixing-qr-issues --qr-iteration 2
-
-# RE-VERIFY (iteration 2) -- MANDATORY, cannot skip
-python3 execute-milestones.py --milestones 1,2 --total-milestones 4 --step 2 \
-  --qr-iteration 2
-```
-
-### Modifying the Pattern
-
-To change QR verification loop behavior:
-
-1. Edit `scripts/utils.py` (single source of truth)
-2. Changes automatically apply to all scripts that import the functions
-3. No agent prompt sync required -- pattern is in scripts, not agent prompts
+1. **planner.py step 5-6**: QR-Completeness + Gate
+2. **planner.py step 8-9**: QR-Code + Gate
+3. **planner.py step 11-12**: QR-Docs + Gate
+4. **wave-executor.py steps 2-3**: Batch QR + Gate
+5. **executor.py step 4-5**: Holistic QR + Gate

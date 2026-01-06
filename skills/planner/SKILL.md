@@ -5,19 +5,18 @@ description: Interactive planning and execution for complex tasks. Use when user
 
 # Planner Skill
 
-Two-phase workflow: **planning** (create plans) and **execution** (implement
-plans).
+Two workflows: **planning** (12-step plan creation + review) and **execution**
+(implement plans).
 
 ## Activation
 
 When this skill activates, IMMEDIATELY invoke the corresponding script. The
 script IS the workflow.
 
-| Mode      | Intent                             | Command                                                                |
-| --------- | ---------------------------------- | ---------------------------------------------------------------------- |
-| planning  | "plan", "design", "architect"      | `python3 scripts/planner.py --phase planning --step 1 --total-steps 4` |
-| review    | "review plan" (after plan written) | `python3 scripts/planner.py --phase review --step 1 --total-steps 3`   |
-| execution | "execute", "implement", "run plan" | `python3 scripts/executor.py --step 1 --total-steps 7`                 |
+| Mode      | Intent                             | Command                                                |
+| --------- | ---------------------------------- | ------------------------------------------------------ |
+| planning  | "plan", "design", "architect"      | `python3 scripts/planner.py --step 1 --total-steps 12` |
+| execution | "execute", "implement", "run plan" | `python3 scripts/executor.py --step 1 --total-steps 7` |
 
 ## When to Use
 
@@ -42,29 +41,34 @@ Skip when task is:
 | `resources/default-conventions.md`    | Structural conventions     | Making decisions without explicit user guidance |
 | `resources/plan-format.md`            | Plan template structure    | Completing planning phase (injected by script)  |
 
-## Workflow Summary
+## Planning Workflow (12 steps)
 
-**Planning phase**: 4+ steps:
+**Steps 1-4: Planning**
 
 1. Context Discovery - explore, gather requirements
 2. Approach Generation - generate options with tradeoffs
 3. Assumption Surfacing - user confirmation of choices
-4. Approach Selection & Milestones - decide, write milestones
+4. Approach Selection & Milestones - decide, write milestones + Code Intent
 
-**Review phase**: 3 steps:
+**Steps 5-12: Review**
 
-1. Parallel QR (completeness + code)
-2. TW documentation scrub
-3. QR-Docs validation
+5. QR-Completeness - validate plan structure
+6. Gate - route based on QR result
+7. Developer Fills Diffs - convert Code Intent to diffs
+8. QR-Code - validate diffs and code quality
+9. Gate - route based on QR result
+10. TW Documentation Scrub - clean comments, inject WHY
+11. QR-Docs - validate comment hygiene
+12. Gate - PLAN APPROVED
 
-**Execution phase**: 7 steps:
+## Execution Workflow (7 steps)
 
-1. Execution planning
-2. Reconciliation (conditional)
-3. Milestone execution via execute-milestone.py
-4. Post-implementation QR
-5. QR issue resolution (conditional)
-6. Documentation
-7. Retrospective
+1. Execution planning - wave analysis
+2. Reconciliation (conditional) - validate existing code
+3. Milestone execution via wave-executor.py
+4. Post-implementation QR - holistic review
+5. QR Gate - route based on result
+6. Documentation - create CLAUDE.md/README.md
+7. Retrospective - summary presentation
 
 Scripts inject step-specific guidance. Invoke and follow output.

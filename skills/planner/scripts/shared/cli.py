@@ -1,0 +1,69 @@
+"""CLI utilities for planner scripts.
+
+Handles argument parsing and mode script entry points.
+"""
+
+import argparse
+import os
+import sys
+from pathlib import Path
+from typing import Callable
+
+from .formatting import format_step_output
+
+
+def add_qr_args(parser: argparse.ArgumentParser) -> None:
+    """Add standard QR verification arguments to argument parser.
+
+    Used by orchestrator scripts (planner.py, executor.py, wave-executor.py)
+    to ensure consistent QR-related CLI flags.
+    """
+    parser.add_argument("--qr-iteration", type=int, default=1)
+    parser.add_argument("--qr-fail", action="store_true",
+                        help="Work step is fixing QR issues")
+    parser.add_argument("--qr-status", type=str, choices=["pass", "fail"],
+                        help="QR result for gate steps")
+
+
+def mode_main(
+    script_file: str,
+    get_step_guidance: Callable[..., dict],
+    description: str,
+    extra_args: list[tuple[list, dict]] = None,
+):
+    """Standard entry point for mode scripts.
+
+    Args:
+        script_file: Pass __file__ from the calling script
+        get_step_guidance: Function that returns guidance dict for each step
+        description: Script description for --help
+        extra_args: Additional arguments beyond standard QR args
+    """
+    script_name = Path(script_file).stem
+
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("--step", type=int, required=True)
+    parser.add_argument("--total-steps", type=int, required=True)
+    parser.add_argument("--qr-iteration", type=int, default=1)
+    parser.add_argument("--qr-fail", action="store_true")
+    for args, kwargs in (extra_args or []):
+        parser.add_argument(*args, **kwargs)
+    parsed = parser.parse_args()
+
+    script_path = os.path.abspath(sys.argv[0])
+
+    guidance = get_step_guidance(
+        parsed.step, parsed.total_steps, script_path,
+        **{k: v for k, v in vars(parsed).items()
+           if k not in ('step', 'total_steps')}
+    )
+
+    print(format_step_output(
+        script=script_name,
+        step=parsed.step,
+        total=parsed.total_steps,
+        title=guidance["title"],
+        actions=guidance["actions"],
+        next_command=guidance["next"],
+        is_step_one=(parsed.step == 1),
+    ))
