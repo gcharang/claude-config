@@ -9,7 +9,7 @@ Validates plan document completeness before TW/Developer work:
 - Plan structure (milestones, acceptance criteria, code presence)
 
 Usage:
-    python3 qr/plan-completeness.py --step 1 --total-steps 5 [--qr-iteration 1] [--qr-fail]
+    python3 qr/plan-completeness.py --step 1 --total-steps 6 [--qr-iteration 1] [--qr-fail]
 
 Sub-agents invoke this script immediately upon receiving their prompt.
 The script provides step-by-step guidance; the agent follows exactly.
@@ -228,7 +228,42 @@ def get_step_guidance(
             "next": f"python3 {script_path} --step 5 --total-steps {total_steps}",
         }
 
-    # Step 5: Output format (final step)
+    # Step 5: Exhaustiveness verification (fresh second-pass)
+    if step == 5:
+        return {
+            "title": "Exhaustiveness Verification",
+            "actions": [
+                "<exhaustiveness_check>",
+                "STOP. Before finalizing findings, perform fresh examination.",
+                "",
+                "This is a SEPARATE verification pass. Do NOT simply review your prior",
+                "findings -- re-examine the plan with fresh eyes.",
+                "",
+                "ADVERSARIAL QUESTIONS (answer each with specific findings or 'none'):",
+                "",
+                "1. What CATEGORIES of issues have you not yet examined?",
+                "   (e.g., error handling, edge cases, integration points)",
+                "",
+                "2. For each milestone, what could go WRONG that is not addressed?",
+                "   List concrete failure scenarios.",
+                "",
+                "3. What ASSUMPTIONS is the plan making that are not documented?",
+                "   (e.g., about infrastructure, dependencies, user behavior)",
+                "",
+                "4. What would a HOSTILE reviewer find that you missed?",
+                "   Imagine someone whose job is to find problems you overlooked.",
+                "",
+                "5. What QUESTIONS would need to be answered before implementation",
+                "   that the plan does not address?",
+                "",
+                "Record any NEW issues discovered. These are ADDITIONAL findings,",
+                "not duplicates of prior checks.",
+                "</exhaustiveness_check>",
+            ],
+            "next": f"python3 {script_path} --step 6 --total-steps {total_steps}",
+        }
+
+    # Step 6: Output format (final step)
     if step >= total_steps:
         expected_output = format_expected_output(
             if_pass="PASS: Plan completeness verified. Ready for Developer diffs.",

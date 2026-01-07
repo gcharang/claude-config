@@ -8,7 +8,7 @@ Validates proposed code changes in plan files before TW scrub:
 - Structural issue detection
 
 Usage:
-    python3 qr/plan-code.py --step 1 --total-steps 6 [--qr-iteration 1] [--qr-fail]
+    python3 qr/plan-code.py --step 1 --total-steps 7 [--qr-iteration 1] [--qr-fail]
 
 Sub-agents invoke this script immediately upon receiving their prompt.
 The script provides step-by-step guidance; the agent follows exactly.
@@ -198,7 +198,42 @@ def get_step_guidance(
             "next": f"python3 {script_path} --step 6 --total-steps {total_steps}",
         }
 
-    # Step 6: Output format (final step)
+    # Step 6: Exhaustiveness verification (fresh second-pass)
+    if step == 6:
+        return {
+            "title": "Exhaustiveness Verification",
+            "actions": [
+                "<exhaustiveness_check>",
+                "STOP. Before finalizing findings, perform fresh examination.",
+                "",
+                "This is a SEPARATE verification pass. Do NOT simply review your prior",
+                "findings -- re-examine the diffs with fresh eyes.",
+                "",
+                "ADVERSARIAL QUESTIONS (answer each with specific findings or 'none'):",
+                "",
+                "1. What FAILURE MODES have you not yet checked?",
+                "   (e.g., nil pointer, resource leak, race condition, timeout)",
+                "",
+                "2. For each diff, what could go WRONG at runtime?",
+                "   List concrete scenarios.",
+                "",
+                "3. What EDGE CASES does the code not handle?",
+                "   (e.g., empty input, max values, concurrent access)",
+                "",
+                "4. What would a HOSTILE reviewer find that you missed?",
+                "   Imagine someone whose job is to find bugs you overlooked.",
+                "",
+                "5. What CONTEXT DRIFT might exist between plan and codebase?",
+                "   Are there changes to the codebase the plan doesn't account for?",
+                "",
+                "Record any NEW issues discovered. These are ADDITIONAL findings,",
+                "not duplicates of prior checks.",
+                "</exhaustiveness_check>",
+            ],
+            "next": f"python3 {script_path} --step 7 --total-steps {total_steps}",
+        }
+
+    # Step 7: Output format (final step)
     if step >= total_steps:
         return {
             "title": "Format Output",

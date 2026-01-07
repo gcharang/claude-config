@@ -10,13 +10,12 @@ Planning skill with resources that must stay synced with agent prompts.
 | ------------------------------------- | --------------------------------------------- | -------------------------------------------- |
 | `SKILL.md`                            | Planning workflow activation                  | Using the planner skill                      |
 | `scripts/planner.py`                  | 12-step planning orchestration                | Debugging planner behavior                   |
-| `scripts/executor.py`                 | Plan execution orchestration                  | Debugging executor behavior                  |
-| `scripts/wave-executor.py`            | Wave execution with batch QR gates            | Debugging wave execution                     |
+| `scripts/executor.py`                 | Plan execution orchestration (9 steps)        | Debugging executor behavior                  |
 | `scripts/qr/plan-completeness.py`     | QR-Completeness workflow                      | Debugging QR-Completeness validation         |
 | `scripts/qr/plan-code.py`             | QR-Code workflow                              | Debugging QR-Code validation                 |
 | `scripts/qr/plan-docs.py`             | QR-Docs workflow                              | Debugging QR-Docs validation                 |
-| `scripts/qr/batch-review.py`          | QR wave batch review workflow                 | Debugging QR batch wave verification         |
-| `scripts/qr/post-impl.py`             | QR post-implementation workflow               | Debugging QR post-implementation review      |
+| `scripts/qr/post-impl-code.py`        | QR code quality review (RULE 0/1/2)           | Debugging QR code review                     |
+| `scripts/qr/post-impl-doc.py`         | QR documentation quality review               | Debugging QR doc review                      |
 | `scripts/qr/reconciliation.py`        | QR reconciliation workflow                    | Debugging QR reconciliation verification     |
 | `scripts/dev/fill-diffs.py`           | Developer diff creation workflow              | Debugging Developer diff creation            |
 | `scripts/tw/plan-scrub.py`            | TW plan scrub workflow                        | Debugging TW documentation scrub             |
@@ -34,14 +33,13 @@ Scripts are organized by the agent that invokes them:
 ```
 scripts/
   planner.py              # Main agent - 12-step unified workflow
-  executor.py             # Main agent - execution orchestration
-  wave-executor.py        # Main agent - wave execution
+  executor.py             # Main agent - 9-step execution orchestration
   qr/                     # quality-reviewer agent
     plan-completeness.py
     plan-code.py
     plan-docs.py
-    batch-review.py
-    post-impl.py
+    post-impl-code.py     # Code quality review (RULE 0/1/2)
+    post-impl-doc.py      # Documentation quality review
     reconciliation.py
   dev/                    # developer agent
     fill-diffs.py
@@ -116,5 +114,5 @@ The pattern is applied at these checkpoints:
 1. **planner.py step 5-6**: QR-Completeness + Gate
 2. **planner.py step 8-9**: QR-Code + Gate
 3. **planner.py step 11-12**: QR-Docs + Gate
-4. **wave-executor.py steps 2-3**: Batch QR + Gate
-5. **executor.py step 4-5**: Holistic QR + Gate
+4. **executor.py step 4-5**: Code QR + Gate (defers to developer)
+5. **executor.py step 7-8**: Doc QR + Gate (defers to technical-writer)

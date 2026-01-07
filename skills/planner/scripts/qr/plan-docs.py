@@ -8,7 +8,7 @@ Validates documentation quality in plan files after TW scrub:
 - WHY-not-WHAT comment validation
 
 Usage:
-    python3 qr/plan-docs.py --step 1 --total-steps 4 [--qr-iteration 1] [--qr-fail]
+    python3 qr/plan-docs.py --step 1 --total-steps 5 [--qr-iteration 1] [--qr-fail]
 
 Sub-agents invoke this script immediately upon receiving their prompt.
 The script provides step-by-step guidance; the agent follows exactly.
@@ -124,7 +124,42 @@ def get_step_guidance(
             "next": f"python3 {script_path} --step 4 --total-steps {total_steps}",
         }
 
-    # Step 4: Output format (final step)
+    # Step 4: Exhaustiveness verification (fresh second-pass)
+    if step == 4:
+        return {
+            "title": "Exhaustiveness Verification",
+            "actions": [
+                "<exhaustiveness_check>",
+                "STOP. Before finalizing findings, perform fresh examination.",
+                "",
+                "This is a SEPARATE verification pass. Do NOT simply review your prior",
+                "findings -- re-examine the documentation with fresh eyes.",
+                "",
+                "ADVERSARIAL QUESTIONS (answer each with specific findings or 'none'):",
+                "",
+                "1. What CATEGORIES of temporal contamination have you not yet checked?",
+                "   (e.g., implicit comparisons, verb tense shifts, meta-commentary)",
+                "",
+                "2. For each comment, does it make sense to a reader who ONLY sees",
+                "   the final code? Would they understand it without diff context?",
+                "",
+                "3. What ASSUMPTIONS about the reader's context does the documentation make?",
+                "   (e.g., knowing what was removed, knowing the author's intent)",
+                "",
+                "4. What would a HOSTILE reviewer find that you missed?",
+                "   Imagine someone whose job is to find documentation issues you overlooked.",
+                "",
+                "5. Are there any comments that explain WHAT but not WHY?",
+                "   Re-read each comment asking 'does this explain the reasoning?'",
+                "",
+                "Record any NEW issues discovered. These are ADDITIONAL findings,",
+                "not duplicates of prior checks.",
+                "</exhaustiveness_check>",
+            ],
+            "next": f"python3 {script_path} --step 5 --total-steps {total_steps}",
+        }
+
+    # Step 5: Output format (final step)
     if step >= total_steps:
         expected_output = format_expected_output(
             if_pass="PASS: Documentation follows timeless present convention.",

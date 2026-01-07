@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-QR-Post-Implementation - Step-based workflow for quality-reviewer sub-agent.
+QR-Post-Impl-Code - Step-based workflow for quality-reviewer sub-agent.
 
-Holistic review AFTER all milestones complete:
+Code quality review AFTER all milestones complete:
 - Factored verification: acceptance criteria vs implemented code
 - Cross-cutting concerns and architectural coherence
-- Documentation format verification (CLAUDE.md)
-- Invisible Knowledge proximity audit
+- RULE 0/1/2 on implemented code
 
 Usage:
-    python3 qr/post-impl.py --step 1 --total-steps 6 [--qr-iteration 1] [--qr-fail]
+    python3 qr/post-impl-code.py --step 1 --total-steps 5 [--qr-iteration 1] [--qr-fail]
 
 Sub-agents invoke this script immediately upon receiving their prompt.
 The script provides step-by-step guidance; the agent follows exactly.
@@ -22,11 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared import (
     QRState,
     get_resource,
-    format_step_output,
     format_qr_banner,
-    format_resource,
-    format_verification_checklist,
-    format_expected_output,
     format_factored_verification_rationale,
 )
 
@@ -48,12 +43,12 @@ def get_step_guidance(
 
     # Step 1: Task description
     if step == 1:
-        banner = format_qr_banner("POST-IMPLEMENTATION QR", qr)
+        banner = format_qr_banner("CODE QR", qr)
         return {
-            "title": "Holistic Post-Implementation Review",
+            "title": "Code Quality Review",
             "actions": [banner, ""]
             + [
-                "TASK: Holistic quality review after ALL milestones complete.",
+                "TASK: Code quality review after ALL milestones complete.",
                 "",
                 "You are reviewing IMPLEMENTED code, not a plan.",
                 "All milestones have been executed. Modified files exist.",
@@ -62,6 +57,8 @@ def get_step_guidance(
                 "  - Acceptance criteria verification (factored approach)",
                 "  - Cross-cutting concerns across milestones",
                 "  - RULE 0/1/2 on implemented code",
+                "",
+                "NOT IN SCOPE (handled by Doc QR):",
                 "  - Documentation format (CLAUDE.md)",
                 "  - Invisible Knowledge proximity audit",
                 "",
@@ -72,7 +69,6 @@ def get_step_guidance(
                 "FIRST: Read the plan file now. Locate:",
                 "  - ## Planning Context (for CONTEXT FILTER)",
                 "  - ## Milestones (acceptance criteria per milestone)",
-                "  - ## Invisible Knowledge (for proximity audit)",
                 "",
                 "Write out CONTEXT FILTER before proceeding:",
                 "  CONTEXT FILTER:",
@@ -184,118 +180,68 @@ def get_step_guidance(
                 "  Apply ONLY these categories (reference below).",
                 "  Do not invent additional categories.",
                 "",
-                "=" * 60,
                 defaults_resource,
-                "=" * 60,
             ],
             "next": f"python3 {script_path} --step 5 --total-steps {total_steps}",
         }
 
-    # Step 5: Documentation and Invisible Knowledge audit
-    if step == 5:
-        return {
-            "title": "Documentation and Invisible Knowledge Audit",
-            "actions": [
-                "DOCUMENTATION FORMAT VERIFICATION",
-                "",
-                "For each CLAUDE.md in MODIFIED_FILES, verify:",
-                "",
-                "| Check              | PASS                             | FAIL (RULE 1 HIGH)         |",
-                "| ------------------ | -------------------------------- | -------------------------- |",
-                "| Format             | Tabular index (WHAT/WHEN cols)   | Prose, bullets, narrative  |",
-                "| Size               | As small as possible             | Large (prose belongs else) |",
-                "| Overview           | One sentence max                 | Multiple sentences         |",
-                "| Forbidden sections | None present                     | 'Key Invariants', etc.     |",
-                "| Operational        | Commands only (Build,Test,etc)   | Explanatory prose          |",
-                "",
-                "CLAUDE.md violations are RULE 1 HIGH (violates TW spec).",
-                "",
-                "Stub directory exception: Directories with only .gitkeep",
-                "do NOT require CLAUDE.md. Do not flag.",
-                "",
-                "---",
-                "",
-                "INVISIBLE KNOWLEDGE PROXIMITY AUDIT",
-                "",
-                "Read the plan's 'Invisible Knowledge' section.",
-                "",
-                "For EACH knowledge item, ask OPEN question:",
-                "  'Where CLOSE TO THE CODE is [item] documented?'",
-                "",
-                "ACCEPTABLE (code-adjacent):",
-                "  - README.md in SAME DIRECTORY as affected code",
-                "  - Module-level docstrings (top of file)",
-                "  - Inline code comments explaining WHY",
-                "",
-                "NOT ACCEPTABLE (violates proximity):",
-                "  - README.md in separate doc/ directory",
-                "  - External wikis or documentation systems",
-                "  - References to external sources without local summary",
-                "",
-                "KNOWLEDGE TYPE MAPPING:",
-                "  | Type                  | Required Location                   |",
-                "  | --------------------- | ----------------------------------- |",
-                "  | Architecture diagrams | README.md in SAME directory         |",
-                "  | Data flow             | README.md or module docstring       |",
-                "  | Tradeoffs             | Code comment where decision shows   |",
-                "  | Invariants            | Code comment at enforcement point   |",
-                "  | Why This Structure    | README.md in SAME directory         |",
-                "",
-                "OUTPUT TABLE:",
-                "  | Knowledge Item     | Documented In        | Proximity | Status     |",
-                "  | ------------------ | -------------------- | --------- | ---------- |",
-                "  | Architecture       | src/rules/README.md  | YES       | FOUND      |",
-                "  | Polling tradeoff   | NOT FOUND            | N/A       | SHOULD_FIX |",
-            ],
-            "next": f"python3 {script_path} --step 6 --total-steps {total_steps}",
-        }
-
-    # Step 6: Output format (final step)
+    # Step 5: Output format (final step) - XML grouped by milestone
     if step >= total_steps:
         return {
-            "title": "Format Output",
+            "title": "Format Output (XML by Milestone)",
             "actions": [
-                "OUTPUT FORMAT:",
+                "OUTPUT FORMAT (XML grouped by milestone for targeted fixes):",
                 "",
+                "```xml",
+                '<qr_findings status="PASS | ISSUES">',
+                "  <summary>",
+                "    <verdict>PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES | CRITICAL</verdict>",
+                "    <standards_applied>[from project docs, or 'RULE 0 + RULE 2 only']</standards_applied>",
+                "  </summary>",
+                "",
+                "  <!-- Group findings by milestone for targeted fixes -->",
+                '  <milestone number="1" name="Milestone Name">',
+                '    <finding rule="RULE0" severity="CRITICAL">',
+                "      <location>file:line or function name</location>",
+                "      <issue>What is wrong</issue>",
+                "      <failure_mode>Why this matters</failure_mode>",
+                "      <suggested_fix>Concrete action</suggested_fix>",
+                "      <confidence>HIGH | MEDIUM | LOW</confidence>",
+                "    </finding>",
+                "    <!-- more findings for this milestone -->",
+                "  </milestone>",
+                "",
+                '  <milestone number="2" name="Another Milestone">',
+                "    <!-- findings for milestone 2 -->",
+                "  </milestone>",
+                "",
+                "  <!-- Cross-cutting issues: assign to most relevant milestone -->",
+                "",
+                "  <acceptance_criteria>",
+                '    <milestone number="1">',
+                '      <criterion text="Returns 429 after 3 failures">MET | NOT_MET</criterion>',
+                "    </milestone>",
+                '    <milestone number="2">',
+                '      <criterion text="...">MET | NOT_MET</criterion>',
+                "    </milestone>",
+                "  </acceptance_criteria>",
+                "",
+                "  <reasoning>How you arrived at verdict</reasoning>",
+                "  <considered_not_flagged>Patterns examined but not issues</considered_not_flagged>",
+                "</qr_findings>",
                 "```",
-                "## VERDICT: [PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES | CRITICAL_ISSUES]",
                 "",
-                "## Project Standards Applied",
-                "[List constraints from project docs, or 'No docs found. RULE 0 + RULE 2 only.']",
-                "",
-                "## Findings",
-                "",
-                "### [RULE] [SEVERITY]: [Title]",
-                "- **Location**: [file:line or function name]",
-                "- **Issue**: [What is wrong]",
-                "- **Failure Mode / Rationale**: [Why this matters]",
-                "- **Suggested Fix**: [Concrete, implementable action]",
-                "- **Confidence**: [HIGH | MEDIUM | LOW]",
-                "",
-                "[Repeat for each finding, ordered: RULE 0 -> RULE 1 -> RULE 2]",
-                "",
-                "## Acceptance Criteria Status",
-                "| Milestone | Criterion | Status | Evidence |",
-                "| --------- | --------- | ------ | -------- |",
-                "",
-                "## Invisible Knowledge Audit",
-                "| Knowledge Item | Documented In | Proximity | Status |",
-                "| -------------- | ------------- | --------- | ------ |",
-                "",
-                "## Reasoning",
-                "[How you arrived at verdict, trade-offs considered]",
-                "",
-                "## Considered But Not Flagged",
-                "[Patterns examined but not issues, with rationale]",
-                "```",
+                "GROUPING RATIONALE:",
+                "  Findings grouped by milestone so developer knows fix scope.",
+                "  Cross-cutting issues: assign to most relevant milestone.",
                 "",
                 "VERDICT GUIDE:",
                 "  PASS: All criteria met, no issues",
                 "  PASS_WITH_CONCERNS: All criteria met, minor suggestions",
                 "  NEEDS_CHANGES: Issues requiring fixes",
-                "  CRITICAL_ISSUES: Production reliability risks",
+                "  CRITICAL: Production reliability risks",
                 "",
-                "Return PASS or ISSUES to the orchestrator.",
+                "Return PASS or ISSUES to orchestrator.",
             ],
             "next": "Return result to orchestrator. Sub-agent task complete.",
         }
@@ -306,4 +252,4 @@ def get_step_guidance(
 
 if __name__ == "__main__":
     from shared import mode_main
-    mode_main(__file__, get_step_guidance, "QR-Post-Implementation: Holistic post-implementation review workflow")
+    mode_main(__file__, get_step_guidance, "QR-Post-Impl-Code: Code quality review workflow")

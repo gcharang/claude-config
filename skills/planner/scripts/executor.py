@@ -2,17 +2,19 @@
 """
 Plan Executor - Execute approved plans through delegation.
 
-Eight-step workflow:
-  1. Execution Planning - analyze plan, detect reconciliation
+Nine-step workflow:
+  1. Execution Planning - analyze plan, build wave list
   2. Reconciliation - validate existing code (conditional)
-  3. Milestone Execution - delegate via execute-milestone.py
-  4. Post-Implementation QR - holistic quality review
-  5. QR Gate - route based on QR result
+  3. Implementation - dispatch developers (wave-aware parallel)
+  4. Code QR - verify code quality (RULE 0/1/2)
+  5. Code QR Gate - route pass/fail
   6. Documentation - TW pass
-  7. Retrospective - present summary
+  7. Doc QR - verify documentation quality
+  8. Doc QR Gate - route pass/fail
+  9. Retrospective - present summary
 
 Usage:
-    python3 executor.py --step 1 --total-steps 7
+    python3 executor.py --step 1 --total-steps 9
 """
 
 import argparse
@@ -22,12 +24,8 @@ from shared import (
     QRState,
     GateConfig,
     get_mode_script_path,
-    get_reverification_context,
     format_step_output,
     format_gate_step,
-    format_invoke_after,
-    format_step_header,
-    format_current_action,
     format_subagent_dispatch,
     format_state_banner,
     format_routing,
@@ -71,7 +69,7 @@ STEPS = {
             "",
             "WORKFLOW:",
             "  This step is ANALYSIS ONLY. Do NOT delegate yet.",
-            "  Delegation happens via wave-executor.py (see MANDATORY ACTION below).",
+            "  Record wave groupings for step 3 (Implementation).",
         ],
     },
     2: {
@@ -108,35 +106,17 @@ STEPS = {
         ],
     },
     3: {
-        "title": "Wave Execution",
-        "actions": [
-            "Execute waves with batch QR after each wave.",
-            "",
-            "Use wave-executor.py for each WAVE:",
-            "  Step 1: Implementation (parallel Task calls for wave milestones)",
-            "  Step 2: Batch QR (single QR reviews all wave milestones)",
-            "  Step 3: Gate Check (proceed to next wave or fix)",
-            "",
-            "WAVE EXECUTION PATTERN:",
-            "  Wave 1: [1,2] -> parallel dev -> batch QR -> PASS",
-            "  Wave 2: [3]   -> dev -> batch QR -> PASS",
-            "  Wave 3: [4]   -> dev -> batch QR -> PASS -> Step 4",
-            "",
-            "ERROR HANDLING (you NEVER fix code yourself):",
-            "  Clear problem + solution: Task(developer) immediately",
-            "  Difficult/unclear problem: Task(debugger) to diagnose, then Task(developer) to fix",
-            "  Uncertain how to proceed: AskUserQuestion with options",
-            "  Low (warnings): Note and continue",
-        ],
+        "title": "Implementation",
+        # Handled specially in format_output - has normal and fix modes
     },
     4: {
-        "title": "Post-Implementation QR",
+        "title": "Code QR",
         "is_qr": True,
-        "qr_name": "HOLISTIC QR",
+        "qr_name": "CODE QR",
         "is_dispatch": True,
         "dispatch_agent": "quality-reviewer",
-        "mode_script": "qr/post-impl.py",
-        "mode_total_steps": 6,
+        "mode_script": "qr/post-impl-code.py",
+        "mode_total_steps": 5,
         "context_vars": {
             "PLAN_FILE": "path to the executed plan",
             "MODIFIED_FILES": "actual file paths from all milestones",
@@ -144,17 +124,23 @@ STEPS = {
         "post_dispatch": [
             "The sub-agent will invoke the script and follow its guidance.",
             "",
-            "Expected output: PASS or ISSUES.",
+            "Expected output: PASS or ISSUES (XML grouped by milestone).",
         ],
         "post_qr_routing": {"self_fix": False, "fix_target": "developer"},
     },
-    # Step 5 is the gate - handled separately in format_output
+    # Step 5 is the Code QR gate - handled separately
     6: {
         "title": "Documentation",
+        # Handled specially in format_output - has normal and fix modes
+    },
+    7: {
+        "title": "Doc QR",
+        "is_qr": True,
+        "qr_name": "DOC QR",
         "is_dispatch": True,
-        "dispatch_agent": "technical-writer",
-        "mode_script": "tw/post-impl.py",
-        "mode_total_steps": 6,
+        "dispatch_agent": "quality-reviewer",
+        "mode_script": "qr/post-impl-doc.py",
+        "mode_total_steps": 4,
         "context_vars": {
             "PLAN_FILE": "path to the executed plan",
             "MODIFIED_FILES": "actual file paths from milestones",
@@ -162,12 +148,12 @@ STEPS = {
         "post_dispatch": [
             "The sub-agent will invoke the script and follow its guidance.",
             "",
-            "Expected output: Documentation report format",
-            "",
-            "Skip if ALL milestones were documentation-only.",
+            "Expected output: PASS or ISSUES.",
         ],
+        "post_qr_routing": {"self_fix": False, "fix_target": "technical-writer"},
     },
-    7: {
+    # Step 8 is the Doc QR gate - handled separately
+    9: {
         "title": "Retrospective",
         "actions": [
             "PRESENT retrospective to user (do not write to file):",
@@ -188,27 +174,179 @@ STEPS = {
 }
 
 
-# Gate configuration for step 5 (Holistic QR Gate)
-EXECUTOR_GATE = GateConfig(
-    qr_name="Holistic QR",
-    work_step=4,
+# Gate configuration for step 5 (Code QR Gate)
+CODE_QR_GATE = GateConfig(
+    qr_name="Code QR",
+    work_step=3,
     pass_step=6,
-    pass_message="Proceed to documentation step.",
+    pass_message="Code quality verified. Proceed to documentation.",
     self_fix=False,
     fix_target="developer",
 )
 
+# Gate configuration for step 8 (Doc QR Gate)
+DOC_QR_GATE = GateConfig(
+    qr_name="Doc QR",
+    work_step=6,
+    pass_step=9,
+    pass_message="Documentation verified. Proceed to retrospective.",
+    self_fix=False,
+    fix_target="technical-writer",
+)
 
-def format_step_5_gate(qr: QRState) -> str:
-    """Format step 5 gate output using XML format."""
-    return format_gate_step(
-        script="executor",
-        step=5,
-        total=7,
-        gate=EXECUTOR_GATE,
-        qr=qr,
-        cmd_template="python3 executor.py",
-    )
+
+def format_step_3_implementation(qr: QRState, total_steps: int, milestone_count: int) -> str:
+    """Format step 3 implementation output."""
+
+    if qr.failed:
+        # Fix mode - dispatch developer with QR findings
+        banner = format_state_banner("IMPLEMENTATION FIX", qr.iteration, "fix")
+        actions = [banner, ""]
+        actions.extend([
+            "FIX MODE: Code QR found issues.",
+            "",
+            "The QR findings (XML grouped by milestone) are in your context.",
+            "Dispatch developer to fix the identified issues.",
+            "",
+            format_orchestrator_constraint(),
+            "",
+            "DISPATCH DEVELOPER:",
+            "  Use Task tool with subagent_type='developer'",
+            "",
+            "  Prompt MUST include:",
+            "    - QR findings (the XML from your context)",
+            "    - Plan file: $PLAN_FILE",
+            "    - Modified files: $MODIFIED_FILES",
+            "    - Instruction: Fix issues listed in <milestone> blocks",
+            "",
+            "After developer completes, re-run Code QR for fresh verification.",
+        ])
+        return format_step_output(
+            script="executor",
+            step=3,
+            total=total_steps,
+            title="Implementation - Fix Mode",
+            actions=actions,
+            next_command=f"python3 executor.py --step 4 --total-steps {total_steps}",
+            is_step_one=False,
+        )
+    else:
+        # Normal mode - dispatch developers for all milestones
+        actions = [
+            "Execute ALL milestones using wave-aware parallel dispatch.",
+            "",
+            "WAVE-AWARE EXECUTION:",
+            "  - Milestones within same wave: dispatch in PARALLEL",
+            "    (Multiple Task calls in single response)",
+            "  - Waves execute SEQUENTIALLY",
+            "    (Wait for wave N to complete before starting wave N+1)",
+            "",
+            "Use waves identified in step 1.",
+            "",
+            format_orchestrator_constraint(),
+            "",
+            "FOR EACH WAVE:",
+            "  1. Dispatch developer agents for ALL milestones in wave:",
+            "     Task(developer): Milestone N",
+            "     Task(developer): Milestone M  (if parallel)",
+            "",
+            "  2. Each prompt must include:",
+            "     - Plan file: $PLAN_FILE",
+            "     - Milestone: [number and name]",
+            "     - Files: [exact paths to create/modify]",
+            "     - Acceptance criteria: [from plan]",
+            "",
+            "  3. Wait for ALL agents in wave to complete",
+            "",
+            "  4. Run tests: pytest / tsc / go test -race",
+            "     Pass criteria: 100% tests pass, zero warnings",
+            "",
+            "  5. Proceed to next wave (repeat 1-4)",
+            "",
+            "After ALL waves complete, proceed to Code QR.",
+            "",
+            "ERROR HANDLING (you NEVER fix code yourself):",
+            "  Clear problem + solution: Task(developer) immediately",
+            "  Difficult/unclear problem: Task(debugger) to diagnose first",
+            "  Uncertain how to proceed: AskUserQuestion with options",
+        ]
+        return format_step_output(
+            script="executor",
+            step=3,
+            total=total_steps,
+            title="Implementation",
+            actions=actions,
+            next_command=f"python3 executor.py --step 4 --total-steps {total_steps}",
+            is_step_one=False,
+        )
+
+
+def format_step_6_documentation(qr: QRState, total_steps: int) -> str:
+    """Format step 6 documentation output."""
+    mode_script = get_mode_script_path("tw/post-impl.py")
+
+    if qr.failed:
+        # Fix mode - dispatch TW with Doc QR findings
+        banner = format_state_banner("DOCUMENTATION FIX", qr.iteration, "fix")
+        actions = [banner, ""]
+        actions.extend([
+            "FIX MODE: Doc QR found issues.",
+            "",
+            "The QR findings are in your context.",
+            "Dispatch technical-writer to fix the identified issues.",
+            "",
+            format_orchestrator_constraint(),
+            "",
+            "DISPATCH TECHNICAL-WRITER:",
+            "  Use Task tool with subagent_type='technical-writer'",
+            "",
+            "  Prompt MUST include:",
+            "    - Doc QR findings (from your context)",
+            "    - Plan file: $PLAN_FILE",
+            "    - Modified files: $MODIFIED_FILES",
+            "    - Instruction: Fix documentation issues",
+            "",
+            "After TW completes, re-run Doc QR for fresh verification.",
+        ])
+        return format_step_output(
+            script="executor",
+            step=6,
+            total=total_steps,
+            title="Documentation - Fix Mode",
+            actions=actions,
+            next_command=f"python3 executor.py --step 7 --total-steps {total_steps}",
+            is_step_one=False,
+        )
+    else:
+        # Normal mode - dispatch TW
+        dispatch_block = format_subagent_dispatch(
+            agent="technical-writer",
+            context_vars={
+                "PLAN_FILE": "path to the executed plan",
+                "MODIFIED_FILES": "actual file paths from milestones",
+            },
+            invoke_cmd=f"python3 {mode_script} --step 1 --total-steps 6",
+        )
+        actions = [
+            format_orchestrator_constraint(),
+            "",
+            dispatch_block,
+            "",
+            "The sub-agent will invoke the script and follow its guidance.",
+            "",
+            "Expected output: Documentation report format",
+            "",
+            "Skip if ALL milestones were documentation-only.",
+        ]
+        return format_step_output(
+            script="executor",
+            step=6,
+            total=total_steps,
+            title="Documentation",
+            actions=actions,
+            next_command=f"python3 executor.py --step 7 --total-steps {total_steps}",
+            is_step_one=False,
+        )
 
 
 def format_output(step: int, total_steps: int,
@@ -219,13 +357,73 @@ def format_output(step: int, total_steps: int,
     # Construct QRState from legacy parameters
     qr = QRState(iteration=qr_iteration, failed=qr_fail, status=qr_status)
 
-    # Step 5 is the gate - uses dedicated gate formatter
+    # Step 5 is the Code QR gate
     if step == 5:
         if not qr_status:
             return "Error: --qr-status required for step 5"
-        return format_step_5_gate(qr)
+        return format_gate_step(
+            script="executor",
+            step=5,
+            total=total_steps,
+            gate=CODE_QR_GATE,
+            qr=qr,
+            cmd_template="python3 executor.py",
+        )
 
-    info = STEPS.get(step, STEPS[7])
+    # Step 8 is the Doc QR gate
+    if step == 8:
+        if not qr_status:
+            return "Error: --qr-status required for step 8"
+        return format_gate_step(
+            script="executor",
+            step=8,
+            total=total_steps,
+            gate=DOC_QR_GATE,
+            qr=qr,
+            cmd_template="python3 executor.py",
+        )
+
+    # Step 3 has special handling (implementation with fix mode)
+    if step == 3:
+        return format_step_3_implementation(qr, total_steps, milestone_count)
+
+    # Step 6 has special handling (documentation with fix mode)
+    if step == 6:
+        return format_step_6_documentation(qr, total_steps)
+
+    info = STEPS.get(step, STEPS[9])
+
+    # Handle QR step in fix mode (developer/TW fixes, not QR re-run)
+    if info.get("is_qr") and qr.failed:
+        post_qr_config = info.get("post_qr_routing", {})
+        fix_target = post_qr_config.get("fix_target", "developer")
+        qr_name = info.get("qr_name", "QR")
+
+        banner = format_state_banner(qr_name, qr.iteration, "fix")
+        fix_actions = [banner, ""] + [
+            f"FIX MODE: {qr_name} found issues.",
+            "",
+            "Review the QR findings in your context.",
+            f"Spawn {fix_target} via Task tool to fix the identified issues.",
+            "",
+            f"{fix_target.title()} prompt should include:",
+            "  - QR findings (from your context)",
+            "  - Plan file: $PLAN_FILE",
+            "  - Modified files: $MODIFIED_FILES",
+            "",
+            f"After {fix_target} completes, re-run {qr_name} for fresh verification.",
+        ]
+        # Return flat next command - re-run this step for fresh QR
+        return format_step_output(
+            script="executor",
+            step=step,
+            total=total_steps,
+            title=f"{info['title']} - Fix Mode",
+            actions=fix_actions,
+            next_command=f"python3 executor.py --step {step} --total-steps {total_steps}",
+            is_step_one=False,
+        )
+
     is_complete = step >= total_steps
 
     # Build actions
@@ -302,29 +500,26 @@ def format_output(step: int, total_steps: int,
         actions.extend([
             "",
             "=" * 70,
-            "MANDATORY NEXT ACTION (DO NOT SKIP)",
+            "MANDATORY NEXT ACTION",
             "=" * 70,
         ])
         if reconciliation_check:
             next_command = f"python3 executor.py --step 2 --total-steps {total_steps} --reconciliation-check"
         else:
             actions.extend([
-                "You MUST invoke wave-executor.py for wave execution.",
-                "DO NOT delegate directly. The script orchestrates dev/QR loops.",
-                "",
-                "After EACH wave completes, invoke next wave until all done.",
+                "Proceed to Implementation step.",
+                "Use the wave groupings from your analysis.",
                 "=" * 70,
             ])
-            if milestone_count > 0:
-                next_command = f"python3 wave-executor.py --milestones <wave1> --total-milestones {milestone_count} --step 1"
-            else:
-                next_command = "python3 wave-executor.py --milestones <wave1> --total-milestones N --step 1"
-    elif step == 3:
-        next_command = "python3 executor.py --step 4 --total-steps 7"
+            next_command = f"python3 executor.py --step 3 --total-steps {total_steps}"
     elif step == 4:
-        # QR step uses branching
+        # Code QR step uses branching
         if_pass = f"python3 executor.py --step 5 --total-steps {total_steps} --qr-status pass"
         if_fail = f"python3 executor.py --step 5 --total-steps {total_steps} --qr-status fail"
+    elif step == 7:
+        # Doc QR step uses branching
+        if_pass = f"python3 executor.py --step 8 --total-steps {total_steps} --qr-status pass"
+        if_fail = f"python3 executor.py --step 8 --total-steps {total_steps} --qr-status fail"
     else:
         next_command = f"python3 executor.py --step {step + 1} --total-steps {total_steps}"
 
@@ -344,7 +539,7 @@ def format_output(step: int, total_steps: int,
 def main():
     parser = argparse.ArgumentParser(
         description="Plan Executor - Execute approved plans",
-        epilog="Steps: plan -> reconcile -> execute -> QR -> gate -> docs -> retrospective",
+        epilog="Steps: plan -> reconcile -> implement -> code QR -> gate -> docs -> doc QR -> gate -> retrospective",
     )
 
     parser.add_argument("--step", type=int, required=True)
@@ -355,11 +550,14 @@ def main():
 
     args = parser.parse_args()
 
-    if args.step < 1 or args.step > 7:
-        sys.exit("Error: step must be 1-7")
+    if args.step < 1 or args.step > 9:
+        sys.exit("Error: step must be 1-9")
 
     if args.step == 5 and not args.qr_status:
         sys.exit("Error: --qr-status required for step 5")
+
+    if args.step == 8 and not args.qr_status:
+        sys.exit("Error: --qr-status required for step 8")
 
     print(format_output(args.step, args.total_steps,
                         args.qr_iteration, args.qr_fail, args.qr_status,

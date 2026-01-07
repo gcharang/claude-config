@@ -29,7 +29,7 @@ ADDING NEW XML ELEMENTS:
 """
 
 from .domain import FlatCommand, BranchCommand, NextCommand, QRState, GateConfig
-from .resources import get_reverification_context, QR_ITERATION_LIMIT
+from .resources import QR_ITERATION_LIMIT
 
 
 # =============================================================================
@@ -314,6 +314,10 @@ def format_state_banner(
 def format_qr_banner(checkpoint: str, qr: QRState) -> str:
     """Generate QR state banner with automatic mode selection.
 
+    Every iteration uses fresh_review mode to avoid confirmation bias.
+    Research shows "verify previous fixes" framing biases toward confirming
+    rather than discovering issues. Each QR pass should be a clean slate.
+
     Args:
         checkpoint: QR checkpoint name (e.g., "QR-COMPLETENESS")
         qr: QR loop state
@@ -321,12 +325,8 @@ def format_qr_banner(checkpoint: str, qr: QRState) -> str:
     Returns:
         Formatted state banner XML string
     """
-    if qr.iteration == 1 and not qr.failed:
-        return format_state_banner(checkpoint, qr.iteration, "initial_review")
-    return format_state_banner(
-        checkpoint, qr.iteration, "re_verification",
-        get_reverification_context()
-    )
+    # Always use fresh_review - no biased "verify fixes" framing
+    return format_state_banner(checkpoint, qr.iteration, "fresh_review")
 
 
 def format_expected_output(
@@ -597,6 +597,12 @@ def format_gate_actions(
     actions = []
     if qr.status and qr.status.lower() == "pass":
         actions.append(pass_message)
+        actions.append("")
+        actions.append(format_forbidden([
+            "Asking the user whether to proceed - the workflow is deterministic",
+            "Offering alternatives to the next step - all steps are mandatory",
+            "Interpreting 'proceed' as optional - EXECUTE immediately",
+        ]))
     else:
         # Pedantic mode reminder
         actions.extend([
@@ -613,7 +619,7 @@ def format_gate_actions(
                 f"QR has failed {qr.iteration} times at this checkpoint.",
                 "",
                 "MANDATORY: Use AskUserQuestion NOW:",
-                "  question: 'QR has found issues across 3 iterations. How to proceed?'",
+                f"  question: 'QR has found issues across {QR_ITERATION_LIMIT} iterations. How to proceed?'",
                 "  header: 'QR Loop'",
                 "  options:",
                 "    - label: 'Continue iterating'",
@@ -625,30 +631,37 @@ def format_gate_actions(
                 "</iteration_limit_reached>",
                 "",
             ])
-        if self_fix:
             actions.extend([
-                "FIX REQUIRED:",
-                f"  You (the orchestrator) must fix the issues directly.",
-                "  This is plan structure work, not implementation code.",
+                "<when_user_says_continue>",
+                "When user selects 'Continue iterating':",
+                "  1. IMMEDIATELY invoke the exact command from <invoke_after> below",
+                "  2. The Python script provides the fix guidance - invoke it first",
+                "  3. Iteration counter is already incremented in the command",
+                "</when_user_says_continue>",
                 "",
             ])
-            actions.append(format_forbidden([
-                "Proceeding without re-running QR",
-                "Interpreting 'minor issues' as skippable",
-            ]))
+        # Gate is pure router - work step provides FIX guidance
+        if self_fix:
+            actions.extend([
+                "NEXT ACTION:",
+                "  Invoke the command in <invoke_after> below.",
+                "  The next step will provide fix guidance for plan structure issues.",
+                "",
+            ])
         else:
             actions.extend([
                 "NEXT ACTION:",
                 "  Invoke the command in <invoke_after> below.",
-                f"  The next step will dispatch {fix_target} in FREE-FORM mode to fix issues.",
+                f"  The next step will dispatch {fix_target} with fix guidance.",
                 "",
             ])
-            actions.append(format_forbidden([
-                "Spawning agents directly from this gate step",
-                "Using Edit/Write tools yourself",
-                "Proceeding without invoking the next step",
-                "Interpreting 'minor issues' as skippable",
-            ]))
+        actions.append(format_forbidden([
+            "Fixing issues directly from this gate step",
+            "Spawning agents directly from this gate step",
+            "Using Edit/Write tools yourself",
+            "Proceeding without invoking the next step",
+            "Interpreting 'minor issues' as skippable",
+        ]))
     return actions
 
 

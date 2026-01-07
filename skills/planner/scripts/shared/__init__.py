@@ -32,7 +32,7 @@ from .resources import (
     QR_ITERATION_LIMIT,
     get_resource,
     get_mode_script_path,
-    get_reverification_context,
+    get_exhaustiveness_prompt,
 )
 
 # Re-export from formatting
@@ -81,7 +81,7 @@ __all__ = [
     # Resources
     "get_resource",
     "get_mode_script_path",
-    "get_reverification_context",
+    "get_exhaustiveness_prompt",
     # Core formatters
     "format_step_header",
     "format_current_action",

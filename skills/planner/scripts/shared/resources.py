@@ -10,9 +10,9 @@ from pathlib import Path
 # Constants
 # =============================================================================
 
-# Empirical observation: QR gains diminish after 2-3 retries.
+# Empirical observation: QR gains diminish after 4-5 retries.
 # Beyond this limit, user confirmation is required to continue.
-QR_ITERATION_LIMIT = 3
+QR_ITERATION_LIMIT = 5
 
 
 # =============================================================================
@@ -55,18 +55,26 @@ def get_mode_script_path(script_name: str) -> str:
     return str(scripts_dir / script_name)
 
 
-def get_reverification_context() -> list[str]:
-    """Return standard context for QR re-verification iterations.
+def get_exhaustiveness_prompt() -> list[str]:
+    """Return exhaustiveness verification prompt for QR steps.
 
-    Used by all mode scripts when qr_iteration > 1 to explain
-    the re-verification state to the sub-agent.
+    Research shows models satisfice (stop after finding "enough" issues)
+    unless explicitly prompted to find more. This prompt counters that
+    tendency by forcing adversarial self-examination.
 
     Returns:
-        List of context lines explaining re-verification state
+        List of prompt lines for exhaustiveness verification
     """
     return [
-        "You previously fixed issues identified by QR.",
-        "This invocation verifies those fixes were applied correctly.",
+        "<exhaustiveness_check>",
+        "STOP. Before reporting your findings, perform adversarial self-examination:",
         "",
-        "CRITICAL: QR MUST return PASS before you can proceed.",
+        "1. What categories of issues have you NOT yet checked?",
+        "2. What assumptions are you making that could hide problems?",
+        "3. Re-read each milestone -- what could go wrong that you missed?",
+        "4. What would a hostile reviewer find that you overlooked?",
+        "",
+        "List any additional issues discovered. Only report PASS if this",
+        "second examination finds nothing new.",
+        "</exhaustiveness_check>",
     ]

@@ -16,7 +16,7 @@ script IS the workflow.
 | Mode      | Intent                             | Command                                                |
 | --------- | ---------------------------------- | ------------------------------------------------------ |
 | planning  | "plan", "design", "architect"      | `python3 scripts/planner.py --step 1 --total-steps 12` |
-| execution | "execute", "implement", "run plan" | `python3 scripts/executor.py --step 1 --total-steps 7` |
+| execution | "execute", "implement", "run plan" | `python3 scripts/executor.py --step 1 --total-steps 9` |
 
 ## When to Use
 
@@ -61,14 +61,16 @@ Skip when task is:
 11. QR-Docs - validate comment hygiene
 12. Gate - PLAN APPROVED
 
-## Execution Workflow (7 steps)
+## Execution Workflow (9 steps)
 
 1. Execution planning - wave analysis
 2. Reconciliation (conditional) - validate existing code
-3. Milestone execution via wave-executor.py
-4. Post-implementation QR - holistic review
-5. QR Gate - route based on result
+3. Implementation - wave-aware parallel dispatch to developers
+4. Code QR - verify code quality (RULE 0/1/2)
+5. Code QR Gate - route to step 3 on fail
 6. Documentation - create CLAUDE.md/README.md
-7. Retrospective - summary presentation
+7. Doc QR - verify documentation quality
+8. Doc QR Gate - route to step 6 on fail
+9. Retrospective - summary presentation
 
 Scripts inject step-specific guidance. Invoke and follow output.

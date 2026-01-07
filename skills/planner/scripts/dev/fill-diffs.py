@@ -42,20 +42,33 @@ def get_step_guidance(
     qr_iteration = kwargs.get("qr_iteration", 1)
     qr_fail = kwargs.get("qr_fail", False)
 
-    # Step 1: Task description
+    # Step 1: Task description (or FIX mode)
     if step == 1:
-        if qr_iteration == 1 and not qr_fail:
-            banner = format_state_banner("DEV-FILL-DIFFS", qr_iteration, "initial_review")
-        else:
-            banner = format_state_banner(
-                "DEV-FILL-DIFFS", qr_iteration, "re_verification",
-                [
-                    "You previously fixed issues identified by QR.",
-                    "This invocation verifies those fixes were applied correctly.",
+        if qr_fail:
+            # FIX MODE - address QR issues only
+            banner = format_state_banner("DEV-FILL-DIFFS", qr_iteration, "fix")
+            return {
+                "title": "Fix QR Issues",
+                "actions": [banner, ""] + [
+                    "FIX MODE: QR-CODE found issues in your diffs.",
                     "",
-                    "CRITICAL: QR MUST return PASS before you can proceed.",
-                ]
-            )
+                    "The orchestrator has included QR findings in your prompt.",
+                    "Address ONLY the identified issues:",
+                    "  - Context line mismatches",
+                    "  - Missing/incorrect file paths",
+                    "  - RULE 0/1/2 violations",
+                    "  - Diff format errors",
+                    "",
+                    "Do NOT redo work that passed.",
+                    "Edit the plan file to fix the specific issues.",
+                    "",
+                    "After fixing, return 'COMPLETE' to orchestrator.",
+                ],
+                "next": None,  # No continuation - single step fix
+            }
+
+        # Normal initial work
+        banner = format_state_banner("DEV-FILL-DIFFS", 1, "work")
         return {
             "title": "Task Description",
             "actions": [banner, ""]

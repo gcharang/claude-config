@@ -28,7 +28,6 @@ from shared import (
     QRState,
     GateConfig,
     get_mode_script_path,
-    get_reverification_context,
     format_step_output,
     format_gate_step,
     format_invoke_after,
@@ -255,7 +254,7 @@ STEPS = {
         "is_dispatch": True,
         "dispatch_agent": "quality-reviewer",
         "mode_script": "qr/plan-completeness.py",
-        "mode_total_steps": 5,
+        "mode_total_steps": 6,
         "context_vars": {"PLAN_FILE": "path to the plan being reviewed"},
         "post_dispatch": [
             "The sub-agent MUST invoke the script and follow its guidance.",
@@ -286,7 +285,7 @@ STEPS = {
         "is_dispatch": True,
         "dispatch_agent": "quality-reviewer",
         "mode_script": "qr/plan-code.py",
-        "mode_total_steps": 6,
+        "mode_total_steps": 7,
         "context_vars": {"PLAN_FILE": "path to the plan being reviewed"},
         "post_dispatch": [
             "The sub-agent MUST invoke the script and follow its guidance.",
@@ -319,7 +318,7 @@ STEPS = {
         "is_dispatch": True,
         "dispatch_agent": "quality-reviewer",
         "mode_script": "qr/plan-docs.py",
-        "mode_total_steps": 4,
+        "mode_total_steps": 5,
         "context_vars": {"PLAN_FILE": "path to the plan being reviewed"},
         "post_dispatch": [
             "The sub-agent MUST invoke the script and follow its guidance.",
@@ -336,7 +335,7 @@ STEPS = {
 GATES = {
     6: GateConfig(
         qr_name="QR-COMPLETENESS",
-        work_step=5,
+        work_step=4,  # Route to plan writing step, not QR step
         pass_step=7,
         pass_message="Proceed to step 7 (Developer Fills Diffs).",
         self_fix=True,
@@ -409,24 +408,35 @@ def get_step_guidance(step: int, total_steps: int,
             plan_format,
         ])
 
+    # Handle planning step 4 in fix mode (main agent fixes plan structure)
+    if step == 4 and qr.failed:
+        banner = format_state_banner("PLAN-FIX", qr.iteration, "fix")
+        fix_actions = [banner, ""] + [
+            "FIX MODE: QR-COMPLETENESS found plan structure issues.",
+            "",
+            "Review the QR findings in your context.",
+            "Fix the identified issues in the plan file directly.",
+            "",
+            "Common issues:",
+            "  - Missing Decision Log entries",
+            "  - Incomplete Code Intent sections",
+            "  - Missing Invisible Knowledge",
+            "  - Incomplete milestone specifications",
+            "",
+            "Use Edit tool to fix the plan file.",
+            "After fixing, proceed to QR-Completeness for fresh verification.",
+        ]
+        # After fix, proceed to step 5 (QR-Completeness) for fresh review
+        return {
+            "title": f"{info['title']} - Fix Mode",
+            "actions": fix_actions,
+            "next": f"python3 planner.py --step 5 --total-steps {total_steps}",
+        }
+
     # Add QR banner for QR steps
     if info.get("is_qr"):
         qr_name = info.get("qr_name", "QR")
         actions.insert(0, format_qr_banner(qr_name, qr))
-        actions.insert(1, "")
-
-    # Add fix mode banner for work steps with --qr-fail
-    if info.get("is_work") and qr.failed:
-        work_agent = info.get("work_agent", "agent")
-        banner = format_state_banner(
-            "FIX_MODE", qr.iteration, "fixing",
-            [
-                f"QR found issues. Spawn {work_agent} with QR findings.",
-                f"The {work_agent} will address the specific issues identified.",
-                "After fixes, proceed to next QR step.",
-            ]
-        )
-        actions.insert(0, banner)
         actions.insert(1, "")
 
     # Generate dispatch block for dispatch steps
@@ -440,22 +450,23 @@ def get_step_guidance(step: int, total_steps: int,
         actions.append(format_orchestrator_constraint())
         actions.append("")
 
-        # Use free-form mode for work steps in fix mode
-        use_free_form = info.get("is_work") and qr.failed
+        # Build invoke command with QR flags when in fix mode
+        invoke_cmd = f"python3 {mode_script} --step 1 --total-steps {mode_total_steps}"
+        if qr.failed:
+            invoke_cmd += f" --qr-fail --qr-iteration {qr.iteration}"
 
         dispatch_block = format_subagent_dispatch(
             agent=dispatch_agent,
             context_vars=context_vars,
-            invoke_cmd=f"python3 {mode_script} --step 1 --total-steps {mode_total_steps}",
-            free_form=use_free_form,
+            invoke_cmd=invoke_cmd,
+            free_form=False,  # Never use free-form mode
         )
         actions.append(dispatch_block)
         actions.append("")
 
         # Add post-dispatch instructions
-        if not use_free_form:
-            post_dispatch = info.get("post_dispatch", [])
-            actions.extend(post_dispatch)
+        post_dispatch = info.get("post_dispatch", [])
+        actions.extend(post_dispatch)
 
         # Add post-QR routing block for QR steps
         post_qr_config = info.get("post_qr_routing")
