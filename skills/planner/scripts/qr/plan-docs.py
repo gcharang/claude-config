@@ -170,31 +170,47 @@ def get_step_guidance(
         }
 
     # Step 5: Output format (final step)
+    # WHY file-based: Token optimization. Main agent only needs PASS/FAIL to route.
+    # Full report goes to file. Executor reads file directly.
+    # Reduces main agent context by ~95% for QR results.
     if step >= total_steps:
-        expected_output = format_expected_output(
-            if_pass="PASS: Documentation follows timeless present convention.",
-            if_issues="""\
-ISSUES:
-  1. [CATEGORY] description (file:line)
-  2. [CATEGORY] description (file:line)
-  ...""",
-            categories=[
-                "TEMPORAL: Change-relative language (most common)",
-                "BASELINE: Hidden baseline reference",
-                "LOCATION: Location directive in comment",
-                "PLANNING: Future intent / TODO",
-                "INTENT: Author decision without technical reason",
-                "WHY-MISSING: Comment explains WHAT but not WHY",
-            ]
-        )
         return {
-            "title": "Format Output",
+            "title": "Write Report and Return Result",
             "actions": [
-                expected_output,
+                "TOKEN OPTIMIZATION: Write full report to file, return minimal output.",
                 "",
-                "Return PASS or ISSUES to the orchestrator.",
+                "WHY: Main agent only needs PASS/FAIL to route. Full report goes to",
+                "file. Executor reads file directly. Saves ~95% tokens in main agent.",
+                "",
+                "STEPS:",
+                "1. Create temp dir: Use Python's tempfile.mkdtemp(prefix='qr-report-')",
+                "2. Write full findings (format below) to: {tmpdir}/qr.md",
+                "3. Return to orchestrator:",
+                "   - If PASS: Return exactly 'RESULT: PASS'",
+                "   - If ISSUES: Return exactly:",
+                "       RESULT: FAIL",
+                "       PATH: {tmpdir}/qr.md",
+                "",
+                "FULL REPORT FORMAT (write to file, NOT to output):",
+                "",
+                "If NO issues found:",
+                "  PASS: Documentation follows timeless present convention.",
+                "",
+                "If issues found:",
+                "  ISSUES:",
+                "    1. [CATEGORY] description (file:line)",
+                "    2. [CATEGORY] description (file:line)",
+                "    ...",
+                "",
+                "CATEGORIES:",
+                "  - TEMPORAL: Change-relative language (most common)",
+                "  - BASELINE: Hidden baseline reference",
+                "  - LOCATION: Location directive in comment",
+                "  - PLANNING: Future intent / TODO",
+                "  - INTENT: Author decision without technical reason",
+                "  - WHY-MISSING: Comment explains WHAT but not WHY",
             ],
-            "next": "Return result to orchestrator. Sub-agent task complete.",
+            "next": "Return minimal result to orchestrator. Sub-agent task complete.",
         }
 
     # Fallback

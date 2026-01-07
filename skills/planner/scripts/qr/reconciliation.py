@@ -128,11 +128,28 @@ def get_step_guidance(step: int, total_steps: int, script_path: str, **kwargs) -
         }
 
     # Step 4: Format Output (final step)
+    # WHY file-based: Token optimization. Main agent only needs PASS/FAIL to route.
+    # Full report goes to file. Executor reads file directly.
+    # Reduces main agent context by ~95% for QR results.
     if step >= total_steps:
         return {
-            "title": "Format Output",
+            "title": "Write Report and Return Result",
             "actions": [
-                "OUTPUT FORMAT:",
+                "TOKEN OPTIMIZATION: Write full report to file, return minimal output.",
+                "",
+                "WHY: Main agent only needs PASS/FAIL to route. Full report goes to",
+                "file. Executor reads file directly. Saves ~95% tokens in main agent.",
+                "",
+                "STEPS:",
+                "1. Create temp dir: Use Python's tempfile.mkdtemp(prefix='qr-report-')",
+                "2. Write full findings (format below) to: {tmpdir}/qr.md",
+                "3. Return to orchestrator:",
+                "   - If SATISFIED: Return exactly 'RESULT: PASS'",
+                "   - If NOT_SATISFIED or PARTIALLY_SATISFIED: Return exactly:",
+                "       RESULT: FAIL",
+                "       PATH: {tmpdir}/qr.md",
+                "",
+                "FULL REPORT FORMAT (write to file, NOT to output):",
                 "",
                 "```",
                 f"## RECONCILIATION: Milestone {milestone}",
@@ -152,11 +169,11 @@ def get_step_guidance(step: int, total_steps: int, script_path: str, **kwargs) -
                 "```",
                 "",
                 "STATUS DEFINITIONS:",
-                "  SATISFIED: ALL criteria MET -> Skip execution",
-                "  NOT_SATISFIED: NO criteria MET -> Execute fully",
-                "  PARTIALLY_SATISFIED: SOME criteria MET -> Execute missing parts",
+                "  SATISFIED: ALL criteria MET -> RESULT: PASS (skip execution)",
+                "  NOT_SATISFIED: NO criteria MET -> RESULT: FAIL (execute fully)",
+                "  PARTIALLY_SATISFIED: SOME criteria MET -> RESULT: FAIL (execute missing)",
             ],
-            "next": "Return result to orchestrator. Sub-agent task complete.",
+            "next": "Return minimal result to orchestrator. Sub-agent task complete.",
         }
 
     # Fallback

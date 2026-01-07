@@ -758,3 +758,23 @@ def format_gate_step(
         gate_result=gate_result,
         next_command=next_command,
     )
+
+
+def format_qr_file_output(passed: bool, report_path: str = None) -> str:
+    """Format minimal QR output for main agent.
+
+    WHY: Token optimization. Main agent only needs PASS/FAIL to route.
+    Full report written to file at report_path. Executor reads file directly.
+    Reduces main agent context by ~95% for QR results.
+
+    Args:
+        passed: True if QR passed, False if issues found
+        report_path: Path to full report file (required if passed=False)
+
+    Returns:
+        Simple text: "RESULT: PASS" or "RESULT: FAIL\\nPATH: /path/to/qr.md"
+    """
+    if passed:
+        return "RESULT: PASS"
+    else:
+        return f"RESULT: FAIL\nPATH: {report_path}"

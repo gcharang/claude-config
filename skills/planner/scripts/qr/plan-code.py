@@ -244,32 +244,47 @@ def get_step_guidance(
         }
 
     # Step 7: Output format (final step)
+    # WHY file-based: Token optimization. Main agent only needs PASS/FAIL to route.
+    # Full report goes to file. Executor reads file directly.
+    # Reduces main agent context by ~95% for QR results.
     if step >= total_steps:
         return {
-            "title": "Format Output",
+            "title": "Write Report and Return Result",
             "actions": [
-                "OUTPUT FORMAT:",
+                "TOKEN OPTIMIZATION: Write full report to file, return minimal output.",
+                "",
+                "WHY: Main agent only needs PASS/FAIL to route. Full report goes to",
+                "file. Executor reads file directly. Saves ~95% tokens in main agent.",
+                "",
+                "STEPS:",
+                "1. Create temp dir: Use Python's tempfile.mkdtemp(prefix='qr-report-')",
+                "2. Write full findings (format below) to: {tmpdir}/qr.md",
+                "3. Return to orchestrator:",
+                "   - If PASS: Return exactly 'RESULT: PASS'",
+                "   - If ISSUES: Return exactly:",
+                "       RESULT: FAIL",
+                "       PATH: {tmpdir}/qr.md",
+                "",
+                "FULL REPORT FORMAT (write to file, NOT to output):",
                 "",
                 "If NO issues found:",
-                "  'PASS: Code changes validated. Context matches codebase.'",
+                "  PASS: Code changes validated. Context matches codebase.",
                 "",
                 "If issues found:",
-                "  'ISSUES:'",
-                "  '  1. [RULE 0 HIGH] Silent error in save() (M2:file.py:45)'",
-                "  '  2. [RULE 1 HIGH] Violates naming convention (M1:api.go:12)'",
-                "  '  3. [RULE 2 SHOULD_FIX] God function (M3:handler.py:80)'",
-                "  '  4. [CONTEXT] Diff context mismatch (M1:service.go)'",
-                "  ...",
+                "  ISSUES:",
+                "    1. [RULE 0 HIGH] Silent error in save() (M2:file.py:45)",
+                "    2. [RULE 1 HIGH] Violates naming convention (M1:api.go:12)",
+                "    3. [RULE 2 SHOULD_FIX] God function (M3:handler.py:80)",
+                "    4. [CONTEXT] Diff context mismatch (M1:service.go)",
+                "    ...",
                 "",
                 "SEVERITY GUIDE:",
                 "  - RULE 0: CRITICAL (data loss), HIGH (service impact)",
                 "  - RULE 1: HIGH (conformance violation)",
                 "  - RULE 2: SHOULD_FIX (maintenance debt), SUGGESTION (opportunity)",
                 "  - CONTEXT: SHOULD_FIX (outdated diff)",
-                "",
-                "Return PASS or ISSUES to the orchestrator.",
             ],
-            "next": "Return result to orchestrator. Sub-agent task complete.",
+            "next": "Return minimal result to orchestrator. Sub-agent task complete.",
         }
 
     # Fallback

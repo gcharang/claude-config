@@ -150,11 +150,28 @@ def get_step_guidance(
         }
 
     # Step 4: Output format (final step)
+    # WHY file-based: Token optimization. Main agent only needs PASS/FAIL to route.
+    # Full report goes to file. Executor reads file directly.
+    # Reduces main agent context by ~95% for QR results.
     if step >= total_steps:
         return {
-            "title": "Format Output",
+            "title": "Write Report and Return Result",
             "actions": [
-                "OUTPUT FORMAT:",
+                "TOKEN OPTIMIZATION: Write full report to file, return minimal output.",
+                "",
+                "WHY: Main agent only needs PASS/FAIL to route. Full report goes to",
+                "file. Executor reads file directly. Saves ~95% tokens in main agent.",
+                "",
+                "STEPS:",
+                "1. Create temp dir: Use Python's tempfile.mkdtemp(prefix='qr-report-')",
+                "2. Write full findings (format below) to: {tmpdir}/qr.md",
+                "3. Return to orchestrator:",
+                "   - If PASS: Return exactly 'RESULT: PASS'",
+                "   - If ISSUES: Return exactly:",
+                "       RESULT: FAIL",
+                "       PATH: {tmpdir}/qr.md",
+                "",
+                "FULL REPORT FORMAT (write to file, NOT to output):",
                 "",
                 "```",
                 "## DOC QR RESULT: PASS | ISSUES",
@@ -179,10 +196,8 @@ def get_step_guidance(
                 "VERDICT GUIDE:",
                 "  PASS: All docs correct format, IK captured, no contamination",
                 "  ISSUES: Any doc format violations or missing IK",
-                "",
-                "Return PASS or ISSUES to the orchestrator.",
             ],
-            "next": "Return result to orchestrator. Sub-agent task complete.",
+            "next": "Return minimal result to orchestrator. Sub-agent task complete.",
         }
 
     # Fallback

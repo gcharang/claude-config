@@ -24,6 +24,7 @@ from .xml import (
     format_open_question_guidance,
     format_gate_actions,
     format_gate_step,
+    format_qr_file_output,
 )
 
 __all__ = [
@@ -33,5 +34,5 @@ __all__ = [
     "format_routing", "format_post_qr_routing", "format_resource", "format_detection_questions",
     "format_verification_checklist", "format_incorrect_behavior", "format_orchestrator_constraint",
     "format_factored_verification_rationale", "format_open_question_guidance",
-    "format_gate_actions", "format_gate_step",
+    "format_gate_actions", "format_gate_step", "format_qr_file_output",
 ]

@@ -274,33 +274,49 @@ def get_step_guidance(
         }
 
     # Step 6: Output format (final step)
+    # WHY file-based: Token optimization. Main agent only needs PASS/FAIL to route.
+    # Full report goes to file. Executor reads file directly.
+    # Reduces main agent context by ~95% for QR results.
     if step >= total_steps:
-        expected_output = format_expected_output(
-            if_pass="PASS: Plan completeness verified. Ready for Developer diffs.",
-            if_issues="""\
-ISSUES:
-  1. [CATEGORY] Description
-  2. [CATEGORY] Description
-  ...""",
-            categories=[
-                "DECISION_LOG: Missing or insufficient Decision Log entry",
-                "POLICY: Policy default lacks user-specified backing",
-                "ASSUMPTION: Unvalidated architectural assumption",
-                "STRUCTURE: Missing required plan element",
-                "CODE_INTENT: Missing Code Intent for implementation milestone",
-                "TEST_SPEC: Missing or empty test specification",
-            ]
-        )
         return {
-            "title": "Format Output",
+            "title": "Write Report and Return Result",
             "actions": [
-                expected_output,
+                "TOKEN OPTIMIZATION: Write full report to file, return minimal output.",
+                "",
+                "WHY: Main agent only needs PASS/FAIL to route. Full report goes to",
+                "file. Executor reads file directly. Saves ~95% tokens in main agent.",
+                "",
+                "STEPS:",
+                "1. Create temp dir: Use Python's tempfile.mkdtemp(prefix='qr-report-')",
+                "2. Write full findings (format below) to: {tmpdir}/qr.md",
+                "3. Return to orchestrator:",
+                "   - If PASS: Return exactly 'RESULT: PASS'",
+                "   - If ISSUES: Return exactly:",
+                "       RESULT: FAIL",
+                "       PATH: {tmpdir}/qr.md",
+                "",
+                "FULL REPORT FORMAT (write to file, NOT to output):",
+                "",
+                "If NO issues found:",
+                "  PASS: Plan completeness verified. Ready for Developer diffs.",
+                "",
+                "If issues found:",
+                "  ISSUES:",
+                "    1. [CATEGORY] Description",
+                "    2. [CATEGORY] Description",
+                "    ...",
+                "",
+                "CATEGORIES:",
+                "  - DECISION_LOG: Missing or insufficient Decision Log entry",
+                "  - POLICY: Policy default lacks user-specified backing",
+                "  - ASSUMPTION: Unvalidated architectural assumption",
+                "  - STRUCTURE: Missing required plan element",
+                "  - CODE_INTENT: Missing Code Intent for implementation milestone",
+                "  - TEST_SPEC: Missing or empty test specification",
                 "",
                 "All issues are SHOULD_FIX severity (planning phase, not production).",
-                "",
-                "Return PASS or ISSUES to the orchestrator.",
             ],
-            "next": "Return result to orchestrator. Sub-agent task complete.",
+            "next": "Return minimal result to orchestrator. Sub-agent task complete.",
         }
 
     # Fallback

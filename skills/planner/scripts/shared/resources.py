@@ -16,6 +16,22 @@ QR_ITERATION_LIMIT = 5
 
 
 # =============================================================================
+# QR Report Token Optimization
+# =============================================================================
+
+
+def create_qr_report_dir() -> Path:
+    """Create temp directory for QR report.
+
+    WHY: Token optimization. QR reports can be 1000+ tokens. Main agent only
+    needs PASS/FAIL to route. Full report goes to file, executor reads directly.
+    This reduces main agent context by ~95% for QR results.
+    """
+    import tempfile
+    return Path(tempfile.mkdtemp(prefix="qr-report-"))
+
+
+# =============================================================================
 # Resource Loading
 # =============================================================================
 

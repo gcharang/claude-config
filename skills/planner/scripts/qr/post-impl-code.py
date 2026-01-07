@@ -196,11 +196,28 @@ def get_step_guidance(
         }
 
     # Step 5: Output format (final step) - XML grouped by milestone
+    # WHY file-based: Token optimization. Main agent only needs PASS/FAIL to route.
+    # Full report goes to file. Executor reads file directly.
+    # Reduces main agent context by ~95% for QR results.
     if step >= total_steps:
         return {
-            "title": "Format Output (XML by Milestone)",
+            "title": "Write Report and Return Result",
             "actions": [
-                "OUTPUT FORMAT (XML grouped by milestone for targeted fixes):",
+                "TOKEN OPTIMIZATION: Write full report to file, return minimal output.",
+                "",
+                "WHY: Main agent only needs PASS/FAIL to route. Full report goes to",
+                "file. Executor reads file directly. Saves ~95% tokens in main agent.",
+                "",
+                "STEPS:",
+                "1. Create temp dir: Use Python's tempfile.mkdtemp(prefix='qr-report-')",
+                "2. Write full findings (format below) to: {tmpdir}/qr.md",
+                "3. Return to orchestrator:",
+                "   - If PASS: Return exactly 'RESULT: PASS'",
+                "   - If ISSUES: Return exactly:",
+                "       RESULT: FAIL",
+                "       PATH: {tmpdir}/qr.md",
+                "",
+                "FULL REPORT FORMAT (write to file, NOT to output):",
                 "",
                 "```xml",
                 '<qr_findings status="PASS | ISSUES">',
@@ -218,26 +235,15 @@ def get_step_guidance(
                 "      <suggested_fix>Concrete action</suggested_fix>",
                 "      <confidence>HIGH | MEDIUM | LOW</confidence>",
                 "    </finding>",
-                "    <!-- more findings for this milestone -->",
                 "  </milestone>",
-                "",
-                '  <milestone number="2" name="Another Milestone">',
-                "    <!-- findings for milestone 2 -->",
-                "  </milestone>",
-                "",
-                "  <!-- Cross-cutting issues: assign to most relevant milestone -->",
                 "",
                 "  <acceptance_criteria>",
                 '    <milestone number="1">',
                 '      <criterion text="Returns 429 after 3 failures">MET | NOT_MET</criterion>',
                 "    </milestone>",
-                '    <milestone number="2">',
-                '      <criterion text="...">MET | NOT_MET</criterion>',
-                "    </milestone>",
                 "  </acceptance_criteria>",
                 "",
                 "  <reasoning>How you arrived at verdict</reasoning>",
-                "  <considered_not_flagged>Patterns examined but not issues</considered_not_flagged>",
                 "</qr_findings>",
                 "```",
                 "",
@@ -250,10 +256,8 @@ def get_step_guidance(
                 "  PASS_WITH_CONCERNS: All criteria met, minor suggestions",
                 "  NEEDS_CHANGES: Issues requiring fixes",
                 "  CRITICAL: Production reliability risks",
-                "",
-                "Return PASS or ISSUES to orchestrator.",
             ],
-            "next": "Return result to orchestrator. Sub-agent task complete.",
+            "next": "Return minimal result to orchestrator. Sub-agent task complete.",
         }
 
     # Fallback
