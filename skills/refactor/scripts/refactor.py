@@ -2,16 +2,17 @@
 """
 Refactor Skill - Dimension-parallel refactoring analysis.
 
-Six-phase workflow:
-  1. Dispatch   - Launch parallel Explore agents (one per dimension)
-  2. Triage     - Review findings, select promising dimensions
-  3. Deep Dive  - Detailed analysis of selected dimensions
-  4. Derive     - Propose improvements for confirmed findings
-  5. Validate   - Test proposals against philosophy
-  6. Synthesize - Prioritize and present recommendations
+Seven-phase workflow:
+  1. Dispatch          - Launch parallel Explore agents (one per dimension)
+  2. Triage            - Review findings, select promising dimensions
+  3. Deep Dive         - Detailed analysis of selected dimensions
+  4. Derive            - Propose improvements for confirmed findings
+  5. Validate          - Test proposals against philosophy
+  6. Pattern Synthesis - Identify cross-cutting patterns and emergent abstractions
+  7. Synthesize        - Tier and present all recommendations
 
 Usage:
-    python3 refactor.py --step 1 --total-steps 6
+    python3 refactor.py --step 1 --total-steps 7
 """
 
 import argparse
@@ -30,7 +31,7 @@ REFACTORING PHILOSOPHY (apply throughout):
 
 # Dimensions for parallel exploration
 # Format: (id, title, focus, impact_weight)
-# impact_weight: 3=structural (architecture, modules), 2=cross-cutting (types, errors), 1=local
+# impact_weight: 3=structural (architecture, modules, abstraction), 2=cross-cutting (types, errors), 1=local
 DIMENSIONS = [
     ("naming", "Naming & Semantics", "Names that mislead, obscure intent, or operate at wrong abstraction level", 1),
     ("extraction", "Extraction & Composition", "Code that resists change due to duplication, mixed responsibilities, or complexity", 1),
@@ -41,6 +42,7 @@ DIMENSIONS = [
     ("modernization", "Modernization", "Outdated patterns, deprecated APIs, missed language features", 1),
     ("architecture", "Architecture", "Wrong boundaries, scaling bottlenecks, structural constraints", 3),
     ("readability", "Readability & LLM Comprehension", "Code that requires external context to understand, especially for LLMs", 1),
+    ("abstraction", "Abstraction & Pattern Unification", "Repeated patterns across files that could be unified into shared abstractions", 3),
 ]
 
 
@@ -92,11 +94,37 @@ def format_invoke_after(command: str) -> str:
 
 def format_parallel_dispatch(explore_script_path: str) -> str:
     """Format the parallel dispatch block for step 1."""
-    lines = [f'<parallel_dispatch agent="Explore" model="sonnet" count="{len(DIMENSIONS)}">']
+    lines = [f'<parallel_dispatch agent="Explore" count="{len(DIMENSIONS)}">']
     lines.append("  <instruction>")
     lines.append(f"    Launch {len(DIMENSIONS)} Explore sub-agents IN PARALLEL (single message, {len(DIMENSIONS)} Task tool calls).")
-    lines.append("    Each agent explores ONE dimension. Use model='sonnet' for efficiency.")
+    lines.append("    Each agent explores ONE dimension.")
     lines.append("  </instruction>")
+    lines.append("")
+    lines.append("  <model_selection>")
+    lines.append("    Choose model for explore agents based on user's request:")
+    lines.append("")
+    lines.append("    HAIKU (default, omit model param):")
+    lines.append("      Standard refactoring analysis, single directory/module")
+    lines.append("")
+    lines.append("    SONNET (model='sonnet'):")
+    lines.append("      - User says: 'thorough', 'careful', 'deep analysis'")
+    lines.append("      - Scope: multiple subsystems, cross-cutting concerns")
+    lines.append("      - Task: architectural refactoring, pattern extraction")
+    lines.append("")
+    lines.append("    OPUS (model='opus'):")
+    lines.append("      - User says: 'try hard', 'difficult', 'complex', 'get this right'")
+    lines.append("      - Scope: entire codebase, framework design")
+    lines.append("      - Task: novel abstractions, significant architectural decisions")
+    lines.append("      - User explicitly requests opus")
+    lines.append("  </model_selection>")
+    lines.append("")
+    lines.append("  <focus_extraction>")
+    lines.append("    If user specified a FOCUS AREA, include it in each agent's prompt.")
+    lines.append("    Examples: 'find shared abstractions', 'focus on error handling patterns'")
+    lines.append("")
+    lines.append("    Prepend to each agent's prompt:")
+    lines.append("      FOCUS: {user's focus area}. Prioritize findings relevant to this goal.")
+    lines.append("  </focus_extraction>")
     lines.append("")
     lines.append("  <template>")
     lines.append("    Explore the codebase for refactoring opportunities in the $DIMENSION dimension.")
@@ -175,15 +203,16 @@ STEPS = {
             "Review ALL dimension findings from Step 1.",
             "",
             "DIMENSION REFERENCE (focus + impact weight):",
-            "  architecture (3): Wrong boundaries, scaling bottlenecks, structural constraints",
-            "  modules (3):      Circular dependencies, wrong cohesion, layer violations",
-            "  types (2):        Missing domain concepts, primitive obsession, leaky abstractions",
-            "  errors (2):       Inconsistent, swallowed, or poorly-located error handling",
-            "  naming (1):       Names that mislead, obscure intent, or wrong abstraction level",
-            "  extraction (1):   Code resisting change: duplication, mixed responsibilities",
-            "  testability (1):  Code difficult to test in isolation",
+            "  architecture (3):  Wrong boundaries, scaling bottlenecks, structural constraints",
+            "  modules (3):       Circular dependencies, wrong cohesion, layer violations",
+            "  abstraction (3):   Repeated patterns across files needing unification",
+            "  types (2):         Missing domain concepts, primitive obsession, leaky abstractions",
+            "  errors (2):        Inconsistent, swallowed, or poorly-located error handling",
+            "  naming (1):        Names that mislead, obscure intent, or wrong abstraction level",
+            "  extraction (1):    Code resisting change: duplication, mixed responsibilities",
+            "  testability (1):   Code difficult to test in isolation",
             "  modernization (1): Outdated patterns, deprecated APIs, missed language features",
-            "  readability (1):  Code requiring external context to understand",
+            "  readability (1):   Code requiring external context to understand",
             "",
             "SELECTION HEURISTIC (pick 3-5 dimensions max):",
             "",
@@ -261,6 +290,7 @@ STEPS = {
             "  MODULES -> Break cycle, introduce facade, relocate",
             "  MODERNIZATION -> Update syntax, use language feature",
             "  ARCHITECTURE -> Introduce layer, define boundary",
+            "  ABSTRACTION -> Unify repeated patterns into shared concept",
             "",
             "OUTPUT: Proposals tied to specific, quoted findings.",
         ],
@@ -298,40 +328,82 @@ STEPS = {
         ],
     },
     6: {
-        "title": "Synthesize",
-        "brief": "Prioritize and present recommendations",
+        "title": "Pattern Synthesis",
+        "brief": "Identify cross-cutting patterns and emergent abstractions",
         "actions": [
-            "From Step 5's VALIDATED proposals:",
+            "Review ALL findings from ALL dimensions together.",
             "",
-            "RANK by impact and effort:",
+            "CROSS-CUTTING ANALYSIS:",
+            "  - What patterns appear across MULTIPLE dimensions?",
+            "  - Which findings share a common ROOT CAUSE?",
+            "  - What domain concept is hiding across these issues?",
             "",
-            "  HIGH IMPACT + LOW EFFORT (do first):",
-            "    - Rename for precision (improves readability)",
-            "    - Extract small helper (reduces duplication)",
-            "    - Modernize syntax (quick win)",
+            "EMERGENT ABSTRACTIONS:",
+            "  For each cross-cutting pattern found:",
             "",
-            "  HIGH IMPACT + HIGH EFFORT (plan carefully):",
-            "    - Introduce domain type",
-            "    - Decompose god function",
-            "    - Restructure module boundaries",
+            "  [EMERGENT] Pattern Name",
+            "  AFFECTED: [list dimensions and specific findings this unifies]",
+            "  ABSTRACTION: [what single concept/type/function would unify these?]",
+            "  SCOPE: [how many files would this simplify?]",
             "",
-            "  LOW IMPACT (defer or skip):",
-            "    - Cosmetic changes",
-            "    - Proposals with weak evidence",
+            "SYNTHESIS QUESTIONS (answer each explicitly):",
+            "  1. 'What ONE abstraction would simplify the most code?'",
+            "  2. 'What transformation/validation/flow repeats across modules?'",
+            "  3. 'Are there parallel hierarchies doing similar things?'",
+            "",
+            "OUTPUT (for Step 7):",
+            "  EMERGENT_PATTERNS: List of cross-cutting patterns with affected findings",
+            "  UNIFIED_PROPOSALS: New proposals that address multiple dimensions at once",
+            "  (These supplement, not replace, the validated proposals from Step 5)",
+        ],
+    },
+    7: {
+        "title": "Synthesize",
+        "brief": "Tier and present all recommendations",
+        "actions": [
+            "Combine Step 5's VALIDATED proposals + Step 6's UNIFIED_PROPOSALS.",
+            "",
+            "CATEGORIZE ALL proposals into tiers (preserve everything):",
+            "",
+            "<tier_critical>",
+            "  Target: 3-5 proposals",
+            "  Criteria: HIGH IMPACT + LOW EFFORT",
+            "  - Clear fix exists, affects multiple areas, low risk",
+            "  - Rename for precision, extract small helper, modernize syntax",
+            "  - Unified abstractions that simplify 3+ files",
+            "</tier_critical>",
+            "",
+            "<tier_recommended>",
+            "  Target: 5-10 proposals",
+            "  Criteria: HIGH IMPACT + MEDIUM/HIGH EFFORT",
+            "  - Significant improvement, requires coordination or planning",
+            "  - Introduce domain type, decompose god function, restructure boundaries",
+            "  - Cross-cutting abstractions that need careful rollout",
+            "</tier_recommended>",
+            "",
+            "<tier_consider>",
+            "  Target: ALL remaining validated proposals",
+            "  Criteria: Valid but lower priority",
+            "  - Cosmetic consistency, minor refinements, localized improvements",
+            "  - Good ideas to revisit when nearby code changes",
+            "</tier_consider>",
+            "",
+            "RULE: Every validated proposal MUST appear in exactly one tier.",
+            "Do NOT discard proposals. Preserve all findings.",
             "",
             "FORMAT each recommendation:",
             "",
-            "  ## [PRIORITY] Title",
-            "  DIMENSION: <which dimension>",
+            "  ## [TIER] Title",
+            "  DIMENSION(S): <which dimension(s)>",
             "  FINDING: <what's wrong, with quoted code>",
             "  INSIGHT: <what concept is hiding here?>",
             "  PROPOSAL: <specific action: rename X, extract Y, introduce Z>",
             "  EVIDENCE: <why this isn't premature -- show 3+ instances>",
             "",
-            "WARN about risks:",
+            "WARN about risks for CRITICAL/RECOMMENDED tiers:",
             "  - Changes affecting public API",
             "  - Refactors needing test updates",
-            "  - Cross-cutting changes",
+            "  - Cross-cutting changes requiring coordination",
         ],
     },
 }
@@ -344,7 +416,7 @@ STEPS = {
 
 def format_output(step: int, total_steps: int) -> str:
     """Format output for display."""
-    info = STEPS.get(step, STEPS[6])
+    info = STEPS.get(step, STEPS[7])
     is_complete = step >= total_steps
     script_path = os.path.abspath(__file__)
     script_dir = os.path.dirname(script_path)
@@ -415,7 +487,7 @@ def format_output(step: int, total_steps: int) -> str:
 def main():
     parser = argparse.ArgumentParser(
         description="Refactor Skill - Dimension-parallel refactoring analysis",
-        epilog="Phases: dispatch -> triage -> deep-dive -> derive -> validate -> synthesize",
+        epilog="Phases: dispatch -> triage -> deep-dive -> derive -> validate -> pattern-synthesis -> synthesize",
     )
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument("--total-steps", type=int, required=True)
@@ -423,8 +495,8 @@ def main():
 
     if args.step < 1:
         sys.exit("ERROR: --step must be >= 1")
-    if args.total_steps < 6:
-        sys.exit("ERROR: --total-steps must be >= 6 (6 phases in workflow)")
+    if args.total_steps < 7:
+        sys.exit("ERROR: --total-steps must be >= 7 (7 phases in workflow)")
     if args.step > args.total_steps:
         sys.exit("ERROR: --step cannot exceed --total-steps")
 

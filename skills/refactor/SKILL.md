@@ -11,12 +11,12 @@ workflow.
 ## Invocation
 
 ```bash
-python3 scripts/refactor.py --step 1 --total-steps 6
+python3 scripts/refactor.py --step 1 --total-steps 7
 ```
 
 | Argument        | Required | Description                 |
 | --------------- | -------- | --------------------------- |
 | `--step`        | Yes      | Current step (starts at 1)  |
-| `--total-steps` | Yes      | Minimum 6; adjust if needed |
+| `--total-steps` | Yes      | Minimum 7; adjust if needed |
 
 Do NOT explore or analyze first. Run the script and follow its output.

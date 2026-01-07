@@ -65,6 +65,66 @@ DIMENSIONS = {
             ("fn(a,b,c,d,e,f)", "fn(Config) where Config groups related params"),
         ],
     },
+    "conditionals": {
+        "title": "Conditional Complexity",
+        "focus": "Complex conditionals that signal missing abstractions, poor domain modeling, or implicit state",
+        "impact_weight": 2,
+        "heuristics": [
+            # Boolean expression complexity
+            "Multi-clause boolean expressions (3+ AND/OR terms needing mental parsing)",
+            "Negated compound conditions (not (a and b) or not (c or d))",
+            "Mixed AND/OR without parentheses clarifying precedence",
+            "Double/triple negatives (if not disabled, if not is_invalid)",
+            # Missing abstractions
+            "Domain predicates hiding in raw conditions (should be user.can_edit())",
+            "Repeated condition patterns across functions (same check, different places)",
+            "Magic value comparisons (status == 3 instead of Status.APPROVED)",
+            "String comparisons for state (if mode == 'active')",
+            # Type-based branching
+            "isinstance/typeof chains (polymorphism candidate)",
+            "Attribute-presence checks (hasattr/in dict as type dispatch)",
+            "Duck typing conditionals that should be protocols/interfaces",
+            # Control flow smells
+            "Deep nesting (3+ levels of if/else)",
+            "Long if/elif chains (often lookup tables or strategy pattern)",
+            "Early-return candidates buried in nested else branches",
+            "Nested ternaries (a if x else b if y else c if z else d)",
+            "Conditional assignment cascades",
+            # State and flags
+            "Boolean flag tangles (multiple flags checked together = implicit state machine)",
+            "Flag parameters that fork entire function behavior",
+            "Stateful conditionals depending on mutation order",
+            "Defensive null chains (x and x.y and x.y.z)",
+            # Business logic issues
+            "Business rules buried in if-statements (should be domain objects)",
+            "Policy decisions scattered across conditionals",
+            "Validation logic duplicated in multiple if-statements",
+            "Feature flag spaghetti throughout codebase",
+            # Anti-patterns
+            "if cond: return True else: return False (just return cond)",
+            "Exception-based control flow (try/except as if/else)",
+            "Short-circuit side effects (cond and do_thing())",
+            "Yoda conditions without clear benefit (if 5 == x)",
+            "Implicit else branches hiding edge cases",
+        ],
+        "detection_questions": [
+            "Can I name what this condition is actually checking in domain terms?",
+            "If I see this condition elsewhere, would I need to change both?",
+            "Is this branching on TYPE when I should use polymorphism?",
+            "Are these boolean flags actually states in a state machine?",
+            "Would a lookup table/dict be clearer than this if/elif chain?",
+            "Is this condition defending against something that should be prevented upstream?",
+            "Can I understand the TRUE branch without reading the FALSE branch?",
+        ],
+        "examples": [
+            ("if user.role == 'admin' or user.role == 'super' or user.perms.get('manage')", "if user.can_manage()"),
+            ("if status == 1: ... elif status == 2: ... elif status == 3: ...", "handlers[status]() or Status enum with methods"),
+            ("if isinstance(x, A): a() elif isinstance(x, B): b()", "x.process() with polymorphic dispatch"),
+            ("if enabled and not disabled and is_active and not is_paused", "if state == State.RUNNING"),
+            ("if x is not None and x.y is not None and x.y.z", "Optional chaining or null object pattern"),
+            ("if condition:\\n    return True\\nelse:\\n    return False", "return condition"),
+        ],
+    },
     "testability": {
         "title": "Testability",
         "focus": "Code that is difficult to test in isolation",
@@ -234,12 +294,38 @@ DIMENSIONS = {
             ("# Set x to 5\\nx = 5", "# Rate limit prevents API throttling\\nmax_requests = 5"),
         ],
     },
+    "abstraction": {
+        "title": "Abstraction & Pattern Unification",
+        "focus": "Repeated patterns across files that could be unified into shared abstractions",
+        "impact_weight": 3,
+        "heuristics": [
+            "Same transformation applied in multiple files (map, filter, validate patterns)",
+            "Parallel class hierarchies doing similar things differently",
+            "Copy-paste inheritance (similar classes with minor variations)",
+            "Scattered business rules (same validation in 3+ places)",
+            "Common error handling patterns duplicated across modules",
+            "Data transformation pipelines with identical structure",
+            "Configuration patterns repeated without abstraction",
+        ],
+        "detection_questions": [
+            "If I changed this logic, how many OTHER files would need the same change?",
+            "Do I see the same shape of code in different modules?",
+            "What domain concept is hiding behind these repeated patterns?",
+            "Could a single abstraction replace multiple similar implementations?",
+        ],
+        "examples": [
+            ("3 services each validate email differently", "EmailValidator value object used everywhere"),
+            ("retry logic copy-pasted in 5 API clients", "RetryPolicy abstraction with configurable backoff"),
+            ("same try/except pattern in 10 files", "error_handler decorator or context manager"),
+        ],
+    },
 }
 
 # Ordered list for iteration (matching original order)
 DIMENSION_ORDER = [
     "naming",
     "extraction",
+    "conditionals",
     "testability",
     "types",
     "errors",
@@ -247,6 +333,7 @@ DIMENSION_ORDER = [
     "modernization",
     "architecture",
     "readability",
+    "abstraction",
 ]
 
 

@@ -89,6 +89,11 @@ For each issue found, output:
     <location>file.py:line-line</location>
     <evidence>quoted code (2-5 lines)</evidence>
     <issue>What's wrong and why it matters</issue>
+    <similar_patterns_elsewhere>
+      If similar pattern exists in other files, list locations:
+      - other_file.py:line (brief note on similarity)
+      Otherwise: "Unique to this location"
+    </similar_patterns_elsewhere>
   </finding>
 
 After all findings, summarize:
@@ -97,6 +102,7 @@ After all findings, summarize:
     <dimension>$DIMENSION</dimension>
     <severity>none|low|medium|high</severity>
     <count>N</count>
+    <cross_file_patterns>N findings appear in multiple locations</cross_file_patterns>
     <recommendation>One sentence: worth deep dive or skip</recommendation>
   </dimension_summary>
 </findings_format>"""
@@ -132,6 +138,11 @@ def format_step_1(dimension_id: str, script_path: str) -> str:
         "  2. Use Grep to find patterns matching heuristics",
         "  3. Use Read to examine suspicious code",
         "  4. Document each finding with location and evidence",
+        "",
+        "CROSS-FILE PATTERN SEARCH:",
+        "  5. After finding an issue, Grep for similar patterns in OTHER files",
+        "  6. For each finding, note similar locations or mark as 'Unique'",
+        "  7. Prioritize findings that appear in 3+ locations (abstraction candidates)",
         "",
         "Do NOT propose solutions yet - just document findings.",
     ]
