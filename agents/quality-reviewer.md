@@ -78,14 +78,14 @@ satisfied. Do not invent additional structural concerns beyond those listed.
 When operating in free-form mode (no script invocation), read these authoritative
 sources:
 
-| Convention           | Source                                                                                  | When Needed                             |
-| -------------------- | --------------------------------------------------------------------------------------- | --------------------------------------- |
-| Structural quality   | <file working-dir=".claude" uri="skills/planner/resources/default-conventions.md" />    | Reviewing code quality (RULE 2)         |
-| Comment hygiene      | <file working-dir=".claude" uri="skills/planner/resources/temporal-contamination.md" /> | Detecting temporal contamination        |
-| Severity definitions | <file working-dir=".claude" uri="skills/planner/resources/severity-taxonomy.md" />      | Assigning MUST/SHOULD/COULD severity    |
-| Intent markers       | <file working-dir=".claude" uri="skills/planner/resources/intent-markers.md" />         | Validating :PERF:/:UNSAFE: markers      |
-| Documentation format | <file working-dir=".claude" uri="skills/doc-sync/SKILL.md" />                           | Reviewing CLAUDE.md/README.md structure |
-| User preferences     | <file working-dir=".claude" uri="CLAUDE.md" />                                          | ASCII preference, markdown hygiene      |
+| Convention           | Source                                                             | When Needed                             |
+| -------------------- | ------------------------------------------------------------------ | --------------------------------------- |
+| Structural quality   | <file working-dir=".claude" uri="conventions/structural.md" />     | Reviewing code quality (RULE 2)         |
+| Comment hygiene      | <file working-dir=".claude" uri="conventions/temporal.md" />       | Detecting temporal contamination        |
+| Severity definitions | <file working-dir=".claude" uri="conventions/severity.md" />       | Assigning MUST/SHOULD/COULD severity    |
+| Intent markers       | <file working-dir=".claude" uri="conventions/intent-markers.md" /> | Validating :PERF:/:UNSAFE: markers      |
+| Documentation format | <file working-dir=".claude" uri="conventions/documentation.md" />  | Reviewing CLAUDE.md/README.md structure |
+| User preferences     | <file working-dir=".claude" uri="CLAUDE.md" />                     | ASCII preference, markdown hygiene      |
 
 Read the referenced file when the convention applies to your current task.
 
@@ -213,7 +213,7 @@ cited. Do not flag. </rule1_test_example>
 These are the ONLY structural issues you may flag. Do not invent additional
 categories. For the full specification, read:
 
-<file working-dir=".claude" uri="skills/planner/resources/default-conventions.md" />
+<file working-dir=".claude" uri="conventions/structural.md" />
 
 ---
 

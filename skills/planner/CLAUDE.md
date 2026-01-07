@@ -6,28 +6,28 @@ Planning skill with authoritative resources referenced by agents and scripts.
 
 ## Index
 
-| File/Directory                        | Contents                                      | Read When                                    |
-| ------------------------------------- | --------------------------------------------- | -------------------------------------------- |
-| `SKILL.md`                            | Planning workflow activation                  | Using the planner skill                      |
-| `scripts/planner.py`                  | 13-step planning orchestration                | Debugging planner behavior                   |
-| `scripts/executor.py`                 | Plan execution orchestration (9 steps)        | Debugging executor behavior                  |
-| `scripts/qr/plan-completeness.py`     | QR-Completeness workflow                      | Debugging QR-Completeness validation         |
-| `scripts/qr/plan-code.py`             | QR-Code workflow                              | Debugging QR-Code validation                 |
-| `scripts/qr/plan-docs.py`             | QR-Docs workflow                              | Debugging QR-Docs validation                 |
-| `scripts/qr/post-impl-code.py`        | QR code quality review                        | Debugging QR code review                     |
-| `scripts/qr/post-impl-doc.py`         | QR documentation quality review               | Debugging QR doc review                      |
-| `scripts/qr/reconciliation.py`        | QR reconciliation workflow                    | Debugging QR reconciliation verification     |
-| `scripts/dev/fill-diffs.py`           | Developer diff creation workflow              | Debugging Developer diff creation            |
-| `scripts/tw/plan-scrub.py`            | TW plan scrub workflow                        | Debugging TW documentation scrub             |
-| `scripts/tw/post-impl.py`             | TW post-implementation workflow               | Debugging TW post-implementation docs        |
-| `scripts/shared/`                     | Shared utilities (domain, formatting, cli)    | Modifying QR verification loop behavior      |
-| `resources/plan-format.md`            | Plan template (injected by script)            | Editing plan structure                       |
-| `resources/temporal-contamination.md` | Detection heuristic for contaminated comments | Updating TW/QR temporal contamination logic  |
-| `resources/diff-format.md`            | Unified diff spec for code changes            | Updating Developer diff consumption logic    |
-| `resources/default-conventions.md`    | Default structural conventions (4-tier)       | Updating QR RULE 2 or planner decision audit |
-| `resources/severity-taxonomy.md`      | MUST/SHOULD/COULD definitions                 | Understanding QR severity                    |
-| `resources/intent-markers.md`         | :PERF:/:UNSAFE: marker spec                   | Understanding intent markers                 |
-| `scripts/qr/README.md`                | QR invisible knowledge                        | Understanding QR iteration bias              |
+| File/Directory                          | Contents                                   | Read When                                    |
+| --------------------------------------- | ------------------------------------------ | -------------------------------------------- |
+| `SKILL.md`                              | Planning workflow activation               | Using the planner skill                      |
+| `scripts/planner.py`                    | 13-step planning orchestration             | Debugging planner behavior                   |
+| `scripts/executor.py`                   | Plan execution orchestration (9 steps)     | Debugging executor behavior                  |
+| `scripts/qr/plan-completeness.py`       | QR-Completeness workflow                   | Debugging QR-Completeness validation         |
+| `scripts/qr/plan-code.py`               | QR-Code workflow                           | Debugging QR-Code validation                 |
+| `scripts/qr/plan-docs.py`               | QR-Docs workflow                           | Debugging QR-Docs validation                 |
+| `scripts/qr/post-impl-code.py`          | QR code quality review                     | Debugging QR code review                     |
+| `scripts/qr/post-impl-doc.py`           | QR documentation quality review            | Debugging QR doc review                      |
+| `scripts/qr/reconciliation.py`          | QR reconciliation workflow                 | Debugging QR reconciliation verification     |
+| `scripts/dev/fill-diffs.py`             | Developer diff creation workflow           | Debugging Developer diff creation            |
+| `scripts/tw/plan-scrub.py`              | TW plan scrub workflow                     | Debugging TW documentation scrub             |
+| `scripts/tw/post-impl.py`               | TW post-implementation workflow            | Debugging TW post-implementation docs        |
+| `scripts/shared/`                       | Shared utilities (domain, formatting, cli) | Modifying QR verification loop behavior      |
+| `resources/plan-format.md`              | Plan template (injected by script)         | Editing plan structure                       |
+| `resources/diff-format.md`              | Unified diff spec for code changes         | Updating Developer diff consumption logic    |
+| `.claude/conventions/temporal.md`       | Timeless present rule (universal)          | Updating TW/QR temporal contamination logic  |
+| `.claude/conventions/structural.md`     | Code quality conventions (universal)       | Updating QR RULE 2 or planner decision audit |
+| `.claude/conventions/severity.md`       | MUST/SHOULD/COULD definitions (universal)  | Understanding QR severity                    |
+| `.claude/conventions/intent-markers.md` | :PERF:/:UNSAFE: marker spec (universal)    | Understanding intent markers                 |
+| `scripts/qr/README.md`                  | QR invisible knowledge                     | Understanding QR iteration bias              |
 
 ## Script Organization
 
@@ -56,35 +56,46 @@ scripts/
     resources.py
 ```
 
-## Resource Sync Requirements
+## Resource Organization
 
-Resources are **authoritative sources**. No manual sync required.
+### Universal Conventions (.claude/conventions/)
 
-### How Resources Are Accessed
+Universal rules used by all agents and skills. Accessed via:
 
-| Access Method    | When Used                        | How It Works                                           |
-| ---------------- | -------------------------------- | ------------------------------------------------------ |
-| Script injection | During planner/executor workflow | Scripts call `get_resource()` at runtime               |
-| Agent reference  | Free-form mode (no script)       | Agent prompts use `<file working-dir=".claude" ... />` |
+- Scripts: `from skills.lib.conventions import get_convention`
+- Agents: `<file working-dir=".claude" uri="conventions/*.md" />`
+
+| Convention        | Purpose                                        |
+| ----------------- | ---------------------------------------------- |
+| documentation.md  | CLAUDE.md/README.md format specification       |
+| structural.md     | Code quality conventions (god object, testing) |
+| temporal.md       | Comment hygiene (timeless present rule)        |
+| severity.md       | MUST/SHOULD/COULD severity definitions         |
+| intent-markers.md | :PERF:/:UNSAFE: marker format                  |
+
+### Planner-Specific Resources (resources/)
+
+Templates specific to planner workflow. Accessed via `get_resource()`.
+
+| Resource       | Purpose                             |
+| -------------- | ----------------------------------- |
+| plan-format.md | Plan structure template             |
+| diff-format.md | Unified diff specification for devs |
+
+### Script Resource Access
+
+| Method           | When Used                                    | Example                          |
+| ---------------- | -------------------------------------------- | -------------------------------- |
+| `get_convention` | Universal conventions used across all skills | `get_convention("temporal.md")`  |
+| `get_resource`   | Planner-specific templates                   | `get_resource("plan-format.md")` |
 
 ### Script-Injected Resources
 
-| Resource                    | Injected By                           |
-| --------------------------- | ------------------------------------- |
-| `plan-format.md`            | `planner.py` at step 4                |
-| `temporal-contamination.md` | `tw/plan-scrub.py`, `qr/plan-docs.py` |
-| `diff-format.md`            | `dev/fill-diffs.py`                   |
-
-### Agent-Referenced Resources
-
-Agent prompts reference resources using `<file working-dir=".claude" uri="..." />`
-tags. This eliminates manual sync -- agents read authoritative files directly.
-
-| Resource                    | Referenced By                                    |
-| --------------------------- | ------------------------------------------------ |
-| `default-conventions.md`    | `agents/quality-reviewer.md` (Convention Refs)   |
-| `temporal-contamination.md` | `agents/quality-reviewer.md`, `technical-writer` |
-| `doc-sync/SKILL.md`         | `agents/technical-writer.md` (Convention Refs)   |
+| Resource         | Injected By                           |
+| ---------------- | ------------------------------------- |
+| `plan-format.md` | `planner.py` at step 4                |
+| `temporal.md`    | `tw/plan-scrub.py`, `qr/plan-docs.py` |
+| `diff-format.md` | `dev/fill-diffs.py`                   |
 
 **When updating**: Edit the resource file. Changes take effect immediately.
 

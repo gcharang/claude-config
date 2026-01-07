@@ -36,6 +36,7 @@ from skills.lib.workflow.formatters import (
     format_verification_checklist,
     format_expected_output,
 )
+from skills.lib.conventions import get_convention
 
 from shared.resources import get_resource
 
@@ -91,7 +92,7 @@ def get_step_guidance(
 
     # Step 2: Resource injection (default conventions)
     if step == 2:
-        defaults_resource = get_resource("default-conventions.md")
+        defaults_resource = get_convention("structural.md")
         resource_block = format_resource(
             "default-conventions",
             "policy-default-verification",

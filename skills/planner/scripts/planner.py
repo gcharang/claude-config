@@ -175,7 +175,7 @@ STEPS = {
     1: {
         "title": "Context Discovery",
         "actions": [
-            "READ resources: default-conventions.md, diff-format.md, temporal-contamination.md",
+            "READ resources: conventions/structural.md, diff-format.md, conventions/temporal.md",
             "",
             "DELEGATE exploration to Explore sub-agent:",
             "  Task tool with subagent_type='Explore'",
@@ -197,7 +197,7 @@ STEPS = {
             "DISCOVER existing testing strategy from:",
             "  - User conversation hints",
             "  - Project CLAUDE.md / README.md",
-            "  - default-conventions.md domain='testing-strategy'",
+            "  - conventions/structural.md domain='testing-strategy'",
             "",
             "PROPOSE test approach for EACH type:",
             "",

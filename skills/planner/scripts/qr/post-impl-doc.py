@@ -30,6 +30,7 @@ if str(planner_scripts_dir) not in sys.path:
 
 from skills.lib.workflow.types import QRState
 from skills.lib.workflow.formatters import format_qr_banner
+from skills.lib.conventions import get_convention
 
 from shared.resources import get_resource
 
@@ -110,7 +111,7 @@ def get_step_guidance(
 
     # Step 3: README.md and comment verification
     if step == 3:
-        temporal_resource = get_resource("temporal-contamination.md")
+        temporal_resource = get_convention("temporal.md")
         return {
             "title": "README.md and Comment Verification",
             "actions": [

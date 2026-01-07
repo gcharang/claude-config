@@ -35,6 +35,7 @@ from skills.lib.workflow.formatters import (
     format_detection_questions,
     format_expected_output,
 )
+from skills.lib.conventions import get_convention
 
 from shared.resources import get_resource
 
@@ -79,7 +80,7 @@ def get_step_guidance(
 
     # Step 2: Resource injection (temporal contamination reference)
     if step == 2:
-        temporal_resource = get_resource("temporal-contamination.md")
+        temporal_resource = get_convention("temporal.md")
         resource_block = format_resource(
             "temporal-contamination",
             "documentation-review",

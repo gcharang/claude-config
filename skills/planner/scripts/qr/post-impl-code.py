@@ -32,6 +32,7 @@ from skills.lib.workflow.formatters import (
     format_qr_banner,
     format_factored_verification_rationale,
 )
+from skills.lib.conventions import get_convention
 
 from shared.resources import get_resource
 
@@ -154,7 +155,7 @@ def get_step_guidance(
 
     # Step 4: Comparison and category application
     if step == 4:
-        defaults_resource = get_resource("default-conventions.md")
+        defaults_resource = get_convention("structural.md")
         return {
             "title": "Compare and Apply Categories (Factored Step 3)",
             "actions": [
@@ -234,7 +235,7 @@ def get_step_guidance(
                 '<qr_findings status="PASS | ISSUES">',
                 "  <summary>",
                 "    <verdict>PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES | MUST_ISSUES</verdict>",
-                "    <standards_applied>[from project docs, or 'default-conventions.md']</standards_applied>",
+                "    <standards_applied>[from project docs, or 'conventions/structural.md']</standards_applied>",
                 "  </summary>",
                 "",
                 "  <!-- Group findings by milestone for targeted fixes -->",

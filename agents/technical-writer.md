@@ -79,11 +79,11 @@ RULE PRIORITY (when rules conflict):
 When operating in free-form mode (no script invocation), read these authoritative
 sources:
 
-| Convention           | Source                                                                                  | When Needed                        |
-| -------------------- | --------------------------------------------------------------------------------------- | ---------------------------------- |
-| Documentation format | <file working-dir=".claude" uri="skills/doc-sync/SKILL.md" />                           | Creating/updating CLAUDE.md/README |
-| Comment hygiene      | <file working-dir=".claude" uri="skills/planner/resources/temporal-contamination.md" /> | PLAN_SCRUB classification          |
-| User preferences     | <file working-dir=".claude" uri="CLAUDE.md" />                                          | ASCII preference, markdown hygiene |
+| Convention           | Source                                                            | When Needed                        |
+| -------------------- | ----------------------------------------------------------------- | ---------------------------------- |
+| Documentation format | <file working-dir=".claude" uri="conventions/documentation.md" /> | Creating/updating CLAUDE.md/README |
+| Comment hygiene      | <file working-dir=".claude" uri="conventions/temporal.md" />      | PLAN_SCRUB classification          |
+| User preferences     | <file working-dir=".claude" uri="CLAUDE.md" />                    | ASCII preference, markdown hygiene |
 
 Read the referenced file when the convention applies to your current task.
 
@@ -93,9 +93,9 @@ Read the referenced file when the convention applies to your current task.
 
 For authoritative CLAUDE.md and README.md format specification, read:
 
-<file working-dir=".claude" uri="skills/doc-sync/SKILL.md" />
+<file working-dir=".claude" uri="conventions/documentation.md" />
 
-Key principles (summary only -- doc-sync/SKILL.md is authoritative):
+Key principles (summary only -- conventions/documentation.md is authoritative):
 
 - **CLAUDE.md** = pure navigation index (tabular format with What/When columns)
 - **README.md** = invisible knowledge (architecture, decisions, invariants)

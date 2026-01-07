@@ -263,27 +263,13 @@ Documentation-only milestones (ALL files are .md, .rst, .txt, or CLAUDE.md):
 
 **Requirements**:
 
-CLAUDE.md (NAVIGATION + OPERATIONAL):
+Delegate to Technical Writer. For documentation format specification:
 
-- Tabular format with WHAT (contents) and WHEN (task triggers) columns
-- Overview section: ONE sentence only
-- NO explanatory prose (architecture, decisions, rationale -> README.md)
-- Operational sections OK: Build, Test, Regenerate, Deploy commands
-- Keep as small as possible while covering all files/subdirectories
+<file working-dir=".claude" uri="conventions/documentation.md" />
 
-README.md (INVISIBLE KNOWLEDGE):
-
-- Create whenever the plan's Invisible Knowledge section is non-empty
-- Place in the SAME DIRECTORY as the code it describes (code-adjacent)
-- Include architecture diagrams, data flow, invariants, tradeoffs
-- Include "Why This Structure" explanations
-- Must be SELF-CONTAINED: do not reference external authoritative sources
-- If knowledge exists elsewhere (doc/, wiki), summarize it here
-
-STUB DIRECTORY EXCEPTION:
-
-- Directories containing only `.gitkeep` or no code files do NOT require
-  CLAUDE.md until code is added
+Key deliverables:
+- CLAUDE.md: Pure navigation index (tabular format)
+- README.md: Invisible knowledge (if IK section non-empty)
 
 **Acceptance Criteria**:
 
@@ -323,3 +309,4 @@ M1 ---> M2
 ```
 
 Independent milestones can execute in parallel during /plan-execution.
+````

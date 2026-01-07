@@ -34,12 +34,12 @@ Skip when task is:
 
 ## Resources
 
-| Resource                              | Contents                   | Read When                                       |
-| ------------------------------------- | -------------------------- | ----------------------------------------------- |
-| `resources/diff-format.md`            | Unified diff specification | Writing code changes in milestones              |
-| `resources/temporal-contamination.md` | Comment hygiene heuristics | Writing comments in code snippets               |
-| `resources/default-conventions.md`    | Structural conventions     | Making decisions without explicit user guidance |
-| `resources/plan-format.md`            | Plan template structure    | Completing planning phase (injected by script)  |
+| Resource                            | Contents                   | Read When                                       |
+| ----------------------------------- | -------------------------- | ----------------------------------------------- |
+| `resources/diff-format.md`          | Unified diff specification | Writing code changes in milestones              |
+| `resources/plan-format.md`          | Plan template structure    | Completing planning phase (injected by script)  |
+| `.claude/conventions/temporal.md`   | Comment hygiene heuristics | Writing comments in code snippets               |
+| `.claude/conventions/structural.md` | Structural conventions     | Making decisions without explicit user guidance |
 
 ## Planning Workflow (12 steps)
 
