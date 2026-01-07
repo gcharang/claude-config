@@ -262,6 +262,52 @@ implementation deviated from the plan, I would know.
 Not every task needs the full planning workflow. These skills handle specific
 concerns.
 
+### Refactor
+
+LLM-generated code accumulates technical debt. The LLM does not see duplication
+across files or notice god functions growing.
+
+The refactor skill explores multiple dimensions in parallel -- naming,
+extraction, types, errors, modules, architecture, abstraction -- validates
+findings against evidence, and outputs prioritized recommendations. It does not
+generate code; it tells you what to fix and why.
+
+Use it when:
+
+- After LLM-generated features work but feel messy
+- Before major changes to identify friction points
+- Code review reveals structural issues
+- Simple changes require touching many files
+
+```
+Use your refactor skill on src/services/
+```
+
+With focus area:
+
+```
+Use your refactor skill on src/ -- focus on refactoring the rendering engine so that it can be reused in multiple components.
+```
+
+### Prompt Engineer
+
+This workflow consists entirely of prompts. Each can be optimized individually.
+
+The skill analyzes prompts, proposes changes with explicit pattern attribution,
+and waits for your approval before applying anything.
+
+Use it when:
+
+- A sub-agent definition is not performing as expected
+- Optimizing a skill's Python script prompts
+- Reviewing a multi-prompt workflow for consistency
+
+```
+Use your prompt engineer skill to optimize the system prompt for agents/developer.md
+```
+
+The skill was optimized using itself.
+
 ### Doc Sync
 
 The CLAUDE.md/README.md hierarchy requires maintenance. The structure changes
@@ -288,22 +334,3 @@ For targeted updates:
 ```
 Use your doc-sync skill to update documentation in src/validators/
 ```
-
-### Prompt Engineer
-
-This workflow consists entirely of prompts. Each can be optimized individually.
-
-The skill analyzes prompts, proposes changes with explicit pattern attribution,
-and waits for your approval before applying anything.
-
-Use it when:
-
-- A sub-agent definition is not performing as expected
-- Optimizing a skill's Python script prompts
-- Reviewing a multi-prompt workflow for consistency
-
-```
-Use your prompt engineer skill to optimize the system prompt for agents/developer.md
-```
-
-The skill was optimized using itself.
