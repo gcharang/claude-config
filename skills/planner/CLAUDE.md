@@ -2,7 +2,7 @@
 
 ## Overview
 
-Planning skill with resources that must stay synced with agent prompts.
+Planning skill with authoritative resources referenced by agents and scripts.
 
 ## Index
 
@@ -58,10 +58,16 @@ scripts/
 
 ## Resource Sync Requirements
 
-Resources are **authoritative sources**. Mode scripts inject resources at
-runtime via `get_resource()` -- no manual sync required for most resources.
+Resources are **authoritative sources**. No manual sync required.
 
-### Script-Injected Resources (No Manual Sync)
+### How Resources Are Accessed
+
+| Access Method    | When Used                        | How It Works                                           |
+| ---------------- | -------------------------------- | ------------------------------------------------------ |
+| Script injection | During planner/executor workflow | Scripts call `get_resource()` at runtime               |
+| Agent reference  | Free-form mode (no script)       | Agent prompts use `<file working-dir=".claude" ... />` |
+
+### Script-Injected Resources
 
 | Resource                    | Injected By                           |
 | --------------------------- | ------------------------------------- |
@@ -69,20 +75,18 @@ runtime via `get_resource()` -- no manual sync required for most resources.
 | `temporal-contamination.md` | `tw/plan-scrub.py`, `qr/plan-docs.py` |
 | `diff-format.md`            | `dev/fill-diffs.py`                   |
 
-**When updating**: Edit the resource file. Changes take effect immediately --
-scripts read resources at runtime.
+### Agent-Referenced Resources
 
-### Agent-Embedded Resources (Manual Sync Required)
+Agent prompts reference resources using `<file working-dir=".claude" uri="..." />`
+tags. This eliminates manual sync -- agents read authoritative files directly.
 
-These resources are embedded in agent prompts because they're used in free-form
-mode (no script invocation):
+| Resource                    | Referenced By                                    |
+| --------------------------- | ------------------------------------------------ |
+| `default-conventions.md`    | `agents/quality-reviewer.md` (Convention Refs)   |
+| `temporal-contamination.md` | `agents/quality-reviewer.md`, `technical-writer` |
+| `doc-sync/SKILL.md`         | `agents/technical-writer.md` (Convention Refs)   |
 
-| Resource                 | Synced To                    | Embedded Section        |
-| ------------------------ | ---------------------------- | ----------------------- |
-| `default-conventions.md` | `agents/quality-reviewer.md` | `<default_conventions>` |
-
-**When updating**: Modify `resources/default-conventions.md` first, then copy
-full content verbatim into `<default_conventions>` section in QR.
+**When updating**: Edit the resource file. Changes take effect immediately.
 
 ## Three Pillars Pattern (QR Verification Loops)
 

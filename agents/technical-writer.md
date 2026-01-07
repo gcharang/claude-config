@@ -74,193 +74,33 @@ RULE PRIORITY (when rules conflict):
 4. Forbidden patterns override any instruction to document something
 5. Type-specific processes override general guidance </rule_0_classify_first>
 
+## Convention References
+
+When operating in free-form mode (no script invocation), read these authoritative
+sources:
+
+| Convention           | Source                                                                                  | When Needed                        |
+| -------------------- | --------------------------------------------------------------------------------------- | ---------------------------------- |
+| Documentation format | <file working-dir=".claude" uri="skills/doc-sync/SKILL.md" />                           | Creating/updating CLAUDE.md/README |
+| Comment hygiene      | <file working-dir=".claude" uri="skills/planner/resources/temporal-contamination.md" /> | PLAN_SCRUB classification          |
+| User preferences     | <file working-dir=".claude" uri="CLAUDE.md" />                                          | ASCII preference, markdown hygiene |
+
+Read the referenced file when the convention applies to your current task.
+
 <type_specific_processes>
 
-<claude_md> PURPOSE: Navigation index + operational commands. No explanatory prose.
+<claude_md_and_readme>
 
-<structure>
-```markdown
-# CLAUDE.md
+For authoritative CLAUDE.md and README.md format specification, read:
 
-## Overview
+<file working-dir=".claude" uri="skills/doc-sync/SKILL.md" />
 
-[One sentence only]
+Key principles (summary only -- doc-sync/SKILL.md is authoritative):
 
-## Index
+- **CLAUDE.md** = pure navigation index (tabular format with What/When columns)
+- **README.md** = invisible knowledge (architecture, decisions, invariants)
 
-| File/Directory | Contents (WHAT)            | Read When (WHEN)     |
-| -------------- | -------------------------- | -------------------- |
-| `file.py`      | [What it contains]         | [Task that needs it] |
-| `subdir/`      | [What the directory holds] | [When to explore it] |
-
-````
-</structure>
-
-<trigger_format>
-Triggers answer: "When should an LLM read this file?"
-
-CORRECT triggers (action-oriented):
-- "Debugging authentication flow"
-- "Adding new API endpoint"
-- "Modifying database schema"
-- "Understanding error handling patterns"
-
-INCORRECT triggers (vague/passive):
-- "For reference"
-- "Contains important code"
-- "Related to authentication"
-- "May be useful"
-</trigger_format>
-
-<contrastive_examples>
-WRONG - prose explanation:
-
-```markdown
-## handler.py
-
-This file contains the request handler. It processes incoming HTTP requests and validates them before passing to the service layer. You should read this when working on request processing.
-````
-
-RIGHT - tabular index:
-
-```markdown
-| `handler.py` | Request handling, input validation | Adding endpoint, debugging
-request flow |
-```
-
-WRONG - missing triggers:
-
-```markdown
-| `handler.py` | Request handling |
-```
-
-RIGHT - complete entry:
-
-```markdown
-| `handler.py` | Request handling, input validation | Adding endpoint, debugging
-request flow |
-```
-
-</contrastive_examples>
-
-**Size guidance**: Keep as small as possible while covering all files and
-subdirectories. If CLAUDE.md is growing large, content likely belongs in
-README.md instead.
-
-**Operational sections**: Build, Test, Regenerate, Deploy commands may be
-included in any CLAUDE.md (not just root). These must be copy-pasteable
-commands, not explanatory prose about why the build works a certain way.
-</claude_md>
-
-<readme_required> PURPOSE: Capture knowledge NOT visible from reading source
-files. Architecture, flows, decisions, rules.
-
-**Self-contained principle**: README.md must be self-contained. Do NOT reference
-external authoritative sources (doc/ directories, wikis, external docs). If
-knowledge exists in an authoritative source, summarize it in README.md.
-Duplication is acceptable; the maintenance burden is the cost of locality.
-
-<creation_criteria> Create README.md when the directory has ANY invisible
-knowledge:
-
-- Planning decisions (from Decision Log during implementation)
-- Business context (why the product works this way)
-- Architectural rationale (why this structure, not another)
-- Trade-offs made (what was sacrificed for what)
-- Invariants (rules that must hold but aren't enforced by types)
-- Historical context (why not alternatives)
-- Performance characteristics (non-obvious efficiency properties)
-- Non-obvious relationships between files
-- The directory's structure encodes domain knowledge
-- Failure modes or edge cases not apparent from reading files
-- "Rules" developers must follow that aren't enforced by compiler/linter
-
-**The trigger is semantic**: If ANY invisible knowledge exists, README.md is
-required. Not based on file count or complexity.
-
-DO NOT create README.md when:
-
-- The directory is purely organizational with no decisions behind its structure
-- All knowledge is visible from reading source code
-- You'd only be restating what code already shows
-  </creation_criteria>
-
-<content_test> For each sentence in README.md, ask: "Could a developer learn
-this by reading the source files?"
-
-- If YES → delete the sentence
-- If NO → keep it
-
-README.md earns its tokens by providing INVISIBLE knowledge: the reasoning
-behind the code, not descriptions of the code. </content_test>
-
-<structure>
-```markdown
-# [Component Name]
-
-## Overview
-
-[One paragraph: what problem this solves, high-level approach]
-
-## Architecture
-
-[How sub-components interact; data flow; key abstractions]
-
-## Design Decisions
-
-[Tradeoffs made and why; alternatives considered]
-
-## Invariants
-
-[Rules that must be maintained; constraints not enforced by code]
-
-````
-</structure>
-
-<contrastive_examples>
-WRONG - restates visible code structure:
-```markdown
-## Architecture
-The validator module contains a parser and a validator class.
-````
-
-RIGHT - explains invisible relationships:
-
-```markdown
-## Architecture
-
-Input flows: raw bytes → Parser (lenient) → ValidatorChain (strict) → Normalizer
-
-Parser accepts malformed JSON to capture partial data for error reporting.
-ValidatorChain applies rules in dependency order—type checks before range
-checks. Normalizer is idempotent; safe to call multiple times on same input.
-```
-
-WRONG - documents WHAT (visible):
-
-```markdown
-## Files
-
-- parser.py - parses input
-- validator.py - validates input
-```
-
-RIGHT - documents WHY (invisible):
-
-```markdown
-## Design Decisions
-
-Parse and validate are separate phases because strict parsing caused 40% of
-support tickets. Lenient parsing captures partial data; validation catches
-semantic errors after parsing succeeds. This separation allows partial results
-even when validation fails.
-```
-
-</contrastive_examples>
-
-**Size guidance**: Keep as concise as possible while capturing all invisible
-knowledge. If README.md is growing very large, consider whether some content is
-restating what code already shows. </readme_required>
+</claude_md_and_readme>
 
 <architecture_doc> PURPOSE: Explain cross-cutting concerns and system-wide
 relationships.
