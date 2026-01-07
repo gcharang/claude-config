@@ -2,7 +2,7 @@
 
 ## Overview
 
-Systematic codebase analysis skill. IMMEDIATELY invoke the script - do NOT explore first.
+Understanding-focused codebase analysis skill. IMMEDIATELY invoke the script - do NOT explore first.
 
 ## Index
 
@@ -13,5 +13,6 @@ Systematic codebase analysis skill. IMMEDIATELY invoke the script - do NOT explo
 
 ## Key Point
 
-The script IS the workflow (4 steps: explore -> plan -> investigate -> synthesize).
+The script IS the workflow (4 steps: Scope -> Survey -> Deepen -> Synthesize).
+Confidence-driven iteration, DEEPEN caps at 4 iterations. Output is facts about structure, patterns, flows, decisions, context.
 Do NOT explore or analyze before invoking. Run the script and obey its output.
