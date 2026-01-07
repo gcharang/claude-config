@@ -5,7 +5,7 @@ QR-Post-Impl-Code - Step-based workflow for quality-reviewer sub-agent.
 Code quality review AFTER all milestones complete:
 - Factored verification: acceptance criteria vs implemented code
 - Cross-cutting concerns and architectural coherence
-- RULE 0/1/2 on implemented code
+- KNOWLEDGE/STRUCTURE/COSMETIC category application
 
 Usage:
     python3 qr/post-impl-code.py --step 1 --total-steps 5 [--qr-iteration 1] [--qr-fail]
@@ -66,7 +66,7 @@ def get_step_guidance(
                 "SCOPE:",
                 "  - Acceptance criteria verification (factored approach)",
                 "  - Cross-cutting concerns across milestones",
-                "  - RULE 0/1/2 on implemented code",
+                "  - Intent markers, knowledge categories, structural categories",
                 "",
                 "NOT IN SCOPE (handled by Doc QR):",
                 "  - Documentation format (CLAUDE.md)",
@@ -141,7 +141,9 @@ def get_step_guidance(
                 "  | ...                     | ...                                 |",
                 "",
                 "ALSO NOTE while reading:",
-                "  - RULE 0 signals: unhandled errors, silent failures, data loss paths",
+                "  - Intent markers: :PERF: and :UNSAFE: (validate format)",
+                "  - Knowledge issues: temporal contamination, baseline references",
+                "  - Structural issues: god objects/functions, duplicate logic",
                 "  - Cross-cutting patterns: shared state, error propagation, naming",
                 "",
                 "FORBIDDEN: Do not look back at acceptance criteria yet.",
@@ -150,11 +152,11 @@ def get_step_guidance(
             "next": f"python3 {script_path} --step 4 --total-steps {total_steps}",
         }
 
-    # Step 4: Comparison and RULE 0/1/2 application
+    # Step 4: Comparison and category application
     if step == 4:
         defaults_resource = get_resource("default-conventions.md")
         return {
-            "title": "Compare and Apply Rules (Factored Step 3)",
+            "title": "Compare and Apply Categories (Factored Step 3)",
             "actions": [
                 "FACTORED VERIFICATION PROTOCOL - Step 3 of 3",
                 "",
@@ -170,25 +172,34 @@ def get_step_guidance(
                 "",
                 "---",
                 "",
-                "RULE APPLICATION (to code observations from Step 3):",
+                "CATEGORY APPLICATION (to code observations from Step 3):",
                 "",
-                "RULE 0 (Production Reliability) - CRITICAL/HIGH:",
-                "  Ask OPEN questions (not yes/no):",
-                "    'What happens when [error condition] occurs?'",
-                "    'What data could be lost if [operation] is interrupted?'",
+                "INTENT MARKERS (MUST severity):",
+                "  Detect :PERF: and :UNSAFE: markers",
+                "  Valid format: ':MARKER: [what]; [why]' (semicolon required, non-empty why)",
+                "  Invalid format -> Report MARKER_INVALID (MUST)",
+                "  Valid marker -> Skip relevant checks for marked code",
                 "",
-                "  For CRITICAL findings, verify via dual-path reasoning:",
-                "    Forward:  'If X happens, then Y, therefore Z (failure)'",
-                "    Backward: 'For Z to occur, Y must happen, which requires X'",
-                "    Both paths must converge for CRITICAL. Otherwise HIGH.",
+                "KNOWLEDGE CATEGORIES (MUST severity):",
+                "  TEMPORAL_CONTAMINATION: Change-relative language in comments",
+                "  BASELINE_REFERENCE: References to removed/replaced code",
+                "  LLM_COMPREHENSION_RISK: Pattern confusing to future LLM",
+                "  Ask: 'Would future reader understand without knowing prior state?'",
                 "",
-                "RULE 1 (Project Conformance) - HIGH:",
-                "  Only flag if project documentation specifies a standard.",
-                "  'Does [code] violate [specific documented standard]?'",
+                "STRUCTURAL CATEGORIES (SHOULD severity):",
+                "  GOD_OBJECT: >15 public methods OR >10 deps OR mixed concerns",
+                "  GOD_FUNCTION: >50 lines OR >3 nesting levels",
+                "  DUPLICATE_LOGIC: Copy-pasted blocks or parallel functions",
+                "  INCONSISTENT_ERROR_HANDLING: Mixed exceptions/codes in same module",
+                "  CONVENTION_VIOLATION: Violates documented project convention",
+                "  Ask: 'What project documentation specifies this standard?'",
                 "",
-                "RULE 2 (Structural Quality) - SHOULD_FIX/SUGGESTION:",
-                "  Apply ONLY these categories (reference below).",
-                "  Do not invent additional categories.",
+                "COSMETIC CATEGORIES (COULD severity):",
+                "  DEAD_CODE: Unused functions, impossible branches",
+                "  FORMATTER_FIXABLE: Style fixable by formatter/linter",
+                "  MINOR_INCONSISTENCY: Non-conformance with no documented rule",
+                "",
+                "Reference for structural thresholds:",
                 "",
                 defaults_resource,
             ],
@@ -222,13 +233,13 @@ def get_step_guidance(
                 "```xml",
                 '<qr_findings status="PASS | ISSUES">',
                 "  <summary>",
-                "    <verdict>PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES | CRITICAL</verdict>",
-                "    <standards_applied>[from project docs, or 'RULE 0 + RULE 2 only']</standards_applied>",
+                "    <verdict>PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES | MUST_ISSUES</verdict>",
+                "    <standards_applied>[from project docs, or 'default-conventions.md']</standards_applied>",
                 "  </summary>",
                 "",
                 "  <!-- Group findings by milestone for targeted fixes -->",
                 '  <milestone number="1" name="Milestone Name">',
-                '    <finding rule="RULE0" severity="CRITICAL">',
+                '    <finding category="MARKER_INVALID" severity="MUST">',
                 "      <location>file:line or function name</location>",
                 "      <issue>What is wrong</issue>",
                 "      <failure_mode>Why this matters</failure_mode>",
@@ -253,9 +264,9 @@ def get_step_guidance(
                 "",
                 "VERDICT GUIDE:",
                 "  PASS: All criteria met, no issues",
-                "  PASS_WITH_CONCERNS: All criteria met, minor suggestions",
-                "  NEEDS_CHANGES: Issues requiring fixes",
-                "  CRITICAL: Production reliability risks",
+                "  PASS_WITH_CONCERNS: All criteria met, only COULD severity",
+                "  NEEDS_CHANGES: SHOULD or MUST severity issues requiring fixes",
+                "  MUST_ISSUES: MUST severity issues (unrecoverable if missed)",
             ],
             "next": "Return minimal result to orchestrator. Sub-agent task complete.",
         }

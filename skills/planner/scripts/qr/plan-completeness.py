@@ -141,7 +141,7 @@ def get_step_guidance(
                 "    BAD:  'Polling | Webhooks unreliable'",
                 "    GOOD: 'Polling | 30% webhook failure -> need fallback anyway'",
                 "",
-                "  If not found: Record as SHOULD_FIX",
+                "  If not found: Record as DECISION_LOG_MISSING",
                 "    'M[N]: [element] uses [choice] but no Decision Log entry'",
                 "",
                 "---",
@@ -158,7 +158,7 @@ def get_step_guidance(
                 "For EACH policy default in plan, ask OPEN question:",
                 "  'What Decision Log entry shows user confirmed this value?'",
                 "",
-                "  If answer is 'none': Record as SHOULD_FIX",
+                "  If answer is 'none': Record as POLICY_UNJUSTIFIED",
                 "    '[Location]: Policy default [value] chosen without user confirmation'",
                 "",
                 "---",
@@ -172,7 +172,7 @@ def get_step_guidance(
                 "  'What is the idiomatic usage pattern of target technology?'",
                 "  'What abstraction from source does target eliminate/preserve?'",
                 "",
-                "  If no user-specified citation: Record as SHOULD_FIX",
+                "  If no user-specified citation: Record as ASSUMPTION_UNVALIDATED",
                 "    'Unvalidated architectural assumption: [description]'",
             ],
             "next": f"python3 {script_path} --step 4 --total-steps {total_steps}",
@@ -183,10 +183,10 @@ def get_step_guidance(
         structure_checklist = format_verification_checklist(
             "plan-structure",
             [
-                {"element": "Milestones", "criterion": "Each has acceptance criteria", "if_missing": "M[N] lacks criteria"},
-                {"element": "Invisible Knowledge", "criterion": "Populated if README.md expected", "if_missing": "Missing Invisible K"},
-                {"element": "Planning Context", "criterion": "Decision Log, Constraints, Risks", "if_missing": "Incomplete Context"},
-                {"element": "Documentation MS", "criterion": "Plan includes doc deliverables", "if_missing": "Add doc milestone"},
+                {"element": "Milestones", "criterion": "Each has acceptance criteria", "if_missing": "CONVENTION_VIOLATION"},
+                {"element": "Invisible Knowledge", "criterion": "Populated if README.md expected", "if_missing": "IK_TRANSFER_FAILURE"},
+                {"element": "Planning Context", "criterion": "Decision Log, Constraints, Risks", "if_missing": "CONVENTION_VIOLATION"},
+                {"element": "Documentation MS", "criterion": "Plan includes doc deliverables", "if_missing": "CONVENTION_VIOLATION"},
             ]
         )
         code_presence_checklist = format_verification_checklist(
@@ -194,8 +194,8 @@ def get_step_guidance(
             [
                 {"element": "Code Intent with file paths", "criterion": "Section present with changes", "if_missing": "PASS"},
                 {"element": "Documentation-only + all .md", "criterion": "Skip reason valid", "if_missing": "PASS"},
-                {"element": "No Code Intent + source files", "criterion": "Must have Code Intent", "if_missing": "SHOULD_FIX: Missing intent"},
-                {"element": "Skip reason + source files", "criterion": "Skip invalid for source", "if_missing": "SHOULD_FIX: Invalid skip"},
+                {"element": "No Code Intent + source files", "criterion": "Must have Code Intent", "if_missing": "CONVENTION_VIOLATION"},
+                {"element": "Skip reason + source files", "criterion": "Skip invalid for source", "if_missing": "CONVENTION_VIOLATION"},
             ]
         )
         test_spec_checklist = format_verification_checklist(
@@ -204,8 +204,8 @@ def get_step_guidance(
                 {"element": "Test file paths + type + scenarios", "criterion": "Fully specified", "if_missing": "PASS"},
                 {"element": "No tests with rationale", "criterion": "Explicit skip OK", "if_missing": "PASS"},
                 {"element": "Documentation-only milestone", "criterion": "No tests needed", "if_missing": "PASS"},
-                {"element": "Empty Tests section", "criterion": "Must specify or skip", "if_missing": "SHOULD_FIX: Empty spec"},
-                {"element": "Implementation MS no Tests", "criterion": "Must have Tests section", "if_missing": "SHOULD_FIX: Missing"},
+                {"element": "Empty Tests section", "criterion": "Must specify or skip", "if_missing": "TESTING_STRATEGY_VIOLATION"},
+                {"element": "Implementation MS no Tests", "criterion": "Must have Tests section", "if_missing": "TESTING_STRATEGY_VIOLATION"},
             ]
         )
         return {
@@ -306,15 +306,17 @@ def get_step_guidance(
                 "    2. [CATEGORY] Description",
                 "    ...",
                 "",
-                "CATEGORIES:",
-                "  - DECISION_LOG: Missing or insufficient Decision Log entry",
-                "  - POLICY: Policy default lacks user-specified backing",
-                "  - ASSUMPTION: Unvalidated architectural assumption",
-                "  - STRUCTURE: Missing required plan element",
-                "  - CODE_INTENT: Missing Code Intent for implementation milestone",
-                "  - TEST_SPEC: Missing or empty test specification",
+                "CATEGORIES (use exact category names):",
+                "  - DECISION_LOG_MISSING: Missing or insufficient Decision Log entry (MUST)",
+                "  - POLICY_UNJUSTIFIED: Policy default lacks user-specified backing (MUST)",
+                "  - ASSUMPTION_UNVALIDATED: Unvalidated architectural assumption (MUST)",
+                "  - IK_TRANSFER_FAILURE: Invisible Knowledge not at BEST location (MUST)",
+                "  - CONVENTION_VIOLATION: Missing required plan element (SHOULD)",
+                "  - TESTING_STRATEGY_VIOLATION: Missing or empty test specification (SHOULD)",
                 "",
-                "All issues are SHOULD_FIX severity (planning phase, not production).",
+                "Intent markers: Check for :PERF: and :UNSAFE: markers.",
+                "  Valid format: ':MARKER: [what]; [why]' (semicolon + non-empty why)",
+                "  Invalid format: Report as MARKER_INVALID (MUST)",
             ],
             "next": "Return minimal result to orchestrator. Sub-agent task complete.",
         }

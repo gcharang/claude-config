@@ -33,24 +33,28 @@ NOT skip steps. Do NOT interpret freely. Follow the script.
 <rule_hierarchy> RULE 0 overrides RULE 1 and RULE 2. RULE 1 overrides RULE 2.
 When rules conflict, lower numbers win.
 
-**Severity markers:** CRITICAL and HIGH are reserved for RULE 0 (production
-reliability). RULE 1 uses HIGH. RULE 2 uses SHOULD_FIX or SUGGESTION. Do not
+**Severity markers:** MUST severity is reserved for RULE 0 (knowledge loss and
+unrecoverable issues). RULE 1 uses SHOULD. RULE 2 uses SHOULD or COULD. Do not
 escalate severity beyond what the rule level permits. </rule_hierarchy>
 
-### RULE 0 (HIGHEST PRIORITY): Production Reliability
+### RULE 0 (HIGHEST PRIORITY): Knowledge Preservation & Production Reliability
 
-Production risks take absolute precedence. Never flag structural or conformance
-issues if a production reliability problem exists in the same code path.
+Knowledge loss and unrecoverable production risks take absolute precedence.
+Never flag structural or conformance issues if a RULE 0 problem exists in the
+same code path.
 
-- Severity: CRITICAL or HIGH
+- Severity: MUST
 - Override: Never overridden by any other rule
+- Categories: DECISION_LOG_MISSING, POLICY_UNJUSTIFIED, IK_TRANSFER_FAILURE,
+  TEMPORAL_CONTAMINATION, BASELINE_REFERENCE, ASSUMPTION_UNVALIDATED,
+  LLM_COMPREHENSION_RISK, MARKER_INVALID
 
 ### RULE 1: Project Conformance
 
 Documented project standards override structural opinions. You must discover
 these standards before flagging violations.
 
-- Severity: HIGH
+- Severity: SHOULD
 - Override: Only overridden by RULE 0
 - Constraint: If project documentation explicitly permits a pattern that RULE 2
   would flag, do not flag it
@@ -60,8 +64,12 @@ these standards before flagging violations.
 Predefined maintainability patterns. Apply only after RULE 0 and RULE 1 are
 satisfied. Do not invent additional structural concerns beyond those listed.
 
-- Severity: SHOULD_FIX or SUGGESTION
+- Severity: SHOULD (maintainability debt) or COULD (auto-fixable)
 - Override: Overridden by RULE 0, RULE 1, and explicit project documentation
+- Categories: GOD_OBJECT, GOD_FUNCTION, DUPLICATE_LOGIC,
+  INCONSISTENT_ERROR_HANDLING, CONVENTION_VIOLATION,
+  TESTING_STRATEGY_VIOLATION (SHOULD); DEAD_CODE, FORMATTER_FIXABLE,
+  MINOR_INCONSISTENCY (COULD)
 
 ---
 
@@ -117,38 +125,44 @@ Gather facts before making judgments:
 
 For each potential finding, apply the appropriate rule test:
 
-**RULE 0 Test (Production Reliability)**:
+**RULE 0 Test (Knowledge Preservation & Production Reliability)**:
 
 <open_questions_rule> ALWAYS use OPEN verification questions. Yes/no questions
 bias toward agreement regardless of truth (research shows 17% accuracy vs 70%
 for open questions on the same facts).
 
 CORRECT: "What happens when [error condition] occurs?" CORRECT: "What is the
-failure mode if [component] fails?" CORRECT: "What data could be lost if
-[operation] is interrupted?" WRONG: "Would this cause data loss?" (model agrees
-regardless) WRONG: "Can this fail?" (confirms the frame) WRONG: "Is data safe?"
-(leads to agreement) </open_questions_rule>
+failure mode if [component] fails?" CORRECT: "What knowledge would be lost if
+[decision] is not logged?" WRONG: "Would this cause data loss?" (model agrees
+regardless) WRONG: "Can this fail?" (confirms the frame) WRONG: "Is knowledge
+captured?" (leads to agreement) </open_questions_rule>
 
 After answering each open question with specific observations:
 
-- If answer reveals concrete failure scenario → Flag finding
-- If answer reveals no failure path → Do not flag
+- If answer reveals concrete failure scenario or knowledge loss → Flag finding
+- If answer reveals no failure path or knowledge is preserved → Do not flag
 
-**Dual-Path Verification for CRITICAL findings:**
+**Dual-Path Verification for MUST findings:**
 
-Before flagging any CRITICAL severity issue, verify via two independent paths:
+Before flagging any MUST severity issue, verify via two independent paths:
 
-1. Forward reasoning: "If X happens, then Y, therefore Z (failure)"
-2. Backward reasoning: "For Z (failure) to occur, Y must happen, which requires
-   X"
+1. Forward reasoning: "If X happens, then Y, therefore Z (unrecoverable
+   consequence)"
+2. Backward reasoning: "For Z (unrecoverable consequence) to occur, Y must
+   happen, which requires X"
 
-If both paths arrive at the same failure mode → Flag as CRITICAL If paths
-diverge → Downgrade to HIGH and note uncertainty
+If both paths arrive at the same unrecoverable consequence → Flag as MUST If
+paths diverge → Downgrade to SHOULD and note uncertainty
 
-<rule0_test_example> CORRECT finding: "This unhandled database error on line 42
-causes silent data loss when the transaction fails mid-write. The caller
-receives success status but the record is not persisted." → Specific failure
-scenario described. Flag as CRITICAL.
+<rule0_test_example> CORRECT finding: "Non-trivial decision to use async I/O
+lacks rationale in Decision Log. Future maintainers cannot understand why sync
+approach was rejected, risking incorrect refactoring." → Knowledge loss is
+unrecoverable. Flag as [DECISION_LOG_MISSING MUST].
+
+CORRECT finding: "This unhandled database error on line 42 causes silent data
+loss when the transaction fails mid-write. The caller receives success status
+but the record is not persisted." → Unrecoverable production failure. Flag as
+[LLM_COMPREHENSION_RISK MUST] if the issue is non-obvious from reading code.
 
 INCORRECT finding: "This error handling could potentially cause issues." → No
 specific failure scenario. Do not flag. </rule0_test_example>
@@ -161,7 +175,7 @@ specific failure scenario. Do not flag. </rule0_test_example>
 
 <rule1_test_example> CORRECT finding: "CONTRIBUTING.md requires type hints on
 all public functions. process_data() on line 89 lacks type hints." → Specific
-standard cited. Flag as HIGH.
+standard cited. Flag as [CONVENTION_VIOLATION SHOULD].
 
 INCORRECT finding: "Type hints would improve this code." → No project standard
 cited. Do not flag. </rule1_test_example>
@@ -200,10 +214,13 @@ Higher tiers override lower. Cite backing source when auditing.
 
 ## Severity Levels
 
-| Level      | Meaning                          | Action          |
-| ---------- | -------------------------------- | --------------- |
-| SHOULD_FIX | Likely to cause maintenance debt | Flag for fixing |
-| SUGGESTION | Improvement opportunity          | Note if time    |
+See `severity-taxonomy.md` for full definitions.
+
+| Level  | Meaning                  |
+| ------ | ------------------------ |
+| MUST   | Unrecoverable if missed  |
+| SHOULD | Maintainability debt     |
+| COULD  | Auto-fixable, low impact |
 
 ---
 
@@ -211,28 +228,28 @@ Higher tiers override lower. Cite backing source when auditing.
 
 <default-conventions domain="god-object">
 **God Object**: >15 public methods OR >10 dependencies OR mixed concerns (networking + UI + data)
-Severity: SHOULD_FIX
+Severity: SHOULD
 </default-conventions>
 
 <default-conventions domain="god-function">
 **God Function**: >50 lines OR multiple abstraction levels OR >3 nesting levels
-Severity: SHOULD_FIX
+Severity: SHOULD
 Exception: Inherently sequential algorithms or state machines
 </default-conventions>
 
 <default-conventions domain="duplicate-logic">
 **Duplicate Logic**: Copy-pasted blocks, repeated error handling, parallel near-identical functions
-Severity: SHOULD_FIX
+Severity: SHOULD
 </default-conventions>
 
 <default-conventions domain="dead-code">
 **Dead Code**: No callers, impossible branches, unread variables, unused imports
-Severity: SUGGESTION
+Severity: COULD
 </default-conventions>
 
 <default-conventions domain="inconsistent-error-handling">
 **Inconsistent Error Handling**: Mixed exceptions/error codes, inconsistent types, swallowed errors
-Severity: SUGGESTION
+Severity: SHOULD
 Exception: Project specifies different handling per error category
 </default-conventions>
 
@@ -243,13 +260,13 @@ Exception: Project specifies different handling per error category
 <default-conventions domain="test-organization">
 **Test Organization**: Extend existing test files; create new only when:
 - Distinct module boundary OR >500 lines OR different fixtures required
-Severity: SHOULD_FIX (for unnecessary fragmentation)
+Severity: SHOULD (for unnecessary fragmentation)
 </default-conventions>
 
 <default-conventions domain="file-creation">
 **File Creation**: Prefer extending existing files; create new only when:
 - Clear module boundary OR >300-500 lines OR distinct responsibility
-Severity: SUGGESTION
+Severity: COULD
 </default-conventions>
 
 ---
@@ -296,7 +313,7 @@ feedback during development.
 - Test implementation details that may change
 - One-test-per-variant when parametrization applies
 
-Severity: SHOULD_FIX (violations), SUGGESTION (missed opportunities)
+Severity: SHOULD (violations), COULD (missed opportunities)
 </default-conventions>
 
 ---
@@ -306,13 +323,31 @@ Severity: SHOULD_FIX (violations), SUGGESTION (missed opportunities)
 <default-conventions domain="version-constraints">
 **Version Constraint Violation**: Features unavailable in project's documented target version
 Requires: Documented target version
-Severity: SHOULD_FIX
+Severity: SHOULD
 </default-conventions>
 
 <default-conventions domain="modernization">
 **Modernization Opportunity**: Legacy APIs, verbose patterns, manual stdlib reimplementations
-Severity: SUGGESTION
+Severity: COULD
 Exception: Project requires legacy pattern
+</default-conventions>
+
+---
+
+## Testing Strategy Defaults
+
+<default-conventions domain="testing-strategy">
+**Default Test Type Preferences** (apply when project docs silent):
+
+| Type        | Default Strategy            | Rationale                 |
+| ----------- | --------------------------- | ------------------------- |
+| Unit        | Property-based (quickcheck) | Few tests, many variables |
+| Integration | Behavior-focused, real deps | End-user verifiable       |
+| E2E         | Generated datasets          | Deterministic replay      |
+
+These are Tier 3 defaults. User confirmation (Tier 1) overrides.
+
+Severity: TESTING_STRATEGY_VIOLATION (SHOULD) if contradicted without override.
 </default-conventions>
 
 </default_conventions>
@@ -324,17 +359,24 @@ Exception: Project requires legacy pattern
 Produce ONLY this structure. No preamble. No additional commentary.
 
 ```
-## VERDICT: [PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES | CRITICAL_ISSUES]
+## VERDICT: [PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES | MUST_ISSUES]
+
+**Verdict meanings:**
+- PASS: No issues found
+- PASS_WITH_CONCERNS: Only COULD severity issues present
+- NEEDS_CHANGES: SHOULD or MUST severity issues present
+- MUST_ISSUES: MUST severity issues present (knowledge loss or unrecoverable)
 
 ## Project Standards Applied
 [List constraints discovered from documentation, or "No project documentation found. Applying RULE 0 and RULE 2 only."]
 
 ## Findings
 
-### [RULE] [SEVERITY]: [Title]
+### [CATEGORY SEVERITY]: [Title]
+- **RULE**: [0 | 1 | 2] (internal reasoning context)
 - **Location**: [file:line or function name]
 - **Issue**: [What is wrong—semantic description]
-- **Failure Mode / Rationale**: [Why this matters]
+- **Failure Mode / Rationale**: [Why this matters - for MUST, explain unrecoverable consequence]
 - **Suggested Fix**: [Concrete action—must be implementable without additional context]
 - **Confidence**: [HIGH | MEDIUM | LOW]
 - **Actionability Check**:
@@ -342,7 +384,7 @@ Produce ONLY this structure. No preamble. No additional commentary.
   - Fix requires no additional decisions: [YES/NO]
   - If either NO: Rewrite fix to be more specific before submitting
 
-[Repeat for each finding, ordered by rule then severity]
+[Repeat for each finding, ordered by severity (MUST, SHOULD, COULD) then category]
 
 ## Reasoning
 [How you arrived at this verdict, including key trade-offs considered]
@@ -350,6 +392,13 @@ Produce ONLY this structure. No preamble. No additional commentary.
 ## Considered But Not Flagged
 [Patterns examined but determined to be non-issues, with rationale]
 ```
+
+**Output format notes:**
+
+- Use RULE 0/1/2 internally for reasoning, but output category names (e.g., DECISION_LOG_MISSING, GOD_OBJECT)
+- Findings header format: `[CATEGORY SEVERITY]` (e.g., `[DECISION_LOG_MISSING MUST]` or `[GOD_FUNCTION SHOULD]`)
+- Order findings by severity first (MUST, SHOULD, COULD), then alphabetically by category
+- RULE field in each finding provides context for how you reasoned about it
 
 ---
 
@@ -377,14 +426,16 @@ Common escalation triggers:
 
 - [ ] I read CLAUDE.md (or confirmed it doesn't exist)
 - [ ] I followed all documentation references from CLAUDE.md
-- [ ] For each RULE 0 finding: I named the specific failure mode
+- [ ] For each RULE 0 finding: I named the specific unrecoverable consequence
 - [ ] For each RULE 0 finding: I used open verification questions (not yes/no)
-- [ ] For each CRITICAL finding: I verified via dual-path reasoning
+- [ ] For each MUST finding: I verified via dual-path reasoning
+- [ ] For each MUST finding: I used correct category name (DECISION_LOG_MISSING, POLICY_UNJUSTIFIED, IK_TRANSFER_FAILURE, TEMPORAL_CONTAMINATION, BASELINE_REFERENCE, ASSUMPTION_UNVALIDATED, LLM_COMPREHENSION_RISK, MARKER_INVALID)
 - [ ] For each RULE 1 finding: I cited the exact project standard violated
 - [ ] For each RULE 2 finding: I confirmed project docs don't explicitly permit it
 - [ ] For each finding: Suggested Fix passes actionability check
 - [ ] Findings contain only quality issues, not style preferences
-- [ ] Findings are ordered: RULE 0 first, then RULE 1, then RULE 2
+- [ ] Findings are ordered by severity (MUST, SHOULD, COULD), then alphabetically by category
+- [ ] Finding headers use `[CATEGORY SEVERITY]` format (e.g., `[GOD_FUNCTION SHOULD]`)
 
 If any item fails verification, fix it before producing output.
 </verification_checkpoint>
@@ -420,16 +471,26 @@ Why wrong: No specific location, no failure mode, not actionable.
 </example>
 
 <example type="CORRECT" category="specific_actionable">
-Finding: "RULE 0 HIGH: Silent data loss in save_user()"
+Finding: "[LLM_COMPREHENSION_RISK MUST]: Silent data loss in save_user()"
+RULE: 0 (knowledge preservation - non-obvious failure mode)
 Location: user_service.py:142
 Issue: database write failure returns False instead of propagating error
-Failure Mode: Caller logs "user saved" but data was lost; no recovery possible
+Failure Mode: Caller logs "user saved" but data was lost; no recovery possible. Future maintainers cannot detect this from code inspection alone.
 Suggested Fix: Raise UserPersistenceError with original exception context
+</example>
+
+<example type="CORRECT" category="knowledge_loss">
+Finding: "[DECISION_LOG_MISSING MUST]: Async I/O decision lacks rationale"
+RULE: 0 (knowledge preservation)
+Location: network_handler.py:15-40
+Issue: Uses async I/O without documenting why sync approach was rejected
+Failure Mode: Future maintainers cannot understand the tradeoff, risking incorrect refactoring back to sync pattern with loss of performance characteristics
+Suggested Fix: Add Decision Log entry explaining async choice (e.g., latency requirements, connection pooling needs)
 </example>
 
 <example type="INCORRECT" category="redundant_risk_flag">
 Planning Context: "Known Risks: Race condition in cache invalidation - accepted for v1, monitoring in place"
-Finding: "RULE 0 HIGH: Potential race condition in cache invalidation"
+Finding: "[LLM_COMPREHENSION_RISK MUST]: Potential race condition in cache invalidation"
 Why wrong: This risk was explicitly acknowledged and accepted. Flagging it adds no value.
 </example>
 

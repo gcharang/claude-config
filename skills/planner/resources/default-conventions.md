@@ -15,10 +15,13 @@ Higher tiers override lower. Cite backing source when auditing.
 
 ## Severity Levels
 
-| Level      | Meaning                          | Action          |
-| ---------- | -------------------------------- | --------------- |
-| SHOULD_FIX | Likely to cause maintenance debt | Flag for fixing |
-| SUGGESTION | Improvement opportunity          | Note if time    |
+See `severity-taxonomy.md` for full definitions.
+
+| Level  | Meaning                  |
+| ------ | ------------------------ |
+| MUST   | Unrecoverable if missed  |
+| SHOULD | Maintainability debt     |
+| COULD  | Auto-fixable, low impact |
 
 ---
 
@@ -26,28 +29,28 @@ Higher tiers override lower. Cite backing source when auditing.
 
 <default-conventions domain="god-object">
 **God Object**: >15 public methods OR >10 dependencies OR mixed concerns (networking + UI + data)
-Severity: SHOULD_FIX
+Severity: SHOULD
 </default-conventions>
 
 <default-conventions domain="god-function">
 **God Function**: >50 lines OR multiple abstraction levels OR >3 nesting levels
-Severity: SHOULD_FIX
+Severity: SHOULD
 Exception: Inherently sequential algorithms or state machines
 </default-conventions>
 
 <default-conventions domain="duplicate-logic">
 **Duplicate Logic**: Copy-pasted blocks, repeated error handling, parallel near-identical functions
-Severity: SHOULD_FIX
+Severity: SHOULD
 </default-conventions>
 
 <default-conventions domain="dead-code">
 **Dead Code**: No callers, impossible branches, unread variables, unused imports
-Severity: SUGGESTION
+Severity: COULD
 </default-conventions>
 
 <default-conventions domain="inconsistent-error-handling">
 **Inconsistent Error Handling**: Mixed exceptions/error codes, inconsistent types, swallowed errors
-Severity: SUGGESTION
+Severity: SHOULD
 Exception: Project specifies different handling per error category
 </default-conventions>
 
@@ -58,13 +61,13 @@ Exception: Project specifies different handling per error category
 <default-conventions domain="test-organization">
 **Test Organization**: Extend existing test files; create new only when:
 - Distinct module boundary OR >500 lines OR different fixtures required
-Severity: SHOULD_FIX (for unnecessary fragmentation)
+Severity: SHOULD (for unnecessary fragmentation)
 </default-conventions>
 
 <default-conventions domain="file-creation">
 **File Creation**: Prefer extending existing files; create new only when:
 - Clear module boundary OR >300-500 lines OR distinct responsibility
-Severity: SUGGESTION
+Severity: COULD
 </default-conventions>
 
 ---
@@ -111,7 +114,7 @@ feedback during development.
 - Test implementation details that may change
 - One-test-per-variant when parametrization applies
 
-Severity: SHOULD_FIX (violations), SUGGESTION (missed opportunities)
+Severity: SHOULD (violations), COULD (missed opportunities)
 </default-conventions>
 
 ---
@@ -121,11 +124,29 @@ Severity: SHOULD_FIX (violations), SUGGESTION (missed opportunities)
 <default-conventions domain="version-constraints">
 **Version Constraint Violation**: Features unavailable in project's documented target version
 Requires: Documented target version
-Severity: SHOULD_FIX
+Severity: SHOULD
 </default-conventions>
 
 <default-conventions domain="modernization">
 **Modernization Opportunity**: Legacy APIs, verbose patterns, manual stdlib reimplementations
-Severity: SUGGESTION
+Severity: COULD
 Exception: Project requires legacy pattern
+</default-conventions>
+
+---
+
+## Testing Strategy Defaults
+
+<default-conventions domain="testing-strategy">
+**Default Test Type Preferences** (apply when project docs silent):
+
+| Type        | Default Strategy            | Rationale                 |
+| ----------- | --------------------------- | ------------------------- |
+| Unit        | Property-based (quickcheck) | Few tests, many variables |
+| Integration | Behavior-focused, real deps | End-user verifiable       |
+| E2E         | Generated datasets          | Deterministic replay      |
+
+These are Tier 3 defaults. User confirmation (Tier 1) overrides.
+
+Severity: TESTING_STRATEGY_VIOLATION (SHOULD) if contradicted without override.
 </default-conventions>

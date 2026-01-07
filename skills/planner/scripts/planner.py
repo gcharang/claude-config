@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """
-Interactive Sequential Planner - Unified 12-step planning workflow.
+Interactive Sequential Planner - Unified 13-step planning workflow.
 
-Steps 1-4:  Planning (context, approaches, assumptions, milestones)
-Steps 5-12: Review (QR gates, developer diffs, TW scrub)
+Steps 1-5:  Planning (context, testing strategy, approaches, assumptions, milestones)
+Steps 6-13: Review (QR gates, developer diffs, TW scrub)
 
 Flow:
   1. Context Discovery
-  2. Approach Generation
-  3. Assumption Surfacing
-  4. Approach Selection & Milestones
-  5. QR-Completeness -> 6. Gate
-  7. Developer Fills Diffs
-  8. QR-Code -> 9. Gate
-  10. TW Documentation Scrub
-  11. QR-Docs -> 12. Gate -> Plan Approved
+  2. Testing Strategy Discovery
+  3. Approach Generation
+  4. Assumption Surfacing
+  5. Approach Selection & Milestones
+  6. QR-Completeness -> 7. Gate
+  8. Developer Fills Diffs
+  9. QR-Code -> 10. Gate
+  11. TW Documentation Scrub
+  12. QR-Docs -> 13. Gate -> Plan Approved
 
 Usage:
-    python3 planner.py --step 1 --total-steps 12
+    python3 planner.py --step 1 --total-steps 13
 """
 
 import argparse
@@ -168,9 +169,9 @@ def get_plan_format() -> str:
     return format_path.read_text()
 
 
-# Unified step definitions (1-12)
+# Unified step definitions (1-13)
 STEPS = {
-    # Planning steps (1-4)
+    # Planning steps (1-5)
     1: {
         "title": "Context Discovery",
         "actions": [
@@ -191,6 +192,34 @@ STEPS = {
         ],
     },
     2: {
+        "title": "Testing Strategy Discovery",
+        "actions": [
+            "DISCOVER existing testing strategy from:",
+            "  - User conversation hints",
+            "  - Project CLAUDE.md / README.md",
+            "  - default-conventions.md domain='testing-strategy'",
+            "",
+            "PROPOSE test approach for EACH type:",
+            "",
+            "For UNIT tests:",
+            "  Use AskUserQuestion:",
+            "    'For unit tests, use property-based (quickcheck) approach?'",
+            "    Options: [Yes - few tests cover many variables] [No - example-based] [Skip - no unit tests]",
+            "",
+            "For INTEGRATION tests:",
+            "  Use AskUserQuestion:",
+            "    'For integration tests, use real dependencies?'",
+            "    Options: [Yes - testcontainers/real deps] [No - mocks] [Skip - no integration tests]",
+            "",
+            "For E2E tests:",
+            "  Use AskUserQuestion:",
+            "    'For e2e tests, use generated datasets?'",
+            "    Options: [Yes - deterministic generated data] [No - fixtures] [Skip - no e2e tests]",
+            "",
+            "Record confirmed strategy in Decision Log with 'user-specified' backing.",
+        ],
+    },
+    3: {
         "title": "Approach Generation",
         "actions": [
             "GENERATE 2-3 approach options:",
@@ -207,7 +236,7 @@ STEPS = {
             "  - If silent, default-conventions domain='testing' applies",
         ],
     },
-    3: {
+    4: {
         "title": "Assumption Surfacing",
         "actions": [
             "FAST PATH: Skip if task involves NONE of:",
@@ -218,14 +247,14 @@ STEPS = {
             "FULL CHECK (if any apply):",
             "  Audit each category with OPEN questions:",
             "    Pattern preservation, Migration strategy, Idiomatic usage,",
-            "    Abstraction boundary, Test strategy, Policy defaults",
+            "    Abstraction boundary, Policy defaults",
             "",
             "  For each assumption needing confirmation:",
             "    Use AskUserQuestion BEFORE proceeding",
             "    Record choice in Decision Log with 'user-specified' backing",
         ],
     },
-    4: {
+    5: {
         "title": "Approach Selection & Milestones",
         "include_verification": True,
         "include_plan_format": True,
@@ -253,11 +282,11 @@ STEPS = {
             "RISKS: | Risk | Mitigation | Anchor (file:line if behavioral claim) |",
             "",
             "Write plan with Code Intent (no diffs yet).",
-            "Developer fills diffs in step 7.",
+            "Developer fills diffs in step 8.",
         ],
     },
-    # Review steps (5-12) - was review steps 1-8
-    5: {
+    # Review steps (6-13)
+    6: {
         "title": "QR-Completeness",
         "is_qr": True,
         "qr_name": "QR-COMPLETENESS",
@@ -273,8 +302,8 @@ STEPS = {
         ],
         "post_qr_routing": {"self_fix": True},
     },
-    # Step 6 is gate - handled by GATES dict
-    7: {
+    # Step 7 is gate - handled by GATES dict
+    8: {
         "title": "Developer Fills Diffs",
         "is_work": True,
         "work_agent": "developer",
@@ -288,7 +317,7 @@ STEPS = {
             "Developer edits plan file IN-PLACE.",
         ],
     },
-    8: {
+    9: {
         "title": "QR-Code",
         "is_qr": True,
         "qr_name": "QR-CODE",
@@ -304,8 +333,8 @@ STEPS = {
         ],
         "post_qr_routing": {"self_fix": False, "fix_target": "developer"},
     },
-    # Step 9 is gate - handled by GATES dict
-    10: {
+    # Step 10 is gate - handled by GATES dict
+    11: {
         "title": "TW Documentation Scrub",
         "is_work": True,
         "work_agent": "technical-writer",
@@ -321,7 +350,7 @@ STEPS = {
             "Expected output: COMPLETE or BLOCKED",
         ],
     },
-    11: {
+    12: {
         "title": "QR-Docs",
         "is_qr": True,
         "qr_name": "QR-DOCS",
@@ -337,30 +366,30 @@ STEPS = {
         ],
         "post_qr_routing": {"self_fix": False, "fix_target": "technical-writer"},
     },
-    # Step 12 is gate - handled by GATES dict
+    # Step 13 is gate - handled by GATES dict
 }
 
 
-# Gate configurations (steps 6, 9, 12)
+# Gate configurations (steps 7, 10, 13)
 GATES = {
-    6: GateConfig(
+    7: GateConfig(
         qr_name="QR-COMPLETENESS",
-        work_step=4,  # Route to plan writing step, not QR step
-        pass_step=7,
-        pass_message="Proceed to step 7 (Developer Fills Diffs).",
+        work_step=5,  # Route to plan writing step, not QR step
+        pass_step=8,
+        pass_message="Proceed to step 8 (Developer Fills Diffs).",
         self_fix=True,
     ),
-    9: GateConfig(
+    10: GateConfig(
         qr_name="QR-CODE",
-        work_step=7,
-        pass_step=10,
-        pass_message="Proceed to step 10 (TW Documentation Scrub).",
+        work_step=8,
+        pass_step=11,
+        pass_message="Proceed to step 11 (TW Documentation Scrub).",
         self_fix=False,
         fix_target="developer",
     ),
-    12: GateConfig(
+    13: GateConfig(
         qr_name="QR-DOCS",
-        work_step=10,
+        work_step=11,
         pass_step=None,
         pass_message="PLAN APPROVED. Ready for /plan-execution.",
         self_fix=False,
@@ -375,7 +404,7 @@ def format_gate(step: int, qr: QRState) -> str:
     return format_gate_step(
         script="planner",
         step=step,
-        total=12,
+        total=13,
         gate=gate,
         qr=qr,
         cmd_template="python3 planner.py",
@@ -390,8 +419,8 @@ def get_step_guidance(step: int, total_steps: int,
     # Construct QRState from parameters
     qr = QRState(iteration=qr_iteration, failed=qr_fail, status=qr_status)
 
-    # Gate steps (6, 9, 12) use shared gate function
-    if step in (6, 9, 12):
+    # Gate steps (7, 10, 13) use shared gate function
+    if step in (7, 10, 13):
         if not qr_status:
             return {"error": f"--qr-status required for gate step {step}"}
         return format_gate(step, qr)
@@ -408,7 +437,7 @@ def get_step_guidance(step: int, total_steps: int,
         actions.append("")
         actions.append(PLANNING_VERIFICATION)
 
-    # Add plan format for step 4
+    # Add plan format for step 5
     if info.get("include_plan_format"):
         plan_format = get_plan_format()
         actions.extend([
@@ -418,8 +447,8 @@ def get_step_guidance(step: int, total_steps: int,
             plan_format,
         ])
 
-    # Handle planning step 4 in fix mode (main agent fixes plan structure)
-    if step == 4 and qr.failed:
+    # Handle planning step 5 in fix mode (main agent fixes plan structure)
+    if step == 5 and qr.failed:
         banner = format_state_banner("PLAN-FIX", qr.iteration, "fix")
         fix_actions = [banner, ""] + [
             "FIX MODE: QR-COMPLETENESS found plan structure issues.",
@@ -436,11 +465,11 @@ def get_step_guidance(step: int, total_steps: int,
             "Use Edit tool to fix the plan file.",
             "After fixing, proceed to QR-Completeness for fresh verification.",
         ]
-        # After fix, proceed to step 5 (QR-Completeness) for fresh review
+        # After fix, proceed to step 6 (QR-Completeness) for fresh review
         return {
             "title": f"{info['title']} - Fix Mode",
             "actions": fix_actions,
-            "next": f"python3 planner.py --step 5 --total-steps {total_steps}",
+            "next": f"python3 planner.py --step 6 --total-steps {total_steps}",
         }
 
     # Add QR banner for QR steps
@@ -490,8 +519,8 @@ def get_step_guidance(step: int, total_steps: int,
     # Determine next step
     next_step = step + 1
 
-    # QR steps (5, 8, 11) use branching (if_pass/if_fail)
-    if step in (5, 8, 11):
+    # QR steps (6, 9, 12) use branching (if_pass/if_fail)
+    if step in (6, 9, 12):
         base_cmd = f"python3 planner.py --step {next_step} --total-steps {total_steps}"
         return {
             "title": info["title"],
@@ -538,8 +567,8 @@ def format_output(step: int, total_steps: int,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Interactive Sequential Planner (12-step unified workflow)",
-        epilog="Steps 1-4: planning | Steps 5-12: review with QR gates",
+        description="Interactive Sequential Planner (13-step unified workflow)",
+        epilog="Steps 1-5: planning | Steps 6-13: review with QR gates",
     )
 
     parser.add_argument("--step", type=int, required=True)
@@ -552,12 +581,12 @@ def main():
         print("Error: step and total-steps must be >= 1", file=sys.stderr)
         sys.exit(1)
 
-    if args.total_steps < 12:
-        print("Error: workflow requires at least 12 steps", file=sys.stderr)
+    if args.total_steps < 13:
+        print("Error: workflow requires at least 13 steps", file=sys.stderr)
         sys.exit(1)
 
     # Gate steps require --qr-status
-    if args.step in (6, 9, 12) and not args.qr_status:
+    if args.step in (7, 10, 13) and not args.qr_status:
         print(f"Error: --qr-status required for gate step {args.step}", file=sys.stderr)
         sys.exit(1)
 

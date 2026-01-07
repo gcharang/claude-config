@@ -94,3 +94,23 @@ def get_exhaustiveness_prompt() -> list[str]:
         "second examination finds nothing new.",
         "</exhaustiveness_check>",
     ]
+
+
+def get_blocking_severities(iteration: int) -> set[str]:
+    """Return severities that block at given iteration.
+
+    Progressive de-escalation: early iterations enforce all severities,
+    later iterations only enforce critical issues.
+
+    Args:
+        iteration: QR loop iteration count (1-indexed)
+
+    Returns:
+        Set of severity strings that should block at this iteration
+    """
+    if iteration <= 3:
+        return {"MUST", "SHOULD", "COULD"}
+    elif iteration == 4:
+        return {"MUST", "SHOULD"}
+    else:  # iteration >= 5
+        return {"MUST"}

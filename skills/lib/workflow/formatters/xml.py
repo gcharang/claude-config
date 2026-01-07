@@ -56,6 +56,7 @@ resources_spec = importlib.util.spec_from_file_location("resources", os.path.joi
 resources_module = importlib.util.module_from_spec(resources_spec)
 resources_spec.loader.exec_module(resources_module)
 QR_ITERATION_LIMIT = resources_module.QR_ITERATION_LIMIT
+get_blocking_severities = resources_module.get_blocking_severities
 
 
 # =============================================================================
@@ -633,16 +634,53 @@ def format_gate_actions(
         # Pedantic mode reminder
         actions.extend([
             "<pedantic_enforcement>",
-            "EVERY issue must be fixed. This is not optional.",
             "QR exists to catch problems BEFORE they reach production.",
+            "See <severity_filter> below for which severities block at this iteration.",
             "</pedantic_enforcement>",
             "",
         ])
+
+        # Progressive de-escalation guidance using get_blocking_severities
+        blocking = get_blocking_severities(qr.iteration)
+        if blocking == {"MUST", "SHOULD", "COULD"}:
+            actions.extend([
+                "<severity_filter>",
+                f"ITERATION {qr.iteration}: All severities block (MUST, SHOULD, COULD)",
+                "Fix ALL issues reported by QR before proceeding.",
+                "</severity_filter>",
+                "",
+            ])
+        elif blocking == {"MUST", "SHOULD"}:
+            actions.extend([
+                "<severity_filter>",
+                f"ITERATION {qr.iteration}: Only MUST and SHOULD severities block",
+                "COULD severity issues (DEAD_CODE, FORMATTER_FIXABLE, MINOR_INCONSISTENCY) may be deferred.",
+                "Focus on MUST and SHOULD issues. COULD issues are noted but do not block.",
+                "</severity_filter>",
+                "",
+            ])
+        else:  # blocking == {"MUST"}
+            actions.extend([
+                "<severity_filter>",
+                f"ITERATION {qr.iteration}: Only MUST severity blocks",
+                "SHOULD and COULD severity issues may be deferred.",
+                "Focus ONLY on MUST issues (knowledge loss, unrecoverable if missed).",
+                "SHOULD issues (structural debt) are noted but do not block.",
+                "COULD issues (cosmetic) are noted but do not block.",
+                "",
+                "If NO MUST issues remain, this gate PASSES despite SHOULD/COULD issues.",
+                "</severity_filter>",
+                "",
+            ])
+
         next_iteration = qr.iteration + 1
         if next_iteration > QR_ITERATION_LIMIT:
             actions.extend([
                 "<iteration_limit_reached>",
                 f"QR has failed {qr.iteration} times at this checkpoint.",
+                "",
+                "NOTE: At iteration 5+, only MUST severity issues should block.",
+                "If QR is reporting SHOULD/COULD issues only, consider proceeding.",
                 "",
                 "MANDATORY: Use AskUserQuestion NOW:",
                 f"  question: 'QR has found issues across {QR_ITERATION_LIMIT} iterations. How to proceed?'",
@@ -650,10 +688,27 @@ def format_gate_actions(
                 "  options:",
                 "    - label: 'Continue iterating'",
                 "      description: 'Keep fixing until QR passes'",
+                "    - label: 'Fix MUST issues only'",
+                "      description: 'Accept SHOULD/COULD issues, fix MUST issues'",
                 "    - label: 'Skip this check'",
                 "      description: 'Accept current state, note remaining issues'",
                 "    - label: 'Abort'",
                 "      description: 'Stop and review'",
+                "",
+                "<human_override_recording>",
+                "If user selects 'Skip this check' or 'Fix MUST issues only':",
+                "",
+                "1. Record accepted risks to plan's Decision Log:",
+                "   Add to ## Decision Log section (create if missing):",
+                "   | Issue | Rationale | Iteration |",
+                "   | ----- | --------- | --------- |",
+                "   | [Each MUST issue text] | [User's selected option] | {qr.iteration} |",
+                "",
+                "2. Instruct TW to add :TODO: comments at code locations:",
+                "   For each accepted MUST issue with a file/line reference:",
+                "   Delegate to @agent-technical-writer in free-form mode:",
+                "   'Add :TODO: comments at [file:line] marking accepted risk: [issue text]'",
+                "</human_override_recording>",
                 "</iteration_limit_reached>",
                 "",
             ])
