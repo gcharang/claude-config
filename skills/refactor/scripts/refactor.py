@@ -18,6 +18,26 @@ Usage:
 import argparse
 import os
 import sys
+from pathlib import Path
+
+# Add parent of skills/ to path for skills.lib.workflow imports
+claude_dir = Path(__file__).resolve().parent.parent.parent.parent
+if str(claude_dir) not in sys.path:
+    sys.path.insert(0, str(claude_dir))
+
+from skills.lib.workflow.formatters import (
+    format_step_header,
+    format_xml_mandate,
+    format_current_action,
+)
+
+
+def format_invoke_after(command: str) -> str:
+    """Render invoke after block for refactor workflow.
+
+    Simplified version that takes a string command directly.
+    """
+    return f"<invoke_after>\n{command}\n</invoke_after>"
 
 
 PHILOSOPHY = """
@@ -47,25 +67,8 @@ DIMENSIONS = [
 
 
 # =============================================================================
-# XML Formatters (self-contained)
+# XML Formatters (refactor-specific)
 # =============================================================================
-
-
-def format_step_header(step: int, total: int, title: str) -> str:
-    """Render step header."""
-    return f'<step_header script="refactor" step="{step}" total="{total}">{title}</step_header>'
-
-
-def format_xml_mandate() -> str:
-    """Return first-step guidance about XML format."""
-    return """<xml_format_mandate>
-CRITICAL: All script outputs use XML format. You MUST:
-
-1. Execute the action in <current_action>
-2. When complete, invoke the exact command in <invoke_after>
-
-DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
-</xml_format_mandate>"""
 
 
 def format_philosophy() -> str:
@@ -77,19 +80,6 @@ def format_philosophy() -> str:
     lines.append('  <principle name="SIMPLICITY">The minimum needed for the current task</principle>')
     lines.append("</philosophy>")
     return "\n".join(lines)
-
-
-def format_current_action(actions: list[str]) -> str:
-    """Render current action block."""
-    lines = ["<current_action>"]
-    lines.extend(actions)
-    lines.append("</current_action>")
-    return "\n".join(lines)
-
-
-def format_invoke_after(command: str) -> str:
-    """Render invoke after block."""
-    return f"<invoke_after>\n{command}\n</invoke_after>"
 
 
 def format_parallel_dispatch(explore_script_path: str) -> str:
@@ -426,7 +416,7 @@ def format_output(step: int, total_steps: int) -> str:
     parts = []
 
     # Step header
-    parts.append(format_step_header(step, total_steps, info["title"]))
+    parts.append(format_step_header("refactor", step, total_steps, info["title"]))
     parts.append("")
 
     # XML mandate for step 1

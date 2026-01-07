@@ -18,6 +18,14 @@ Usage:
 
 import argparse
 import sys
+from pathlib import Path
+
+# Add skills/ to path for lib.workflow imports
+skills_dir = Path(__file__).parent.parent.parent
+if str(skills_dir) not in sys.path:
+    sys.path.insert(0, str(skills_dir))
+
+from lib.workflow.formatters.text import format_text_output
 
 
 STEPS = {
@@ -166,42 +174,6 @@ STEPS = {
 }
 
 
-def format_output(step: int, total_steps: int, decision: str = None) -> str:
-    """Format output for display."""
-    info = STEPS.get(step, STEPS[7])
-    is_complete = step >= total_steps
-
-    lines = []
-
-    if step == 1 and decision:
-        lines.extend([
-            "DECISION UNDER REVIEW:",
-            decision,
-            "",
-        ])
-
-    lines.extend([
-        f"DECISION CRITIC - Step {step}/{total_steps}: {info['title']}",
-        f"Phase: {info['phase']}",
-        "",
-        "DO:",
-    ])
-
-    for action in info["actions"]:
-        if action:
-            lines.append(f"  {action}")
-        else:
-            lines.append("")
-
-    lines.append("")
-
-    if is_complete:
-        lines.append("COMPLETE - Present verdict to user.")
-    else:
-        next_info = STEPS.get(step + 1, STEPS[7])
-        lines.append(f"NEXT: Step {step + 1} - {next_info['title']}")
-
-    return "\n".join(lines)
 
 
 def main():
@@ -222,7 +194,22 @@ def main():
     if args.step == 1 and not args.decision:
         sys.exit("Error: --decision required for step 1")
 
-    print(format_output(args.step, args.total_steps, args.decision))
+    info = STEPS.get(args.step, STEPS[7])
+    next_info = STEPS.get(args.step + 1, STEPS[7]) if args.step < args.total_steps else None
+
+    # Add decision context to actions for step 1
+    actions = info["actions"]
+    if args.step == 1 and args.decision:
+        actions = [f"DECISION UNDER REVIEW: {args.decision}", ""] + actions
+
+    print(format_text_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DECISION CRITIC - {info['title']}",
+        actions=actions,
+        brief=f"Phase: {info['phase']}",
+        next_title=next_info["title"] if next_info else None,
+    ))
 
 
 if __name__ == "__main__":

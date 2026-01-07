@@ -13,44 +13,38 @@ Usage:
 import argparse
 import os
 import sys
+from pathlib import Path
+
+# Add parent of skills/ to path for skills.lib.workflow imports
+claude_dir = Path(__file__).resolve().parent.parent.parent.parent
+if str(claude_dir) not in sys.path:
+    sys.path.insert(0, str(claude_dir))
+
+from skills.lib.workflow.formatters import (
+    format_xml_mandate,
+    format_current_action,
+)
+
+
+def format_invoke_after(command: str) -> str:
+    """Render invoke after block for explore workflow.
+
+    Simplified version that takes a string command directly.
+    """
+    return f"<invoke_after>\n{command}\n</invoke_after>"
 
 # Import shared dimension definitions
 from dimensions import DIMENSIONS, DIMENSION_ORDER
 
 
 # =============================================================================
-# XML Formatters (self-contained)
+# XML Formatters (explore-specific)
 # =============================================================================
 
 
 def format_step_header(step: int, total: int, title: str, dimension: str) -> str:
     """Render step header with dimension context."""
     return f'<step_header script="explore" step="{step}" total="{total}" dimension="{dimension}">{title}</step_header>'
-
-
-def format_xml_mandate() -> str:
-    """Return first-step guidance about XML format."""
-    return """<xml_format_mandate>
-CRITICAL: All script outputs use XML format. You MUST:
-
-1. Execute the action in <current_action>
-2. When complete, invoke the exact command in <invoke_after>
-
-DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
-</xml_format_mandate>"""
-
-
-def format_current_action(actions: list[str]) -> str:
-    """Render current action block."""
-    lines = ["<current_action>"]
-    lines.extend(actions)
-    lines.append("</current_action>")
-    return "\n".join(lines)
-
-
-def format_invoke_after(command: str) -> str:
-    """Render invoke after block."""
-    return f"<invoke_after>\n{command}\n</invoke_after>"
 
 
 def format_heuristics(heuristics: list[str]) -> str:

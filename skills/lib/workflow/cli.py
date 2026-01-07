@@ -1,4 +1,4 @@
-"""CLI utilities for planner scripts.
+"""CLI utilities for workflow scripts.
 
 Handles argument parsing and mode script entry points.
 """
@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from .formatting import format_step_output
+from .formatters import format_step_output
 
 
 def add_qr_args(parser: argparse.ArgumentParser) -> None:
@@ -58,12 +58,25 @@ def mode_main(
            if k not in ('step', 'total_steps')}
     )
 
+    # Handle both dict and dataclass (GuidanceResult) returns
+    # Scripts use different patterns - some return dicts, others return GuidanceResult
+    if hasattr(guidance, '__dataclass_fields__'):
+        # GuidanceResult dataclass - convert to dict
+        guidance_dict = {
+            "title": guidance.title,
+            "actions": guidance.actions,
+            "next": guidance.next,
+        }
+    else:
+        # Already a dict
+        guidance_dict = guidance
+
     print(format_step_output(
         script=script_name,
         step=parsed.step,
         total=parsed.total_steps,
-        title=guidance["title"],
-        actions=guidance["actions"],
-        next_command=guidance["next"],
+        title=guidance_dict["title"],
+        actions=guidance_dict["actions"],
+        next_command=guidance_dict["next"],
         is_step_one=(parsed.step == 1),
     ))

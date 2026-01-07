@@ -24,10 +24,18 @@ import argparse
 import sys
 from pathlib import Path
 
-from shared import (
-    QRState,
-    GateConfig,
-    get_mode_script_path,
+# Add parent of skills/ to path for skills.lib.workflow imports
+claude_dir = Path(__file__).resolve().parent.parent.parent.parent
+if str(claude_dir) not in sys.path:
+    sys.path.insert(0, str(claude_dir))
+
+# Add planner/scripts to path for shared.resources access
+planner_scripts_dir = Path(__file__).resolve().parent
+if str(planner_scripts_dir) not in sys.path:
+    sys.path.insert(0, str(planner_scripts_dir))
+
+from skills.lib.workflow.types import QRState, GateConfig
+from skills.lib.workflow.formatters import (
     format_step_output,
     format_gate_step,
     format_invoke_after,
@@ -38,8 +46,10 @@ from shared import (
     format_post_qr_routing,
     format_orchestrator_constraint,
     format_qr_banner,
-    add_qr_args,
 )
+from skills.lib.workflow.cli import add_qr_args
+
+from shared.resources import get_mode_script_path
 
 
 PLANNING_VERIFICATION = """\

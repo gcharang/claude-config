@@ -17,9 +17,18 @@ The script provides step-by-step guidance; the agent follows exactly.
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from shared import (
+# Add parent of skills/ to path for skills.lib.workflow imports
+claude_dir = Path(__file__).resolve().parent.parent.parent.parent.parent
+if str(claude_dir) not in sys.path:
+    sys.path.insert(0, str(claude_dir))
+
+# Add planner/scripts to path for shared.resources access
+planner_scripts_dir = Path(__file__).resolve().parent.parent
+if str(planner_scripts_dir) not in sys.path:
+    sys.path.insert(0, str(planner_scripts_dir))
+
+from skills.lib.workflow.formatters import (
     format_step_output,
     format_expected_output,
 )
@@ -252,5 +261,5 @@ def get_step_guidance(
 
 
 if __name__ == "__main__":
-    from shared import mode_main
+    from skills.lib.workflow.cli import mode_main
     mode_main(__file__, get_step_guidance, "TW-Post-Impl: Post-implementation documentation workflow")

@@ -20,6 +20,14 @@ Usage:
 
 import argparse
 import sys
+from pathlib import Path
+
+# Add skills/ to path for lib.workflow imports
+skills_dir = Path(__file__).parent.parent.parent
+if str(skills_dir) not in sys.path:
+    sys.path.insert(0, str(skills_dir))
+
+from lib.workflow.formatters.text import format_text_output
 
 
 STEPS = {
@@ -119,48 +127,6 @@ STEPS = {
 }
 
 
-def format_output(step: int, total_steps: int) -> str:
-    """Format compact output for display."""
-    # Extra steps go to Verify (where accuracy improves most)
-    if step > 4 and step < total_steps:
-        info = STEPS[3]  # Extra verification rounds
-    elif step >= total_steps:
-        info = STEPS[4]  # Final synthesis
-    else:
-        info = STEPS.get(step, STEPS[4])
-
-    is_complete = step >= total_steps
-
-    lines = [
-        f"PROBLEM ANALYSIS - Step {step}/{total_steps}: {info['title']}",
-        f"  {info['brief']}",
-        "",
-        "DO:",
-    ]
-
-    for action in info["actions"]:
-        if action:
-            lines.append(f"  {action}")
-        else:
-            lines.append("")
-
-    lines.append("")
-
-    if is_complete:
-        lines.append("COMPLETE - Present recommendation to user.")
-    else:
-        next_step = step + 1
-        if next_step > 4 and next_step < total_steps:
-            next_info = STEPS[3]
-        elif next_step >= total_steps:
-            next_info = STEPS[4]
-        else:
-            next_info = STEPS.get(next_step, STEPS[4])
-        lines.append(f"NEXT: Step {next_step} - {next_info['title']}")
-
-    return "\n".join(lines)
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Problem Analysis - Compact reasoning workflow",
@@ -177,7 +143,17 @@ def main():
     if args.step > args.total_steps:
         sys.exit("ERROR: --step cannot exceed --total-steps")
 
-    print(format_output(args.step, args.total_steps))
+    # Use shared text formatter
+    info = STEPS.get(args.step if args.step <= 4 else (3 if args.step < args.total_steps else 4))
+    next_info = STEPS.get(args.step + 1 if args.step + 1 <= 4 else 4) if args.step < args.total_steps else None
+    print(format_text_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"PROBLEM ANALYSIS - {info['title']}",
+        actions=info["actions"],
+        brief=info["brief"],
+        next_title=next_info["title"] if next_info else None,
+    ))
 
 
 if __name__ == "__main__":

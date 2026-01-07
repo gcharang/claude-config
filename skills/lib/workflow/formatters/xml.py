@@ -1,8 +1,8 @@
-"""XML formatting functions for planner scripts.
+"""XML formatting functions for workflow scripts.
 
 COMPOSITION PATTERN:
 
-The planner skill uses a two-layer composition model for XML output:
+The workflow framework uses a two-layer composition model for XML output:
 
 1. GUIDANCE LAYER: Functions return dicts with typed fields
    - get_step_*_guidance() -> {"title": str, "actions": list[str], "next": str, ...}
@@ -11,7 +11,7 @@ The planner skill uses a two-layer composition model for XML output:
 2. RENDERING LAYER: format_step_output() assembles final XML
    - Takes dict fields as parameters
    - Calls smaller XML formatters (format_step_header, format_current_action, etc.)
-   - Returns complete XML string via list + "\\n".join() pattern
+   - Returns complete XML string via list + "\n".join() pattern
 
 COMPOSABILITY:
   actions = [
@@ -28,8 +28,35 @@ ADDING NEW XML ELEMENTS:
   3. If element belongs outside <current_action>, add parameter to format_step_output()
 """
 
-from .domain import FlatCommand, BranchCommand, NextCommand, QRState, GateConfig
-from .resources import QR_ITERATION_LIMIT
+import sys
+from pathlib import Path
+
+# Add parent of skills/ to path for cross-skill imports
+# Path: xml.py -> formatters -> workflow -> lib -> skills -> .claude (5 parents)
+claude_dir = Path(__file__).parent.parent.parent.parent.parent
+if str(claude_dir) not in sys.path:
+    sys.path.insert(0, str(claude_dir))
+
+from skills.lib.workflow.types import QRState, GateConfig
+
+# Import planner-specific command types directly from domain.py module (not through __init__.py)
+# This avoids circular import: formatters -> shared.__init__ -> formatters
+# Planner-specific guidance types live in planner/scripts/shared/domain.py - not framework primitives
+import importlib.util
+import os
+
+shared_dir = os.path.join(claude_dir, 'skills', 'planner', 'scripts', 'shared')
+domain_spec = importlib.util.spec_from_file_location("domain", os.path.join(shared_dir, 'domain.py'))
+domain_module = importlib.util.module_from_spec(domain_spec)
+domain_spec.loader.exec_module(domain_module)
+FlatCommand = domain_module.FlatCommand
+BranchCommand = domain_module.BranchCommand
+NextCommand = domain_module.NextCommand
+
+resources_spec = importlib.util.spec_from_file_location("resources", os.path.join(shared_dir, 'resources.py'))
+resources_module = importlib.util.module_from_spec(resources_spec)
+resources_spec.loader.exec_module(resources_module)
+QR_ITERATION_LIMIT = resources_module.QR_ITERATION_LIMIT
 
 
 # =============================================================================

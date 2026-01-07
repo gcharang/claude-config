@@ -1,7 +1,7 @@
 """Shared utilities for planner scripts.
 
-This module re-exports all utilities from submodules for backwards compatibility.
-New code should import from submodules directly when possible.
+Workflow types and formatters live in skills.lib.workflow.
+This module contains planner-specific resource utilities.
 
 QR Gate Pattern for Verification Loops:
   Every QR step is followed by a GATE step that:
@@ -17,16 +17,6 @@ This pattern is applied consistently across:
   - wave-executor.py (steps 2-3: batch QR with gate)
 """
 
-# Re-export from domain
-from .domain import (
-    QRState,
-    FlatCommand,
-    BranchCommand,
-    NextCommand,
-    GuidanceResult,
-    GateConfig,
-)
-
 # Re-export from resources
 from .resources import (
     QR_ITERATION_LIMIT,
@@ -35,79 +25,24 @@ from .resources import (
     get_exhaustiveness_prompt,
 )
 
-# Re-export from formatting
-from .formatting import (
-    format_step_header,
-    format_current_action,
-    format_invoke_after,
-    format_next_block,
-    format_gate_result,
-    format_xml_mandate,
-    format_step_output,
-    format_subagent_dispatch,
-    format_state_banner,
-    format_qr_banner,
-    format_expected_output,
-    format_forbidden,
-    format_routing,
-    format_post_qr_routing,
-    format_resource,
-    format_detection_questions,
-    format_verification_checklist,
-    format_incorrect_behavior,
-    format_orchestrator_constraint,
-    format_factored_verification_rationale,
-    format_open_question_guidance,
-    format_gate_actions,
-    format_gate_step,
-)
-
-# Re-export from cli
-from .cli import (
-    add_qr_args,
-    mode_main,
+# Re-export from domain (planner-specific guidance types)
+from .domain import (
+    GuidanceResult,
+    FlatCommand,
+    BranchCommand,
+    NextCommand,
 )
 
 __all__ = [
-    # Domain types
-    "QRState",
-    "FlatCommand",
-    "BranchCommand",
-    "NextCommand",
-    "GuidanceResult",
-    "GateConfig",
     # Constants
     "QR_ITERATION_LIMIT",
     # Resources
     "get_resource",
     "get_mode_script_path",
     "get_exhaustiveness_prompt",
-    # Core formatters
-    "format_step_header",
-    "format_current_action",
-    "format_invoke_after",
-    "format_next_block",
-    "format_gate_result",
-    "format_xml_mandate",
-    "format_step_output",
-    # Extended formatters
-    "format_subagent_dispatch",
-    "format_state_banner",
-    "format_qr_banner",
-    "format_expected_output",
-    "format_forbidden",
-    "format_routing",
-    "format_post_qr_routing",
-    "format_resource",
-    "format_detection_questions",
-    "format_verification_checklist",
-    "format_incorrect_behavior",
-    "format_orchestrator_constraint",
-    "format_factored_verification_rationale",
-    "format_open_question_guidance",
-    "format_gate_actions",
-    "format_gate_step",
-    # CLI
-    "add_qr_args",
-    "mode_main",
+    # Domain types (planner-specific)
+    "GuidanceResult",
+    "FlatCommand",
+    "BranchCommand",
+    "NextCommand",
 ]
