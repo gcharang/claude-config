@@ -55,7 +55,7 @@ def format_invoke_after(command: str) -> str:
 
 def format_heuristics(heuristics: list[str]) -> str:
     """Format heuristics as XML."""
-    lines = ["<heuristics>"]
+    lines = ['<heuristics exemplary="true" note="illustrative, not exhaustive">']
     for h in heuristics:
         lines.append(f"  <heuristic>{h}</heuristic>")
     lines.append("</heuristics>")
@@ -64,7 +64,7 @@ def format_heuristics(heuristics: list[str]) -> str:
 
 def format_detection_questions(questions: list[str]) -> str:
     """Format detection questions as XML."""
-    lines = ["<detection_questions>"]
+    lines = ['<detection_questions exemplary="true" note="illustrative, not exhaustive">']
     for q in questions:
         lines.append(f"  <question>{q}</question>")
     lines.append("</detection_questions>")
@@ -73,7 +73,7 @@ def format_detection_questions(questions: list[str]) -> str:
 
 def format_examples(examples: list[tuple[str, str]]) -> str:
     """Format before/after examples as XML."""
-    lines = ["<examples>"]
+    lines = ['<examples exemplary="true" note="illustrative, not exhaustive">']
     for before, after in examples:
         lines.append(f'  <example before="{before}">{after}</example>')
     lines.append("</examples>")
@@ -121,15 +121,19 @@ def format_step_1(dimension_id: str, script_path: str) -> str:
         f"DIMENSION: {dim['title']}",
         f"FOCUS: {dim['focus']}",
         "",
-        "EXPLORE the codebase using these heuristics:",
+        "NON-EXHAUSTIVE GUIDANCE:",
+        "The lists below illustrate this dimension's INTENT. Use them to understand the",
+        "category of issues to detect, then apply similar reasoning beyond what's listed.",
+        "",
+        "EXPLORE the codebase using heuristics like these:",
         "",
         format_heuristics(dim["heuristics"]),
         "",
-        "ASK these questions as you read code:",
+        "ASK questions like these as you read code:",
         "",
         format_detection_questions(dim["detection_questions"]),
         "",
-        "EXAMPLES of improvements:",
+        "EXAMPLES of improvements (illustrative):",
         "",
         format_examples(dim["examples"]),
         "",
