@@ -827,9 +827,18 @@ def format_qr_file_output(passed: bool, report_path: str = None) -> str:
         report_path: Path to full report file (required if passed=False)
 
     Returns:
-        Simple text: "RESULT: PASS" or "RESULT: FAIL\\nPATH: /path/to/qr.md"
+        Simple text with routing reminder for orchestrator
     """
     if passed:
         return "RESULT: PASS"
     else:
-        return f"RESULT: FAIL\nPATH: {report_path}"
+        # Orchestrator action block prevents premature fixing.
+        # This is the ONLY guidance orchestrator sees after QR returns.
+        return f"""RESULT: FAIL
+PATH: {report_path}
+
+<orchestrator_action>
+STOP. Do NOT fix issues yet.
+Your ONLY action: Invoke the gate step command from <if_fail>.
+The gate step will provide fix guidance.
+</orchestrator_action>"""
