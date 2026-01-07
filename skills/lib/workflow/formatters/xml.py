@@ -31,11 +31,10 @@ ADDING NEW XML ELEMENTS:
 import sys
 from pathlib import Path
 
-# Add parent of skills/ to path for cross-skill imports
-# Path: xml.py -> formatters -> workflow -> lib -> skills -> .claude (5 parents)
-claude_dir = Path(__file__).parent.parent.parent.parent.parent
-if str(claude_dir) not in sys.path:
-    sys.path.insert(0, str(claude_dir))
+# xml.py is inside skills/, so use parent for absolute imports
+_claude_dir = Path(__file__).resolve().parents[4]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
 
 from skills.lib.workflow.types import QRState, GateConfig
 
@@ -45,7 +44,7 @@ from skills.lib.workflow.types import QRState, GateConfig
 import importlib.util
 import os
 
-shared_dir = os.path.join(claude_dir, 'skills', 'planner', 'scripts', 'shared')
+shared_dir = os.path.join(_claude_dir, 'skills', 'planner', 'scripts', 'shared')
 domain_spec = importlib.util.spec_from_file_location("domain", os.path.join(shared_dir, 'domain.py'))
 domain_module = importlib.util.module_from_spec(domain_spec)
 domain_spec.loader.exec_module(domain_module)

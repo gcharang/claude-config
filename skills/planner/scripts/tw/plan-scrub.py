@@ -20,10 +20,10 @@ The script provides step-by-step guidance; the agent follows exactly.
 import sys
 from pathlib import Path
 
-# Add parent of skills/ to path for skills.lib.workflow imports
-claude_dir = Path(__file__).resolve().parent.parent.parent.parent.parent
-if str(claude_dir) not in sys.path:
-    sys.path.insert(0, str(claude_dir))
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[4]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
 
 # Add planner/scripts to path for shared.resources access
 planner_scripts_dir = Path(__file__).resolve().parent.parent

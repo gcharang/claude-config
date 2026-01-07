@@ -104,7 +104,7 @@ actions = [
 
 **Planner-specific types NOT in framework**: FlatCommand, BranchCommand, NextCommand, GuidanceResult live in planner/scripts/shared/domain.py. These are guidance layer types used by planner mode scripts, not framework primitives. xml.py imports them via importlib to avoid circular dependency.
 
-**Import mechanism (sys.path.insert)**: Each script entry point adds skills/ to sys.path. No external environment dependency (PYTHONPATH not required). Works in any invocation context. Each script self-configures import path; no PYTHONPATH environment setup required.
+**Import mechanism (inline path setup)**: Scripts use `.parents[N]` to add .claude/ to sys.path for `from skills.*` imports. Simplified from old 6-line pattern using repetitive `.parent.parent...`. No external environment dependency (PYTHONPATH not required). Works in any invocation context. See "Bootstrap Pattern" section for details and migration guide.
 
 ## Invariants
 
@@ -132,10 +132,10 @@ actions = [
 import sys
 from pathlib import Path
 
-# Add skills/ to path
-skills_dir = Path(__file__).parent.parent.parent
-if str(skills_dir) not in sys.path:
-    sys.path.insert(0, str(skills_dir))
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
 
 from skills.lib.workflow.formatters import format_step_output
 from skills.lib.workflow.types import Step, LinearRouting
@@ -169,6 +169,14 @@ print(format_step_output(
 ### QR loop with gate step
 
 ```python
+import sys
+from pathlib import Path
+
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
+
 from skills.lib.workflow.formatters import format_gate_step
 from skills.lib.workflow.types import QRState, GateConfig, BranchRouting
 
@@ -209,6 +217,14 @@ if args.step == 6:  # Gate step
 ### Plain text output for simple skills
 
 ```python
+import sys
+from pathlib import Path
+
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
+
 from skills.lib.workflow.formatters.text import format_text_output
 
 # Simple skill without XML structure
@@ -225,6 +241,14 @@ print(format_text_output(
 ### Sub-agent dispatch
 
 ```python
+import sys
+from pathlib import Path
+
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
+
 from skills.lib.workflow.formatters import format_subagent_dispatch
 from skills.lib.workflow.types import AgentRole
 
@@ -241,6 +265,59 @@ actions = [
     ),
 ]
 ```
+
+## Bootstrap Pattern
+
+All workflow scripts use this 4-line pattern to enable `from skills.*` imports:
+
+```python
+import sys
+from pathlib import Path
+
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[N]  # N depends on depth
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
+```
+
+**Depth guide**:
+
+- `skills/*/scripts/*.py`: `.parents[3]` (script -> scripts -> skill -> skills -> .claude)
+- `skills/*/scripts/*/*.py`: `.parents[4]` (script -> subdir -> scripts -> skill -> skills -> .claude)
+
+**Why this pattern**:
+
+- No PYTHONPATH dependency - works in any invocation context
+- Simplified from old 6-line pattern using repetitive `.parent.parent...`
+- Adds .claude/ only once (idempotent check)
+- Absolute path resolution prevents relative path issues
+
+**Migration from old pattern**:
+
+Before (6 lines, repetitive):
+
+```python
+import sys
+from pathlib import Path
+
+script_dir = Path(__file__).resolve().parent
+project_root = script_dir.parent.parent.parent  # Repetitive
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+```
+
+After (4 lines, .parents[N]):
+
+```python
+import sys
+from pathlib import Path
+
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
+```
+
+See `/Users/lmergen/.claude/skills/_bootstrap.py` for pattern documentation.
 
 ## Migration Guide
 
@@ -263,40 +340,49 @@ from shared import (
 import sys
 from pathlib import Path
 
-# Add skills/ to path (adjust parent depth for your script location)
-skills_dir = Path(__file__).parent.parent.parent
-if str(skills_dir) not in sys.path:
-    sys.path.insert(0, str(skills_dir))
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
 
 from skills.lib.workflow.types import QRState, GateConfig
 from skills.lib.workflow.formatters import format_step_output, format_gate_step
 ```
 
-**Path depth guide**:
-
-- `planner/scripts/planner.py`: 3 parents (scripts -> planner -> skills)
-- `planner/scripts/qr/plan-completeness.py`: 4 parents (qr -> scripts -> planner -> skills)
-- `refactor/scripts/refactor.py`: 3 parents
+Simplified from old 6-line pattern: uses `.parents[N]` instead of counting `.parent.parent...`
 
 ### Adding sys.path setup to new skills
 
-All workflow scripts need sys.path setup at the top:
+All workflow scripts need simplified sys.path setup at the top:
 
 ```python
 import sys
 from pathlib import Path
 
-# Add skills/ to sys.path for lib.workflow imports
-skills_dir = Path(__file__).parent.parent.parent  # Adjust parent count
-if str(skills_dir) not in sys.path:
-    sys.path.insert(0, str(skills_dir))
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[N]  # N = depth to .claude/
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
 ```
+
+Depth guide:
+
+- `skills/*/scripts/*.py`: `.parents[3]` (script -> scripts -> skill -> skills -> .claude)
+- `skills/*/scripts/*/*.py`: `.parents[4]` (script -> subdir -> scripts -> skill -> skills -> .claude)
 
 ### Using mode_main for CLI boilerplate reduction
 
 **Before** (custom argparse + format_output):
 
 ```python
+import sys
+from pathlib import Path
+
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
+
 def main():
     parser = argparse.ArgumentParser(description="My Workflow")
     parser.add_argument("--step", type=int, required=True)
@@ -312,6 +398,14 @@ def main():
 **After** (mode_main handles argparse + formatting):
 
 ```python
+import sys
+from pathlib import Path
+
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
+
 from skills.lib.workflow.cli import mode_main
 
 def get_step_guidance(step, total_steps, script_path, qr_iteration=1, qr_fail=False):
@@ -331,6 +425,20 @@ if __name__ == "__main__":
 ### Composing XML blocks in actions
 
 ```python
+import sys
+from pathlib import Path
+
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
+
+from skills.lib.workflow.formatters import (
+    format_state_banner,
+    format_forbidden,
+    format_expected_output,
+)
+
 actions = [
     format_state_banner("checkpoint_name", iteration=2, mode="re-verify"),
     "",
@@ -351,6 +459,14 @@ actions = [
 ### Conditional routing based on QR status
 
 ```python
+import sys
+from pathlib import Path
+
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
+
 from skills.lib.workflow.types import BranchRouting
 
 # In STEPS dict:
@@ -370,6 +486,14 @@ qr_step = Step(
 ### Terminal step (workflow complete)
 
 ```python
+import sys
+from pathlib import Path
+
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
+
 from skills.lib.workflow.types import TerminalRouting
 
 final_step = Step(
@@ -386,6 +510,14 @@ final_step = Step(
 ### Fresh review mode (CoVe pattern)
 
 ```python
+import sys
+from pathlib import Path
+
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
+
 from skills.lib.workflow.formatters import format_qr_banner
 
 # Iteration 1: initial review

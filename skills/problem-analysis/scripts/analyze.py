@@ -22,12 +22,12 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add skills/ to path for lib.workflow imports
-skills_dir = Path(__file__).parent.parent.parent
-if str(skills_dir) not in sys.path:
-    sys.path.insert(0, str(skills_dir))
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
 
-from lib.workflow.formatters.text import format_text_output
+from skills.lib.workflow.formatters.text import format_text_output
 
 
 STEPS = {

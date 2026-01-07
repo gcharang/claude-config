@@ -20,10 +20,10 @@ import os
 import sys
 from pathlib import Path
 
-# Add parent of skills/ to path for skills.lib.workflow imports
-claude_dir = Path(__file__).resolve().parent.parent.parent.parent
-if str(claude_dir) not in sys.path:
-    sys.path.insert(0, str(claude_dir))
+# Add .claude/ to path for skills.* imports
+_claude_dir = Path(__file__).resolve().parents[3]
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
 
 from skills.lib.workflow.formatters import (
     format_step_header,
