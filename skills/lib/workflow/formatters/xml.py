@@ -440,7 +440,7 @@ def format_post_qr_routing(self_fix: bool = False, fix_target: str = "developer"
     lines.append("<pedantic_mode>")
     lines.append("EVERY issue is blocking. There are no 'minor concerns' or 'non-critical issues'.")
     lines.append("If QR returns ANYTHING other than clean PASS, route to <if_fail>.")
-    lines.append("Defense: Max 3 iterations, then escalate to user via AskUserQuestion.")
+    lines.append(f"Defense: Max {QR_ITERATION_LIMIT} iterations, then escalate to user via AskUserQuestion.")
     lines.append("</pedantic_mode>")
     lines.append("")
     lines.append("<routing_table>")
@@ -645,7 +645,7 @@ def format_gate_actions(
         if blocking == {"MUST", "SHOULD", "COULD"}:
             actions.extend([
                 "<severity_filter>",
-                f"ITERATION {qr.iteration}: All severities block (MUST, SHOULD, COULD)",
+                f"ITERATION {qr.iteration} of {QR_ITERATION_LIMIT}: All severities block (MUST, SHOULD, COULD)",
                 "Fix ALL issues reported by QR before proceeding.",
                 "</severity_filter>",
                 "",
@@ -653,7 +653,7 @@ def format_gate_actions(
         elif blocking == {"MUST", "SHOULD"}:
             actions.extend([
                 "<severity_filter>",
-                f"ITERATION {qr.iteration}: Only MUST and SHOULD severities block",
+                f"ITERATION {qr.iteration} of {QR_ITERATION_LIMIT}: Only MUST and SHOULD severities block",
                 "COULD severity issues (DEAD_CODE, FORMATTER_FIXABLE, MINOR_INCONSISTENCY) may be deferred.",
                 "Focus on MUST and SHOULD issues. COULD issues are noted but do not block.",
                 "</severity_filter>",
@@ -662,7 +662,7 @@ def format_gate_actions(
         else:  # blocking == {"MUST"}
             actions.extend([
                 "<severity_filter>",
-                f"ITERATION {qr.iteration}: Only MUST severity blocks",
+                f"ITERATION {qr.iteration} of {QR_ITERATION_LIMIT}: Only MUST severity blocks",
                 "SHOULD and COULD severity issues may be deferred.",
                 "Focus ONLY on MUST issues (knowledge loss, unrecoverable if missed).",
                 "SHOULD issues (structural debt) are noted but do not block.",
@@ -776,7 +776,7 @@ def format_gate_step(
     if qr.status and qr.status.lower() == "pass":
         gate_result = ("pass", "GATE PASSED")
     else:
-        gate_result = ("fail", f"GATE FAILED (iteration {qr.iteration})")
+        gate_result = ("fail", f"GATE FAILED (iteration {qr.iteration} of {QR_ITERATION_LIMIT})")
 
     # Build actions using format_gate_actions helper
     actions = format_gate_actions(
