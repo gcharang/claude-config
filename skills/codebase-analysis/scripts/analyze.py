@@ -33,8 +33,12 @@ from skills.lib.workflow.formatters.text import format_text_output
 CONFIDENCE_LEVELS = ["exploring", "low", "medium", "high", "certain"]
 
 
-def get_scope_actions(confidence: str) -> tuple[str, list[str], str]:
-    """SCOPE step actions by confidence level."""
+def get_scope_actions(confidence: str) -> tuple[str, list[str], str | None]:
+    """SCOPE step actions by confidence level.
+
+    Returns (title, actions, next_title).
+    next_title=None means re-invoke same step (instruction in actions).
+    """
     if confidence in ["exploring", "low", "medium", "high"]:
         return (
             "SCOPE - Define understanding goals",
@@ -58,9 +62,9 @@ def get_scope_actions(confidence: str) -> tuple[str, list[str], str]:
                 "",
                 "DO NOT seek user confirmation. Goals are internal guidance.",
                 "",
-                "ADVANCE to SURVEY with confidence=certain when goals defined.",
+                "NEXT: Re-invoke --step 1 --confidence certain when goals defined.",
             ],
-            "SURVEY",
+            None,  # re-invoke same step
         )
     else:  # certain
         return (
@@ -74,7 +78,7 @@ def get_scope_actions(confidence: str) -> tuple[str, list[str], str]:
         )
 
 
-def get_survey_actions(confidence: str) -> tuple[str, list[str], str]:
+def get_survey_actions(confidence: str) -> tuple[str, list[str], str | None]:
     """SURVEY step actions by confidence level."""
     if confidence == "exploring":
         return (
@@ -94,9 +98,9 @@ def get_survey_actions(confidence: str) -> tuple[str, list[str], str]:
                 "",
                 "WAIT for Explore results before re-invoking this step.",
                 "",
-                "After dispatch: Re-invoke with confidence=low.",
+                "NEXT: Re-invoke --step 2 --confidence low after results received.",
             ],
-            "SURVEY (processing results)",
+            None,
         )
     elif confidence == "low":
         return (
@@ -128,10 +132,11 @@ def get_survey_actions(confidence: str) -> tuple[str, list[str], str]:
                 "  - Areas not covered by exploration",
                 "  - Questions that remain unanswered",
                 "",
-                "If significant gaps: Re-invoke with confidence=low, dispatch more agents.",
-                "If minor gaps: Advance to confidence=medium.",
+                "NEXT:",
+                "  - Significant gaps: Re-invoke --step 2 --confidence low, dispatch more agents",
+                "  - Minor gaps: Re-invoke --step 2 --confidence medium",
             ],
-            "SURVEY (coverage assessment)",
+            None,
         )
     elif confidence == "medium":
         return (
@@ -141,18 +146,18 @@ def get_survey_actions(confidence: str) -> tuple[str, list[str], str]:
                 "  - Which goals have initial understanding?",
                 "  - Which goals need more exploration?",
                 "",
-                "OPTIONS:",
-                "  - Good coverage: Advance to confidence=high",
-                "  - One specific gap: Dispatch targeted Explore agent, stay medium",
-                "  - Multiple gaps: Return to confidence=low, dispatch agents",
-                "",
                 "Balance breadth vs depth:",
                 "  - SURVEY focuses on breadth (map the landscape)",
                 "  - DEEPEN focuses on depth (understand specifics)",
                 "",
                 "Prefer advancing to DEEPEN over extending SURVEY.",
+                "",
+                "NEXT:",
+                "  - Good coverage: Re-invoke --step 2 --confidence certain",
+                "  - One specific gap: Dispatch agent, re-invoke --step 2 --confidence medium",
+                "  - Multiple gaps: Re-invoke --step 2 --confidence low",
             ],
-            "SURVEY (final check) or DEEPEN",
+            None,
         )
     elif confidence == "high":
         return (
@@ -165,9 +170,9 @@ def get_survey_actions(confidence: str) -> tuple[str, list[str], str]:
                 "",
                 "REMAINING questions are normal - DEEPEN addresses these.",
                 "",
-                "ADVANCE to DEEPEN with confidence=certain, iteration=1.",
+                "NEXT: Re-invoke --step 2 --confidence certain.",
             ],
-            "DEEPEN",
+            None,
         )
     else:  # certain
         return (
@@ -181,7 +186,7 @@ def get_survey_actions(confidence: str) -> tuple[str, list[str], str]:
         )
 
 
-def get_deepen_actions(confidence: str, iteration: int) -> tuple[str, list[str], str]:
+def get_deepen_actions(confidence: str, iteration: int) -> tuple[str, list[str], str | None]:
     """DEEPEN step actions by confidence level and iteration."""
     max_iterations = 4
 
@@ -217,9 +222,9 @@ def get_deepen_actions(confidence: str, iteration: int) -> tuple[str, list[str],
                 "  - What specifically do we need to understand?",
                 "  - What questions remain unanswered?",
                 "",
-                "ADVANCE to confidence=low.",
+                f"NEXT: Re-invoke --step 3 --confidence low --iteration {iteration}.",
             ],
-            f"DEEPEN iteration {iteration} (dispatch)",
+            None,
         )
     elif confidence == "low":
         return (
@@ -232,13 +237,11 @@ def get_deepen_actions(confidence: str, iteration: int) -> tuple[str, list[str],
                 "  - Include specific questions to answer",
                 "  - Reference files/components from SURVEY",
                 "",
-                f"Pass --iteration {iteration} to agent context.",
-                "",
                 "WAIT for results before re-invoking this step.",
                 "",
-                "After dispatch: Re-invoke with confidence=medium.",
+                f"NEXT: Re-invoke --step 3 --confidence medium --iteration {iteration}.",
             ],
-            f"DEEPEN iteration {iteration} (processing)",
+            None,
         )
     elif confidence == "medium":
         return (
@@ -256,12 +259,12 @@ def get_deepen_actions(confidence: str, iteration: int) -> tuple[str, list[str],
                 "  - Understanding sufficient for goals?",
                 "  - New questions emerged?",
                 "",
-                "OPTIONS:",
-                "  - Understanding sufficient: Advance to confidence=high",
-                "  - Need more detail on SAME target: Stay medium, dispatch again",
-                "  - New target identified: Return to exploring, increment iteration",
+                "NEXT:",
+                f"  - Understanding sufficient: Re-invoke --step 3 --confidence high --iteration {iteration}",
+                f"  - Need more on SAME target: Re-invoke --step 3 --confidence low --iteration {iteration}",
+                f"  - New target identified: Re-invoke --step 3 --confidence exploring --iteration {iteration + 1}",
             ],
-            f"DEEPEN iteration {iteration} (assessment) or iteration {iteration + 1}",
+            None,
         )
     elif confidence == "high":
         return (
@@ -274,14 +277,13 @@ def get_deepen_actions(confidence: str, iteration: int) -> tuple[str, list[str],
                 "  - Are the important flows clear?",
                 "  - Do we understand the critical decisions?",
                 "",
-                "OPTIONS:",
-                "  - Understanding complete: Advance to SYNTHESIZE with confidence=certain",
-                f"  - More depth needed: Start iteration {iteration + 1}",
-                f"    (return to confidence=exploring, increment iteration)",
-                "",
                 f"At iteration {max_iterations}: Must advance to SYNTHESIZE.",
+                "",
+                "NEXT:",
+                f"  - Understanding complete: Re-invoke --step 3 --confidence certain --iteration {iteration}",
+                f"  - More depth needed: Re-invoke --step 3 --confidence exploring --iteration {iteration + 1}",
             ],
-            f"SYNTHESIZE or DEEPEN iteration {iteration + 1}",
+            None,
         )
     else:  # certain
         return (
@@ -295,7 +297,7 @@ def get_deepen_actions(confidence: str, iteration: int) -> tuple[str, list[str],
         )
 
 
-def get_synthesize_actions(confidence: str) -> tuple[str, list[str], str]:
+def get_synthesize_actions(confidence: str) -> tuple[str, list[str], str | None]:
     """SYNTHESIZE step actions by confidence level."""
     if confidence == "exploring":
         return (
@@ -330,14 +332,13 @@ def get_synthesize_actions(confidence: str) -> tuple[str, list[str], str]:
                 "  - Constraints and trade-offs",
                 "  - Evolution and history (if evident)",
                 "",
-                "ADVANCE to confidence=low.",
+                "NEXT: Re-invoke --step 4 --confidence low.",
             ],
-            "SYNTHESIZE (refining)",
+            None,
         )
     elif confidence in ["low", "medium"]:
-        status = "low" if confidence == "low" else "medium"
         return (
-            f"SYNTHESIZE - Refine summary ({status} confidence)",
+            f"SYNTHESIZE - Refine summary ({confidence} confidence)",
             [
                 "REFINE summary sections:",
                 "",
@@ -356,13 +357,13 @@ def get_synthesize_actions(confidence: str) -> tuple[str, list[str], str]:
                 "  - Understanding-focused (not problem-finding)",
                 "  - Structured and organized",
                 "",
-                "OPTIONS:",
-                "  - Ready for output: Advance to confidence=high",
-                "  - Needs refinement: Stay at current confidence, refine more",
-                "",
                 "Do not over-iterate. Aim for good enough, not perfect.",
+                "",
+                "NEXT:",
+                "  - Ready for output: Re-invoke --step 4 --confidence high",
+                f"  - Needs refinement: Re-invoke --step 4 --confidence {confidence}",
             ],
-            "SYNTHESIZE (final check)",
+            None,
         )
     elif confidence == "high":
         return (
@@ -373,9 +374,9 @@ def get_synthesize_actions(confidence: str) -> tuple[str, list[str], str]:
                 "  - Structure/Patterns/Flows/Decisions/Context all present?",
                 "  - Framing is understanding-focused (not auditing)?",
                 "",
-                "ADVANCE to confidence=certain for output.",
+                "NEXT: Re-invoke --step 4 --confidence certain.",
             ],
-            "Output ready",
+            None,
         )
     else:  # certain
         return (
@@ -404,7 +405,7 @@ def get_synthesize_actions(confidence: str) -> tuple[str, list[str], str]:
                 "",
                 "WORKFLOW COMPLETE - Present summary to user.",
             ],
-            "Complete",
+            None,  # No next step
         )
 
 
