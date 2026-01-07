@@ -91,7 +91,7 @@ Read the referenced file when the convention applies to your current task.
 
 <claude_md_and_readme>
 
-For authoritative CLAUDE.md and README.md format specification, read:
+For authoritative specification:
 
 <file working-dir=".claude" uri="conventions/documentation.md" />
 

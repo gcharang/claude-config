@@ -211,7 +211,7 @@ cited. Do not flag. </rule1_test_example>
 ## RULE 2 Categories
 
 These are the ONLY structural issues you may flag. Do not invent additional
-categories. For the full specification, read:
+categories. For authoritative specification:
 
 <file working-dir=".claude" uri="conventions/structural.md" />
 
