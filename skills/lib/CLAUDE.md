@@ -1,11 +1,9 @@
-# CLAUDE.md
-
-## Overview
+# lib/
 
 Shared libraries for skill implementations.
 
-## Index
+## Subdirectories
 
-| Directory   | Contents                         | Read When                                  |
+| Directory   | What                             | When to read                               |
 | ----------- | -------------------------------- | ------------------------------------------ |
 | `workflow/` | Workflow orchestration framework | Building multi-step scripts, QR loop logic |

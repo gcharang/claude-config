@@ -1,22 +1,17 @@
-# skills/prompt-engineer/
+# prompt-engineer/
 
-## Overview
+Prompt optimization skill. IMMEDIATELY invoke the script -- do NOT explore or analyze first.
 
-Prompt optimization skill using research-backed techniques. IMMEDIATELY invoke
-the script - do NOT explore or analyze first.
+## Files
 
-## Index
+| File                  | What              | When to read         |
+| --------------------- | ----------------- | -------------------- |
+| `SKILL.md`            | Skill invocation  | Using this skill     |
+| `README.md`           | Architecture      | Understanding design |
+| `scripts/optimize.py` | Complete workflow | Debugging behavior   |
 
-| File/Directory                                 | Contents               | Read When          |
-| ---------------------------------------------- | ---------------------- | ------------------ |
-| `SKILL.md`                                     | Invocation             | Using this skill   |
-| `scripts/optimize.py`                          | Complete workflow      | Debugging behavior |
-| `references/prompt-engineering-single-turn.md` | Single-turn techniques | Script instructs   |
-| `references/prompt-engineering-multi-turn.md`  | Multi-turn techniques  | Script instructs   |
-| `references/prompt-engineering-subagents.md`   | Subagent orchestration | Script instructs   |
-| `references/prompt-engineering-hitl.md`        | Human-in-the-loop      | Script instructs   |
+## Subdirectories
 
-## Key Point
-
-The script IS the workflow (5 steps: assess -> plan -> refine -> approve ->
-execute). Do NOT analyze before invoking. Run the script and obey its output.
+| Directory     | What                          | When to read     |
+| ------------- | ----------------------------- | ---------------- |
+| `references/` | Prompt engineering techniques | Script instructs |

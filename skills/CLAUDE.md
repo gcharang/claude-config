@@ -1,22 +1,25 @@
-# CLAUDE.md
+# skills/
 
-## Overview
+Script-based agent workflows with shared orchestration framework.
 
-Claude Code skills system - script-based agent workflows with shared orchestration framework.
+## Files
 
-## Index
+| File            | What                                 | When to read                                  |
+| --------------- | ------------------------------------ | --------------------------------------------- |
+| `_bootstrap.py` | sys.path setup pattern documentation | Creating new skill scripts                    |
+| `README.md`     | Skills architecture, design, catalog | Understanding skills system design, migration |
 
-| Directory             | Contents                                             | Read When                                     |
-| --------------------- | ---------------------------------------------------- | --------------------------------------------- |
-| `_bootstrap.py`       | sys.path setup pattern documentation                 | Creating new skill scripts                    |
-| `lib/`                | Shared workflow framework (types, formatters, CLI)   | Building multi-step workflows, understanding  |
-| `planner/`            | Planning and execution workflows (12+9 steps)        | Creating implementation plans, executing      |
-| `refactor/`           | Refactoring analysis across dimensions               | Technical debt review, code quality           |
-| `problem-analysis/`   | Structured problem decomposition (4 steps)           | Understanding complex issues                  |
-| `decision-critic/`    | Decision stress-testing and critique                 | Validating architectural choices              |
-| `codebase-analysis/`  | Systematic codebase exploration (4 steps)            | Repository architecture review                |
-| `prompt-engineer/`    | Prompt optimization and engineering                  | Improving agent prompts                       |
-| `incoherence/`        | Documentation and code consistency detection         | Finding spec/implementation mismatches        |
-| `doc-sync/`           | Cross-repository documentation synchronization       | Syncing docs across multiple repos            |
-| `leon-writing-style/` | Content generation in Leon's voice                   | Writing content matching user's style         |
-| `README.md`           | Skills architecture, bootstrap pattern, organization | Understanding skills system design, migration |
+## Subdirectories
+
+| Directory             | What                                   | When to read                           |
+| --------------------- | -------------------------------------- | -------------------------------------- |
+| `lib/`                | Shared workflow framework              | Building multi-step workflows          |
+| `planner/`            | Planning and execution workflows       | Creating implementation plans          |
+| `refactor/`           | Refactoring analysis across dimensions | Technical debt review, code quality    |
+| `problem-analysis/`   | Structured problem decomposition       | Understanding complex issues           |
+| `decision-critic/`    | Decision stress-testing and critique   | Validating architectural choices       |
+| `codebase-analysis/`  | Systematic codebase exploration        | Repository architecture review         |
+| `prompt-engineer/`    | Prompt optimization and engineering    | Improving agent prompts                |
+| `incoherence/`        | Consistency detection                  | Finding spec/implementation mismatches |
+| `doc-sync/`           | Documentation synchronization          | Syncing docs across repos              |
+| `leon-writing-style/` | Style-matched content generation       | Writing content matching user's style  |

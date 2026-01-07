@@ -1,9 +1,16 @@
-# skills/refactor/
+# refactor/
 
-## Index
+Refactoring analysis skill across multiple dimensions.
 
-| File            | Contents               | Read When        |
-| --------------- | ---------------------- | ---------------- |
-| `SKILL.md`      | Invocation + usage     | Using this skill |
-| `scripts/*.py`  | Workflow orchestration | Debugging        |
-| `dimensions.py` | Dimension definitions  | Adding/editing   |
+## Files
+
+| File        | What                           | When to read               |
+| ----------- | ------------------------------ | -------------------------- |
+| `SKILL.md`  | Skill invocation and usage     | Using this skill           |
+| `README.md` | Architecture, design decisions | Understanding skill design |
+
+## Subdirectories
+
+| Directory  | What                           | When to read       |
+| ---------- | ------------------------------ | ------------------ |
+| `scripts/` | Workflow orchestration scripts | Debugging behavior |
