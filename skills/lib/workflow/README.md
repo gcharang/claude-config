@@ -106,6 +106,16 @@ actions = [
 
 **Import mechanism (inline path setup)**: Scripts use `.parents[N]` to add .claude/ to sys.path for `from skills.*` imports. Simplified from old 6-line pattern using repetitive `.parent.parent...`. No external environment dependency (PYTHONPATH not required). Works in any invocation context. See "Bootstrap Pattern" section for details and migration guide.
 
+## Invisible Knowledge
+
+Constraints discovered through debugging that aren't obvious from code structure:
+
+1. **Turn boundary isolation**: Guidance in dispatch step output (e.g., `<post_qr_routing>`) is not re-read after sub-agent returns. The orchestrator acts on fresh sub-agent output without referencing earlier instructions.
+
+2. **Sub-agent output is the intervention point**: To prevent premature fixing after QR sub-agent returns, the sub-agent's output itself must include routing reminders. This is why `format_qr_file_output()` includes an `<orchestrator_action>` block.
+
+3. **No system reminder injection**: Claude Code cannot inject messages after sub-agent returns. All post-sub-agent guidance must come from the sub-agent's own output.
+
 ## Invariants
 
 1. **Output equivalence**: For any (step, total_steps, qr_state) input, formatters produce byte-identical output to original planner/scripts/shared/formatting.py implementation.

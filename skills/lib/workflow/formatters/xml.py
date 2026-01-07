@@ -822,6 +822,12 @@ def format_qr_file_output(passed: bool, report_path: str = None) -> str:
     Full report written to file at report_path. Executor reads file directly.
     Reduces main agent context by ~95% for QR results.
 
+    INVISIBLE KNOWLEDGE: Turn boundary isolation means orchestrator forgets
+    <post_qr_routing> guidance from dispatch step after sub-agent returns.
+    The <orchestrator_action> block here is the ONLY guidance visible when
+    orchestrator decides next action. Without it, orchestrator acts on QR
+    findings directly instead of invoking gate step first.
+
     Args:
         passed: True if QR passed, False if issues found
         report_path: Path to full report file (required if passed=False)

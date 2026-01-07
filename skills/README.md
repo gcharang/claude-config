@@ -118,6 +118,16 @@ Gate Step (--qr-status=pass|fail)
 
 **Depth-based .parents[N] calculation**: Bootstrap pattern uses .parents[N] where N depends on script depth relative to .claude/ root. scripts/_.py uses .parents[3], scripts/_/\*.py uses .parents[4]. Documented in \_bootstrap.py for reference.
 
+## Invisible Knowledge
+
+Constraints discovered through debugging that aren't obvious from code structure:
+
+1. **No system reminder injection**: Claude Code cannot inject system reminders or messages after sub-agent returns. Solution B patterns (inject reminder after Task tool returns) are categorically non-feasible. All guidance must come from script output or sub-agent output itself.
+
+2. **Turn boundary isolation**: Guidance in prior turn (script output) is not re-read after sub-agent returns. Agent acts on fresh sub-agent output without referencing earlier instructions. Example: `<post_qr_routing>` block in step 6 output is forgotten after QR sub-agent returns with findings.
+
+3. **Sub-agent output is the intervention point**: To influence orchestrator behavior after sub-agent returns, the sub-agent's own output must include the guidance. This is why `format_qr_file_output()` includes an `<orchestrator_action>` block reminding the orchestrator to invoke the gate step before fixing.
+
 ## Invariants
 
 1. **Script activation required**: Skills MUST activate via script invocation. Agent does NOT explore before invoking. Script IS the workflow.
