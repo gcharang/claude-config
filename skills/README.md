@@ -21,7 +21,7 @@ skills/
 
   planner/                 # Planning and execution workflows
     scripts/
-      planner.py           # 12-step planning workflow
+      planner.py           # 13-step planning workflow
       executor.py          # 9-step execution workflow
       qr/*.py              # Quality review sub-workflows
       tw/*.py              # Technical writer sub-workflows
@@ -158,7 +158,7 @@ Constraints discovered through debugging that aren't obvious from code structure
 
 | Skill              | Steps    | Purpose                                | Quality Gates |
 | ------------------ | -------- | -------------------------------------- | ------------- |
-| planner            | 12 + 9   | Plan creation + execution              | 3 QR loops    |
+| planner            | 13 + 9   | Plan creation + execution              | 3 QR loops    |
 | refactor           | 7        | Refactoring analysis across dimensions | None          |
 | problem-analysis   | 4        | Structured problem decomposition       | None          |
 | decision-critic    | Variable | Decision stress-testing                | None          |

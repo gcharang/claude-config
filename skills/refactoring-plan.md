@@ -216,7 +216,7 @@ They are planner-specific guidance types, not framework primitives. M1 xml.py im
 +]
 ```
 
-```diff
+````diff
 --- /dev/null
 +++ b/skills/lib/workflow/types.py
 @@ -0,0 +1,96 @@
@@ -399,12 +399,15 @@ They are planner-specific guidance types, not framework primitives. M1 xml.py im
 
 **Code Intent**:
 
-```
+````
+
 New file `skills/lib/workflow/formatters/__init__.py`:
-- Re-export all format_* functions from xml.py
+
+- Re-export all format\_\* functions from xml.py
 
 New file `skills/lib/workflow/formatters/xml.py`:
-- Copy all format_* functions from planner/scripts/shared/formatting.py
+
+- Copy all format\_\* functions from planner/scripts/shared/formatting.py
 - Preserve docstrings, signatures, implementation
 - Update imports to use types from skills.lib.workflow.types
 - Key functions: format_step_header, format_current_action, format_invoke_after,
@@ -412,7 +415,8 @@ New file `skills/lib/workflow/formatters/xml.py`:
   format_resource, format_forbidden, format_routing, format_expected_output,
   format_verification_checklist, format_detection_questions, format_orchestrator_constraint,
   format_post_qr_routing, format_factored_verification_rationale
-```
+
+````
 
 **Code Changes**:
 
@@ -457,9 +461,9 @@ New file `skills/lib/workflow/formatters/xml.py`:
 +    "format_factored_verification_rationale", "format_open_question_guidance",
 +    "format_gate_actions", "format_gate_step",
 +]
-```
+````
 
-```diff
+````diff
 --- /dev/null
 +++ b/skills/lib/workflow/formatters/xml.py
 @@ -0,0 +1,734 @@
@@ -867,13 +871,16 @@ New file `skills/lib/workflow/formatters/xml.py`:
 
 **Code Intent**:
 
-```
+````
+
 New file `skills/lib/workflow/formatters/text.py`:
+
 - format_text_step_header(step, total, title, brief=None) -> str
 - format_text_output(step, total, title, actions, next_title=None) -> str
   - Returns plain text format matching problem-analysis/decision-critic output
-  - "STEP N/TOTAL: Title\n  Brief\n\nDO:\n  actions...\n\nNEXT: Step N+1 - Title"
-```
+  - "STEP N/TOTAL: Title\n Brief\n\nDO:\n actions...\n\nNEXT: Step N+1 - Title"
+
+````
 
 **Code Changes**:
 
@@ -960,13 +967,16 @@ New file `skills/lib/workflow/formatters/text.py`:
 
 **Code Intent**:
 
-```
+````
+
 New file `skills/lib/workflow/cli.py`:
+
 - add_qr_args(parser): Add --qr-iteration, --qr-fail, --qr-status to ArgumentParser
 - mode_main(script_file, get_step_guidance, description, extra_args=None):
   Copy from planner/scripts/shared/cli.py
   Update imports to use lib.workflow types and formatters
-```
+
+````
 
 **Code Changes**:
 
@@ -1113,17 +1123,20 @@ QR-Code review identified that M5-M8 diffs use format_text_output() and format_s
 
 **Code Intent**:
 
-```
+````
+
 Modify `skills/planner/scripts/shared/__init__.py`:
+
 - Add imports from skills.lib.workflow.types (all types)
 - Add imports from skills.lib.workflow.formatters (all formatters)
 - Add imports from skills.lib.workflow.cli (add_qr_args, mode_main)
-- Explicit __all__ list for backwards compatibility:
+- Explicit **all** list for backwards compatibility:
   Types: AgentRole, LinearRouting, BranchRouting, TerminalRouting, Routing, Dispatch, GateConfig, QRState, Step, WorkflowDefinition, FlatCommand, BranchCommand, NextCommand, GuidanceResult
   Formatters: format_step_header, format_current_action, format_invoke_after, format_next_block, format_step_output, format_subagent_dispatch, format_qr_banner, format_gate_step, format_resource, format_forbidden, format_routing, format_expected_output, format_verification_checklist, format_detection_questions, format_orchestrator_constraint, format_post_qr_routing, format_factored_verification_rationale, format_state_banner, format_gate_actions, format_xml_mandate
   CLI: add_qr_args, mode_main
 - Add comment: "# Compatibility layer - migrate to skills.lib.workflow"
-```
+
+````
 
 **Code Changes**:
 
@@ -1212,7 +1225,7 @@ Add sys.path setup at top of `skills/planner/scripts/shared/__init__.py`:
      add_qr_args,
      mode_main,
  )
-```
+````
 
 ---
 
@@ -1773,6 +1786,7 @@ Pattern for all scripts:
 **Code Changes**:
 
 This milestone creates 11 diffs (one per script file). Each diff follows the same pattern:
+
 1. Add sys.path setup
 2. Replace shared.formatting imports with skills.lib.workflow.formatters
 3. Replace shared.cli imports with skills.lib.workflow.cli
@@ -1784,7 +1798,7 @@ Example diff for planner.py (other scripts follow same pattern):
 --- a/skills/planner/scripts/planner.py
 +++ b/skills/planner/scripts/planner.py
 @@ -1,6 +1,16 @@
- """12-step planning workflow orchestrator."""
+ """13-step planning workflow orchestrator."""
 
  import argparse
 +import sys

@@ -5,7 +5,7 @@ description: Interactive planning and execution for complex tasks. Use when user
 
 # Planner Skill
 
-Two workflows: **planning** (12-step plan creation + review) and **execution**
+Two workflows: **planning** (13-step plan creation + review) and **execution**
 (implement plans).
 
 ## Activation
@@ -15,7 +15,7 @@ script IS the workflow.
 
 | Mode      | Intent                             | Command                                                |
 | --------- | ---------------------------------- | ------------------------------------------------------ |
-| planning  | "plan", "design", "architect"      | `python3 scripts/planner.py --step 1 --total-steps 12` |
+| planning  | "plan", "design", "architect"      | `python3 scripts/planner.py --step 1 --total-steps 13` |
 | execution | "execute", "implement", "run plan" | `python3 scripts/executor.py --step 1 --total-steps 9` |
 
 ## When to Use
@@ -41,25 +41,26 @@ Skip when task is:
 | `.claude/conventions/temporal.md`   | Comment hygiene heuristics | Writing comments in code snippets               |
 | `.claude/conventions/structural.md` | Structural conventions     | Making decisions without explicit user guidance |
 
-## Planning Workflow (12 steps)
+## Planning Workflow (13 steps)
 
-**Steps 1-4: Planning**
+**Steps 1-5: Planning**
 
 1. Context Discovery - explore, gather requirements
-2. Approach Generation - generate options with tradeoffs
-3. Assumption Surfacing - user confirmation of choices
-4. Approach Selection & Milestones - decide, write milestones + Code Intent
+2. Testing Strategy Discovery - identify test patterns
+3. Approach Generation - generate options with tradeoffs
+4. Assumption Surfacing - user confirmation of choices
+5. Approach Selection & Milestones - decide, write milestones + Code Intent
 
-**Steps 5-12: Review**
+**Steps 6-13: Review**
 
-5. QR-Completeness - validate plan structure
-6. Gate - route based on QR result
-7. Developer Fills Diffs - convert Code Intent to diffs
-8. QR-Code - validate diffs and code quality
-9. Gate - route based on QR result
-10. TW Documentation Scrub - clean comments, inject WHY
-11. QR-Docs - validate comment hygiene
-12. Gate - PLAN APPROVED
+6. QR-Completeness - validate plan structure
+7. Gate - route based on QR result
+8. Developer Fills Diffs - convert Code Intent to diffs
+9. QR-Code - validate diffs and code quality
+10. Gate - route based on QR result
+11. TW Documentation Scrub - clean comments, inject WHY
+12. QR-Docs - validate comment hygiene
+13. Gate - PLAN APPROVED
 
 ## Execution Workflow (9 steps)
 
