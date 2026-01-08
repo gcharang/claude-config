@@ -17,6 +17,7 @@ Script-based agent workflows with shared orchestration framework.
 | `planner/`            | Planning and execution workflows       | Creating implementation plans          |
 | `refactor/`           | Refactoring analysis across dimensions | Technical debt review, code quality    |
 | `problem-analysis/`   | Structured problem decomposition       | Understanding complex issues           |
+| `solution-design/`    | Perspective-parallel solution generation | Generating diverse solutions         |
 | `decision-critic/`    | Decision stress-testing and critique   | Validating architectural choices       |
 | `codebase-analysis/`  | Systematic codebase exploration        | Repository architecture review         |
 | `prompt-engineer/`    | Prompt optimization and engineering    | Improving agent prompts                |
