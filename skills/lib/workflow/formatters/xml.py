@@ -272,6 +272,7 @@ def format_subagent_dispatch(
     context_vars: dict[str, str],
     invoke_cmd: str,
     free_form: bool = False,
+    qr_fix_mode: bool = False,
 ) -> str:
     """Render the <subagent_dispatch> XML block for agent delegation.
 
@@ -280,6 +281,7 @@ def format_subagent_dispatch(
         context_vars: Dict of variable name -> description for substitution
         invoke_cmd: The command the sub-agent should run (with $VAR placeholders)
         free_form: If True, dispatch in free-form mode (no script invocation)
+        qr_fix_mode: If True, inject QR_REPORT_PATH and add passthrough guidance
 
     Returns:
         XML string: <subagent_dispatch agent="...">...</subagent_dispatch>
@@ -291,6 +293,11 @@ def format_subagent_dispatch(
             "python3 $MODE_SCRIPT --step 1 --total-steps 5"
         )
     """
+    # When in fix mode, inject QR_REPORT_PATH into context_vars
+    if qr_fix_mode:
+        context_vars = dict(context_vars)  # copy to avoid mutation
+        context_vars["QR_REPORT_PATH"] = "exact path from QR output"
+
     mode = "free-form" if free_form else "script"
     lines = [f'<subagent_dispatch agent="{agent}" mode="{mode}">']
     if context_vars:
@@ -309,6 +316,14 @@ def format_subagent_dispatch(
         lines.append(f'    Your Task tool prompt MUST begin with: "Start by invoking: {invoke_cmd}"')
         lines.append("    This is MANDATORY. The sub-agent follows the script, not free-form instructions.")
         lines.append("  </handoff_instruction>")
+    # Add passthrough guidance when in fix mode
+    if qr_fix_mode:
+        lines.append("  <qr_report_passthrough>")
+        lines.append("    CRITICAL: Include QR_REPORT_PATH verbatim in your Task prompt.")
+        lines.append("    DO NOT read QR_REPORT_PATH yourself.")
+        lines.append("    DO NOT extract, summarize, or interpret the issues.")
+        lines.append("    The sub-agent reads the file directly.")
+        lines.append("  </qr_report_passthrough>")
     lines.append("</subagent_dispatch>")
     return "\n".join(lines)
 
@@ -735,6 +750,11 @@ def format_gate_actions(
                 "  Invoke the command in <invoke_after> below.",
                 f"  The next step will dispatch {fix_target} with fix guidance.",
                 "",
+                "<qr_report_path_passthrough>",
+                "QR_REPORT_PATH from QR output MUST be passed to the work step.",
+                "You do NOT read this file. The sub-agent reads it.",
+                "</qr_report_path_passthrough>",
+                "",
             ])
         actions.append(format_forbidden([
             "Fixing issues directly from this gate step",
@@ -841,10 +861,10 @@ def format_qr_file_output(passed: bool, report_path: str = None) -> str:
         # Orchestrator action block prevents premature fixing.
         # This is the ONLY guidance orchestrator sees after QR returns.
         return f"""RESULT: FAIL
-PATH: {report_path}
+QR_REPORT_PATH: {report_path}
 
 <orchestrator_action>
-STOP. Do NOT fix issues yet.
+STOP. Do NOT fix issues yet. Do NOT read QR_REPORT_PATH.
 Your ONLY action: Invoke the gate step command from <if_fail>.
-The gate step will provide fix guidance.
+Pass QR_REPORT_PATH to subsequent steps - you NEVER read this file.
 </orchestrator_action>"""

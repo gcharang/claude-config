@@ -62,7 +62,9 @@ def get_step_guidance(
                 "actions": [banner, ""] + [
                     "FIX MODE: QR-CODE found issues in your diffs.",
                     "",
-                    "The orchestrator has included QR findings in your prompt.",
+                    "Find QR_REPORT_PATH in the <context> section of your dispatch.",
+                    "Read that file to see the issues. The orchestrator has NOT read it.",
+                    "",
                     "Address ONLY the identified issues:",
                     "  - Context line mismatches",
                     "  - Missing/incorrect file paths",

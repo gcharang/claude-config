@@ -498,7 +498,8 @@ def get_step_guidance(step: int, total_steps: int,
             agent=dispatch_agent,
             context_vars=context_vars,
             invoke_cmd=invoke_cmd,
-            free_form=False,  # Never use free-form mode
+            free_form=False,
+            qr_fix_mode=qr.failed,
         )
         actions.append(dispatch_block)
         actions.append("")

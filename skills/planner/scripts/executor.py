@@ -210,26 +210,27 @@ def format_step_3_implementation(qr: QRState, total_steps: int, milestone_count:
     """Format step 3 implementation output."""
 
     if qr.failed:
-        # Fix mode - dispatch developer with QR findings
+        # Fix mode - dispatch developer with QR findings using structured dispatch
         banner = format_state_banner("IMPLEMENTATION FIX", qr.iteration, "fix")
+        dispatch_block = format_subagent_dispatch(
+            agent="developer",
+            context_vars={
+                "PLAN_FILE": "path to the executed plan",
+                "MODIFIED_FILES": "actual file paths from milestones",
+            },
+            invoke_cmd="",  # free_form mode, no script
+            free_form=True,
+            qr_fix_mode=True,
+        )
         actions = [banner, ""]
         actions.extend([
             "FIX MODE: Code QR found issues.",
             "",
-            "The QR findings (XML grouped by milestone) are in your context.",
-            "Dispatch developer to fix the identified issues.",
-            "",
             format_orchestrator_constraint(),
             "",
-            "DISPATCH DEVELOPER:",
-            "  Use Task tool with subagent_type='developer'",
+            dispatch_block,
             "",
-            "  Prompt MUST include:",
-            "    - QR findings (the XML from your context)",
-            "    - Plan file: $PLAN_FILE",
-            "    - Modified files: $MODIFIED_FILES",
-            "    - Instruction: Fix issues listed in <milestone> blocks",
-            "",
+            "Developer reads QR report and fixes issues in <milestone> blocks.",
             "After developer completes, re-run Code QR for fresh verification.",
         ])
         return format_step_output(
@@ -297,26 +298,28 @@ def format_step_6_documentation(qr: QRState, total_steps: int) -> str:
     mode_script = get_mode_script_path("tw/post-impl.py")
 
     if qr.failed:
-        # Fix mode - dispatch TW with Doc QR findings
+        # Fix mode - dispatch TW with Doc QR findings using structured dispatch
         banner = format_state_banner("DOCUMENTATION FIX", qr.iteration, "fix")
+        invoke_cmd = f"python3 {mode_script} --step 1 --total-steps 6 --qr-fail --qr-iteration {qr.iteration}"
+        dispatch_block = format_subagent_dispatch(
+            agent="technical-writer",
+            context_vars={
+                "PLAN_FILE": "path to the executed plan",
+                "MODIFIED_FILES": "actual file paths from milestones",
+            },
+            invoke_cmd=invoke_cmd,
+            free_form=False,
+            qr_fix_mode=True,
+        )
         actions = [banner, ""]
         actions.extend([
             "FIX MODE: Doc QR found issues.",
             "",
-            "The QR findings are in your context.",
-            "Dispatch technical-writer to fix the identified issues.",
-            "",
             format_orchestrator_constraint(),
             "",
-            "DISPATCH TECHNICAL-WRITER:",
-            "  Use Task tool with subagent_type='technical-writer'",
+            dispatch_block,
             "",
-            "  Prompt MUST include:",
-            "    - Doc QR findings (from your context)",
-            "    - Plan file: $PLAN_FILE",
-            "    - Modified files: $MODIFIED_FILES",
-            "    - Instruction: Fix documentation issues",
-            "",
+            "TW reads QR report and fixes documentation issues.",
             "After TW completes, re-run Doc QR for fresh verification.",
         ])
         return format_step_output(
@@ -411,17 +414,24 @@ def format_output(step: int, total_steps: int,
         qr_name = info.get("qr_name", "QR")
 
         banner = format_state_banner(qr_name, qr.iteration, "fix")
+        dispatch_block = format_subagent_dispatch(
+            agent=fix_target,
+            context_vars={
+                "PLAN_FILE": "path to the executed plan",
+                "MODIFIED_FILES": "actual file paths from milestones",
+            },
+            invoke_cmd="",
+            free_form=True,
+            qr_fix_mode=True,
+        )
         fix_actions = [banner, ""] + [
             f"FIX MODE: {qr_name} found issues.",
             "",
-            "Review the QR findings in your context.",
-            f"Spawn {fix_target} via Task tool to fix the identified issues.",
+            format_orchestrator_constraint(),
             "",
-            f"{fix_target.title()} prompt should include:",
-            "  - QR findings (from your context)",
-            "  - Plan file: $PLAN_FILE",
-            "  - Modified files: $MODIFIED_FILES",
+            dispatch_block,
             "",
+            f"{fix_target.title()} reads QR report and fixes issues.",
             f"After {fix_target} completes, re-run {qr_name} for fresh verification.",
         ]
         # Return flat next command - re-run this step for fresh QR
