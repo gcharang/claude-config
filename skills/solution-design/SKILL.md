@@ -13,9 +13,7 @@ identify problems or perform root cause analysis--use problem-analysis for that.
 
 ## Invocation
 
-```bash
-python3 scripts/design.py --step 1 --total-steps 7
-```
+<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.solution_design.design --step 1 --total-steps 7" />
 
 | Argument        | Required | Description                 |
 | --------------- | -------- | --------------------------- |

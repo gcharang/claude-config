@@ -1,0 +1,568 @@
+#!/usr/bin/env python3
+"""
+Incoherence Detector - Step-based incoherence detection workflow
+
+DETECTION PHASE (Steps 1-12):
+    Steps 1-3 (Parent): Survey, dimension selection, exploration dispatch
+    Steps 4-7 (Sub-Agent): Broad sweep, coverage check, gap-fill, format findings
+    Step 8 (Parent): Synthesis & candidate selection
+    Step 9 (Parent): Deep-dive dispatch
+    Steps 10-11 (Sub-Agent): Deep-dive exploration and formatting
+    Step 12 (Parent): Verdict analysis and grouping
+
+INTERACTIVE RESOLUTION PHASE (Steps 13-15):
+    Step 13 (Parent): Prepare resolution batches from groups
+    Step 14 (Parent): Present batch via AskUserQuestion
+                      - Group batches: ask group question ONLY first
+                      - Non-group or MODE=individual: ask per-issue questions
+    Step 15 (Parent): Loop controller
+                      - If unified chosen: record for all, next batch
+                      - If individual chosen: loop to step 14 with MODE=individual
+                      - If all batches done: proceed to application
+
+APPLICATION PHASE (Steps 16-21):
+    Step 16 (Parent): Analyze targets and select agent types
+    Step 17 (Parent): Dispatch current wave of agents
+    Steps 18-19 (Sub-Agent): Apply resolution, format result
+    Step 20 (Parent): Collect wave results, check for next wave
+    Step 21 (Parent): Present final report to user
+
+Resolution is interactive - user answers AskUserQuestion prompts inline.
+No manual file editing required.
+"""
+
+import argparse
+import sys
+
+# Module path for -m invocation
+MODULE_PATH = "skills.incoherence.incoherence"
+
+DIMENSION_CATALOG = """
+ABSTRACT DIMENSION CATALOG
+==========================
+
+Choose dimensions from this catalog based on Step 1 info sources.
+
+CATEGORY A: SPECIFICATION VS BEHAVIOR
+  - README/docs claim X, but code does Y
+  - API documentation vs actual API behavior
+  - Examples in docs that don't actually work
+  Source pairs: Documentation <-> Code implementation
+
+CATEGORY B: INTERFACE CONTRACT INTEGRITY
+  - Type definitions vs actual runtime values
+  - Schema definitions vs validation behavior
+  - Function signatures vs docstrings
+  Source pairs: Type/Schema definitions <-> Runtime behavior
+
+CATEGORY C: CROSS-REFERENCE CONSISTENCY
+  - Same concept described differently in different docs
+  - Numeric constants/limits stated inconsistently
+  - Intra-document contradictions
+  Source pairs: Document <-> Document
+
+CATEGORY D: TEMPORAL CONSISTENCY (Staleness)
+  - Outdated comments referencing removed code
+  - TODO/FIXME comments for completed work
+  - References to renamed/moved files
+  Source pairs: Historical references <-> Current state
+
+CATEGORY E: ERROR HANDLING CONSISTENCY
+  - Documented error codes vs actual error responses
+  - Exception handling docs vs throw/catch behavior
+  Source pairs: Error documentation <-> Error implementation
+
+CATEGORY F: CONFIGURATION & ENVIRONMENT
+  - Documented env vars vs actual env var usage
+  - Default values in docs vs defaults in code
+  Source pairs: Config documentation <-> Config handling code
+
+CATEGORY G: AMBIGUITY & UNDERSPECIFICATION
+  - Vague statements that could be interpreted multiple ways
+  - Missing thresholds, limits, or parameters
+  - Implicit assumptions not stated explicitly
+  Detection method: Ask "could two people read this differently?"
+
+CATEGORY H: POLICY & CONVENTION COMPLIANCE
+  - Architectural decisions (ADRs) violated by implementation
+  - Style guide rules not followed in code
+  - "We don't do X" statements violated in codebase
+  Source pairs: Policy documents <-> Implementation patterns
+
+CATEGORY I: COMPLETENESS & DOCUMENTATION GAPS
+  - Public API endpoints with no documentation
+  - Functions/classes with no docstrings
+  - Magic values/constants without explanation
+  Detection method: Find code constructs, check if docs exist
+
+CATEGORY J: COMPOSITIONAL CONSISTENCY
+  - Claims individually valid but jointly impossible
+  - Numeric constraints that contradict when combined
+  - Configuration values that create impossible states
+  - Timing/resource constraints that cannot all be satisfied
+  Detection method: Gather related claims, compute implications, check for contradiction
+  Example: timeout=30s, retries=10, max_duration=60s → 30×10=300≠60
+
+CATEGORY K: IMPLICIT CONTRACT INTEGRITY
+  - Names/identifiers promise behavior the code doesn't deliver
+  - Function named validateX() that doesn't actually validate
+  - Error messages that misrepresent the actual error
+  - Module/package names that don't match contents
+  - Log messages that lie about what happened
+  Detection method: Parse names semantically, infer promise, compare to behavior
+  Note: LLMs are particularly susceptible to being misled by names
+
+CATEGORY L: DANGLING SPECIFICATION REFERENCES
+  - Entity A references entity B, but B is never defined anywhere
+  - FK references table that has no schema (e.g., api_keys.tenant_id but no tenants table)
+  - UI/API mentions endpoints or types that are not specified
+  - Schema field references enum or type with no definition
+  Detection method:
+    1. Extract DEFINED entities (tables, APIs, types, enums) with locations
+    2. Extract REFERENCED entities (FKs, type usages, API calls) with locations
+    3. Report: referenced but not defined = dangling reference
+  Source pairs: Any specification -> Cross-file entity registry
+  Note: Distinct from I (code-without-docs). L is SPEC-without-SPEC.
+
+CATEGORY M: INCOMPLETE SPECIFICATION DEFINITIONS
+  - Entity is defined but missing components required for implementation
+  - Table schema documented but missing fields that other docs reference
+  - API endpoint defined but missing request/response schema
+  - Proto/schema has fields but lacks types others expect
+  Detection method:
+    1. For each defined entity, extract CLAIMED components
+    2. Cross-reference with EXPECTED components from consuming docs
+    3. Report: expected but not claimed = incomplete definition
+  Source pairs: Definition document <-> Consumer documents
+  Example: rules table shows (id, name, enabled) but API doc expects 'expression' field
+
+SELECTION RULES:
+- Select ALL categories relevant to Step 1 info sources
+- Typical selection is 5-8 dimensions
+- G, H, I, K are especially relevant for LLM-assisted coding
+- J requires cross-referencing multiple claims (more expensive)
+- L, M are critical for design-phase docs and specs-to-be-implemented
+  Select when docs describe systems that need to be built
+"""
+
+
+def get_step_guidance(step_number, total_steps):
+
+    # =========================================================================
+    # DETECTION PHASE: Steps 1-9
+    # =========================================================================
+
+    if step_number == 1:
+        return {
+            "actions": [
+                "CODEBASE SURVEY",
+                "",
+                "Gather MINIMAL context (README first 50 lines, CLAUDE.md, dir listing, manifest).",
+                "Do NOT read detailed docs, source code, configs, or tests.",
+                "",
+                "Identify: codebase type, primary language, doc locations, info source types",
+                "(README, API docs, comments, types, configs, schemas, ADRs, style guides, tests)",
+            ],
+            "next": "Invoke step 2 with survey results in --thoughts"
+        }
+
+    if step_number == 2:
+        return {
+            "actions": [
+                "DIMENSION SELECTION",
+                "",
+                "Select from catalog (A-M) based on Step 1 info sources.",
+                "Do NOT read files or create domain-specific dimensions.",
+                "",
+                DIMENSION_CATALOG,
+                "",
+                "Output: Selected dimensions with one-line rationale each.",
+            ],
+            "next": "Invoke step 3 with selected dimensions in --thoughts"
+        }
+
+    if step_number == 3:
+        return {
+            "actions": [
+                "EXPLORATION DISPATCH",
+                "",
+                "Launch one haiku Explore agent per dimension (ALL in SINGLE message).",
+                "",
+                "AGENT PROMPT:",
+                f"  DIMENSION: {{letter}} - {{name}}. DESCRIPTION: {{from_catalog}}",
+                f'  Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step-number 4 --total-steps 21 --thoughts \\"Dimension: {{{{letter}}}}\\"" />',
+            ],
+            "next": "After all agents complete, invoke step 8 with combined findings"
+        }
+
+    # =========================================================================
+    # EXPLORATION SUB-AGENT STEPS: 4-7
+    # =========================================================================
+
+    if step_number == 4:
+        return {
+            "actions": [
+                "BROAD SWEEP [SUB-AGENT]",
+                "",
+                "Cast WIDE NET. Prioritize recall over precision. Your dimension is in --thoughts.",
+                "",
+                "SEARCH: docs/, README, src/, configs, schemas, types, tests.",
+                "",
+                "FOR L/M DIMENSIONS: Build entity registry first:",
+                "  - DEFINED: tables, endpoints, types (entity_name, file:line, components)",
+                "  - REFERENCED: FKs, type usages, API calls (entity_name, file:line)",
+                "  - Cross-ref: referenced-not-defined=L, defined-but-incomplete=M",
+                "",
+                "PER FINDING: Location A, Location B, conflict, confidence (low OK).",
+                "Bias: Report more. Track searched locations.",
+            ],
+            "next": "Invoke step 5 with your findings and searched locations in --thoughts"
+        }
+
+    if step_number == 5:
+        return {
+            "actions": [
+                "COVERAGE CHECK [SUB-AGENT]",
+                "",
+                "Identify GAPS: unexplored dirs, skipped file types, unchecked modules.",
+                "Diversity check: all findings same dir/type? Check both docs AND code.",
+                "",
+                "Output: At least 3 gaps + specific files/patterns to search next.",
+            ],
+            "next": "Invoke step 6 with identified gaps in --thoughts"
+        }
+
+    if step_number == 6:
+        return {
+            "actions": [
+                "GAP-FILL EXPLORATION [SUB-AGENT]",
+                "",
+                "Search at least 3 new locations from gap list.",
+                "Try: tests, examples, scripts/, negations ('not', 'deprecated'), TODOs/FIXMEs.",
+                "",
+                "Record new findings: Location A, Location B, conflict, confidence.",
+            ],
+            "next": "Invoke step 7 with all findings (original + new) in --thoughts"
+        }
+
+    if step_number == 7:
+        return {
+            "actions": [
+                "FORMAT EXPLORATION FINDINGS [SUB-AGENT]",
+                "",
+                "Output format:",
+                "  DIMENSION {letter} | TOTAL: N | AREAS SEARCHED: [list]",
+                "  FINDING 1: A=[file:line] B=[file:line] Conflict=[desc] Confidence=[h/m/l]",
+                "  ...",
+                "",
+                "Include ALL findings. Deduplication happens in step 8.",
+            ],
+            "next": "Output formatted results. Sub-agent task complete."
+        }
+
+    # =========================================================================
+    # DETECTION PHASE CONTINUED: Steps 8-13
+    # =========================================================================
+
+    if step_number == 8:
+        return {
+            "actions": [
+                "SYNTHESIZE CANDIDATES",
+                "",
+                "1. Score each (0-10): Impact + Confidence + Specificity + Fixability",
+                "2. Output: C1, C2... with location, summary, score, dimension",
+                "",
+                "Pass ALL candidates (no limits). Deduplication after Sonnet verification.",
+            ],
+            "next": "Invoke step 9 with all candidates in --thoughts"
+        }
+
+    if step_number == 9:
+        return {
+            "actions": [
+                "DEEP-DIVE DISPATCH",
+                "",
+                "Launch sonnet agents (subagent_type='general-purpose', model='sonnet').",
+                "Launch ALL in SINGLE message (no self-limiting).",
+                "",
+                "AGENT PROMPT:",
+                f"  CANDIDATE: {{id}} at {{location}} | DIMENSION: {{letter}} - {{name}}",
+                f"  Claimed: {{summary}}",
+                f"  Workflow: step 10 (explore) -> step 11 (format)",
+                f'  Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step-number 10 --total-steps 21 --thoughts \\"Verifying: {{{{id}}}}\\"" />',
+            ],
+            "next": "After all agents complete, invoke step 12 with all verdicts"
+        }
+
+    # =========================================================================
+    # DEEP-DIVE SUB-AGENT STEPS: 10-11
+    # =========================================================================
+
+    if step_number == 10:
+        return {
+            "actions": [
+                "DEEP-DIVE EXPLORATION [SUB-AGENT]",
+                "",
+                "1. Read both sources with 100+ lines context, extract exact quotes",
+                "2. Analyze by dimension:",
+                "   - A,B,C,E,F,J,K (contradiction): genuinely conflicting? -> TRUE_INCOHERENCE",
+                "   - G (ambiguity): two readers interpret differently? -> SIGNIFICANT_AMBIGUITY",
+                "   - H (policy): orphaned ref -> DOC_GAP, active violation -> TRUE_INCOHERENCE",
+                "   - I (completeness): missing needed info? -> DOCUMENTATION_GAP",
+                "   - L,M (omission): undefined/incomplete entity? -> SPECIFICATION_GAP",
+                "",
+                "3. Verdict: TRUE_INCOHERENCE | SIGNIFICANT_AMBIGUITY | DOCUMENTATION_GAP |",
+                "   SPECIFICATION_GAP | FALSE_POSITIVE",
+            ],
+            "next": "When done exploring, invoke step 11 with findings in --thoughts"
+        }
+
+    if step_number == 11:
+        return {
+            "actions": [
+                "FORMAT RESULTS [SUB-AGENT]",
+                "",
+                "Output format:",
+                "  CANDIDATE: {id} | VERDICT: {verdict} | SEVERITY: {c/h/m/l}",
+                "  SOURCE A: {file}:{line} \"{quote}\" Claims: {claim}",
+                "  SOURCE B: {file}:{line} \"{quote}\" Claims: {claim}",
+                "  ANALYSIS: {why conflict} | RECOMMENDATION: {fix}",
+            ],
+            "next": "Output formatted result. Sub-agent task complete."
+        }
+
+    if step_number == 12:
+        return {
+            "actions": [
+                "VERDICT ANALYSIS",
+                "",
+                "1. Tally by verdict type and severity",
+                "2. Quality check: each non-FALSE_POSITIVE has exact quotes",
+                "3. Deduplicate: merge identical source pairs, keep richer analysis",
+                "4. Group related issues:",
+                "   - SHARED ROOT CAUSE: same file, same outdated doc, same config",
+                "   - SHARED THEME: same dimension, same concept, same fix type",
+                "   Output: G1, G2... with member issues, relationship, unified resolution",
+            ],
+            "next": "Invoke step 13 with confirmed findings and groups"
+        }
+
+    if step_number == 13:
+        return {
+            "actions": [
+                "PREPARE RESOLUTION BATCHES",
+                "",
+                "Batch rules (priority order, max 4 per batch):",
+                "1. Group-based: issues sharing G1/G2/... together",
+                "2. File-based: ungrouped issues affecting same file",
+                "3. Singletons: remaining unrelated issues",
+                "",
+                "Per batch output: Issues, theme/file, group suggestion (if applicable)",
+                "",
+                "Per issue output:",
+                "  ISSUE {id}: {title} | Severity | Dimension | Group",
+                "  Source A: {file}:{line} \"{quote max 10 lines}\" Claims: ...",
+                "  Source B: {file}:{line} \"{quote max 10 lines}\" Claims: ...",
+                "  Analysis: {conflict} | Suggestions: 1. {action} 2. {alt action}",
+                "",
+                "Suggestions must use ACTUAL values (e.g., 'Update to 60s' not 'match code').",
+            ],
+            "next": "Invoke step 14 with batch definitions and issue data in --thoughts"
+        }
+
+    # =========================================================================
+    # INTERACTIVE RESOLUTION PHASE: Steps 14-15
+    # =========================================================================
+
+    if step_number == 14:
+        return {
+            "actions": [
+                "PRESENT RESOLUTION BATCH",
+                "",
+                "Use AskUserQuestion. Check --thoughts for 'MODE: individual' flag.",
+                "Edge cases: empty batch=skip, single-member group=individual, quotes>10 lines=truncate.",
+                "",
+                "GROUP BATCH (2+ members, no MODE flag): ask group question only",
+                "  header: 'G{n}', options: unified_suggestion | 'Resolve individually' | 'Skip all'",
+                "",
+                "NON-GROUP or MODE=individual: ask per-issue questions",
+                "  header: 'I{n}', include: file:line, quotes, claims, analysis",
+                "  options: suggestion_1 | suggestion_2 | 'Skip'",
+                "",
+                "Suggestions must use ACTUAL values (e.g., 'Update to 60s' not 'match code').",
+            ],
+            "next": "After AskUserQuestion returns, invoke step 15 with responses"
+        }
+
+    if step_number == 15:
+        return {
+            "actions": [
+                "RESOLUTION LOOP CONTROLLER",
+                "",
+                "Early exit: if ALL resolutions are NO_RESOLUTION, output 'No issues selected' and stop.",
+                "",
+                "Process response:",
+                "  G{n} response: unified -> record for all; 'individually' -> step 14 MODE=individual;",
+                "                 'skip all' -> NO_RESOLUTION for all; 'other' -> record custom for all",
+                "  I{n} responses: record each resolution or NO_RESOLUTION",
+                "",
+                "Loop decision:",
+                "  1. 'Resolve individually' -> step 14 with MODE=individual",
+                "  2. More batches -> step 14 with next batch",
+                "  3. All complete -> step 16 with all resolutions",
+                "",
+                "Include in --thoughts: collected resolutions, remaining batches, MODE flag if applicable.",
+            ],
+            "next": (
+                "If 'Resolve individually' selected: invoke step 14 with MODE=individual\n"
+                "If more batches remain: invoke step 14 with next batch\n"
+                "If all batches complete: invoke step 16 with all resolutions"
+            )
+        }
+
+    # =========================================================================
+    # APPLICATION PHASE: Steps 16-22
+    # =========================================================================
+
+    if step_number == 16:
+        return {
+            "actions": [
+                "PLAN DISPATCH",
+                "",
+                "From --thoughts: read resolutions, skip NO_RESOLUTION.",
+                "",
+                "1. Target files: use Source A/B as hints, resolution may specify",
+                "2. Agent types: .md/.rst/.txt -> technical-writer, code/config -> developer",
+                "3. Group by file: multiple issues same file -> one agent",
+                "4. Waves: different files parallel, conflicts sequential",
+                "",
+                "Output: FILE GROUPS (file, issues, agent) + DISPATCH PLAN (waves)",
+            ],
+            "next": "Invoke step 17 with dispatch plan in --thoughts"
+        }
+
+    if step_number == 17:
+        return {
+            "actions": [
+                "RECONCILE DISPATCH",
+                "",
+                "Launch agents for current wave (Wave 1 first time, next wave after step 20).",
+                "Agent types: developer (code/config) or technical-writer (docs).",
+                "",
+                "AGENT PROMPT:",
+                f"  TARGET: {{file}} | ISSUES: {{ids}}",
+                f"  Per issue: type, severity, sources, analysis, resolution_text",
+                f"  Workflow: step 18 (apply) -> step 19 (format)",
+                f'  Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step-number 18 --total-steps 21 --thoughts \\"FILE: {{{{file}}}}\\"" />',
+                "",
+                "Launch ALL wave agents in SINGLE message.",
+            ],
+            "next": "After all wave agents complete, invoke step 20 with results"
+        }
+
+    # =========================================================================
+    # APPLICATION SUB-AGENT STEPS: 18-19
+    # =========================================================================
+
+    if step_number == 18:
+        return {
+            "actions": [
+                "RECONCILE APPLY [SUB-AGENT]",
+                "",
+                "For each resolution: locate target, apply change, verify it addresses the issue.",
+                "Batched: apply in order, watch for conflicts.",
+                "Bias: apply the resolution, interpret charitably, skip rarely.",
+            ],
+            "next": "When done, invoke step 19 with results in --thoughts"
+        }
+
+    if step_number == 19:
+        return {
+            "actions": [
+                "RECONCILE FORMAT [SUB-AGENT]",
+                "",
+                "Per issue: ISSUE: {id} | STATUS: RESOLVED|SKIPPED | FILE: {path}",
+                "  If RESOLVED: CHANGE: {brief description}",
+                "  If SKIPPED: REASON: {why}",
+            ],
+            "next": "Output formatted result(s). Sub-agent task complete."
+        }
+
+    if step_number == 20:
+        return {
+            "actions": [
+                "RECONCILE COLLECT",
+                "",
+                "Collect wave results: per agent, issues handled, status, change/reason.",
+                "Check dispatch plan: more waves -> step 17, all complete -> step 21.",
+            ],
+            "next": "If more waves: invoke step 17. Otherwise: invoke step 21."
+        }
+
+    if step_number >= 21:
+        return {
+            "actions": [
+                "PRESENT REPORT",
+                "",
+                "Output inline (no file):",
+                "  Summary: detected N, resolved M, skipped K",
+                "  Table: ID | Severity | Status | Summary (~40 chars)",
+                "",
+                "List ALL issues. RESOLVED or SKIPPED with reason.",
+            ],
+            "next": "WORKFLOW COMPLETE."
+        }
+
+    return {"actions": ["Unknown step"], "next": "Check step number"}
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Incoherence Detector")
+    parser.add_argument("--step-number", type=int, required=True)
+    parser.add_argument("--total-steps", type=int, required=True)
+    parser.add_argument("--thoughts", type=str, required=True)
+    args = parser.parse_args()
+
+    guidance = get_step_guidance(args.step_number, args.total_steps)
+
+    # Determine agent type and phase
+    # Detection sub-agents: 4-7 (exploration), 10-11 (deep-dive)
+    if args.step_number in [4, 5, 6, 7, 10, 11]:
+        agent_type = "SUB-AGENT"
+        phase = "DETECTION"
+    # Application sub-agents: 18-19 (apply resolution)
+    elif args.step_number in [18, 19]:
+        agent_type = "SUB-AGENT"
+        phase = "APPLICATION"
+    # Detection parent: 1-12
+    elif args.step_number <= 12:
+        agent_type = "PARENT"
+        phase = "DETECTION"
+    # Resolution parent: 13-15
+    elif args.step_number <= 15:
+        agent_type = "PARENT"
+        phase = "RESOLUTION"
+    # Application parent: 16-22
+    else:
+        agent_type = "PARENT"
+        phase = "APPLICATION"
+
+    print(f"STEP {args.step_number}/{args.total_steps} [{phase}] [{agent_type}]")
+    print()
+    print("ACTIONS:")
+    for action in guidance["actions"]:
+        print(f"  {action}")
+    print()
+
+    # Phase boundary reminders (condensed)
+    if args.step_number == 12:
+        print("NOTE: Detection complete. Proceed to resolution via AskUserQuestion.")
+    if args.step_number == 15:
+        print("NOTE: Resolution complete. Proceed to dispatch agents for application.")
+
+    print()
+    print("NEXT:", guidance["next"])
+
+
+if __name__ == "__main__":
+    main()

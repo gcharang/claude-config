@@ -13,10 +13,10 @@ Two workflows: **planning** (13-step plan creation + review) and **execution**
 When this skill activates, IMMEDIATELY invoke the corresponding script. The
 script IS the workflow.
 
-| Mode      | Intent                             | Command                                                |
-| --------- | ---------------------------------- | ------------------------------------------------------ |
-| planning  | "plan", "design", "architect"      | `python3 scripts/planner.py --step 1 --total-steps 13` |
-| execution | "execute", "implement", "run plan" | `python3 scripts/executor.py --step 1 --total-steps 9` |
+| Mode      | Intent                             | Command                                                                                                             |
+| --------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| planning  | "plan", "design", "architect"      | `<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.planner.planner --step 1 --total-steps 13" />` |
+| execution | "execute", "implement", "run plan" | `<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.planner.executor --step 1 --total-steps 9" />` |
 
 ## When to Use
 

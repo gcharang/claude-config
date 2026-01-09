@@ -24,9 +24,7 @@ Can also be invoked standalone when problem is narrowly scoped.
 
 ## Invocation
 
-```bash
-python3 scripts/analyze.py --step 1 --total-steps 5
-```
+<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.problem_analysis.analyze --step 1 --total-steps 5" />
 
 | Argument        | Required | Description               |
 | --------------- | -------- | ------------------------- |

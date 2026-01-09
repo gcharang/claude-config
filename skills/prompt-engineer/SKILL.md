@@ -10,9 +10,7 @@ workflow.
 
 ## Invocation
 
-```bash
-python3 scripts/optimize.py --step 1 --total-steps 5
-```
+<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.prompt_engineer.optimize --step 1 --total-steps 5" />
 
 | Argument        | Required | Description                 |
 | --------------- | -------- | --------------------------- |

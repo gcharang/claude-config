@@ -13,8 +13,9 @@ Planning and execution skill with quality review gates.
 
 | Directory    | What                   | When to read                        |
 | ------------ | ---------------------- | ----------------------------------- |
-| `scripts/`   | Workflow orchestration | Debugging planner/executor behavior |
 | `resources/` | Plan format, diff spec | Editing plan structure, diff format |
+
+Python code: `scripts/skills/planner/` (planner.py, executor.py, explore.py, qr/, tw/, dev/)
 
 ## Universal Conventions
 

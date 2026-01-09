@@ -10,9 +10,7 @@ workflow.
 
 ## Invocation
 
-```bash
-python3 scripts/refactor.py --step 1 --total-steps 7
-```
+<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.refactor.refactor --step 1 --total-steps 7" />
 
 | Argument        | Required | Description                 |
 | --------------- | -------- | --------------------------- |

@@ -10,12 +10,7 @@ workflow.
 
 ## Invocation
 
-```bash
-python3 scripts/incoherence.py \
-  --step-number 1 \
-  --total-steps 21 \
-  --thoughts "<context>"
-```
+<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.incoherence.incoherence --step-number 1 --total-steps 21 --thoughts '<context>'" />
 
 | Argument        | Required | Description                               |
 | --------------- | -------- | ----------------------------------------- |
