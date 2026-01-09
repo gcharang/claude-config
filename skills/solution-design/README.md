@@ -18,7 +18,7 @@ If the solution is clear -- add a button, fix a typo, implement a known pattern 
 
 ## How It Works
 
-The skill defines seven reasoning perspectives:
+Seven reasoning perspectives:
 
 - **Minimal**: What is the smallest change that addresses the root cause?
 - **Structural**: What design change makes this class of problem impossible?
@@ -28,9 +28,9 @@ The skill defines seven reasoning perspectives:
 - **First Principles**: What solution emerges if we ignore convention?
 - **Upstream**: What if we solved this earlier in the causal chain?
 
-For each problem, the skill selects 4-6 perspectives likely to produce distinct solutions. Each perspective dispatches as a separate sub-agent. The agents run in parallel -- this matters. A single agent cycling through perspectives compresses each one and anchors on earlier ideas. Parallel execution gives each mode full context to reason without contamination.
+Each perspective dispatches as a separate sub-agent, all 7 in parallel. A single agent cycling through perspectives compresses each one and anchors on earlier ideas. Parallel execution keeps each mode isolated.
 
-After collection, a synthesis step identifies where perspectives converge, where they conflict, and whether combining insights produces solutions none proposed individually. A challenge step stress-tests each solution. The output is a ranked list with trade-offs explicit.
+After collection, a synthesis step identifies convergence and conflict. If combining insights produces a solution none proposed individually, it gets added. A challenge step stress-tests everything. The output is a ranked list with trade-offs explicit.
 
 ## Usage
 

@@ -65,76 +65,46 @@ PERSPECTIVE_SUMMARIES = [
 
 
 def format_perspective_selection_guidance() -> str:
-    """Format guidance for selecting which perspectives to use."""
-    lines = ['<perspective_selection_guidance>']
-    lines.append("  Select 4-6 perspectives that will produce GENUINELY DIVERSE solutions.")
-    lines.append("  Goal: diversity of reasoning, not comprehensive coverage.")
-    lines.append("  Five perspectives producing five different solutions is better than")
-    lines.append("  seven perspectives converging on three similar ones.")
-    lines.append("")
-    lines.append("  <when_valuable>")
-    lines.append("    MINIMAL: Always include to establish baseline and ensure practical option exists")
-    lines.append("    STRUCTURAL: When problem might recur or represents a pattern")
-    lines.append("    STATELESS: When root cause involves state, concurrency, mutation, temporal coupling")
-    lines.append("    DOMAIN: When unclear concepts, primitives carrying domain meaning, scattered business logic")
-    lines.append("    REMOVAL: When system seems overcomplicated, features might be the problem")
-    lines.append("    FIRSTPRINCIPLES: When conventions haven't worked, problem seems harder than it should be")
-    lines.append("    UPSTREAM: When treating symptoms, same problem recurs, defensive code proliferating")
-    lines.append("  </when_valuable>")
-    lines.append("</perspective_selection_guidance>")
+    """Format guidance for launching all perspectives."""
+    lines = ['<perspective_dispatch>']
+    lines.append("  Launch ALL perspectives in parallel.")
+    lines.append("  Each perspective reasons differently; synthesis handles deduplication.")
+    lines.append("</perspective_dispatch>")
     return "\n".join(lines)
 
 
 def format_parallel_dispatch(perspective_script_path: str) -> str:
     """Format the parallel dispatch block for step 2."""
-    lines = ['<parallel_dispatch agent="general-purpose" dynamic="true">']
-    lines.append("  <instruction>")
-    lines.append("    After selecting perspectives, launch one general-purpose sub-agent per selected perspective.")
-    lines.append("    All agents launch IN PARALLEL (single message, multiple Task tool calls).")
-    lines.append("    Each agent generates solutions from ONE perspective only.")
-    lines.append("  </instruction>")
+    lines = ['<parallel_dispatch agent="general-purpose">']
+    lines.append("  <mandatory>")
+    lines.append("    You MUST launch EXACTLY 7 sub-agents in a SINGLE message.")
+    lines.append("    One agent for each perspective listed below. No selection. No filtering.")
+    lines.append("    If you launch fewer than 7 agents, you have failed this step.")
+    lines.append("  </mandatory>")
+    lines.append("")
+    lines.append("  <agents_to_launch>")
+    for p_id, p_title, p_question in PERSPECTIVE_SUMMARIES:
+        lines.append(f'    <agent perspective="{p_id}">')
+        lines.append(f'      {p_title}: {p_question}')
+        lines.append(f'    </agent>')
+    lines.append("  </agents_to_launch>")
     lines.append("")
     lines.append("  <model_selection>")
-    lines.append("    First check if user EXPLICITLY requested a model. User overrides take precedence.")
-    lines.append("")
-    lines.append("    USER OVERRIDE (highest priority):")
-    lines.append("      Any explicit model request -> use that model for ALL agents")
-    lines.append("      Examples (non-exhaustive): 'use opus', 'with sonnet', 'run with haiku', 'fast', 'quick'")
-    lines.append("")
-    lines.append("    KEYWORD ESCALATION (if no explicit model request):")
-    lines.append("      Indicators suggesting more reasoning power needed -> escalate model choice")
-    lines.append("      SONNET triggers (non-exhaustive): 'thorough', 'careful', 'deep', 'comprehensive'")
-    lines.append("      OPUS triggers (non-exhaustive): 'try hard', 'difficult', 'complex', 'get this right', 'important'")
-    lines.append("")
-    lines.append("    DEFAULT (if no user preference detected):")
-    lines.append("      Choose based on perspective:")
-    lines.append("      - HAIKU: MINIMAL perspective (quick, practical)")
-    lines.append("      - SONNET: STRUCTURAL, DOMAIN, STATELESS, REMOVAL, UPSTREAM")
-    lines.append("      - OPUS: FIRSTPRINCIPLES (benefits from deeper reasoning)")
+    lines.append("    If user requested a specific model, use that for ALL agents.")
+    lines.append("    Otherwise, default by perspective:")
+    lines.append("      - HAIKU: minimal")
+    lines.append("      - SONNET: structural, domain, stateless, removal, upstream")
+    lines.append("      - OPUS: firstprinciples")
     lines.append("  </model_selection>")
     lines.append("")
-    lines.append("  <context_to_provide>")
-    lines.append("    Each sub-agent MUST receive:")
-    lines.append("      1. The ROOT CAUSE statement (verbatim from Step 1)")
-    lines.append("      2. HARD CONSTRAINTS (non-negotiable requirements)")
-    lines.append("      3. Their assigned PERSPECTIVE")
-    lines.append("  </context_to_provide>")
-    lines.append("")
-    lines.append("  <template>")
+    lines.append("  <agent_prompt_template>")
     lines.append("    Generate solutions for this root cause from the $PERSPECTIVE perspective.")
     lines.append("")
     lines.append("    ROOT CAUSE: [include verbatim from Step 1]")
     lines.append("    HARD CONSTRAINTS: [include from Step 1]")
     lines.append("")
     lines.append(f"    Start: python3 {perspective_script_path} --step 1 --total-steps 2 --perspective $PERSPECTIVE_ID")
-    lines.append("  </template>")
-    lines.append("")
-    lines.append("  <available_perspectives>")
-    for p_id, p_title, p_question in PERSPECTIVE_SUMMARIES:
-        lines.append(f'    <perspective id="{p_id}" title="{p_title}">')
-        lines.append(f'      {p_question}')
-        lines.append(f'    </perspective>')
-    lines.append("  </available_perspectives>")
+    lines.append("  </agent_prompt_template>")
     lines.append("</parallel_dispatch>")
     return "\n".join(lines)
 
@@ -307,7 +277,7 @@ STEPS = {
     },
     2: {
         "title": "Dispatch",
-        "brief": "Select perspectives and launch parallel sub-agents",
+        "brief": "Launch all perspectives as parallel sub-agents",
         "needs_dispatch": True,  # Flag for format_output
     },
     3: {
@@ -563,8 +533,8 @@ def format_output(step: int, total_steps: int) -> str:
     actions = []
 
     if step == 2:
-        # Step 2: Perspective selection and parallel dispatch
-        actions.append("SELECT PERSPECTIVES AND DISPATCH SUB-AGENTS")
+        # Step 2: Launch all perspectives in parallel
+        actions.append("DISPATCH ALL PERSPECTIVE SUB-AGENTS")
         actions.append("")
         actions.append("Using the ROOT_CAUSE and CONSTRAINTS from Step 1:")
         actions.append("")

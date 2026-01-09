@@ -4,7 +4,7 @@ Shared perspective definitions for solution-design skill.
 
 Single source of truth for all perspective metadata. Used by:
   - perspective.py: Full definitions for solution generation prompts
-  - design.py: Core questions for selection, full definitions for context
+  - design.py: Core questions for dispatch, full definitions for context
 
 Usage:
     python3 perspectives.py --list                    # List perspective IDs
@@ -235,7 +235,7 @@ def format_all() -> str:
 
 
 def format_summary() -> str:
-    """Format perspective summaries for dispatch selection."""
+    """Format perspective summaries for dispatch."""
     lines = ["<perspective_summaries>"]
     for p_id in PERSPECTIVE_ORDER:
         p = PERSPECTIVES[p_id]
@@ -260,7 +260,7 @@ def main():
         "--all", action="store_true", help="Get all perspectives as XML summary"
     )
     group.add_argument(
-        "--summary", action="store_true", help="Get perspective summaries for selection"
+        "--summary", action="store_true", help="Get perspective summaries for dispatch"
     )
 
     args = parser.parse_args()
