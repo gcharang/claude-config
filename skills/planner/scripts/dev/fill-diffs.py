@@ -35,7 +35,7 @@ from skills.lib.workflow.formatters import (
     format_expected_output,
 )
 
-from shared.resources import get_resource
+from skills.lib.conventions import get_convention
 
 
 def get_step_guidance(
@@ -138,7 +138,7 @@ def get_step_guidance(
 
     # Step 3: Diff format reference (inject resource)
     if step == 3:
-        diff_resource = get_resource("diff-format.md")
+        diff_resource = get_convention("diff-format.md")
         return {
             "title": "Create Unified Diffs",
             "actions": [

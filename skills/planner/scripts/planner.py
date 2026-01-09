@@ -183,7 +183,7 @@ STEPS = {
             "DECISION_CRITERIA": "what planning decisions will consume this output",
         },
         "actions": [
-            "READ resources: conventions/structural.md, diff-format.md, conventions/temporal.md",
+            "READ .claude/conventions: structural.md, diff-format.md, temporal.md",
             "",
             "DELEGATE exploration to Explore sub-agent with decision context.",
             "",

@@ -227,7 +227,7 @@ Example:
 
 After plan is written, spawn Developer to convert Code Intent to unified diffs.
 Developer reads actual files and produces accurate context lines.
-See `resources/diff-format.md` for diff specification.
+See `.claude/conventions/diff-format.md` for diff specification.
 
 ```diff
 --- a/path/to/file.py

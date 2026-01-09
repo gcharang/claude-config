@@ -100,7 +100,7 @@ Gate Step (--qr-status=pass|fail)
 
 **SKILL.md activation metadata**: Each skill has SKILL.md with YAML frontmatter (name, description) for skill system. Description includes trigger conditions and immediate-invoke instruction. Agent reads SKILL.md to understand when and how to activate skill.
 
-**Resources as authoritative sources**: planner/resources/ contains planner-specific templates (plan-format.md, diff-format.md). Universal conventions live in .claude/conventions/ (structural.md, temporal.md, severity.md, intent-markers.md, documentation.md). Scripts inject resources at runtime via get_resource() or get_convention(). No manual sync for most resources. Resources embedded in agent prompts require manual sync.
+**Resources as authoritative sources**: planner/resources/ contains planner-specific templates (plan-format.md, explore-output-format.md). Universal conventions live in .claude/conventions/ (structural.md, temporal.md, severity.md, intent-markers.md, documentation.md, diff-format.md). Scripts inject conventions at runtime via get_convention(). No manual sync for most resources. Resources embedded in agent prompts require manual sync.
 
 ## Design Decisions
 
