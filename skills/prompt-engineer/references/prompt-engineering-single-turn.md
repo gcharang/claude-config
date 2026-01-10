@@ -11,7 +11,7 @@ This document synthesizes practical prompt engineering patterns with academic re
 | Domain             | Technique                     | Trigger Condition                               | Stacks With                        | Conflicts With                     | Cost/Tradeoff                                | Effect                                                       |
 | ------------------ | ----------------------------- | ----------------------------------------------- | ---------------------------------- | ---------------------------------- | -------------------------------------------- | ------------------------------------------------------------ |
 | **Reasoning**      | Plan-and-Solve                | Multi-step problems with missing steps          | RE2, Thinking Tags, Step-Back      | Scope Limitation, Direct Prompting | Moderate token increase for planning phase   | Of incorrect answers: calc errors 7%→5%, missing-step 12%→7% |
-| **Reasoning**      | Step-Back                     | Domain knowledge required before reasoning      | Plan-and-Solve                     | —                                  | Additional retrieval step                    | Up to 27% improvement on knowledge tasks                     |
+| **Reasoning**      | Step-Back                     | Domain knowledge required before reasoning      | Plan-and-Solve                     | —                                  | Additional retrieval step                    | TimeQA +27%; MMLU Physics/Chemistry +7-11%                   |
 | **Reasoning**      | Chain of Draft                | Token efficiency needed                         | Any reasoning technique            | Verbose CoT                        | Minimal; up to 92% token reduction           | Matches CoT accuracy at 7.6% token cost                      |
 | **Reasoning**      | Direct Prompting              | Pattern recognition, implicit learning          | —                                  | Any CoT variant                    | Minimal; no reasoning overhead               | Avoids 30%+ accuracy drops on pattern tasks                  |
 | **Reasoning**      | Thread of Thought             | Chaotic/multi-source context                    | RE2                                | —                                  | Moderate increase; benefits from two-phase   | Systematic context segmentation                              |
@@ -38,14 +38,13 @@ This document synthesizes practical prompt engineering patterns with academic re
 | **Behavioral**     | Pre-Work Context Analysis     | Blind execution problems                        | Category-Based Examples            | —                                  | Slight increase for analysis phase           | Prevents context-blind execution                             |
 | **Behavioral**     | Emphasis Hierarchy            | Multiple priority levels                        | Numbered Rule Priority             | —                                  | Minimal                                      | Predictable priority system                                  |
 | **Behavioral**     | Affirmative Directives        | Any instruction (foundational)                  | Contrastive Examples               | —                                  | Minimal                                      | Significant correctness improvement                          |
-| **Verification**   | Embedded Verification         | Factual accuracy concerns                       | —                                  | —                                  | Moderate increase for verification questions | List-based QA: 17%→70% (factored CoVe)                       |
 
 ---
 
 ## Quick Reference: Key Principles
 
 1. **Plan-and-Solve for Complex Tasks** — Explicit planning reduces missing-step errors (from 12% to 7% of incorrect answers)
-2. **Step-Back for Knowledge-Intensive Tasks** — Retrieve principles before specific reasoning
+2. **Step-Back for Knowledge-Intensive Tasks** — Retrieve principles before specific reasoning (TimeQA +27%, MMLU +7-11%)
 3. **Re-Reading (RE2) for Better Comprehension** — Instruction "Read the question again:" outperforms simple repetition by 1.2pp
 4. **Rephrase and Respond (RaR) for Ambiguous Questions** — Let the model clarify questions in its own terms
 5. **System 2 Attention (S2A) for Contaminated Context** — Filter out bias/noise before reasoning
@@ -82,7 +81,6 @@ This document synthesizes practical prompt engineering patterns with academic re
 36. **Output Format Strictness** — "ONLY return X" leaves no room for interpretation
 37. **Emotional Stimuli** — "This is important to my career" improves attention (8% Instruction Induction, 115% BIG-Bench)
 38. **Identity Establishment** — Role-play prompting is foundational; +10pp accuracy observed on math benchmarks
-39. **Embedded Verification** — Open verification questions improve list-based accuracy from 17% to 70%
 
 ---
 
@@ -298,8 +296,6 @@ Then, based on these quotes, list the key diagnostic information.
 Place your analysis in <diagnostic_info> tags.
 ```
 
-**Why this differs from Embedded Verification**: Verification validates claims _after_ generation. Quote Extraction grounds reasoning _before_ analysis begins. The model commits to specific evidence first, then reasons from that evidence.
-
 **Non-obvious insight**: This is more effective than "cite your sources" because extraction happens _before_ reasoning, not as post-hoc justification. When the model reasons first and cites later, it may confabulate citations that support its conclusions. When it extracts first, reasoning is constrained to actual evidence.
 
 ---
@@ -355,7 +351,7 @@ of ideal gases?"
 Now answer the original question using these principles.
 ```
 
-**Performance**: Up to 27% improvement on knowledge-intensive tasks like MMLU physics and TimeQA.
+**Performance**: TimeQA showed 27% improvement; MMLU Physics/Chemistry showed +7% to +11%. Gains vary significantly by task—temporal reasoning benefits most.
 
 **Why this differs from Plan-and-Solve**: Plan-and-Solve structures _how_ to reason through a problem. Step-Back retrieves _what background knowledge_ to use. They address different bottlenecks: Plan-and-Solve fixes missing reasoning steps; Step-Back fixes missing domain knowledge. The techniques can be combined.
 
@@ -1428,41 +1424,7 @@ The incorrect version establishes a default but doesn't explain the reasoning, m
 
 ---
 
-## 6. Verification
-
-Techniques for improving factual accuracy through self-checking.
-
-### Embedded Verification
-
-For factual accuracy, embed verification steps within prompts. Chain-of-Verification research shows significant improvements, particularly for list-based questions.
-
-Per Dhuliawala et al. (2023): "Only ~17% of baseline answer entities are correct in list-based questions. However, when querying each individual entity via a verification question, we find ~70% are correctly answered."
-
-**Critical distinctions**:
-
-1. **Question type matters**: The 17%→70% improvement is specifically for list-based questions using the factored CoVe approach
-2. **Open questions outperform yes/no**: "We find that yes/no type questions perform worse for the factored version of CoVe. Some anecdotal examples... show the model tends to agree with facts in a yes/no question format whether they are right or wrong"
-
-**Example of the yes/no failure mode** (from the paper):
-
-- Open question: "Where was Hillary Clinton born?" → "Chicago, Illinois" (correct)
-- Yes/no question: "Was Hillary Clinton born in New York?" → "Yes" (incorrect—model agrees with the framing)
-
-**Implementation:**
-
-```
-After completing your analysis:
-1. Identify claims that could be verified
-2. For each claim, ask yourself the verification question directly
-   (use open questions like "What is X?" not yes/no questions like "Is X true?")
-3. Revise any inconsistencies before finalizing
-```
-
-**Non-obvious insight**: The instruction to use open questions rather than yes/no is critical. Without it, the model will verify claims using confirming questions ("Is Paris the capital of France?") which biases toward agreement regardless of correctness.
-
----
-
-## 7. Natural Language Understanding
+## 6. Natural Language Understanding
 
 Techniques specifically for NLU tasks requiring deep comprehension.
 
@@ -1505,7 +1467,7 @@ As you perform this task, follow these steps:
 
 ---
 
-## 8. Anti-Patterns to Avoid
+## 7. Anti-Patterns to Avoid
 
 ### The Hedging Spiral
 
@@ -1659,7 +1621,6 @@ Affirmative instructions directly specify the target behavior without requiring 
 - Chia et al. (2023). "Contrastive Chain-of-Thought Prompting." arXiv.
 - Cuadra et al. (2025). "The Danger of Overthinking: Examining the Reasoning-Action Dilemma in Agentic Tasks." arXiv.
 - Deng et al. (2023). "Rephrase and Respond: Let Large Language Models Ask Better Questions for Themselves." arXiv.
-- Dhuliawala et al. (2023). "Chain-of-Verification Reduces Hallucination in Large Language Models." arXiv.
 - Fu et al. (2023). "Complexity-Based Prompting for Multi-Step Reasoning." arXiv.
 - Kojima et al. (2022). "Large Language Models are Zero-Shot Reasoners." NeurIPS.
 - Kong et al. (2024). "Better Zero-Shot Reasoning with Role-Play Prompting." arXiv.
