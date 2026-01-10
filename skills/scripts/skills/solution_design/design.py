@@ -2,14 +2,16 @@
 """
 Solution Design Skill - Perspective-parallel solution generation.
 
-Seven-step workflow:
+Nine-step workflow:
   1. Context    - Establish problem, constraints, success criteria
-  2. Dispatch   - Select perspectives and launch parallel sub-agents
-  3. Aggregate  - Collect solutions, deduplicate, build roster
-  4. Synthesize - Analyze convergence/tension, generate cross-cutting solutions
-  5. Challenge  - Stress-test all solutions (pure and synthesized equally)
-  6. Select     - Rank, build trade-off matrix, produce recommendations
-  7. Output     - Generate final report (plain text)
+  2. Calibrate  - Infer evaluation criteria from problem + project + defaults
+  3. Reflect    - Validate inferred criteria, resolve conflicts, finalize
+  4. Dispatch   - Select perspectives and launch parallel sub-agents
+  5. Aggregate  - Collect solutions, deduplicate, build roster
+  6. Synthesize - Analyze convergence/tension, generate cross-cutting solutions
+  7. Challenge  - Stress-test all solutions (pure and synthesized equally)
+  8. Select     - Rank, build trade-off matrix, produce recommendations
+  9. Output     - Generate final report (plain text)
 
 Design note: This skill generates solutions for a given root cause. It does NOT
 identify problems or perform root cause analysis--that belongs upstream
@@ -25,6 +27,7 @@ from skills.lib.workflow.formatters import (
     format_current_action,
 )
 from skills.solution_design.perspectives import PERSPECTIVES, PERSPECTIVE_ORDER
+from skills.solution_design.defaults import format_all_defaults
 
 
 # Module paths for -m invocation
@@ -67,7 +70,7 @@ def format_perspective_selection_guidance() -> str:
 
 
 def format_parallel_dispatch() -> str:
-    """Format the parallel dispatch block for step 2."""
+    """Format the parallel dispatch block for step 4."""
     lines = ['<parallel_dispatch agent="general-purpose">']
     lines.append("  <mandatory>")
     lines.append("    You MUST launch EXACTLY 7 sub-agents in a SINGLE message.")
@@ -79,7 +82,7 @@ def format_parallel_dispatch() -> str:
     for p_id, p_title, p_question in PERSPECTIVE_SUMMARIES:
         lines.append(f'    <agent perspective="{p_id}">')
         lines.append(f'      {p_title}: {p_question}')
-        lines.append(f'    </agent>')
+        lines.append("    </agent>")
     lines.append("  </agents_to_launch>")
     lines.append("")
     lines.append("  <model_selection>")
@@ -95,6 +98,38 @@ def format_parallel_dispatch() -> str:
     lines.append("")
     lines.append("    ROOT CAUSE: [include verbatim from Step 1]")
     lines.append("    HARD CONSTRAINTS: [include from Step 1]")
+    lines.append("")
+    lines.append("    EVALUATION CRITERIA (from Step 3 - FINALIZED_CRITERIA):")
+    lines.append("    These criteria will be used to evaluate your solutions. Use them to:")
+    lines.append("    - Avoid proposing solutions with obviously fatal flaws")
+    lines.append("    - Flag risks that match significant/minor conditions")
+    lines.append("    - Be explicit about trade-offs on the weighted dimensions")
+    lines.append("")
+    lines.append("    VIABILITY: ")
+    lines.append("      [Include viability criteria from FINALIZED_CRITERIA]")
+    lines.append("      A solution must meet ALL these criteria to be considered viable.")
+    lines.append("")
+    lines.append("    FLAW SEVERITY:")
+    lines.append("      FATAL (solution will be eliminated):")
+    lines.append("        [List fatal conditions from FINALIZED_CRITERIA]")
+    lines.append("")
+    lines.append("      SIGNIFICANT (solution viable but with documented issues):")
+    lines.append("        [List significant conditions from FINALIZED_CRITERIA]")
+    lines.append("")
+    lines.append("      MINOR (noted as trade-off):")
+    lines.append("        [List minor conditions from FINALIZED_CRITERIA]")
+    lines.append("")
+    lines.append("    TRADEOFF DIMENSIONS:")
+    lines.append("      PRIMARY (weighted in ranking):")
+    lines.append("        [List primary dimensions with weights from FINALIZED_CRITERIA]")
+    lines.append("")
+    lines.append("      When describing trade-offs, address these dimensions explicitly.")
+    lines.append("")
+    lines.append("    GUIDANCE:")
+    lines.append("    - Still explore your perspective FULLY--do not only generate 'safe' solutions")
+    lines.append("    - If your perspective suggests something that might hit a fatal condition,")
+    lines.append("      either explain why it doesn't, or note the risk explicitly")
+    lines.append("    - Be specific about how your solutions perform on the primary trade-off dimensions")
     lines.append("")
     lines.append(f'    Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {PERSPECTIVE_MODULE_PATH} --step 1 --total-steps 2 --perspective $PERSPECTIVE_ID" />')
     lines.append("  </agent_prompt_template>")
@@ -269,11 +304,206 @@ STEPS = {
         ],
     },
     2: {
+        "title": "Calibrate",
+        "brief": "Infer evaluation criteria from problem + project + defaults",
+        "actions": [
+            "CALIBRATE EVALUATION CRITERIA",
+            "",
+            "Before generating and evaluating solutions, establish the criteria that will be used",
+            "to assess them. This ensures consistent, context-appropriate evaluation.",
+            "",
+            "INPUT: Root cause, constraints, and success criteria from Step 1.",
+            "",
+            "INFERENCE HIERARCHY (in priority order):",
+            "  1. PROBLEM INFERENCE: What does the problem statement imply about evaluation?",
+            "  2. PROJECT INFERENCE: What does the project context suggest? (if available)",
+            "  3. DEFAULT CONVENTIONS: Fallback when no specific inference possible",
+            "",
+            "INFER EACH OF THE FOLLOWING:",
+            "",
+            "1. VIABILITY DEFINITION",
+            "   What makes a solution 'viable' for THIS problem?",
+            "",
+            "   Problem signals to look for:",
+            "   - Urgency indicators (production, blocking, critical) -> speed matters",
+            "   - Scope indicators (architectural, long-term, foundation) -> thoroughness matters",
+            "   - Domain indicators (security, performance, reliability) -> domain excellence matters",
+            "",
+            "   Default if no signals:",
+            "   - Addresses root cause through clear mechanism",
+            "   - Respects all hard constraints",
+            "   - Is implementable with reasonable effort",
+            "",
+            "2. FLAW SEVERITY WEIGHTING",
+            "   What makes a flaw fatal vs significant vs minor for THIS problem?",
+            "",
+            "   Problem type determines severity:",
+            "   - Security problem -> security regressions are FATAL, not significant",
+            "   - Performance problem -> performance overhead weighted more severely",
+            "   - Reliability problem -> failure modes are FATAL",
+            "   - Maintainability problem -> complexity weighted more severely",
+            "",
+            "   Hard constraints from Step 1:",
+            "   - Each hard constraint violation -> FATAL",
+            "",
+            "   Default categorization:",
+            "   - FATAL: Doesn't address root cause, violates hard constraint, creates worse problem",
+            "   - SIGNIFICANT: Substantial soft-constraint violation, requires unavailable resources",
+            "   - MINOR: Manageable downside, acceptable complexity increase",
+            "",
+            "3. TRADE-OFF DIMENSIONS",
+            "   Which dimensions should the trade-off matrix include for THIS problem?",
+            "",
+            "   Extract from problem and constraints:",
+            "   - Each soft constraint suggests a dimension",
+            "   - Problem type suggests primary dimensions",
+            "",
+            "   Default dimensions (always consider):",
+            "   - Complexity, Risk, Reversibility, Scope",
+            "",
+            "   Assign weights (high/medium/low) based on problem priorities.",
+            "",
+            "4. SYNTHESIS THRESHOLD",
+            "   How aggressively should we synthesize cross-cutting solutions?",
+            "",
+            "   Problem complexity determines appetite:",
+            "   - Simple, focused -> conservative (3+ solutions, strong theme)",
+            "   - Complex, multi-faceted -> moderate (2+ solutions, moderate theme)",
+            "   - Exploratory -> aggressive (2+ solutions, any pattern)",
+            "",
+            "   Default: conservative",
+            "",
+            "DEFAULT CRITERIA (use as fallback when inference produces nothing):",
+            "",
+            format_all_defaults(),
+            "",
+            "OUTPUT your inferred criteria in the following format.",
+            "Tag each criterion with its source (problem, project, or default).",
+            "Include rationale explaining WHY each inference fits this problem.",
+            "",
+            "<evaluation_criteria>",
+            "  <viability_definition>",
+            "    <source>problem | project | default</source>",
+            "    <criteria>",
+            "      <criterion>...</criterion>",
+            "    </criteria>",
+            "    <rationale>Why these criteria fit this problem</rationale>",
+            "  </viability_definition>",
+            "",
+            "  <flaw_severity>",
+            "    <source>problem | project | default</source>",
+            "    <fatal_conditions>",
+            "      <condition>...</condition>",
+            "    </fatal_conditions>",
+            "    <significant_conditions>",
+            "      <condition>...</condition>",
+            "    </significant_conditions>",
+            "    <minor_conditions>",
+            "      <condition>...</condition>",
+            "    </minor_conditions>",
+            "    <rationale>Why this severity weighting fits this problem</rationale>",
+            "  </flaw_severity>",
+            "",
+            "  <tradeoff_dimensions>",
+            "    <source>problem | project | default</source>",
+            "    <primary_dimensions>",
+            '      <dimension name="..." weight="high | medium | low">',
+            "        <why>Explanation of why this dimension matters here</why>",
+            "      </dimension>",
+            "    </primary_dimensions>",
+            "    <secondary_dimensions>",
+            '      <dimension name="..."/>',
+            "    </secondary_dimensions>",
+            "    <rationale>Why these dimensions fit this problem</rationale>",
+            "  </tradeoff_dimensions>",
+            "",
+            "  <synthesis_threshold>",
+            "    <source>problem | project | default</source>",
+            "    <minimum_solutions_for_theme>3</minimum_solutions_for_theme>",
+            "    <theme_strength_required>strong | moderate</theme_strength_required>",
+            "    <synthesize_appetite>conservative | moderate | aggressive</synthesize_appetite>",
+            "    <rationale>Why this threshold fits this problem</rationale>",
+            "  </synthesis_threshold>",
+            "</evaluation_criteria>",
+        ],
+    },
+    3: {
+        "title": "Reflect",
+        "brief": "Validate inferred criteria, resolve conflicts, finalize",
+        "actions": [
+            "REFLECT ON INFERRED CRITERIA",
+            "",
+            "Review the evaluation criteria from Step 2. Validate and finalize them.",
+            "",
+            "VALIDATION CHECKS:",
+            "",
+            "1. CONSISTENCY CHECK",
+            "   - Do viability criteria align with flaw severity?",
+            "     (If something makes a solution non-viable, it should be fatal)",
+            "   - Do trade-off dimensions cover the soft constraints?",
+            "   - Does synthesis threshold match problem complexity?",
+            "",
+            "   If inconsistent: Identify the conflict and resolve it.",
+            "",
+            "2. COMPLETENESS CHECK",
+            "   - Is every hard constraint mapped to a fatal flaw condition?",
+            "   - Are obvious dimensions missing from trade-offs?",
+            "   - Is the viability definition operational (actually usable for decisions)?",
+            "",
+            "   If incomplete: Add missing elements.",
+            "",
+            "3. SPECIFICITY CHECK",
+            "   - Are criteria specific enough to produce consistent judgments?",
+            "   - Are criteria too specific (would incorrectly exclude valid solutions)?",
+            "   - Is there appropriate room for legitimate judgment?",
+            "",
+            "   If over-specified: Loosen criteria.",
+            "   If under-specified: Add clarification.",
+            "",
+            "4. CONFLICT RESOLUTION",
+            "   If problem signals conflict (e.g., urgent AND architectural):",
+            "   - Determine which takes priority for THIS specific problem",
+            "   - Document the conflict and resolution",
+            "   - Adjust criteria accordingly",
+            "",
+            "   Priority order for conflicts:",
+            "   - Hard constraints are inviolable",
+            "   - Problem-specific signals override project patterns",
+            "   - Explicit user instructions override all inferences",
+            "",
+            "MAKE ADJUSTMENTS as needed based on validation.",
+            "",
+            "OUTPUT:",
+            "",
+            "<finalized_criteria>",
+            "  <viability_definition>...</viability_definition>",
+            "  <flaw_severity>...</flaw_severity>",
+            "  <tradeoff_dimensions>...</tradeoff_dimensions>",
+            "  <synthesis_threshold>...</synthesis_threshold>",
+            "",
+            "  <validation>",
+            "    <consistency_check>pass | fail</consistency_check>",
+            "    <completeness_check>pass | fail</completeness_check>",
+            "    <specificity_check>pass | fail</specificity_check>",
+            "    <adjustments_made>",
+            "      <adjustment>Description of any changes made during reflection</adjustment>",
+            "    </adjustments_made>",
+            "  </validation>",
+            "</finalized_criteria>",
+            "",
+            "The finalized criteria will be used in:",
+            "  - Step 4 (Dispatch): Agents see criteria to generate informed solutions",
+            "  - Step 6 (Synthesize): synthesis_threshold determines theme requirements",
+            "  - Step 7 (Challenge): viability_definition and flaw_severity for evaluation",
+            "  - Step 8 (Select): tradeoff_dimensions for matrix and ranking",
+        ],
+    },
+    4: {
         "title": "Dispatch",
         "brief": "Launch all perspectives as parallel sub-agents",
         "needs_dispatch": True,  # Flag for format_output
     },
-    3: {
+    5: {
         "title": "Aggregate",
         "brief": "Collect solutions, deduplicate, build roster",
         "actions": [
@@ -284,7 +514,7 @@ STEPS = {
             "",
             "1. COLLECT all solutions from all perspective sub-agents",
             "   - Each perspective produces 1-3 solutions in structured format",
-            "   - Preserve all solution details (what, where, mechanism, effort, trade-offs)",
+            "   - Preserve all solution details (what, where, mechanism, trade-offs)",
             "",
             "2. DEDUPLICATE:",
             "   - Identify solutions that are the SAME APPROACH with different phrasing",
@@ -313,11 +543,16 @@ STEPS = {
             "  GAPS: [any perspectives that produced no solutions]",
         ],
     },
-    4: {
+    6: {
         "title": "Synthesize",
         "brief": "Analyze convergence/tension, generate cross-cutting solutions",
         "actions": [
             "ANALYZE SOLUTION RELATIONSHIPS AND GENERATE CROSS-CUTTING SOLUTIONS",
+            "",
+            "Reference FINALIZED_CRITERIA.synthesis_threshold from Step 3:",
+            "  - minimum_solutions_for_theme: How many solutions must share a theme?",
+            "  - theme_strength_required: How central must the theme be?",
+            "  - synthesize_appetite: conservative | moderate | aggressive",
             "",
             "1. ANALYZE CONVERGENCE:",
             "   - Which solutions from DIFFERENT perspectives point to the same approach?",
@@ -334,19 +569,25 @@ STEPS = {
             "3. IDENTIFY THEMES:",
             "   - What concepts appear across MULTIPLE solutions even when solutions differ?",
             "   - Look for: 'boundary validation', 'state isolation', 'type safety'",
-            "   - Themes appearing in 3+ solutions are SYNTHESIS CANDIDATES",
+            "   - Apply synthesis_threshold: themes appearing in N+ solutions are candidates",
             "",
             "4. GENERATE CROSS-CUTTING SOLUTIONS (IF WARRANTED):",
-            "   For each strong theme, ask:",
+            "   Apply synthesis threshold:",
+            "   - CONSERVATIVE: Only synthesize when 3+ solutions share strong theme",
+            "   - MODERATE: Synthesize when 2+ solutions share moderate theme",
+            "   - AGGRESSIVE: Synthesize when any clear pattern emerges",
+            "",
+            "   For each qualified theme, ask:",
             "   'Is there a solution that fully embodies this theme in a way no single",
             "    perspective captured?'",
             "",
             "   IF YES: Articulate with SAME SPECIFICITY as pure solutions:",
-            "     - what, where, mechanism, effort, trade-offs",
+            "     - what, where, mechanism, trade-offs",
             "     - Tag as 'synthesized' with attribution to inspiring solutions",
             "",
             "   IF NO: Document 'No cross-cutting solutions generated'",
-            "   This is a VALID and COMMON outcome. Do not force artificial combinations.",
+            "   Zero synthesized solutions is ALWAYS a valid outcome.",
+            "   Do not force synthesis to have output.",
             "",
             format_synthesis_analysis_template(),
             "",
@@ -366,11 +607,13 @@ STEPS = {
             "  ENRICHED_ROSTER: [all pure solutions + any synthesized solutions]",
         ],
     },
-    5: {
+    7: {
         "title": "Challenge",
-        "brief": "Stress-test all solutions (pure and synthesized equally)",
+        "brief": "Stress-test all solutions using calibrated criteria",
         "actions": [
             "STRESS-TEST ALL SOLUTIONS",
+            "",
+            "Reference FINALIZED_CRITERIA from Step 3 for evaluation.",
             "",
             "For EACH solution in the enriched roster (pure AND synthesized):",
             "",
@@ -381,16 +624,27 @@ STEPS = {
             "  4. What SECOND-ORDER EFFECTS might this create?",
             "  5. Does this actually ADDRESS THE ROOT CAUSE or merely treat symptoms?",
             "",
-            "CATEGORIZE ISSUES FOUND:",
-            "  FATAL: Invalidates the solution under stated constraints",
-            "         -> Mark solution as ELIMINATED with reason",
-            "  SIGNIFICANT: Real problem that affects viability",
-            "         -> Document issue, solution remains VIABLE WITH ISSUES",
-            "  MINOR: Downside but manageable",
-            "         -> Note as trade-off, solution remains VIABLE",
+            "VIABILITY CHECK using viability_definition:",
+            "  Does solution meet ALL viability criteria from Step 3?",
+            "  If NO: Solution is ELIMINATED (not viable)",
+            "  If YES: Solution proceeds to severity categorization",
+            "",
+            "CATEGORIZE ISSUES using flaw_severity from Step 3:",
+            "",
+            "  FATAL (from flaw_severity.fatal_conditions):",
+            "    Apply the specific fatal conditions inferred for this problem.",
+            "    -> Mark solution as ELIMINATED with reason",
+            "",
+            "  SIGNIFICANT (from flaw_severity.significant_conditions):",
+            "    Apply the specific significant conditions inferred for this problem.",
+            "    -> Document issue, solution remains VIABLE WITH ISSUES",
+            "",
+            "  MINOR (from flaw_severity.minor_conditions):",
+            "    Apply the specific minor conditions inferred for this problem.",
+            "    -> Note as trade-off, solution remains VIABLE",
             "",
             "UPDATE SOLUTION STATUS:",
-            "  ELIMINATED: Fatal flaw found (document reason)",
+            "  ELIMINATED: Fatal flaw found or viability criteria not met (document reason)",
             "  VIABLE: Passed challenge (may have documented issues)",
             "",
             "COVERAGE CHECK:",
@@ -407,26 +661,36 @@ STEPS = {
             "  VIABLE: [solutions that survived challenge]",
         ],
     },
-    6: {
+    8: {
         "title": "Select",
-        "brief": "Rank, build trade-off matrix, produce recommendations",
+        "brief": "Rank using calibrated dimensions, produce recommendations",
         "actions": [
             "EVALUATE AND PRODUCE RECOMMENDATIONS",
+            "",
+            "Reference FINALIZED_CRITERIA.tradeoff_dimensions from Step 3.",
             "",
             "1. RANK SURVIVING SOLUTIONS:",
             "   - Order by overall viability given stated constraints",
             "   - Document ranking criteria used",
             "   - Origin (pure vs synthesized) does NOT factor into ranking",
             "",
-            "2. BUILD TRADE-OFF MATRIX:",
-            "   For each dimension that matters (based on constraints):",
+            "2. BUILD TRADE-OFF MATRIX using calibrated dimensions:",
             "",
-            "   | Solution    | Complexity | Risk | Reversibility | Scope | [other dims] |",
-            "   |-------------|------------|------|---------------|-------|--------------|",
-            "   | Solution #1 | low        | low  | high          | local | ...          |",
+            "   PRIMARY DIMENSIONS (must appear in matrix, from Step 3):",
+            "   Include all primary dimensions with their weights.",
             "",
-            "   Typical dimensions: complexity, risk, reversibility, scope of change",
-            "   Add problem-specific dimensions as relevant",
+            "   SECONDARY DIMENSIONS (include if solutions vary, from Step 3):",
+            "   Check if solutions differ on these; include only if relevant.",
+            "",
+            "   DIMENSION WEIGHTING:",
+            "   When ranking solutions, weight dimensions according to calibrated weights.",
+            "   High-weight dimensions contribute more to overall ranking.",
+            "",
+            "   | Solution    | [Dim1] | [Dim2] | [Dim3] | ... |",
+            "   |-------------|--------|--------|--------|-----|",
+            "   | Solution #1 | value  | value  | value  | ... |",
+            "",
+            "   Do NOT include excluded dimensions.",
             "   Do NOT include time estimates (hours/days/weeks)",
             "",
             "3. NOTE CONVERGENCE AND TENSION:",
@@ -454,12 +718,12 @@ STEPS = {
             "",
             "OUTPUT:",
             "  RANKED_SOLUTIONS: [ordered list with ranking rationale]",
-            "  TRADE_OFF_MATRIX: [table comparing solutions on key dimensions]",
+            "  TRADE_OFF_MATRIX: [table comparing solutions on calibrated dimensions]",
             "  DECISION_FRAMEWORK: [conditional recommendations]",
             "  RECOMMENDATION: [explicit recommendation or key discriminating factor]",
         ],
     },
-    7: {
+    9: {
         "title": "Output",
         "brief": "Generate final report (plain text)",
         "actions": [
@@ -485,10 +749,11 @@ STEPS = {
             "  - All constraints (hard and soft)",
             "  - Success criteria",
             "  - Cost of inaction baseline",
+            "  - Evaluation criteria used (from Step 3)",
             "  - Synthesis insights (convergence, tensions, themes)",
             "  - All viable solutions with full details",
             "  - Eliminated solutions with reasons",
-            "  - Trade-off matrix",
+            "  - Trade-off matrix (using calibrated dimensions)",
             "  - Decision framework (conditional recommendations)",
             "  - Explicit recommendation (or key discriminating factor)",
             "",
@@ -505,7 +770,7 @@ STEPS = {
 
 def format_output(step: int, total_steps: int) -> str:
     """Format output for display."""
-    info = STEPS.get(step, STEPS[7])
+    info = STEPS.get(step, STEPS[9])
     is_complete = step >= total_steps
 
     parts = []
@@ -522,11 +787,12 @@ def format_output(step: int, total_steps: int) -> str:
     # Build actions
     actions = []
 
-    if step == 2:
-        # Step 2: Launch all perspectives in parallel
+    if step == 4:
+        # Step 4: Launch all perspectives in parallel (Dispatch)
         actions.append("DISPATCH ALL PERSPECTIVE SUB-AGENTS")
         actions.append("")
-        actions.append("Using the ROOT_CAUSE and CONSTRAINTS from Step 1:")
+        actions.append("Using the ROOT_CAUSE, CONSTRAINTS from Step 1")
+        actions.append("and FINALIZED_CRITERIA from Step 3:")
         actions.append("")
         actions.append(format_perspective_selection_guidance())
         actions.append("")
@@ -561,7 +827,7 @@ def format_output(step: int, total_steps: int) -> str:
 def main():
     parser = argparse.ArgumentParser(
         description="Solution Design Skill - Perspective-parallel solution generation",
-        epilog="Steps: context -> dispatch -> aggregate -> synthesize -> challenge -> select -> output",
+        epilog="Steps: context -> calibrate -> reflect -> dispatch -> aggregate -> synthesize -> challenge -> select -> output",
     )
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument("--total-steps", type=int, required=True)
@@ -569,8 +835,8 @@ def main():
 
     if args.step < 1:
         sys.exit("ERROR: --step must be >= 1")
-    if args.total_steps < 7:
-        sys.exit("ERROR: --total-steps must be >= 7 (7 steps in workflow)")
+    if args.total_steps < 9:
+        sys.exit("ERROR: --total-steps must be >= 9 (9 steps in workflow)")
     if args.step > args.total_steps:
         sys.exit("ERROR: --step cannot exceed --total-steps")
 
