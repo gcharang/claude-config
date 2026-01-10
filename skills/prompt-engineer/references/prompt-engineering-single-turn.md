@@ -11,10 +11,12 @@ This document synthesizes practical prompt engineering patterns with academic re
 | Domain             | Technique                     | Trigger Condition                               | Stacks With                        | Conflicts With                     | Cost/Tradeoff                                | Effect                                                       |
 | ------------------ | ----------------------------- | ----------------------------------------------- | ---------------------------------- | ---------------------------------- | -------------------------------------------- | ------------------------------------------------------------ |
 | **Reasoning**      | Plan-and-Solve                | Multi-step problems with missing steps          | RE2, Thinking Tags, Step-Back      | Scope Limitation, Direct Prompting | Moderate token increase for planning phase   | Of incorrect answers: calc errors 7%→5%, missing-step 12%→7% |
-| **Reasoning**      | Step-Back                     | Domain knowledge required before reasoning      | Plan-and-Solve                     | —                                  | Additional retrieval step                    | TimeQA +27%; MMLU Physics/Chemistry +7-11%                   |
-| **Reasoning**      | Chain of Draft                | Token efficiency needed                         | Any reasoning technique            | Verbose CoT                        | Minimal; up to 92% token reduction           | Matches CoT accuracy at 7.6% token cost                      |
+| **Reasoning**      | Step-Back                     | Domain knowledge required before reasoning      | Plan-and-Solve                     | —                                  | Additional retrieval step                    | Up to 27% improvement on knowledge tasks                     |
+| **Reasoning**      | Chain of Draft                | Token efficiency needed                         | Any reasoning technique            | Verbose CoT                        | Minimal; up to 92% token reduction           | Matches CoT accuracy at as little as 7.6% token cost (varies by task) |
 | **Reasoning**      | Direct Prompting              | Pattern recognition, implicit learning          | —                                  | Any CoT variant                    | Minimal; no reasoning overhead               | Avoids 30%+ accuracy drops on pattern tasks                  |
 | **Reasoning**      | Thread of Thought             | Chaotic/multi-source context                    | RE2                                | —                                  | Moderate increase; benefits from two-phase   | Systematic context segmentation                              |
+| **Reasoning**      | Self-Ask                      | Compositional questions requiring decomposition | Search/retrieval tools             | —                                  | Moderate increase (sub-question chains)      | Bamboogle: +11.2pp over few-shot CoT (64.9% vs 53.7%)        |
+| **Reasoning**      | Program of Thoughts           | Numerical/computational problems                | Plan-and-Solve                     | Chain of Draft                     | Requires code interpreter                    | ~12% avg improvement over CoT on math benchmarks             |
 | **Input**          | RE2 (Re-Reading)              | Any comprehension task (universal enhancer)     | All output-phase techniques        | —                                  | Minimal; question repetition only            | GSM8K: 77.79%→80.59% with CoT                                |
 | **Input**          | RaR (Rephrase and Respond)    | Ambiguous questions, frame mismatch             | CoT                                | —                                  | Minimal; single rephrasing step              | Aligns intent with LLM interpretation                        |
 | **Input**          | S2A (System 2 Attention)      | Heavily biased/opinionated context              | —                                  | Including original context         | ~2x tokens (preprocessing filter call)       | Factual QA: 62.8%→80.3% on opinion-contaminated prompts      |
@@ -24,27 +26,30 @@ This document synthesizes practical prompt engineering patterns with academic re
 | **Example Design** | Contrastive Examples          | Model makes predictable mistakes                | Affirmative Directives, Categories | —                                  | ~2x example tokens (correct + incorrect)     | +9.8 to +16.0 points on reasoning tasks                      |
 | **Example Design** | Complexity-Based Selection    | Teaching thorough reasoning                     | Diversity-Based Selection          | —                                  | Fewer examples but longer; net neutral       | +5.3 avg, up to +18 accuracy (Fu et al.)                     |
 | **Example Design** | Diversity-Based Selection     | Selecting from example pool                     | Complexity-Based Selection         | —                                  | None; selection strategy only                | Robust even with 50% wrong demos                             |
+| **Example Design** | Auto-CoT                      | Need CoT demos without manual crafting          | Diversity-Based Selection          | Hand-crafted examples              | Requires clustering/embedding                | Matches Manual-CoT (within 1-2%)                             |
 | **Example Design** | Analogical Prompting          | No hand-crafted examples available              | Diversity instruction              | Hand-crafted examples              | Moderate increase (self-generated examples)  | GSM8K: 77.8% (vs 72.5% 0-shot CoT)                           |
+| **Example Design** | Contextual Calibration        | Few-shot with biased label predictions          | Any few-shot technique             | —                                  | Requires calibration pass                    | Up to +30% accuracy on classification                        |
 | **Example Design** | Category-Based Generalization | Novel inputs need correct handling              | Edge-case examples                 | —                                  | Minimal; structural organization             | Enables analogical reasoning                                 |
 | **Output**         | Scope Limitation              | Well-defined task; model stuck in planning loop | —                                  | Plan-and-Solve                     | May reduce tokens by preventing overthinking | Prevents analysis paralysis                                  |
 | **Output**         | XML Structure Patterns        | Enforcing completeness                          | Instructive Tag Naming             | —                                  | Minimal; structural tags only                | Forces systematic reasoning                                  |
 | **Output**         | Format Strictness             | Exact format required                           | Forbidden Phrases                  | —                                  | Minimal                                      | "ONLY return X" compliance                                   |
 | **Output**         | Hint-Based Guidance           | Output missing key aspects                      | Any technique                      | —                                  | Minimal                                      | 4-13% improvement via directional stimulus                   |
 | **NLU**            | Metacognitive Prompting       | Deep comprehension required                     | —                                  | Simple tasks (causes overthinking) | Moderate to high (5-stage process)           | +4.8% to +6.4% over CoT                                      |
-| **Behavioral**     | Identity Establishment        | Any task (foundational)                         | Emotional Stimuli                  | —                                  | Minimal                                      | +10pp on math benchmarks                                     |
+| **Behavioral**     | Identity Establishment        | Any task (foundational)                         | Emotional Stimuli                  | —                                  | Minimal                                      | AQuA: +10.3pp; varies significantly by task (Last Letter: +60pp) |
 | **Behavioral**     | Emotional Stimuli             | Reluctant execution                             | Identity Establishment             | —                                  | Minimal                                      | 8% on Instruction Induction, 115% on BIG-Bench               |
 | **Behavioral**     | Confidence Building           | Hesitation/verification loops                   | Error Normalization                | —                                  | Minimal                                      | Eliminates hesitation loops                                  |
 | **Behavioral**     | Error Normalization           | Expected failures cause stopping                | Confidence Building                | —                                  | Minimal                                      | Prevents apology spirals                                     |
 | **Behavioral**     | Pre-Work Context Analysis     | Blind execution problems                        | Category-Based Examples            | —                                  | Slight increase for analysis phase           | Prevents context-blind execution                             |
 | **Behavioral**     | Emphasis Hierarchy            | Multiple priority levels                        | Numbered Rule Priority             | —                                  | Minimal                                      | Predictable priority system                                  |
 | **Behavioral**     | Affirmative Directives        | Any instruction (foundational)                  | Contrastive Examples               | —                                  | Minimal                                      | Significant correctness improvement                          |
+| **Verification**   | Embedded Verification         | Factual accuracy concerns                       | —                                  | —                                  | Moderate increase for verification questions | List-based QA: 17%→70% (factored CoVe)                       |
 
 ---
 
 ## Quick Reference: Key Principles
 
 1. **Plan-and-Solve for Complex Tasks** — Explicit planning reduces missing-step errors (from 12% to 7% of incorrect answers)
-2. **Step-Back for Knowledge-Intensive Tasks** — Retrieve principles before specific reasoning (TimeQA +27%, MMLU +7-11%)
+2. **Step-Back for Knowledge-Intensive Tasks** — Retrieve principles before specific reasoning
 3. **Re-Reading (RE2) for Better Comprehension** — Instruction "Read the question again:" outperforms simple repetition by 1.2pp
 4. **Rephrase and Respond (RaR) for Ambiguous Questions** — Let the model clarify questions in its own terms
 5. **System 2 Attention (S2A) for Contaminated Context** — Filter out bias/noise before reasoning
@@ -80,7 +85,12 @@ This document synthesizes practical prompt engineering patterns with academic re
 35. **Reward/Penalty Framing** — Monetary penalties create behavioral weight
 36. **Output Format Strictness** — "ONLY return X" leaves no room for interpretation
 37. **Emotional Stimuli** — "This is important to my career" improves attention (8% Instruction Induction, 115% BIG-Bench)
-38. **Identity Establishment** — Role-play prompting is foundational; +10pp accuracy observed on math benchmarks
+38. **Identity Establishment** — Role-play prompting is foundational; AQuA: +10.3pp accuracy (Kong et al. 2024), varies by task
+39. **Embedded Verification** — Open verification questions improve list-based accuracy from 17% to 70%
+40. **Self-Ask for Compositional Questions** — Explicit sub-question decomposition +11.2pp on Bamboogle (Press et al. 2022)
+41. **Program of Thoughts for Computation** — Delegate arithmetic to interpreter; ~12% avg improvement over CoT on math
+42. **Auto-CoT for Automatic Demos** — Diversity-based clustering creates CoT examples without manual labeling (Zhang et al. 2022)
+43. **Contextual Calibration for Bias** — Adjust predictions using content-free input probe; up to +30% accuracy (Zhao et al. 2021)
 
 ---
 
@@ -296,6 +306,8 @@ Then, based on these quotes, list the key diagnostic information.
 Place your analysis in <diagnostic_info> tags.
 ```
 
+**Why this differs from Embedded Verification**: Verification validates claims _after_ generation. Quote Extraction grounds reasoning _before_ analysis begins. The model commits to specific evidence first, then reasons from that evidence.
+
 **Non-obvious insight**: This is more effective than "cite your sources" because extraction happens _before_ reasoning, not as post-hoc justification. When the model reasons first and cites later, it may confabulate citations that support its conclusions. When it extracts first, reasoning is constrained to actual evidence.
 
 ---
@@ -351,7 +363,7 @@ of ideal gases?"
 Now answer the original question using these principles.
 ```
 
-**Performance**: TimeQA showed 27% improvement; MMLU Physics/Chemistry showed +7% to +11%. Gains vary significantly by task—temporal reasoning benefits most.
+**Performance**: Up to 27% improvement on knowledge-intensive tasks like MMLU physics and TimeQA.
 
 **Why this differs from Plan-and-Solve**: Plan-and-Solve structures _how_ to reason through a problem. Step-Back retrieves _what background knowledge_ to use. They address different bottlenecks: Plan-and-Solve fixes missing reasoning steps; Step-Back fixes missing domain knowledge. The techniques can be combined.
 
@@ -424,6 +436,97 @@ The conclusion marker ("Therefore, the answer:") forces the model to distill its
 
 ---
 
+### Self-Ask: Explicit Sub-Question Decomposition
+
+For compositional questions requiring multiple reasoning steps, **Self-Ask** prompts the model to explicitly ask and answer follow-up sub-questions before reaching the final answer.
+
+Per Press et al. (2022): "Self-ask prompting for compositional question answering, in which the model explicitly asks itself (and then answers) follow-up questions before answering the initial question."
+
+**Performance**: Self-Ask achieves 64.9% on Bamboogle (compositional questions), compared to 53.7% for standard few-shot CoT—an improvement of +11.2pp. The technique also integrates naturally with search engines: when sub-questions require factual knowledge, an external retriever can provide answers.
+
+**The trigger phrase:**
+
+```
+Question: [compositional question]
+
+Are follow-up questions needed here: Yes.
+Follow-up: [first sub-question]
+Intermediate answer: [answer to first sub-question]
+Follow-up: [second sub-question]
+Intermediate answer: [answer to second sub-question]
+...
+So the final answer is: [final answer]
+```
+
+**Example from the paper:**
+
+```
+Question: Who was president of the U.S. when superconductivity was discovered?
+
+Are follow-up questions needed here: Yes.
+Follow-up: When was superconductivity discovered?
+Intermediate answer: 1911.
+Follow-up: Who was president of the U.S. in 1911?
+Intermediate answer: William Howard Taft.
+So the final answer is: William Howard Taft.
+```
+
+**Why this differs from Plan-and-Solve**: Plan-and-Solve structures _how_ to approach a problem. Self-Ask decomposes _what_ sub-questions need answering. Plan-and-Solve creates a procedural plan; Self-Ask creates an explicit Q&A trace. Use Self-Ask for compositional factual questions; use Plan-and-Solve for procedural multi-step reasoning.
+
+**Stacking note**: Self-Ask combines well with retrieval-augmented generation. The explicit sub-questions can be sent to a search API, and intermediate answers can be grounded in retrieved documents.
+
+---
+
+### Program of Thoughts: Delegating Computation
+
+When tasks involve numerical computation, reasoning and calculation can be separated. **Program of Thoughts (PoT)** has the model express reasoning as code, delegating actual computation to an interpreter.
+
+Per Chen et al. (2023): "Program of Thoughts prompting... disentangles computation from reasoning by having LLMs express reasoning as Python programs, offloading calculation to a Python interpreter."
+
+**Performance**: PoT achieves ~12% average improvement over CoT on math/numerical benchmarks: GSM8K (71.6% vs 63.1%), AQuA (54.1% vs 45.3%), SVAMP (85.2% vs 74.8%). The gains are largest on problems with complex arithmetic where CoT accumulates calculation errors.
+
+**The trigger phrase:**
+
+```
+Write a Python function to solve this problem. Express your reasoning as code,
+then execute it to get the answer.
+
+# Problem: [problem statement]
+```
+
+**Example:**
+
+```
+# Problem: A store sells apples for $1.50 each. If you buy 5 or more,
+# you get a 10% discount. How much do 7 apples cost?
+
+def solve():
+    price_per_apple = 1.50
+    quantity = 7
+
+    # Check discount eligibility
+    if quantity >= 5:
+        discount = 0.10
+    else:
+        discount = 0
+
+    # Calculate total
+    subtotal = price_per_apple * quantity
+    total = subtotal * (1 - discount)
+
+    return total
+
+# Answer: solve() = 9.45
+```
+
+**Why this works**: LLMs make arithmetic errors. Interpreters don't. By separating "what to compute" (model's strength) from "computing it accurately" (interpreter's strength), PoT avoids accumulated calculation errors that plague long CoT chains.
+
+**When to use**: Numerical/mathematical tasks with multi-step computation: financial calculations, physics problems, statistical analyses, multi-variable word problems. Not useful for tasks without significant computation (classification, extraction, pure reasoning).
+
+**Stacking note**: PoT combines with Plan-and-Solve—plan the approach first, then express the solution as code. Conflicts with Chain of Draft (PoT produces code, not minimal text).
+
+---
+
 ### Chain-of-Thought: When It Helps vs. When It Hurts
 
 CoT benefits are task-type dependent. The determining factor: whether correctness requires grounding in external context.
@@ -476,6 +579,12 @@ Chain-of-thought explanations can be plausible yet systematically unfaithful. Pe
 **Implication**: Do not treat CoT explanations as faithful representations of model decision-making. CoT improves accuracy on many tasks, but the _explanations_ may not reflect the actual reasoning process. The model may be influenced by factors it doesn't verbalize.
 
 **Non-obvious insight**: Few-shot CoT reduces susceptibility to bias compared to zero-shot CoT. Per the paper: accuracy improves significantly when moving from zero-shot to few-shot settings (35.0→51.7% for one model). If you need more robust reasoning, few-shot demonstrations help—but they don't eliminate the faithfulness problem.
+
+**Safety caveat for sensitive domains**: Per Shaikh et al. (2023): "Zero-shot CoT reasoning in LLMs can increase the generation of harmful content... we observe increases in toxicity and stereotype metrics across multiple social groups."
+
+The study found that adding "Let's think step by step" to harmful prompts increased the rate of harmful outputs: stereotype agreement rose from 5% to 12% on certain groups, and toxicity scores increased by 19% on RealToxicityPrompts. The mechanism: CoT prompting encourages the model to elaborate rather than decline, and the reasoning steps can reinforce biased associations.
+
+**Practical guidance**: Avoid zero-shot CoT on tasks involving sensitive social topics (stereotypes, demographics, politically charged content) or where refusal is the appropriate response. For these domains, direct prompting or explicit guardrails outperform reasoning prompts.
 
 ---
 
@@ -602,6 +711,29 @@ When selecting few-shot examples from a pool of candidates, choose diverse examp
 <example category="percentage">...</example>
 <example category="percentage">...</example>
 ```
+
+#### Auto-CoT: Automatic Demonstration Construction
+
+**Auto-CoT** automates the creation of diverse CoT demonstrations, eliminating manual example crafting. Per Zhang et al. (2022): "Auto-CoT automatically constructs demonstrations with questions and reasoning chains... using clustering-based selection to sample diverse questions and generate chains using zero-shot CoT."
+
+**The two-stage process:**
+
+1. **Question clustering**: Partition training questions into k clusters using sentence embeddings
+2. **Demonstration sampling**: Select one representative question from each cluster, generate its reasoning chain via zero-shot CoT ("Let's think step by step")
+
+**Performance**: Auto-CoT matches Manual-CoT performance across 10 reasoning benchmarks (within 1-2% accuracy), despite using automatically generated chains that may contain errors. On GSM8K: Manual-CoT achieves 46.9%, Auto-CoT achieves 47.9%.
+
+**Why this works**: Diversity compensates for individual errors. When demonstrations span different problem types, even if some contain mistakes, the model learns generalizable reasoning patterns rather than memorizing specific error modes.
+
+**Practical guidance**: If you need CoT demonstrations but lack time for manual curation:
+
+1. Embed your question pool using any sentence embedding model
+2. Cluster into k groups (k = number of desired examples, typically 4-8)
+3. For each cluster, select the question closest to centroid
+4. Generate reasoning chains via zero-shot CoT
+5. Optionally: filter chains with obviously wrong final answers
+
+**Stacking note**: Auto-CoT implements the diversity principle automatically. Combines with Complexity-Based Selection by filtering for longer/more complex generated chains from each cluster.
 
 ---
 
@@ -755,6 +887,48 @@ Skewed example distributions create prediction bias. Per the systematic survey (
 <example label="negative">...</example>
 ```
 
+#### Contextual Calibration
+
+Even balanced examples can produce biased predictions due to surface-level cues in the prompt format. **Contextual Calibration** corrects for this by measuring the model's prior bias and adjusting predictions accordingly.
+
+Per Zhao et al. (2021): "We first estimate the model's bias towards each answer by feeding in a content-free input such as 'N/A'... We then fit calibration parameters that cause the prediction for this input to be uniform across answers."
+
+**The problem**: LLMs exhibit three sources of bias in few-shot settings:
+1. **Majority label bias**: Predicting the most frequent label in examples
+2. **Recency bias**: Favoring labels that appeared recently in the prompt
+3. **Common token bias**: Preferring labels that are more common in pretraining data
+
+**Performance**: Contextual calibration improves GPT-3 accuracy by up to 30% on some tasks. On SST-2 sentiment analysis, accuracy improved from 49.9% to 80.0% after calibration.
+
+**The calibration process:**
+
+```
+1. Run inference with content-free input (e.g., "N/A", "Input: N/A")
+2. Record probability distribution P_bias over labels
+3. For each real prediction P_pred, compute:
+   P_calibrated = normalize(P_pred / P_bias)
+```
+
+**Example:**
+
+```
+# Content-free probe (measures bias)
+Input: N/A
+Sentiment: → Model outputs: {"positive": 0.7, "negative": 0.3}
+
+# This reveals 70% prior toward "positive" independent of content
+
+# For a real input:
+Input: "The movie was okay."
+Sentiment: → Raw output: {"positive": 0.6, "negative": 0.4}
+
+# After calibration (divide by bias, normalize):
+# Calibrated: {"positive": 0.6/0.7, "negative": 0.4/0.3} → normalize → {"positive": 0.39, "negative": 0.61}
+# Prediction flips from positive to negative after removing bias
+```
+
+**When to use**: Classification tasks with few-shot prompts where you observe unexpected label skew, or when working with labels of different frequencies in the pretraining corpus ("positive" vs "optimistic"). Less applicable to generation tasks.
+
 #### Structural Similarity
 
 Examples similar in _structure_ to expected inputs outperform topically similar but structurally different examples. Per Liu et al. (2021): selecting exemplars similar to the test sample improves performance.
@@ -903,13 +1077,26 @@ List any security vulnerabilities...
 
 #### Tabular Reasoning Structure
 
-For multi-variable problems, instruct the model to organize reasoning as a markdown table. Per the systematic survey: "Tab-CoT consists of a Zero-Shot CoT prompt that makes the LLM output reasoning as a markdown table. This tabular design enables the LLM to improve the structure and thus the reasoning of its output."
+For multi-variable problems, instruct the model to organize reasoning as a markdown table. Per Jin & Lu (2023) on Tab-CoT: "Tab-CoT consists of a Zero-Shot CoT prompt that makes the LLM output reasoning as a markdown table. This tabular design enables the LLM to improve the structure and thus the reasoning of its output."
+
+**Performance advantage**: Tab-CoT produces significantly more concise reasoning. On the same arithmetic problem, standard prompting uses 15 words, zero-shot CoT uses 140 words, while Tab-CoT uses only 28 words—achieving 80% token reduction while maintaining accuracy through structured tabular format.
 
 **The trigger phrase:**
 
 ```
 Organize your reasoning as a markdown table with columns for [relevant variables].
 Then derive the answer from the completed table.
+```
+
+**Example output format:**
+
+```
+| step | event                    | answer     |
+|------|--------------------------|------------|
+| 1    | 200 loaves baked         | 200 loaves |
+| 2    | 93 loaves sold morning   | 107 loaves |
+| 3    | 39 loaves sold afternoon | 68 loaves  |
+| 4    | 6 loaves returned        | 74 loaves  |
 ```
 
 ---
@@ -1040,7 +1227,7 @@ Techniques for controlling model behavior, motivation, and execution patterns.
 
 **Research basis**: Per Kong et al. (2024): "Role-play prompting consistently surpasses the standard zero-shot approach across most datasets... accuracy on AQuA rises from 53.5% to 63.8%."
 
-On mathematical reasoning benchmarks, identity establishment provides 10+ percentage point accuracy improvement through implicit role-based reasoning. The technique is foundational across all domains—"You are a helpful assistant" is ubiquitous—though the magnitude of improvement varies by task type.
+On mathematical reasoning benchmarks, identity establishment provides significant accuracy improvements through implicit role-based reasoning, though gains vary substantially by task: AQuA improved from 53.5% to 63.8% (+10.3pp), while Last Letter improved from 23.8% to 84.2% (+60.4pp). The technique is foundational across all domains—"You are a helpful assistant" is ubiquitous—but users should not expect uniform improvements.
 
 **Example:**
 
@@ -1424,7 +1611,41 @@ The incorrect version establishes a default but doesn't explain the reasoning, m
 
 ---
 
-## 6. Natural Language Understanding
+## 6. Verification
+
+Techniques for improving factual accuracy through self-checking.
+
+### Embedded Verification
+
+For factual accuracy, embed verification steps within prompts. Chain-of-Verification research shows significant improvements, particularly for list-based questions.
+
+Per Dhuliawala et al. (2023): "Only ~17% of baseline answer entities are correct in list-based questions. However, when querying each individual entity via a verification question, we find ~70% are correctly answered."
+
+**Critical distinctions**:
+
+1. **Question type matters**: The 17%→70% improvement is specifically for list-based questions using the factored CoVe approach
+2. **Open questions outperform yes/no**: "We find that yes/no type questions perform worse for the factored version of CoVe. Some anecdotal examples... show the model tends to agree with facts in a yes/no question format whether they are right or wrong"
+
+**Example of the yes/no failure mode** (from the paper):
+
+- Open question: "Where was Hillary Clinton born?" → "Chicago, Illinois" (correct)
+- Yes/no question: "Was Hillary Clinton born in New York?" → "Yes" (incorrect—model agrees with the framing)
+
+**Implementation:**
+
+```
+After completing your analysis:
+1. Identify claims that could be verified
+2. For each claim, ask yourself the verification question directly
+   (use open questions like "What is X?" not yes/no questions like "Is X true?")
+3. Revise any inconsistencies before finalizing
+```
+
+**Non-obvious insight**: The instruction to use open questions rather than yes/no is critical. Without it, the model will verify claims using confirming questions ("Is Paris the capital of France?") which biases toward agreement regardless of correctness.
+
+---
+
+## 7. Natural Language Understanding
 
 Techniques specifically for NLU tasks requiring deep comprehension.
 
@@ -1467,7 +1688,7 @@ As you perform this task, follow these steps:
 
 ---
 
-## 7. Anti-Patterns to Avoid
+## 8. Anti-Patterns to Avoid
 
 ### The Hedging Spiral
 
@@ -1618,17 +1839,22 @@ Affirmative instructions directly specify the target behavior without requiring 
 ## Research Citations
 
 - Bsharat et al. (2024). "Principled Instructions Are All You Need for Questioning LLaMA-1/2, GPT-3.5/4." arXiv.
+- Chen et al. (2023). "Program of Thoughts Prompting: Disentangling Computation from Reasoning for Numerical Reasoning Tasks." TMLR.
 - Chia et al. (2023). "Contrastive Chain-of-Thought Prompting." arXiv.
 - Cuadra et al. (2025). "The Danger of Overthinking: Examining the Reasoning-Action Dilemma in Agentic Tasks." arXiv.
 - Deng et al. (2023). "Rephrase and Respond: Let Large Language Models Ask Better Questions for Themselves." arXiv.
+- Dhuliawala et al. (2023). "Chain-of-Verification Reduces Hallucination in Large Language Models." arXiv.
 - Fu et al. (2023). "Complexity-Based Prompting for Multi-Step Reasoning." arXiv.
+- Jin & Lu (2023). "Tab-CoT: Zero-shot Tabular Chain of Thought." ACL Findings.
 - Kojima et al. (2022). "Large Language Models are Zero-Shot Reasoners." NeurIPS.
 - Kong et al. (2024). "Better Zero-Shot Reasoning with Role-Play Prompting." arXiv.
 - Li et al. (2023). "Large Language Models Understand and Can Be Enhanced by Emotional Stimuli." arXiv.
 - Li et al. (2023). "Guiding Large Language Models via Directional Stimulus Prompting." arXiv.
 - Liu et al. (2021). "What Makes Good In-Context Examples for GPT-3?" arXiv.
 - Lu et al. (2021). "Fantastically Ordered Prompts and Where to Find Them." ACL.
+- Press et al. (2022). "Measuring and Narrowing the Compositionality Gap in Language Models." arXiv.
 - Schulhoff et al. (2024). "The Prompt Report: A Systematic Survey of Prompting Techniques." arXiv.
+- Shaikh et al. (2023). "On Second Thought, Let's Not Think Step by Step! Bias and Toxicity in Zero-Shot Reasoning." ACL.
 - Shi et al. (2023). "Large Language Models Can Be Easily Distracted by Irrelevant Context." arXiv.
 - Sprague et al. (2025). "Mind Your Step (by Step): Chain-of-Thought can Reduce Performance on Tasks where Thinking Makes Humans Worse." arXiv.
 - Turpin et al. (2023). "Language Models Don't Always Say What They Think: Unfaithful Explanations in Chain-of-Thought Prompting." NeurIPS.
