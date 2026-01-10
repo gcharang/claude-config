@@ -6,6 +6,8 @@
 !agents/**
 !commands/
 !commands/**
+!conventions/
+!conventions/**
 !skills/
 !skills/**
 !output-styles/
