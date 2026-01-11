@@ -32,6 +32,7 @@ skills/
   refactor/                # Refactoring analysis
   problem-analysis/        # Problem decomposition
   decision-critic/         # Decision stress-testing
+  deepthink/               # Structured reasoning for open questions
   codebase-analysis/       # Repository exploration
   prompt-engineer/         # Prompt optimization
   incoherence/             # Consistency detection
@@ -156,17 +157,18 @@ Constraints discovered through debugging that aren't obvious from code structure
 
 ## Skills Catalog
 
-| Skill              | Steps    | Purpose                                | Quality Gates |
-| ------------------ | -------- | -------------------------------------- | ------------- |
-| planner            | 13 + 9   | Plan creation + execution              | 3 QR loops    |
-| refactor           | 7        | Refactoring analysis across dimensions | None          |
-| problem-analysis   | 4        | Structured problem decomposition       | None          |
-| decision-critic    | Variable | Decision stress-testing                | None          |
-| codebase-analysis  | 4        | Systematic repository exploration      | None          |
-| prompt-engineer    | Variable | Prompt optimization                    | None          |
-| incoherence        | Variable | Consistency detection                  | None          |
-| doc-sync           | Variable | Cross-repo documentation sync          | None          |
-| leon-writing-style | Variable | Style-matched content generation       | None          |
+| Skill              | Steps    | Purpose                                 | Quality Gates |
+| ------------------ | -------- | --------------------------------------- | ------------- |
+| planner            | 13 + 9   | Plan creation + execution               | 3 QR loops    |
+| refactor           | 7        | Refactoring analysis across dimensions  | None          |
+| problem-analysis   | 4        | Structured problem decomposition        | None          |
+| decision-critic    | Variable | Decision stress-testing                 | None          |
+| deepthink          | 14       | Structured reasoning for open questions | None          |
+| codebase-analysis  | 4        | Systematic repository exploration       | None          |
+| prompt-engineer    | Variable | Prompt optimization                     | None          |
+| incoherence        | Variable | Consistency detection                   | None          |
+| doc-sync           | Variable | Cross-repo documentation sync           | None          |
+| leon-writing-style | Variable | Style-matched content generation        | None          |
 
 **Quality gates**: Only planner uses QR loops. Other skills are analysis/synthesis workflows without iterative refinement.
 
