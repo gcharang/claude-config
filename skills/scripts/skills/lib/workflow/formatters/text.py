@@ -101,8 +101,9 @@ def format_text_output(
     lines.append("")
     if invoke_after:
         lines.append(f"INVOKE AFTER: {invoke_after}")
-    elif step >= total:
-        lines.append("COMPLETE - Present results to user.")
+    elif step >= total - 1:
+        # step is 0-indexed, total is count; step 12 with total 13 is the last step
+        lines.append("WORKFLOW COMPLETE - Present results to user.")
     elif next_title:
         lines.append(f"NEXT: Step {step + 1} - {next_title}")
 

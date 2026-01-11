@@ -30,12 +30,14 @@ ADDING NEW XML ELEMENTS:
 
 from skills.lib.workflow.types import (
     QRState,
+    QRStatus,
     GateConfig,
     FlatCommand,
     BranchCommand,
     NextCommand,
 )
-from skills.planner.shared.resources import QR_ITERATION_LIMIT, get_blocking_severities
+from skills.lib.workflow.formatters.builder import wrap_xml
+from skills.lib.workflow.constants import QR_ITERATION_LIMIT, get_blocking_severities
 
 
 # =============================================================================
@@ -79,11 +81,7 @@ def format_current_action(actions: list[str]) -> str:
     Returns:
         XML string: <current_action>...</current_action>
     """
-    lines = ["<current_action>"]
-    for action in actions:
-        lines.append(action)
-    lines.append("</current_action>")
-    return "\n".join(lines)
+    return wrap_xml("current_action", *actions)
 
 
 def format_invoke_after(cmd: NextCommand) -> str:
@@ -97,14 +95,13 @@ def format_invoke_after(cmd: NextCommand) -> str:
     """
     if cmd is None:
         return ""
-    lines = ["<invoke_after>"]
     if isinstance(cmd, BranchCommand):
-        lines.append(f"<if_pass>{cmd.if_pass}</if_pass>")
-        lines.append(f"<if_fail>{cmd.if_fail}</if_fail>")
-    else:
-        lines.append(cmd.command)
-    lines.append("</invoke_after>")
-    return "\n".join(lines)
+        return wrap_xml(
+            "invoke_after",
+            f"<if_pass>{cmd.if_pass}</if_pass>",
+            f"<if_fail>{cmd.if_fail}</if_fail>",
+        )
+    return wrap_xml("invoke_after", cmd.command)
 
 
 def format_next_block(cmd: NextCommand) -> str:
@@ -121,15 +118,20 @@ def format_next_block(cmd: NextCommand) -> str:
     """
     if cmd is None:
         return ""
-    lines = ['<next required="true">']
-    lines.append("After current_action completes, execute invoke_after.")
     if isinstance(cmd, BranchCommand):
-        lines.append(f"Re-read now: if_pass -> {cmd.if_pass}")
-        lines.append(f"            if_fail -> {cmd.if_fail}")
-    else:
-        lines.append(f"Re-read now: {cmd.command}")
-    lines.append("</next>")
-    return "\n".join(lines)
+        return wrap_xml(
+            "next",
+            "After current_action completes, execute invoke_after.",
+            f"Re-read now: if_pass -> {cmd.if_pass}",
+            f"            if_fail -> {cmd.if_fail}",
+            required="true",
+        )
+    return wrap_xml(
+        "next",
+        "After current_action completes, execute invoke_after.",
+        f"Re-read now: {cmd.command}",
+        required="true",
+    )
 
 
 def format_gate_result(status: str, message: str) -> str:
@@ -616,7 +618,7 @@ def format_gate_actions(
         List of action strings for the gate step
     """
     actions = []
-    if qr.status and qr.status.lower() == "pass":
+    if qr.passed:
         actions.append(pass_message)
         actions.append("")
         actions.append(format_forbidden([
@@ -772,7 +774,7 @@ def format_gate_step(
         Complete formatted gate step output
     """
     # Build gate result
-    if qr.status and qr.status.lower() == "pass":
+    if qr.passed:
         gate_result = ("pass", "GATE PASSED")
     else:
         gate_result = ("fail", f"GATE FAILED (iteration {qr.iteration} of {QR_ITERATION_LIMIT})")
@@ -797,7 +799,7 @@ def format_gate_step(
     )
 
     # Determine which command to use
-    if qr.status and qr.status.lower() == "pass":
+    if qr.passed:
         next_command = pass_cmd
     else:
         next_command = fail_cmd

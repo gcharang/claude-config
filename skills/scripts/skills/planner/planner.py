@@ -21,7 +21,7 @@ Flow:
 import argparse
 import sys
 
-from skills.lib.workflow.types import QRState, GateConfig
+from skills.lib.workflow.types import QRState, QRStatus, GateConfig
 from skills.lib.workflow.formatters import (
     format_step_output,
     format_gate_step,
@@ -158,6 +158,10 @@ def get_plan_format() -> str:
 
 
 # Unified step definitions (1-13)
+# Step flags:
+#   is_qr: True = step runs QR verification (followed by gate step)
+#   is_dispatch: True = step dispatches to sub-agent via mode script
+#   is_work: True = step performs modifications (vs review-only)
 STEPS = {
     # Planning steps (1-5)
     1: {
@@ -417,7 +421,8 @@ def get_step_guidance(step: int, total_steps: int,
     """Returns guidance for a step."""
 
     # Construct QRState from parameters
-    qr = QRState(iteration=qr_iteration, failed=qr_fail, status=qr_status)
+    status = QRStatus(qr_status) if qr_status else None
+    qr = QRState(iteration=qr_iteration, failed=qr_fail, status=status)
 
     # Gate steps (7, 10, 13) use shared gate function
     if step in (7, 10, 13):

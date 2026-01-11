@@ -21,19 +21,16 @@ def _compute_module_path(script_file: str) -> str:
         Module path for -m invocation (e.g., skills.planner.qr.plan_completeness)
     """
     path = Path(script_file).resolve()
-    # Find 'scripts/skills' in path and extract everything after 'scripts/'
     parts = path.parts
-    try:
+    # Find 'scripts' in path and extract module path after it
+    if "scripts" in parts:
         scripts_idx = parts.index("scripts")
-        # Module path starts after 'scripts/' directory
-        module_parts = parts[scripts_idx + 1:]
-        # Remove .py extension from last part
-        module_parts = list(module_parts)
-        module_parts[-1] = module_parts[-1].removesuffix(".py")
-        return ".".join(module_parts)
-    except (ValueError, IndexError):
-        # Fallback: just use filename
-        return path.stem
+        if scripts_idx + 1 < len(parts):
+            module_parts = list(parts[scripts_idx + 1:])
+            module_parts[-1] = module_parts[-1].removesuffix(".py")
+            return ".".join(module_parts)
+    # Fallback: just use filename
+    return path.stem
 
 
 def add_qr_args(parser: argparse.ArgumentParser) -> None:
@@ -88,7 +85,7 @@ def mode_main(
         guidance_dict = {
             "title": guidance.title,
             "actions": guidance.actions,
-            "next": guidance.next,
+            "next": guidance.next_command,
         }
     else:
         # Already a dict

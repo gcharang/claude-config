@@ -17,7 +17,7 @@ Nine-step workflow:
 import argparse
 import sys
 
-from skills.lib.workflow.types import QRState, GateConfig
+from skills.lib.workflow.types import QRState, QRStatus, GateConfig
 from skills.lib.workflow.formatters import (
     format_step_output,
     format_gate_step,
@@ -358,7 +358,8 @@ def format_output(step: int, total_steps: int,
     """Format output for display using XML format."""
 
     # Construct QRState from legacy parameters
-    qr = QRState(iteration=qr_iteration, failed=qr_fail, status=qr_status)
+    status = QRStatus(qr_status) if qr_status else None
+    qr = QRState(iteration=qr_iteration, failed=qr_fail, status=status)
 
     # Step 5 is the Code QR gate
     if step == 5:

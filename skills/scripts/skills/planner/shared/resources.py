@@ -5,34 +5,17 @@ Handles loading of resource files and path resolution.
 
 from pathlib import Path
 
+# Re-export QR constants from lib layer for backwards compatibility
+from skills.lib.workflow.constants import QR_ITERATION_LIMIT, get_blocking_severities
 
-# =============================================================================
-# QR Constants
-# =============================================================================
-
-# Empirical observation: QR gains diminish after 4-5 retries.
-# Beyond this limit, user confirmation is required to continue.
-QR_ITERATION_LIMIT = 5
-
-
-def get_blocking_severities(iteration: int) -> set[str]:
-    """Return severities that block at given iteration.
-
-    Progressive de-escalation: early iterations enforce all severities,
-    later iterations only enforce critical issues.
-
-    Args:
-        iteration: QR loop iteration count (1-indexed)
-
-    Returns:
-        Set of severity strings that should block at this iteration
-    """
-    if iteration <= 3:
-        return {"MUST", "SHOULD", "COULD"}
-    elif iteration == 4:
-        return {"MUST", "SHOULD"}
-    else:  # iteration >= 5
-        return {"MUST"}
+__all__ = [
+    "QR_ITERATION_LIMIT",
+    "get_blocking_severities",
+    "create_qr_report_dir",
+    "get_resource",
+    "get_mode_script_path",
+    "get_exhaustiveness_prompt",
+]
 
 
 # =============================================================================

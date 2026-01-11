@@ -54,12 +54,13 @@ def load_resource_section(section: str) -> str:
 
     start_marker, end_marker = section_markers[section]
 
-    try:
-        start_idx = content.index(start_marker)
-        end_idx = content.index(end_marker) if end_marker else len(content)
-        return content[start_idx:end_idx].strip()
-    except ValueError:
+    start_idx = content.find(start_marker)
+    if start_idx == -1:
         return ""
+    end_idx = content.find(end_marker, start_idx) if end_marker else len(content)
+    if end_idx == -1:
+        end_idx = len(content)
+    return content[start_idx:end_idx].strip()
 
 
 def get_step_guidance(step: int, total_steps: int) -> dict:
