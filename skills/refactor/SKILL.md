@@ -5,16 +5,28 @@ description: Invoke IMMEDIATELY via python script when user requests refactoring
 
 # Refactor
 
-When this skill activates, IMMEDIATELY invoke the script. The script IS the
-workflow.
+When this skill activates, IMMEDIATELY invoke the script. The script IS the workflow.
 
 ## Invocation
 
-<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.refactor.refactor --step 1 --total-steps 7" />
+<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.refactor.refactor --step 1 --total-steps 2 --n 10" />
 
-| Argument        | Required | Description                 |
-| --------------- | -------- | --------------------------- |
-| `--step`        | Yes      | Current step (starts at 1)  |
-| `--total-steps` | Yes      | Minimum 7; adjust if needed |
+| Argument        | Required | Description                            |
+| --------------- | -------- | -------------------------------------- |
+| `--step`        | Yes      | Current step (starts at 1)             |
+| `--total-steps` | Yes      | Total steps (2 for current workflow)   |
+| `--n`           | No       | Number of categories to explore (default: 10) |
 
 Do NOT explore or analyze first. Run the script and follow its output.
+
+## Determining N (category count)
+
+Default: N = 10
+
+Adjust based on user request scope:
+
+- SMALL (single file, specific concern, "quick look"): N = 5
+- MEDIUM (directory, module, standard analysis): N = 10
+- LARGE (entire codebase, "thorough", "comprehensive"): N = 25
+
+The script randomly selects N categories from the 38 available code quality categories defined in conventions/code-quality/.

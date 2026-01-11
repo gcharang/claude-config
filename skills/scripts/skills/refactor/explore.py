@@ -1,32 +1,58 @@
 #!/usr/bin/env python3
 """
-Refactor Explore - Dimension-specific exploration for refactoring analysis.
+Refactor Explore - Category-specific exploration for code smell detection.
 
-Two-step workflow per dimension:
-  1. Exploration - Search for issues using dimension-specific heuristics
+Two-step workflow per category:
+  1. Exploration - Search for issues using category heuristics from markdown
   2. Synthesis   - Format findings with severity assessment
 """
 
 import argparse
 import sys
+from pathlib import Path
 
 from skills.lib.workflow.formatters import (
     format_xml_mandate,
     format_current_action,
+    format_invoke_after,
 )
-from skills.refactor.dimensions import DIMENSIONS, DIMENSION_ORDER
+from skills.lib.workflow.types import FlatCommand
 
 
 # Module path for -m invocation
 MODULE_PATH = "skills.refactor.explore"
 
+# Path to conventions/code-quality/ directory
+# explore.py is at: .claude/skills/scripts/skills/refactor/explore.py
+# conventions is at: .claude/conventions/code-quality/
+CONVENTIONS_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "conventions" / "code-quality"
 
-def format_invoke_after(command: str) -> str:
-    """Render invoke after block for explore workflow.
 
-    Simplified version that takes a string command directly.
+# =============================================================================
+# Category Loader
+# =============================================================================
+
+
+def load_category_block(category_ref: str) -> str:
+    """Load category text block from file:start-end reference.
+
+    Args:
+        category_ref: Reference in format "baseline.md:10-19"
+
+    Returns:
+        Text content of lines start through end (1-indexed, inclusive)
     """
-    return f"<invoke_after>\n{command}\n</invoke_after>"
+    file_part, line_range = category_ref.split(":")
+    start, end = map(int, line_range.split("-"))
+
+    path = CONVENTIONS_DIR / file_part
+    if not path.exists():
+        sys.exit(f"ERROR: Category file not found: {path}")
+
+    lines = path.read_text().splitlines()
+
+    # Return lines start through end (1-indexed, inclusive)
+    return "\n".join(lines[start - 1 : end])
 
 
 # =============================================================================
@@ -34,64 +60,9 @@ def format_invoke_after(command: str) -> str:
 # =============================================================================
 
 
-def format_step_header(step: int, total: int, title: str, dimension: str) -> str:
-    """Render step header with dimension context."""
-    return f'<step_header script="explore" step="{step}" total="{total}" dimension="{dimension}">{title}</step_header>'
-
-
-def format_heuristics(heuristics: list[str]) -> str:
-    """Format heuristics as XML."""
-    lines = ['<heuristics exemplary="true" note="illustrative, not exhaustive">']
-    for h in heuristics:
-        lines.append(f"  <heuristic>{h}</heuristic>")
-    lines.append("</heuristics>")
-    return "\n".join(lines)
-
-
-def format_detection_questions(questions: list[str]) -> str:
-    """Format detection questions as XML."""
-    lines = ['<detection_questions exemplary="true" note="illustrative, not exhaustive">']
-    for q in questions:
-        lines.append(f"  <question>{q}</question>")
-    lines.append("</detection_questions>")
-    return "\n".join(lines)
-
-
-def format_examples(examples: list[tuple[str, str]]) -> str:
-    """Format before/after examples as XML."""
-    lines = ['<examples exemplary="true" note="illustrative, not exhaustive">']
-    for before, after in examples:
-        lines.append(f'  <example before="{before}">{after}</example>')
-    lines.append("</examples>")
-    return "\n".join(lines)
-
-
-def format_findings_template() -> str:
-    """Format the expected findings output structure."""
-    return """<findings_format>
-For each issue found, output:
-
-  <finding severity="high|medium|low">
-    <location>file.py:line-line</location>
-    <evidence>quoted code (2-5 lines)</evidence>
-    <issue>What's wrong and why it matters</issue>
-    <similar_patterns_elsewhere>
-      If similar pattern exists in other files, list locations:
-      - other_file.py:line (brief note on similarity)
-      Otherwise: "Unique to this location"
-    </similar_patterns_elsewhere>
-  </finding>
-
-After all findings, summarize:
-
-  <dimension_summary>
-    <dimension>$DIMENSION</dimension>
-    <severity>none|low|medium|high</severity>
-    <count>N</count>
-    <cross_file_patterns>N findings appear in multiple locations</cross_file_patterns>
-    <recommendation>One sentence: worth deep dive or skip</recommendation>
-  </dimension_summary>
-</findings_format>"""
+def format_step_header(step: int, total: int, title: str, category_ref: str) -> str:
+    """Render step header with category context."""
+    return f'<step_header script="explore" step="{step}" total="{total}" category="{category_ref}">{title}</step_header>'
 
 
 # =============================================================================
@@ -99,33 +70,24 @@ After all findings, summarize:
 # =============================================================================
 
 
-def format_step_1(dimension_id: str) -> str:
-    """Format step 1: exploration prompt."""
-    dim = DIMENSIONS[dimension_id]
+def format_step_1(category_ref: str) -> str:
+    """Format step 1: exploration prompt with category block."""
+    category_block = load_category_block(category_ref)
 
     actions = [
-        f"DIMENSION: {dim['title']}",
-        f"FOCUS: {dim['focus']}",
+        "<smell_category>",
+        category_block,
+        "</smell_category>",
         "",
-        "NON-EXHAUSTIVE GUIDANCE:",
-        "The lists below illustrate this dimension's INTENT. Use them to understand the",
-        "category of issues to detect, then apply similar reasoning beyond what's listed.",
-        "",
-        "EXPLORE the codebase using heuristics like these:",
-        "",
-        format_heuristics(dim["heuristics"]),
-        "",
-        "ASK questions like these as you read code:",
-        "",
-        format_detection_questions(dim["detection_questions"]),
-        "",
-        "EXAMPLES of improvements (illustrative):",
-        "",
-        format_examples(dim["examples"]),
+        # RE2: Re-reading instruction improves comprehension by ~3pp (Xu et al. 2023)
+        "Read the category definition again. Identify:",
+        "  - The core detection question (Detect: line)",
+        "  - Concrete patterns to search for",
+        "  - Any Stop conditions that limit scope",
         "",
         "SEARCH STRATEGY:",
-        "  1. Use Glob to find relevant files",
-        "  2. Use Grep to find patterns matching heuristics",
+        "  1. Use Glob to find relevant files in scope",
+        "  2. Use Grep to find patterns matching the heuristics above",
         "  3. Use Read to examine suspicious code",
         "  4. Document each finding with location and evidence",
         "",
@@ -134,57 +96,76 @@ def format_step_1(dimension_id: str) -> str:
         "  6. For each finding, note similar locations or mark as 'Unique'",
         "  7. Prioritize findings that appear in 3+ locations (abstraction candidates)",
         "",
-        "Do NOT propose solutions yet - just document findings.",
+        # Error Normalization: Prevents forcing false positives
+        "CALIBRATION:",
+        "  - Finding zero issues is a valid outcome. Do not force findings.",
+        "  - Flag only when evidence is clear. Ambiguous cases are not findings.",
+        "  - If a Stop condition applies, do not flag even if pattern matches.",
+        "",
+        "Document findings. Do NOT propose solutions yet.",
     ]
 
     parts = [
-        format_step_header(1, 2, "Exploration", dimension_id),
+        format_step_header(1, 2, "Exploration", category_ref),
         "",
         format_xml_mandate(),
         "",
         format_current_action(actions),
         "",
-        format_invoke_after(f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 2 --total-steps 2 --dimension {dimension_id}" />'),
+        format_invoke_after(
+            FlatCommand(
+                f'<invoke working-dir=".claude/skills/scripts" '
+                f'cmd="python3 -m {MODULE_PATH} --step 2 --total-steps 2 '
+                f'--category {category_ref}" />'
+            )
+        ),
     ]
     return "\n".join(parts)
 
 
-def format_step_2(dimension_id: str) -> str:
-    """Format step 2: synthesis."""
-    dim = DIMENSIONS[dimension_id]
+def format_step_2(category_ref: str) -> str:
+    """Format step 2: synthesis with strict output format."""
 
     actions = [
-        f"DIMENSION: {dim['title']}",
-        "",
         "SYNTHESIZE your findings from Step 1.",
         "",
-        format_findings_template(),
+        "OUTPUT FORMAT (strict):",
         "",
-        "SEVERITY GUIDELINES:",
-        "  HIGH: Blocks maintainability, affects multiple areas, clear fix exists",
-        "  MEDIUM: Causes friction, localized impact, fix is straightforward",
-        "  LOW: Minor annoyance, cosmetic, fix is trivial",
-        "  NONE: No issues found in this dimension",
+        '<smell_report category="$CATEGORY_NAME" severity="high|medium|low|none" count="N">',
+        '  <finding location="file.py:line-line" severity="high|medium|low">',
+        '    <evidence>quoted code (2-5 lines max)</evidence>',
+        '    <issue>what is wrong (one sentence)</issue>',
+        '  </finding>',
+        '  <!-- repeat for each finding -->',
+        '</smell_report>',
         "",
-        "OUTPUT your findings now using the format above.",
+        "SEVERITY:",
+        "  HIGH: Blocks maintainability, affects multiple areas",
+        "  MEDIUM: Causes friction, localized impact",
+        "  LOW: Minor annoyance, cosmetic",
+        "  NONE: No issues found",
+        "",
+        "Extract $CATEGORY_NAME from the ## heading in the category block above.",
+        "",
+        "OUTPUT your smell_report now.",
     ]
 
     parts = [
-        format_step_header(2, 2, "Synthesis", dimension_id),
+        format_step_header(2, 2, "Synthesis", category_ref),
         "",
         format_current_action(actions),
         "",
-        "COMPLETE - Return findings to orchestrator.",
+        "COMPLETE - Return smell_report to orchestrator.",
     ]
     return "\n".join(parts)
 
 
-def format_output(step: int, total_steps: int, dimension: str) -> str:
+def format_output(step: int, total_steps: int, category_ref: str) -> str:
     """Format output for the given step."""
     if step == 1:
-        return format_step_1(dimension)
+        return format_step_1(category_ref)
     else:
-        return format_step_2(dimension)
+        return format_step_2(category_ref)
 
 
 # =============================================================================
@@ -194,12 +175,16 @@ def format_output(step: int, total_steps: int, dimension: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Refactor Explore - Dimension-specific exploration",
-        epilog=f"Dimensions: {', '.join(DIMENSION_ORDER)}",
+        description="Refactor Explore - Category-specific code smell detection",
     )
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument("--total-steps", type=int, required=True)
-    parser.add_argument("--dimension", type=str, required=True, choices=DIMENSION_ORDER)
+    parser.add_argument(
+        "--category",
+        type=str,
+        required=True,
+        help="Category reference as file:startline-endline (e.g., baseline.md:5-13)",
+    )
 
     args = parser.parse_args()
 
@@ -210,7 +195,11 @@ def main():
     if args.step > args.total_steps:
         sys.exit("ERROR: --step cannot exceed --total-steps")
 
-    print(format_output(args.step, args.total_steps, args.dimension))
+    # Validate category format
+    if ":" not in args.category or "-" not in args.category.split(":")[1]:
+        sys.exit("ERROR: --category must be in format file.md:start-end")
+
+    print(format_output(args.step, args.total_steps, args.category))
 
 
 if __name__ == "__main__":
