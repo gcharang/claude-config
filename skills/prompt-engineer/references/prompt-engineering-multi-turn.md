@@ -20,26 +20,26 @@ Turn 3--sequential LLM calls in a multi-turn conversation.
 
 ## Technique Selection Guide
 
-| Domain             | Technique             | Trigger Condition                          | Stacks With               | Conflicts With       | Cost/Tradeoff                      | Effect                                           |
-| ------------------ | --------------------- | ------------------------------------------ | ------------------------- | -------------------- | ---------------------------------- | ------------------------------------------------ |
-| **Pre-Processing** | S2A Context Filtering | Input contains irrelevant/misleading noise | Any downstream technique  | --                   | 2x tokens (filter + generate)      | QA +17.5pp; math +12pp                           |
-| **Refinement**     | Self-Refine           | Output quality improvable via iteration    | Any single-turn reasoning | Time-critical tasks  | 2-4x tokens per iteration          | 5-40% absolute improvement across 7 task types   |
-| **Verification**   | CoVe (Question-Based) | Factual accuracy critical                  | Quote Extraction, CRITIC  | Joint verification   | 3-4x tokens                        | List QA: 17%->70%; FACTSCORE +28% rel (55.9→71.4)|
-| **Verification**   | Factored Verification | Summary verification against source        | CoVe                      | Joint CoVe           | Claims x calls                     | HaluEval: 76.2% (+10pp); 45% hallucination cut   |
-| **Verification**   | CRITIC (Tool-Based)   | Verifiable via search/code/calculator      | CoVe, Self-Refine         | Intrinsic correction | Tool API + 2-3x tokens             | AmbigNQ +7.7 F1; GSM8K +7.0%; 79% toxicity cut   |
-| **Aggregation**    | Universal Self-Cons.† | Free-form output; exact-match SC fails     | Complexity weighting      | Greedy decoding      | N samples + 1 selection            | Matches SC on math (92.4%); enables SC for prose |
-| **Aggregation**    | Multi-Chain Reasoning | Evidence scattered across attempts         | Self-Consistency          | Single-chain         | N chains + 1 meta-reasoning        | +5.7% over SC on multi-hop; 82% quality explains |
-| **Aggregation**    | Complexity-Weighted   | Varying reasoning depth across samples     | USC, Self-Consistency     | Simple majority      | Minimal; selection only            | GSM8K: 80.5% vs 78.0% SC (+2.5pp)                |
-| **Aggregation**    | Multi-Expert†         | Multiple valid perspectives needed         | USC                       | Iterative debate     | Single aggregation turn            | TruthfulQA: 89.4% vs 77.1% USC (+12.2pp)         |
-| **Meta-Reasoning** | Cumulative Reasoning  | Complex reasoning; validated steps needed  | External verifiers        | Linear CoT           | 3+ roles/step; DAG management      | Game of 24: 98% vs 74% ToT; MATH L5 +43%         |
-| **Decomposition**  | Decomposed Prompting  | Task needs specialized sub-handlers        | Any verification          | Monolithic prompts   | Handler setup overhead             | Enables tasks CoT cannot learn from few-shot     |
-| **Decomposition**  | ADAPT                 | Task complexity unknown; may fail          | Self-Refine, CRITIC       | Fixed decomposition  | Recursive calls on failure         | ALFWorld +28%; WebShop +27%; TextCraft +33%      |
-| **Decomposition**  | Cognitive Prompting   | Complex multi-step problem needs structure | Any verification          | Monolithic prompts   | 8 COPs overhead per problem        | GSM8K +10.8% (H-CP); LLaMA 70B: 95% solve        |
-| **Decomposition**  | Table as Thought      | Constraint planning; multi-constraint tracking | Any verification      | Simple CoT           | Schema + table construction        | Calendar +10.8% over direct; planning+5.4%       |
-| **Verification**   | Socratic Method       | Claims need cross-examination/dialectic    | CoVe, Factored             | Simple yes/no checks | Multi-turn dialogue overhead       | Improves validity scoring via elenchus           |
-| **Prompt Design**  | Synthetic Prompting   | Few-shot demos insufficient; need diversity| Any reasoning technique   | Fixed exemplars      | 1000x backward-forward synthesis   | +15.6% over PAL; GSM8K 74.7%                     |
-| **Parallel**       | Skeleton-of-Thought†  | Multi-point answers; independent sections  | Any aggregation           | Sequential reasoning | Skeleton + N expansion calls       | 1.6-2.7x speedup; net quality +0.05 to +0.22     |
-| **Prompt Design**  | Active Prompting†     | Few-shot exemplar selection                | Any few-shot technique    | Random selection     | Uncertainty estimation (k samples) | GSM8K +4.8pp over random (78.6%->83.4%)          |
+| Domain             | Technique             | Trigger Condition                              | Stacks With               | Conflicts With       | Cost/Tradeoff                      | Effect                                            |
+| ------------------ | --------------------- | ---------------------------------------------- | ------------------------- | -------------------- | ---------------------------------- | ------------------------------------------------- |
+| **Pre-Processing** | S2A Context Filtering | Input contains irrelevant/misleading noise     | Any downstream technique  | --                   | 2x tokens (filter + generate)      | QA +17.5pp; math +12pp                            |
+| **Refinement**     | Self-Refine           | Output quality improvable via iteration        | Any single-turn reasoning | Time-critical tasks  | 2-4x tokens per iteration          | 5-40% absolute improvement across 7 task types    |
+| **Verification**   | CoVe (Question-Based) | Factual accuracy critical                      | Quote Extraction, CRITIC  | Joint verification   | 3-4x tokens                        | List QA: 17%->70%; FACTSCORE +28% rel (55.9→71.4) |
+| **Verification**   | Factored Verification | Summary verification against source            | CoVe                      | Joint CoVe           | Claims x calls                     | HaluEval: 76.2% (+10pp); 45% hallucination cut    |
+| **Verification**   | CRITIC (Tool-Based)   | Verifiable via search/code/calculator          | CoVe, Self-Refine         | Intrinsic correction | Tool API + 2-3x tokens             | AmbigNQ +7.7 F1; GSM8K +7.0%; 79% toxicity cut    |
+| **Aggregation**    | Universal Self-Cons.† | Free-form output; exact-match SC fails         | Complexity weighting      | Greedy decoding      | N samples + 1 selection            | Matches SC on math (92.4%); enables SC for prose  |
+| **Aggregation**    | Multi-Chain Reasoning | Evidence scattered across attempts             | Self-Consistency          | Single-chain         | N chains + 1 meta-reasoning        | +5.7% over SC on multi-hop; 82% quality explains  |
+| **Aggregation**    | Complexity-Weighted   | Varying reasoning depth across samples         | USC, Self-Consistency     | Simple majority      | Minimal; selection only            | GSM8K: 80.5% vs 78.0% SC (+2.5pp)                 |
+| **Aggregation**    | Multi-Expert†         | Multiple valid perspectives needed             | USC                       | Iterative debate     | Single aggregation turn            | TruthfulQA: 89.4% vs 77.1% USC (+12.2pp)          |
+| **Meta-Reasoning** | Cumulative Reasoning  | Complex reasoning; validated steps needed      | External verifiers        | Linear CoT           | 3+ roles/step; DAG management      | Game of 24: 98% vs 74% ToT; MATH L5 +43%          |
+| **Decomposition**  | Decomposed Prompting  | Task needs specialized sub-handlers            | Any verification          | Monolithic prompts   | Handler setup overhead             | Enables tasks CoT cannot learn from few-shot      |
+| **Decomposition**  | ADAPT                 | Task complexity unknown; may fail              | Self-Refine, CRITIC       | Fixed decomposition  | Recursive calls on failure         | ALFWorld +28%; WebShop +27%; TextCraft +33%       |
+| **Decomposition**  | Cognitive Prompting   | Complex multi-step problem needs structure     | Any verification          | Monolithic prompts   | 8 COPs overhead per problem        | GSM8K +10.8% (H-CP); LLaMA 70B: 95% solve         |
+| **Decomposition**  | Table as Thought      | Constraint planning; multi-constraint tracking | Any verification          | Simple CoT           | Schema + table construction        | Calendar +10.8% over direct; planning+5.4%        |
+| **Verification**   | Socratic Method       | Claims need cross-examination/dialectic        | CoVe, Factored            | Simple yes/no checks | Multi-turn dialogue overhead       | Improves validity scoring via elenchus            |
+| **Prompt Design**  | Synthetic Prompting   | Few-shot demos insufficient; need diversity    | Any reasoning technique   | Fixed exemplars      | 1000x backward-forward synthesis   | +15.6% over PAL; GSM8K 74.7%                      |
+| **Parallel**       | Skeleton-of-Thought†  | Multi-point answers; independent sections      | Any aggregation           | Sequential reasoning | Skeleton + N expansion calls       | 1.6-2.7x speedup; net quality +0.05 to +0.22      |
+| **Prompt Design**  | Active Prompting†     | Few-shot exemplar selection                    | Any few-shot technique    | Random selection     | Uncertainty estimation (k samples) | GSM8K +4.8pp over random (78.6%->83.4%)           |
 
 ---
 
@@ -409,11 +409,11 @@ interactions."
 
 **Key techniques:**
 
-| Method    | Purpose                          | When to Use              |
-| --------- | -------------------------------- | ------------------------ |
-| Elenchus  | Test consistency via questioning | Validate argument logic  |
-| Dialectic | Expose missing counterarguments  | Check for omissions      |
-| Maieutics | Draw out implicit knowledge      | Expand understanding     |
+| Method    | Purpose                          | When to Use             |
+| --------- | -------------------------------- | ----------------------- |
+| Elenchus  | Test consistency via questioning | Validate argument logic |
+| Dialectic | Expose missing counterarguments  | Check for omissions     |
+| Maieutics | Draw out implicit knowledge      | Expand understanding    |
 
 **Process:**
 
@@ -761,11 +761,11 @@ like mathematics, logic, and decision-making."
 
 **Three variants:**
 
-| Variant | Description                           | Performance |
-| ------- | ------------------------------------- | ----------- |
-| D-CP    | Fixed sequence of COPs                | Baseline    |
-| SA-CP   | LLM self-selects COP sequence         | +flexible   |
-| H-CP    | SA-CP + few-shot CoT from solutions   | **95%**     |
+| Variant | Description                         | Performance |
+| ------- | ----------------------------------- | ----------- |
+| D-CP    | Fixed sequence of COPs              | Baseline    |
+| SA-CP   | LLM self-selects COP sequence       | +flexible   |
+| H-CP    | SA-CP + few-shot CoT from solutions | **95%**     |
 
 **Process prompt (SA-CP):**
 
@@ -782,10 +782,10 @@ Please start with "Goal Clarification" and proceed step by step.
 
 **Performance (GSM8K):**
 
-| Model      | Zero-shot | D-CP  | SA-CP | H-CP      |
-| ---------- | --------- | ----- | ----- | --------- |
-| LLaMA 70B  | ~88%      | ~92%  | ~93%  | **95%**   |
-| Qwen 32B   | ~92%      | ~95%  | ~96%  | **97%**   |
+| Model     | Zero-shot | D-CP | SA-CP | H-CP    |
+| --------- | --------- | ---- | ----- | ------- |
+| LLaMA 70B | ~88%      | ~92% | ~93%  | **95%** |
+| Qwen 32B  | ~92%      | ~95% | ~96%  | **97%** |
 
 **Why this works:** Kramer & Baumann: "Unlike methods such as CoT, CP provides
 multi-dimensional depth without manual solution design."
@@ -835,10 +835,10 @@ Headers: Participant Name | Availability Start | Availability End |
 
 **Performance:**
 
-| Task               | Direct | CoT   | Text as Thought | Table as Thought |
-| ------------------ | ------ | ----- | --------------- | ---------------- |
-| Calendar (GPT-4o)  | 64.0%  | 64.5% | 69.4%           | **74.8%**        |
-| TravelPlanner      | 0.56%  | 0.56% | 0.0%            | **1.11%** (given)|
+| Task              | Direct | CoT   | Text as Thought | Table as Thought  |
+| ----------------- | ------ | ----- | --------------- | ----------------- |
+| Calendar (GPT-4o) | 64.0%  | 64.5% | 69.4%           | **74.8%**         |
+| TravelPlanner     | 0.56%  | 0.56% | 0.0%            | **1.11%** (given) |
 
 **Why this works:** Sun et al.: "Headers in the table schemas are designed to
 represent essential reasoning steps and key information pertinent to the task.
@@ -1014,11 +1014,11 @@ be more precise and consistent with the question."
 
 **Critical conditions for quality:**
 
-| Condition         | Effect on Synthesis                         |
-| ----------------- | ------------------------------------------- |
-| Topic word        | Ensures diversity; without: 62.5% same topic|
-| Target complexity | Controls difficulty; without: much simpler  |
-| Reasoning chain   | Ensures answerability; without: 37.5% wrong |
+| Condition         | Effect on Synthesis                          |
+| ----------------- | -------------------------------------------- |
+| Topic word        | Ensures diversity; without: 62.5% same topic |
+| Target complexity | Controls difficulty; without: much simpler   |
+| Reasoning chain   | Ensures answerability; without: 37.5% wrong  |
 
 WRONG: Synthesize questions directly without reasoning chain first RIGHT:
 Generate reasoning chain first, then matching question (backward process)

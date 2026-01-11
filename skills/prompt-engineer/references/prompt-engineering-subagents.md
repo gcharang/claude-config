@@ -725,12 +725,12 @@ RIGHT: `Subtask completes -> validate format/sanity -> if valid continue; else r
 
 ## Research Citations
 
-- Huang, B., et al. (2024). "Enhancing Large Language Models in Coding Through   Multi-Perspective Self-Consistency." ACL.
-- Juneja, G., Dutta, S., & Chakraborty, T. (2024). "LM^2: A Simple Society of   Language Models Solves Complex Reasoning." arXiv.
+- Huang, B., et al. (2024). "Enhancing Large Language Models in Coding Through Multi-Perspective Self-Consistency." ACL.
+- Juneja, G., Dutta, S., & Chakraborty, T. (2024). "LM^2: A Simple Society of Language Models Solves Complex Reasoning." arXiv.
 - Kong, A., et al. (2024). "Better Zero-Shot Reasoning with Role-Play Prompting." arXiv.
-- Long, D.X., et al. (2024). "Multi-expert Prompting Improves Reliability,  Safety and Usefulness of Large Language Models." EMNLP.
+- Long, D.X., et al. (2024). "Multi-expert Prompting Improves Reliability, Safety and Usefulness of Large Language Models." EMNLP.
 - Ning, X., Lin, Z., Zhou, Z., et al. (2024). "Skeleton-of-Thought: Prompting LLMs for Efficient Parallel Generation." ICLR.
-- Prasad, P.S. & Nguyen, M.N. (2025). "When Two LLMs Debate, Both Think They'll  Win." arXiv.
+- Prasad, P.S. & Nguyen, M.N. (2025). "When Two LLMs Debate, Both Think They'll Win." arXiv.
 - Shen, Y., et al. (2023). "HuggingGPT: Solving AI Tasks with ChatGPT and its Friends in Hugging Face." arXiv.
 - Shinn, N., et al. (2023). "Reflexion: Language Agents with Verbal Reinforcement Learning." NeurIPS.
 - Wang, H., et al. (2024). "Devil's Advocate: Anticipatory Reflection for LLM Agents." arXiv.
