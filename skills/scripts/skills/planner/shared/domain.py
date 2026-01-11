@@ -1,64 +1,19 @@
 """Domain types for the planner skill.
 
-These types replace stringly-typed dicts and primitive parameter groups
-with explicit, composable abstractions.
+Planner-specific types that extend the shared workflow types.
+Command routing types (FlatCommand, BranchCommand, NextCommand) are
+re-exported from skills.lib.workflow.types for backwards compatibility.
 """
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Literal
 
-
-# =============================================================================
-# QR Loop State
-# =============================================================================
-
-
-@dataclass
-class QRState:
-    """Quality Review loop state.
-
-    Encapsulates the three primitives that were previously passed separately:
-    qr_iteration, qr_fail, qr_status.
-
-    Attributes:
-        iteration: Loop count (1 = initial review, 2+ = re-verification)
-        failed: Whether this invocation is fixing issues from prior QR
-        status: Gate input - "pass" or "fail" from previous QR step
-    """
-
-    iteration: int = 1
-    failed: bool = False
-    status: Literal["pass", "fail"] | None = None
-
-
-# =============================================================================
-# Command Routing
-# =============================================================================
-
-
-@dataclass
-class FlatCommand:
-    """Single command routing (non-branching steps)."""
-
-    command: str
-
-
-@dataclass
-class BranchCommand:
-    """Conditional routing based on QR result (branching steps)."""
-
-    if_pass: str
-    if_fail: str
-
-
-NextCommand = FlatCommand | BranchCommand | None
-"""Union type for step routing.
-
-- FlatCommand: Non-branching step, single next command
-- BranchCommand: QR step, branches on pass/fail
-- None: Terminal step, no invoke_after
-"""
+# Re-export command routing types from lib (backwards compatibility)
+from skills.lib.workflow.types import (
+    FlatCommand,
+    BranchCommand,
+    NextCommand,
+)
 
 
 # =============================================================================

@@ -28,8 +28,13 @@ ADDING NEW XML ELEMENTS:
   3. If element belongs outside <current_action>, add parameter to format_step_output()
 """
 
-from skills.lib.workflow.types import QRState, GateConfig
-from skills.planner.shared.domain import FlatCommand, BranchCommand, NextCommand
+from skills.lib.workflow.types import (
+    QRState,
+    GateConfig,
+    FlatCommand,
+    BranchCommand,
+    NextCommand,
+)
 from skills.planner.shared.resources import QR_ITERATION_LIMIT, get_blocking_severities
 
 

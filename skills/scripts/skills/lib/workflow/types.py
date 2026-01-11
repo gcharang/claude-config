@@ -41,6 +41,35 @@ class TerminalRouting:
 Routing = LinearRouting | BranchRouting | TerminalRouting
 
 
+# =============================================================================
+# Command Routing (for invoke_after)
+# =============================================================================
+
+
+@dataclass
+class FlatCommand:
+    """Single command routing (non-branching steps)."""
+
+    command: str
+
+
+@dataclass
+class BranchCommand:
+    """Conditional routing based on QR result (branching steps)."""
+
+    if_pass: str
+    if_fail: str
+
+
+NextCommand = FlatCommand | BranchCommand | None
+"""Union type for step routing.
+
+- FlatCommand: Non-branching step, single next command
+- BranchCommand: QR step, branches on pass/fail
+- None: Terminal step, no invoke_after
+"""
+
+
 @dataclass
 class Dispatch:
     """Sub-agent dispatch configuration."""
