@@ -254,7 +254,13 @@ def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
 
 def step_triage(
     ctx: StepContext,
-    scope: Annotated[str | None, Arg(description="Scope determined in step 1")] = None,
+    scope: Annotated[
+        str | None,
+        Arg(
+            description="Scope determined in step 1",
+            choices=("single-prompt", "ecosystem", "greenfield", "problem"),
+        ),
+    ] = None,
 ) -> tuple[Outcome, dict]:
     """Handler for triage step with scope parameter."""
     return Outcome.OK, {}
@@ -843,25 +849,16 @@ SCOPES = {
 
 
 def main(
-    step: Annotated[int, Param(min=1, max=8, required=True)] = None,
-    scope: Annotated[
-        str | None,
-        Param(
-            choices=("single-prompt", "ecosystem", "greenfield", "problem"),
-            description="Workflow scope (determined in step 1)",
-        ),
-    ] = None,
+    step: int = None,
+    scope: str | None = None,
 ):
-    """Entry point with parameter annotations for testing framework.
-
-    Note: Parameters have defaults because actual values come from argparse.
-    The annotations are metadata for the testing framework.
-    """
+    """CLI entry point. Args come from argparse, not these defaults."""
     parser = argparse.ArgumentParser(
         description="Prompt Engineer - Scope-adaptive optimization workflow",
         epilog="Step 1: triage. Steps 2+: scope-specific workflow.",
     )
     parser.add_argument("--step", type=int, required=True)
+    parser.add_argument("--total-steps", type=int, help="Ignored (computed from scope)")
     parser.add_argument(
         "--scope",
         choices=list(SCOPES.keys()),
@@ -928,26 +925,30 @@ def main(
     read_specs = {
         "single-prompt": (4, [
             "references/prompt-engineering-single-turn.md",
-            "  -> Extract: Technique Selection Guide table",
+            "references/prompt-engineering-compression.md (always)",
+            "  -> Extract: Technique Selection Guide tables from both",
             "  -> For each technique: note Trigger Condition column",
             "If multi-turn patterns detected: also read multi-turn reference.",
         ]),
         "ecosystem": (5, [
             "references/prompt-engineering-single-turn.md",
             "references/prompt-engineering-multi-turn.md (always for ecosystem)",
+            "references/prompt-engineering-compression.md (always)",
             "  -> Extract: Technique Selection Guide from each",
             "  -> For each technique: note Trigger Condition column",
             "If orchestration or human gates: also read subagents/hitl refs.",
         ]),
         "greenfield": (4, [
             "references/prompt-engineering-single-turn.md",
-            "  -> Extract: Technique Selection Guide table",
+            "references/prompt-engineering-compression.md (always)",
+            "  -> Extract: Technique Selection Guide tables from both",
             "  -> For each technique: note Trigger Condition column",
             "If multi-turn architecture chosen: also read multi-turn reference.",
         ]),
         "problem": (4, [
             "references/prompt-engineering-single-turn.md",
-            "  -> Extract: Technique Selection Guide table",
+            "references/prompt-engineering-compression.md (always)",
+            "  -> Extract: Technique Selection Guide tables from both",
             "  -> Focus on techniques matching the problem class",
             "If problem involves multi-turn patterns: also read multi-turn reference.",
         ]),
