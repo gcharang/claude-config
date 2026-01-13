@@ -12,6 +12,8 @@ Available conventions:
 """
 from pathlib import Path
 
+from skills.lib.io import read_text_or_exit
+
 
 def get_convention(name: str) -> str:
     """Load convention from centralized store.
@@ -22,9 +24,9 @@ def get_convention(name: str) -> str:
     Returns:
         Full content of the convention file
 
-    Raises:
-        FileNotFoundError: If convention doesn't exist
+    Exits:
+        With contextual error message if convention doesn't exist
     """
     # parents[4]: lib -> skills -> scripts -> skills -> .claude
     convention_path = Path(__file__).resolve().parents[4] / "conventions" / name
-    return convention_path.read_text()
+    return read_text_or_exit(convention_path, "loading convention")

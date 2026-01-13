@@ -23,7 +23,16 @@ Two modes: Full (all steps) and Quick (skips 5-10).
 
 import argparse
 import sys
+from typing import Annotated
 
+from skills.lib.workflow.core import (
+    Arg,
+    Outcome,
+    StepContext,
+    StepDef,
+    Workflow,
+    register_workflow,
+)
 from skills.lib.workflow.formatters import (
     format_step_header,
     format_xml_mandate,
@@ -310,8 +319,17 @@ STEPS = {
         "title": "Sub-Agent Design",
         "brief": "Generate sub-agent task definitions",
         "actions": [
-            "Design sub-agents to explore this question in parallel.",
-            "You have complete freedom in how you divide the work.",
+            "Design sub-agents to explore this question from different angles.",
+            "",
+            "HOW SUB-AGENTS WORK:",
+            "  - All launch simultaneously (parallel execution)",
+            "  - Each receives the same inputs: original question + shared context",
+            "  - Each produces independent output returned to you for aggregation",
+            "  - Sub-agents cannot see or build on each other's work",
+            "",
+            "Your task: design WHAT each sub-agent analyzes, knowing they work in isolation.",
+            "",
+            "You have complete freedom in how you divide the analytical work.",
             "",
             "DIVISION STRATEGIES:",
             "",
@@ -319,7 +337,8 @@ STEPS = {
             "",
             "  By Perspective/Lens",
             "    Different epistemological viewpoints examining the same problem.",
-            "    A skeptic looks for flaws, an optimist for opportunities.",
+            "    A skeptic examines assuming the obvious answer is wrong;",
+            "    an optimist examines assuming success is achievable.",
             "",
             "  By Role/Stakeholder",
             "    Who has skin in the game? Different priorities and constraints.",
@@ -339,8 +358,9 @@ STEPS = {
             "  By Hypothesis",
             "    Assign sub-agents to steelman competing hypotheses.",
             "",
-            "  By Decomposition",
-            "    Break into sub-problems and assign each.",
+            "  By Facet",
+            "    Identify independent aspects analyzable without depending on",
+            "    each other's conclusions.",
             "",
             "You may combine strategies.",
             "",
@@ -857,7 +877,192 @@ def get_completion_message(confidence: str) -> list[str]:
     return base_actions
 
 
-def main():
+# Workflow handlers
+def step_handler_simple(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Generic handler for output-only steps."""
+    return Outcome.OK, {}
+
+
+def step_planning(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Handler for planning step that branches based on mode."""
+    mode = ctx.workflow_params.get("mode", "full")
+    if mode == "quick":
+        return Outcome.SKIP, {"mode": mode}
+    return Outcome.OK, {"mode": mode}
+
+
+def step_full_only(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Handler for steps that should be skipped in quick mode."""
+    mode = ctx.workflow_params.get("mode", "full")
+    if mode == "quick":
+        return Outcome.SKIP, {}
+    return Outcome.OK, {}
+
+
+def step_initial_synthesis(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Handler for initial synthesis step."""
+    return Outcome.OK, {}
+
+
+def step_iterative_refinement(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Handler for iterative refinement step with confidence loop."""
+    iteration = ctx.step_state.get("iteration", 1)
+    confidence = ctx.workflow_params.get("confidence", "exploring")
+
+    if confidence == "certain" or iteration >= MAX_ITERATIONS:
+        return Outcome.OK, {"iteration": iteration, "confidence": confidence}
+    else:
+        return Outcome.ITERATE, {"iteration": iteration + 1, "confidence": confidence}
+
+
+def step_formatting_output(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Handler for final formatting step."""
+    return Outcome.OK, {}
+
+
+# Workflow definition
+WORKFLOW = Workflow(
+    "deepthink",
+    StepDef(
+        id="context_clarification",
+        title="Context Clarification",
+        actions=STEPS[0]["actions"],
+        handler=step_handler_simple,
+        next={Outcome.OK: "abstraction"},
+    ),
+    StepDef(
+        id="abstraction",
+        title="Abstraction",
+        actions=STEPS[1]["actions"],
+        handler=step_handler_simple,
+        next={Outcome.OK: "characterization"},
+    ),
+    StepDef(
+        id="characterization",
+        title="Characterization",
+        actions=STEPS[2]["actions"],
+        handler=step_handler_simple,
+        next={Outcome.OK: "analogical_recall"},
+    ),
+    StepDef(
+        id="analogical_recall",
+        title="Analogical Recall",
+        actions=STEPS[3]["actions"],
+        handler=step_handler_simple,
+        next={Outcome.OK: "planning"},
+    ),
+    StepDef(
+        id="planning",
+        title="Planning",
+        actions=STEPS[4]["actions"],
+        handler=step_planning,
+        next={
+            Outcome.OK: "subagent_design",
+            Outcome.SKIP: "initial_synthesis",
+        },
+    ),
+    StepDef(
+        id="subagent_design",
+        title="Sub-Agent Design",
+        actions=STEPS[5]["actions"],
+        handler=step_full_only,
+        next={
+            Outcome.OK: "design_critique",
+            Outcome.SKIP: "initial_synthesis",
+        },
+    ),
+    StepDef(
+        id="design_critique",
+        title="Design Critique",
+        actions=STEPS[6]["actions"],
+        handler=step_full_only,
+        next={
+            Outcome.OK: "design_revision",
+            Outcome.SKIP: "initial_synthesis",
+        },
+    ),
+    StepDef(
+        id="design_revision",
+        title="Design Revision",
+        actions=STEPS[7]["actions"],
+        handler=step_full_only,
+        next={
+            Outcome.OK: "dispatch",
+            Outcome.SKIP: "initial_synthesis",
+        },
+    ),
+    StepDef(
+        id="dispatch",
+        title="Dispatch",
+        actions=[],
+        handler=step_full_only,
+        next={
+            Outcome.OK: "quality_gate",
+            Outcome.SKIP: "initial_synthesis",
+        },
+    ),
+    StepDef(
+        id="quality_gate",
+        title="Quality Gate",
+        actions=STEPS[9]["actions"],
+        handler=step_full_only,
+        next={
+            Outcome.OK: "aggregation",
+            Outcome.SKIP: "initial_synthesis",
+        },
+    ),
+    StepDef(
+        id="aggregation",
+        title="Aggregation",
+        actions=STEPS[10]["actions"],
+        handler=step_full_only,
+        next={
+            Outcome.OK: "initial_synthesis",
+            Outcome.SKIP: "initial_synthesis",
+        },
+    ),
+    StepDef(
+        id="initial_synthesis",
+        title="Initial Synthesis",
+        actions=[],
+        handler=step_initial_synthesis,
+        next={Outcome.OK: "iterative_refinement"},
+    ),
+    StepDef(
+        id="iterative_refinement",
+        title="Iterative Refinement",
+        actions=[],
+        handler=step_iterative_refinement,
+        next={
+            Outcome.OK: "formatting_output",
+            Outcome.ITERATE: "iterative_refinement",
+        },
+    ),
+    StepDef(
+        id="formatting_output",
+        title="Formatting & Output",
+        actions=[],
+        handler=step_formatting_output,
+        next={Outcome.OK: None},
+    ),
+    description="Structured reasoning for open-ended analytical questions",
+)
+
+register_workflow(WORKFLOW)
+
+
+def main(
+    step: int = None,
+    total_steps: int = None,
+    confidence: str | None = None,
+    iteration: int | None = None,
+    mode: str | None = None,
+):
+    """Entry point with parameter annotations for testing framework.
+
+    Note: Parameters have defaults because actual values come from argparse.
+    The annotations are metadata for the testing framework.
+    """
     parser = argparse.ArgumentParser(
         description="DeepThink - Structured reasoning for open-ended analytical questions",
         epilog="Steps: 0-13 (Full mode) or 0-4,11-13 (Quick mode)",

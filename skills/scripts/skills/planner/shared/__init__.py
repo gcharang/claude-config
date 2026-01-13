@@ -19,7 +19,6 @@ This pattern is applied consistently across:
 
 # Re-export from resources
 from .resources import (
-    QR_ITERATION_LIMIT,
     get_resource,
     get_mode_script_path,
     get_exhaustiveness_prompt,
@@ -34,8 +33,6 @@ from .domain import (
 )
 
 __all__ = [
-    # Constants
-    "QR_ITERATION_LIMIT",
     # Resources
     "get_resource",
     "get_mode_script_path",

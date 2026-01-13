@@ -87,13 +87,117 @@ Gate Step (--qr-status=pass|fail)
   +-- FAIL --> Work Step (--qr-fail=true, --qr-iteration=N+1)
 ```
 
+## Architectural Evolution: From @skill to Workflow
+
+### Legacy Pattern (@skill decorator)
+
+Original approach:
+```python
+STEPS = {
+    1: {"title": "...", "actions": [...]},
+    2: {"title": "...", "actions": [...]},
+}
+
+@skill(name="my-skill", total_steps=5)
+def main(step: int = None, total_steps: int = None):
+    step_info = STEPS[step]
+    # Print actions, handle transitions in code...
+```
+
+Problems:
+- Step definitions separate from registration
+- Transitions buried in main() logic (not introspectable)
+- Manifest manually maintained (easy to drift from code)
+- Hard to validate workflow structure (dead-end steps, orphaned nodes)
+
+### New Pattern (Workflow class)
+
+Current approach:
+```python
+from skills.lib.workflow.core import Workflow, StepDef, Outcome, register_workflow
+
+def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
+    # Step logic...
+    return Outcome.OK, {}
+
+WORKFLOW = Workflow(
+    "my-skill",
+    StepDef(id="step1", title="...", actions=[...], handler=step_handler,
+            next={Outcome.OK: "step2"}),
+    StepDef(id="step2", title="...", actions=[...],
+            next={Outcome.OK: None}),  # terminal
+)
+
+register_workflow(WORKFLOW)
+```
+
+Benefits:
+- **Single source of truth**: Steps + transitions + metadata in one structure
+- **Transitions as data**: Workflow graph is data, not code logic
+- **Auto-generated manifest**: Derived via `to_manifest()`, never drifts
+- **Validation at registration**: Catches dead-ends, orphans, invalid targets early
+- **Introspectable**: Tools can visualize, analyze, validate workflow structure
+
+### Migration Status
+
+**Completed (4/10 skills)**:
+- decision-critic (7 steps, linear)
+- leon-writing-style (linear)
+- problem-analysis (5 steps, iterative with confidence)
+- codebase-analysis (4 steps, confidence-driven iteration)
+
+**Remaining**:
+- deepthink (14 steps, mode branching)
+- solution-design (9 steps, parallel dispatch)
+- refactor (5 steps, QR gates)
+- planner (complex, QR gates + multi-mode)
+- incoherence (21 steps, multi-phase)
+- doc-sync (not implemented)
+
+See `MIGRATION_STATUS.md` for detailed migration roadmap.
+
+### Common Patterns
+
+**Linear workflow**:
+```python
+StepDef(id="step1", next={Outcome.OK: "step2"})
+```
+
+**Confidence-driven iteration**:
+```python
+def step_investigate(ctx):
+    if ctx.workflow_params["confidence"] == "high":
+        return Outcome.OK, {}
+    return Outcome.ITERATE, {"iteration": ctx.step_state.get("iteration", 1) + 1}
+
+StepDef(id="investigate", next={Outcome.OK: "formulate", Outcome.ITERATE: "investigate"})
+```
+
+**Mode branching**:
+```python
+def step_planning(ctx):
+    return Outcome.SKIP if ctx.workflow_params["mode"] == "quick" else Outcome.OK
+
+StepDef(id="planning", next={Outcome.OK: "subagent_design", Outcome.SKIP: "synthesis"})
+```
+
+**QR gates**:
+```python
+StepDef(id="qr_gate", handler=Dispatch(agent=AgentRole.QUALITY_REVIEWER, ...),
+        next={Outcome.OK: "proceed", Outcome.FAIL: "revise"})
+```
+
+See `lib/workflow/README.md` for detailed pattern documentation.
+
 ## Why This Structure
 
 **Script-based activation over free-form**: Free-form workflows drift. Agent explores first, skips steps, invents better approaches. Scripts enforce consistent behavior through structured XML output. Skills activate via `.skill` descriptor; agent invokes script immediately.
 
 **lib/workflow/ shared framework**: Extracted 550+ lines of duplication from planner, refactor, problem-analysis, decision-critic. Framework provides types (AgentRole, Routing, Dispatch, Step, QRState), formatters (26 XML + text), and CLI utilities. New skills compose existing primitives instead of reimplementing orchestration.
 
-**Compatibility layer during migration**: planner/scripts/shared/ temporarily re-exports lib/workflow to preserve existing imports. All planner mode scripts now import lib/workflow directly. Compatibility layer removed after remaining skills migrate.
+**Workflow-based architecture (new)**: Data-driven workflow definitions enable validation, introspection, and auto-manifest generation. Transitions are data (Outcome -> step_id mappings), not code logic. Single source of truth prevents drift.
+
+**Compatibility layer during migration**: Legacy @skill decorator still works. New Workflow pattern preferred for new skills. Both registries combine in manifest generation.
 
 **Bootstrap pattern over PYTHONPATH**: Skills use inline sys.path setup to add .claude/ for `from skills.*` imports. No external environment configuration. Pattern simplified from old 6-line repetitive `.parent.parent...` to 4-line `.parents[N]` approach documented in \_bootstrap.py.
 

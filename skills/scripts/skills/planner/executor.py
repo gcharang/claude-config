@@ -17,7 +17,7 @@ Nine-step workflow:
 import argparse
 import sys
 
-from skills.lib.workflow.types import QRState, QRStatus, GateConfig
+from skills.lib.workflow.types import QRState, QRStatus, GateConfig, AgentRole
 from skills.lib.workflow.formatters import (
     format_step_output,
     format_gate_step,
@@ -181,7 +181,7 @@ CODE_QR_GATE = GateConfig(
     pass_step=6,
     pass_message="Code quality verified. Proceed to documentation.",
     self_fix=False,
-    fix_target="developer",
+    fix_target=AgentRole.DEVELOPER,
 )
 
 # Gate configuration for step 8 (Doc QR Gate)
@@ -191,7 +191,7 @@ DOC_QR_GATE = GateConfig(
     pass_step=9,
     pass_message="Documentation verified. Proceed to retrospective.",
     self_fix=False,
-    fix_target="technical-writer",
+    fix_target=AgentRole.TECHNICAL_WRITER,
 )
 
 

@@ -33,8 +33,17 @@ No manual file editing required.
 
 import argparse
 import sys
+from typing import Annotated
 
-# Module path for -m invocation
+from skills.lib.workflow.core import (
+    Arg,
+    Outcome,
+    StepContext,
+    StepDef,
+    Workflow,
+    register_workflow,
+)
+
 MODULE_PATH = "skills.incoherence.incoherence"
 
 DIMENSION_CATALOG = """
@@ -144,6 +153,19 @@ SELECTION RULES:
 - L, M are critical for design-phase docs and specs-to-be-implemented
   Select when docs describe systems that need to be built
 """
+
+
+def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Generic handler for output-only steps."""
+    return Outcome.OK, {}
+
+
+def step_survey(
+    ctx: StepContext,
+    thoughts: Annotated[str, Arg(required=True, description="Step context and findings")],
+) -> tuple[Outcome, dict]:
+    """Handler for step 1 (survey) with thoughts parameter."""
+    return Outcome.OK, {}
 
 
 def get_step_guidance(step_number, total_steps):
@@ -516,7 +538,192 @@ def get_step_guidance(step_number, total_steps):
     return {"actions": ["Unknown step"], "next": "Check step number"}
 
 
-def main():
+WORKFLOW = Workflow(
+    "incoherence",
+    StepDef(
+        id="survey",
+        title="Codebase Survey",
+        phase="DETECTION",
+        actions=get_step_guidance(1, 21)["actions"],
+        handler=step_survey,
+        next={Outcome.OK: "dimension_selection"},
+    ),
+    StepDef(
+        id="dimension_selection",
+        title="Dimension Selection",
+        phase="DETECTION",
+        actions=get_step_guidance(2, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "exploration_dispatch"},
+    ),
+    StepDef(
+        id="exploration_dispatch",
+        title="Exploration Dispatch",
+        phase="DETECTION",
+        actions=get_step_guidance(3, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "broad_sweep"},
+    ),
+    StepDef(
+        id="broad_sweep",
+        title="Broad Sweep [SUB-AGENT]",
+        phase="DETECTION",
+        actions=get_step_guidance(4, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "coverage_check"},
+    ),
+    StepDef(
+        id="coverage_check",
+        title="Coverage Check [SUB-AGENT]",
+        phase="DETECTION",
+        actions=get_step_guidance(5, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "gap_fill"},
+    ),
+    StepDef(
+        id="gap_fill",
+        title="Gap-Fill Exploration [SUB-AGENT]",
+        phase="DETECTION",
+        actions=get_step_guidance(6, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "format_exploration"},
+    ),
+    StepDef(
+        id="format_exploration",
+        title="Format Exploration Findings [SUB-AGENT]",
+        phase="DETECTION",
+        actions=get_step_guidance(7, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "synthesize_candidates"},
+    ),
+    StepDef(
+        id="synthesize_candidates",
+        title="Synthesize Candidates",
+        phase="DETECTION",
+        actions=get_step_guidance(8, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "deep_dive_dispatch"},
+    ),
+    StepDef(
+        id="deep_dive_dispatch",
+        title="Deep-Dive Dispatch",
+        phase="DETECTION",
+        actions=get_step_guidance(9, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "deep_dive_exploration"},
+    ),
+    StepDef(
+        id="deep_dive_exploration",
+        title="Deep-Dive Exploration [SUB-AGENT]",
+        phase="DETECTION",
+        actions=get_step_guidance(10, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "format_results"},
+    ),
+    StepDef(
+        id="format_results",
+        title="Format Results [SUB-AGENT]",
+        phase="DETECTION",
+        actions=get_step_guidance(11, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "verdict_analysis"},
+    ),
+    StepDef(
+        id="verdict_analysis",
+        title="Verdict Analysis",
+        phase="DETECTION",
+        actions=get_step_guidance(12, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "prepare_resolution_batches"},
+    ),
+    StepDef(
+        id="prepare_resolution_batches",
+        title="Prepare Resolution Batches",
+        phase="RESOLUTION",
+        actions=get_step_guidance(13, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "present_batch"},
+    ),
+    StepDef(
+        id="present_batch",
+        title="Present Resolution Batch",
+        phase="RESOLUTION",
+        actions=get_step_guidance(14, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "resolution_loop"},
+    ),
+    StepDef(
+        id="resolution_loop",
+        title="Resolution Loop Controller",
+        phase="RESOLUTION",
+        actions=get_step_guidance(15, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "plan_dispatch"},
+    ),
+    StepDef(
+        id="plan_dispatch",
+        title="Plan Dispatch",
+        phase="APPLICATION",
+        actions=get_step_guidance(16, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "reconcile_dispatch"},
+    ),
+    StepDef(
+        id="reconcile_dispatch",
+        title="Reconcile Dispatch",
+        phase="APPLICATION",
+        actions=get_step_guidance(17, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "reconcile_apply"},
+    ),
+    StepDef(
+        id="reconcile_apply",
+        title="Reconcile Apply [SUB-AGENT]",
+        phase="APPLICATION",
+        actions=get_step_guidance(18, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "reconcile_format"},
+    ),
+    StepDef(
+        id="reconcile_format",
+        title="Reconcile Format [SUB-AGENT]",
+        phase="APPLICATION",
+        actions=get_step_guidance(19, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "reconcile_collect"},
+    ),
+    StepDef(
+        id="reconcile_collect",
+        title="Reconcile Collect",
+        phase="APPLICATION",
+        actions=get_step_guidance(20, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "present_report"},
+    ),
+    StepDef(
+        id="present_report",
+        title="Present Report",
+        phase="APPLICATION",
+        actions=get_step_guidance(21, 21)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: None},
+    ),
+    description="Multi-phase incoherence detection and resolution workflow",
+)
+
+register_workflow(WORKFLOW)
+
+
+def main(
+    step_number: int = None,
+    total_steps: int = None,
+    thoughts: str = None,
+):
+    """Entry point with parameter annotations for testing framework.
+
+    Note: Parameters have defaults because actual values come from argparse.
+    The annotations are metadata for the testing framework.
+    """
     parser = argparse.ArgumentParser(description="Incoherence Detector")
     parser.add_argument("--step-number", type=int, required=True)
     parser.add_argument("--total-steps", type=int, required=True)

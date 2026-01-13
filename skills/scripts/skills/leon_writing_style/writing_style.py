@@ -15,6 +15,16 @@ Grounded in:
 import argparse
 import sys
 from pathlib import Path
+from typing import Annotated
+
+from skills.lib.workflow.core import (
+    Outcome,
+    StepContext,
+    StepDef,
+    Workflow,
+    Arg,
+    register_workflow,
+)
 
 
 def get_phase_name(step: int) -> str:
@@ -31,9 +41,11 @@ def get_phase_name(step: int) -> str:
 
 def load_resource_section(section: str) -> str:
     """Load a specific section from the style guide resource."""
+    import sys
+
     resource_path = Path(__file__).parent.parent / "resources" / "writing-style.md"
     if not resource_path.exists():
-        return ""
+        sys.exit(f"ERROR: writing style resource not found: {resource_path}")
 
     content = resource_path.read_text()
 
@@ -970,7 +982,136 @@ def format_output(step: int, total_steps: int, guidance: dict, thoughts: str) ->
     return "\n".join(lines)
 
 
-def main():
+# Handler functions (output-only steps just return OK)
+def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Generic handler for output-only steps."""
+    return Outcome.OK, {}
+
+
+# Workflow definition with 9 core steps
+WORKFLOW = Workflow(
+    "leon-writing-style",
+    StepDef(
+        id="classification",
+        title="Content Classification",
+        phase="UNDERSTANDING",
+        actions=[
+            "Before writing, classify your content. Voice rules depend on this.",
+            "",
+            "<content_types>",
+            "NARRATIVE - Tell a story, share experience, explain motivation",
+            "  Voice: First-person ('I found', 'I chose', 'my advice')",
+            "  Use for: Introductions, rationale, design decisions, opinions",
+            "",
+            "INSTRUCTIONAL - Teach how to do something",
+            "  Voice: Imperative ('Run the command', 'Configure the setting')",
+            "  Use for: Usage guides, tutorials, step-by-step procedures",
+            "",
+            "REFERENCE - Document facts, APIs, specifications",
+            "  Voice: Third-person declarative ('The function accepts...')",
+            "  Use for: API docs, parameter tables, specifications",
+            "",
+            "HYBRID - Mixed content (most technical writing)",
+            "  Voice: Shifts by section purpose",
+            "  Use for: READMEs, blog posts, technical articles",
+            "</content_types>",
+            "",
+            "<classification_output>",
+            "Map your content to types:",
+            "",
+            "  | Section/Topic | Content Type | Voice |",
+            "  |---------------|--------------|-------|",
+            "  | Introduction  | narrative    | first-person |",
+            "  | Usage         | instructional| imperative |",
+            "  | ...           | ...          | ... |",
+            "",
+            "This table guides voice selection in later steps.",
+            "</classification_output>",
+        ],
+        handler=step_handler,
+        next={Outcome.OK: "purpose_audience"},
+    ),
+    StepDef(
+        id="purpose_audience",
+        title="Purpose & Audience",
+        phase="UNDERSTANDING",
+        actions=get_step_guidance(2, 9)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "drafting"},
+    ),
+    StepDef(
+        id="drafting",
+        title="Draft with Style Rules",
+        phase="DRAFTING",
+        actions=get_step_guidance(3, 9)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "ai_tells_detection"},
+    ),
+    StepDef(
+        id="ai_tells_detection",
+        title="AI Tells Detection",
+        phase="VERIFICATION",
+        actions=get_step_guidance(4, 9)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "positive_markers"},
+    ),
+    StepDef(
+        id="positive_markers",
+        title="Positive Voice Marker Check",
+        phase="VERIFICATION",
+        actions=get_step_guidance(5, 9)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "voice_alignment"},
+    ),
+    StepDef(
+        id="voice_alignment",
+        title="Voice-Content Alignment",
+        phase="VERIFICATION",
+        actions=get_step_guidance(6, 9)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "consolidation"},
+    ),
+    StepDef(
+        id="consolidation",
+        title="Cross-Check Consolidation",
+        phase="VERIFICATION",
+        actions=get_step_guidance(7, 9)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "refinement"},
+    ),
+    StepDef(
+        id="refinement",
+        title="Self-Refine",
+        phase="REFINEMENT",
+        actions=get_step_guidance(8, 9)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "final_check"},
+    ),
+    StepDef(
+        id="final_check",
+        title="Final Quality Check",
+        phase="REFINEMENT",
+        actions=get_step_guidance(9, 9)["actions"],
+        handler=step_handler,
+        next={Outcome.OK: None},
+    ),
+    description="Multi-turn style compliance workflow",
+)
+
+register_workflow(WORKFLOW)
+
+
+def main(
+    step: int = None,
+    total_steps: int = None,
+    thoughts: str | None = None,
+):
+    """Entry point with parameter annotations for testing framework.
+
+    Note: Uses --step-number for backward compatibility with original interface.
+    Parameters have defaults because actual values come from argparse.
+    The annotations are metadata for the testing framework.
+    """
     parser = argparse.ArgumentParser(
         description="Leon Writing Style - Multi-turn style compliance workflow",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -978,7 +1119,9 @@ def main():
     )
 
     parser.add_argument(
+        "--step",
         "--step-number",
+        dest="step_number",
         type=int,
         required=True,
         help="Current step number (starts at 1)",
@@ -987,12 +1130,12 @@ def main():
         "--total-steps",
         type=int,
         required=True,
-        help="Estimated total steps (typically 8, adjust as needed)",
+        help="Estimated total steps (typically 9, adjust as needed)",
     )
     parser.add_argument(
         "--thoughts",
         type=str,
-        required=True,
+        default="",
         help="Your thinking, draft content, classification, and findings",
     )
 

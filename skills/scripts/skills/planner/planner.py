@@ -21,7 +21,14 @@ Flow:
 import argparse
 import sys
 
-from skills.lib.workflow.types import QRState, QRStatus, GateConfig
+from skills.lib.workflow.types import QRState, QRStatus, GateConfig, AgentRole, Dispatch
+from skills.lib.workflow.core import (
+    Workflow,
+    StepDef,
+    StepContext,
+    Outcome,
+    register_workflow,
+)
 from skills.lib.workflow.formatters import (
     format_step_output,
     format_gate_step,
@@ -389,7 +396,7 @@ GATES = {
         pass_step=11,
         pass_message="Proceed to step 11 (TW Documentation Scrub).",
         self_fix=False,
-        fix_target="developer",
+        fix_target=AgentRole.DEVELOPER,
     ),
     13: GateConfig(
         qr_name="QR-DOCS",
@@ -397,9 +404,151 @@ GATES = {
         pass_step=None,
         pass_message="PLAN APPROVED. Ready for /plan-execution.",
         self_fix=False,
-        fix_target="technical-writer",
+        fix_target=AgentRole.TECHNICAL_WRITER,
     ),
 }
+
+
+def step_handler_noop(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Generic handler for output-only steps."""
+    return Outcome.OK, {}
+
+
+def step_gate_passthrough(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Pass-through handler for gate routing steps."""
+    return Outcome.OK, {}
+
+
+WORKFLOW = Workflow(
+    "planner",
+    StepDef(
+        id="context_discovery",
+        title="Context Discovery",
+        actions=STEPS[1]["actions"],
+        handler=Dispatch(
+            agent=AgentRole.EXPLORE,
+            script="skills.planner.explore",
+            total_steps=5,
+            context_vars={
+                "TASK": "the user's task/request being planned",
+                "DECISION_CRITERIA": "what planning decisions will consume this output",
+            },
+        ),
+        next={Outcome.OK: "testing_strategy"},
+    ),
+    StepDef(
+        id="testing_strategy",
+        title="Testing Strategy Discovery",
+        actions=STEPS[2]["actions"],
+        handler=step_handler_noop,
+        next={Outcome.OK: "approach_generation"},
+    ),
+    StepDef(
+        id="approach_generation",
+        title="Approach Generation",
+        actions=STEPS[3]["actions"],
+        handler=step_handler_noop,
+        next={Outcome.OK: "assumption_surfacing"},
+    ),
+    StepDef(
+        id="assumption_surfacing",
+        title="Assumption Surfacing",
+        actions=STEPS[4]["actions"],
+        handler=step_handler_noop,
+        next={Outcome.OK: "approach_selection"},
+    ),
+    StepDef(
+        id="approach_selection",
+        title="Approach Selection & Milestones",
+        actions=STEPS[5]["actions"],
+        handler=step_handler_noop,
+        next={Outcome.OK: "qr_completeness"},
+    ),
+    StepDef(
+        id="qr_completeness",
+        title="QR-Completeness",
+        actions=[],
+        handler=Dispatch(
+            agent=AgentRole.QUALITY_REVIEWER,
+            script="skills.planner.qr.plan_completeness",
+            total_steps=6,
+            context_vars={"PLAN_FILE": "path to the plan being reviewed"},
+        ),
+        next={Outcome.OK: "qr_completeness_gate", Outcome.FAIL: "qr_completeness_gate"},
+    ),
+    StepDef(
+        id="qr_completeness_gate",
+        title="QR-Completeness Gate",
+        actions=[],
+        handler=step_gate_passthrough,
+        next={Outcome.OK: "developer_fills_diffs", Outcome.FAIL: "approach_selection"},
+    ),
+    StepDef(
+        id="developer_fills_diffs",
+        title="Developer Fills Diffs",
+        actions=[],
+        handler=Dispatch(
+            agent=AgentRole.DEVELOPER,
+            script="skills.planner.dev.fill_diffs",
+            total_steps=4,
+            context_vars={"PLAN_FILE": "path to the plan being reviewed"},
+        ),
+        next={Outcome.OK: "qr_code"},
+    ),
+    StepDef(
+        id="qr_code",
+        title="QR-Code",
+        actions=[],
+        handler=Dispatch(
+            agent=AgentRole.QUALITY_REVIEWER,
+            script="skills.planner.qr.plan_code",
+            total_steps=7,
+            context_vars={"PLAN_FILE": "path to the plan being reviewed"},
+        ),
+        next={Outcome.OK: "qr_code_gate", Outcome.FAIL: "qr_code_gate"},
+    ),
+    StepDef(
+        id="qr_code_gate",
+        title="QR-Code Gate",
+        actions=[],
+        handler=step_gate_passthrough,
+        next={Outcome.OK: "tw_documentation_scrub", Outcome.FAIL: "developer_fills_diffs"},
+    ),
+    StepDef(
+        id="tw_documentation_scrub",
+        title="TW Documentation Scrub",
+        actions=[],
+        handler=Dispatch(
+            agent=AgentRole.TECHNICAL_WRITER,
+            script="skills.planner.tw.plan_scrub",
+            total_steps=6,
+            context_vars={"PLAN_FILE": "path to the plan being reviewed"},
+        ),
+        next={Outcome.OK: "qr_docs"},
+    ),
+    StepDef(
+        id="qr_docs",
+        title="QR-Docs",
+        actions=[],
+        handler=Dispatch(
+            agent=AgentRole.QUALITY_REVIEWER,
+            script="skills.planner.qr.plan_docs",
+            total_steps=5,
+            context_vars={"PLAN_FILE": "path to the plan being reviewed"},
+        ),
+        next={Outcome.OK: "qr_docs_gate", Outcome.FAIL: "qr_docs_gate"},
+    ),
+    StepDef(
+        id="qr_docs_gate",
+        title="QR-Docs Gate",
+        actions=[],
+        handler=step_gate_passthrough,
+        next={Outcome.OK: None, Outcome.FAIL: "tw_documentation_scrub"},
+    ),
+    description="Interactive sequential planner with QR gates",
+)
+
+register_workflow(WORKFLOW)
 
 
 def format_gate(step: int, qr: QRState) -> str:
@@ -571,7 +720,18 @@ def format_output(step: int, total_steps: int,
     )
 
 
-def main():
+def main(
+    step: int = None,
+    total_steps: int = None,
+    qr_iteration: int = 1,
+    qr_fail: bool = False,
+    qr_status: str = None,
+):
+    """Backward compatibility CLI entry point.
+
+    Note: Parameters have defaults because actual values come from argparse.
+    The annotations are metadata for the testing framework.
+    """
     parser = argparse.ArgumentParser(
         description="Interactive Sequential Planner (13-step unified workflow)",
         epilog="Steps 1-5: planning | Steps 6-13: review with QR gates",
@@ -584,17 +744,14 @@ def main():
     args = parser.parse_args()
 
     if args.step < 1 or args.total_steps < 1:
-        print("Error: step and total-steps must be >= 1", file=sys.stderr)
-        sys.exit(1)
+        sys.exit("Error: step and total-steps must be >= 1")
 
     if args.total_steps < 13:
-        print("Error: workflow requires at least 13 steps", file=sys.stderr)
-        sys.exit(1)
+        sys.exit("Error: workflow requires at least 13 steps")
 
     # Gate steps require --qr-status
     if args.step in (7, 10, 13) and not args.qr_status:
-        print(f"Error: --qr-status required for gate step {args.step}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(f"Error: --qr-status required for gate step {args.step}")
 
     print(format_output(args.step, args.total_steps,
                         args.qr_iteration, args.qr_fail, args.qr_status))

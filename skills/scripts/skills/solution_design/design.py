@@ -20,7 +20,16 @@ identify problems or perform root cause analysis--that belongs upstream
 
 import argparse
 import sys
+from typing import Annotated
 
+from skills.lib.workflow.core import (
+    Workflow,
+    StepDef,
+    StepContext,
+    Outcome,
+    Arg,
+    register_workflow,
+)
 from skills.lib.workflow.formatters import (
     format_step_header,
     format_xml_mandate,
@@ -501,7 +510,7 @@ STEPS = {
     4: {
         "title": "Dispatch",
         "brief": "Launch all perspectives as parallel sub-agents",
-        "needs_dispatch": True,  # Flag for format_output
+        "needs_dispatch": True,
     },
     5: {
         "title": "Aggregate",
@@ -764,8 +773,109 @@ STEPS = {
 
 
 # =============================================================================
-# Output Formatting
+# Step Handlers
 # =============================================================================
+
+
+def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Generic handler for output-only steps."""
+    return Outcome.OK, {}
+
+
+# =============================================================================
+# Workflow Definition
+# =============================================================================
+
+
+WORKFLOW = Workflow(
+    "solution-design",
+    StepDef(
+        id="context",
+        title="Context",
+        phase="PREPARATION",
+        actions=STEPS[1]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "calibrate"},
+    ),
+    StepDef(
+        id="calibrate",
+        title="Calibrate",
+        phase="PREPARATION",
+        actions=STEPS[2]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "reflect"},
+    ),
+    StepDef(
+        id="reflect",
+        title="Reflect",
+        phase="PREPARATION",
+        actions=STEPS[3]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "dispatch"},
+    ),
+    StepDef(
+        id="dispatch",
+        title="Dispatch",
+        phase="GENERATION",
+        actions=[
+            "DISPATCH ALL PERSPECTIVE SUB-AGENTS",
+            "",
+            "Using the ROOT_CAUSE, CONSTRAINTS from Step 1",
+            "and FINALIZED_CRITERIA from Step 3:",
+            "",
+            format_perspective_selection_guidance(),
+            "",
+            format_parallel_dispatch(),
+            "",
+            "WAIT for all perspective agents to complete before proceeding.",
+        ],
+        handler=step_handler,
+        next={Outcome.OK: "aggregate"},
+    ),
+    StepDef(
+        id="aggregate",
+        title="Aggregate",
+        phase="GENERATION",
+        actions=STEPS[5]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "synthesize"},
+    ),
+    StepDef(
+        id="synthesize",
+        title="Synthesize",
+        phase="EVALUATION",
+        actions=STEPS[6]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "challenge"},
+    ),
+    StepDef(
+        id="challenge",
+        title="Challenge",
+        phase="EVALUATION",
+        actions=STEPS[7]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "select"},
+    ),
+    StepDef(
+        id="select",
+        title="Select",
+        phase="EVALUATION",
+        actions=STEPS[8]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "output"},
+    ),
+    StepDef(
+        id="output",
+        title="Output",
+        phase="DELIVERY",
+        actions=STEPS[9]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: None},
+    ),
+    description="Perspective-parallel solution generation workflow",
+)
+
+register_workflow(WORKFLOW)
 
 
 def format_output(step: int, total_steps: int) -> str:
@@ -819,12 +929,15 @@ def format_output(step: int, total_steps: int) -> str:
     return "\n".join(parts)
 
 
-# =============================================================================
-# Main
-# =============================================================================
+def main(
+    step: int = None,
+    total_steps: int = None,
+):
+    """Entry point with backward compatibility for CLI invocation.
 
-
-def main():
+    Note: Parameters have defaults because actual values come from argparse.
+    The annotations are metadata for the testing framework.
+    """
     parser = argparse.ArgumentParser(
         description="Solution Design Skill - Perspective-parallel solution generation",
         epilog="Steps: context -> calibrate -> reflect -> dispatch -> aggregate -> synthesize -> challenge -> select -> output",

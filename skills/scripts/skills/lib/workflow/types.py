@@ -18,6 +18,16 @@ class AgentRole(Enum):
     GENERAL_PURPOSE = "general-purpose"
 
 
+class Confidence(Enum):
+    """Confidence levels for iterative workflows."""
+
+    EXPLORING = "exploring"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CERTAIN = "certain"
+
+
 class QRStatus(Enum):
     """Quality Review result status."""
 
@@ -127,6 +137,7 @@ class GateConfig:
     fix_target: AgentRole | None = None
 
 
+# DEPRECATED: Use StepDef from core.py for new skills
 @dataclass
 class Step:
     """Step configuration for workflow."""
@@ -139,6 +150,7 @@ class Step:
     phase: str | None = None
 
 
+# DEPRECATED: Use Workflow from core.py for new skills
 @dataclass
 class WorkflowDefinition:
     """Complete workflow definition."""

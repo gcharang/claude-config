@@ -43,11 +43,11 @@ def load_category_block(category_ref: str) -> str:
     file_part, line_range = category_ref.split(":")
     start, end = map(int, line_range.split("-"))
 
-    path = CONVENTIONS_DIR / file_part
-    if not path.exists():
-        sys.exit(f"ERROR: Category file not found: {path}")
+    from skills.lib.io import read_text_or_exit
 
-    lines = path.read_text().splitlines()
+    path = CONVENTIONS_DIR / file_part
+    content = read_text_or_exit(path, "loading category file")
+    lines = content.splitlines()
     return "\n".join(lines[start - 1 : end])
 
 

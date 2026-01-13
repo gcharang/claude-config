@@ -784,7 +784,7 @@ def format_gate_step(
         qr=qr,
         pass_message=gate.pass_message,
         self_fix=gate.self_fix,
-        fix_target=gate.fix_target or "developer",
+        fix_target=gate.fix_target.value if gate.fix_target else "developer",
     )
 
     # Build commands

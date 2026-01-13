@@ -15,7 +15,16 @@ Research grounding:
 
 import argparse
 import sys
+from typing import Annotated
 
+from skills.lib.workflow.core import (
+    Arg,
+    Outcome,
+    StepContext,
+    StepDef,
+    Workflow,
+    register_workflow,
+)
 from skills.lib.workflow.formatters.text import format_text_output
 
 
@@ -165,9 +174,95 @@ STEPS = {
 }
 
 
+# Handler functions (output-only steps just return OK)
+def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Generic handler for output-only steps."""
+    return Outcome.OK, {}
 
 
-def main():
+def step_extract_structure(
+    ctx: StepContext,
+    decision: Annotated[str, Arg(required=True, description="Decision to critique")],
+) -> tuple[Outcome, dict]:
+    """Handler for extract_structure step with decision parameter."""
+    return Outcome.OK, {}
+
+
+# Workflow definition
+WORKFLOW = Workflow(
+    "decision-critic",
+    StepDef(
+        id="extract_structure",
+        title="Extract Structure",
+        phase="DECOMPOSITION",
+        actions=STEPS[1]["actions"],
+        handler=step_extract_structure,
+        next={Outcome.OK: "classify_verifiability"},
+    ),
+    StepDef(
+        id="classify_verifiability",
+        title="Classify Verifiability",
+        phase="DECOMPOSITION",
+        actions=STEPS[2]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "generate_questions"},
+    ),
+    StepDef(
+        id="generate_questions",
+        title="Generate Verification Questions",
+        phase="VERIFICATION",
+        actions=STEPS[3]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "factored_verification"},
+    ),
+    StepDef(
+        id="factored_verification",
+        title="Factored Verification",
+        phase="VERIFICATION",
+        actions=STEPS[4]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "contrarian_perspective"},
+    ),
+    StepDef(
+        id="contrarian_perspective",
+        title="Contrarian Perspective",
+        phase="CHALLENGE",
+        actions=STEPS[5]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "alternative_framing"},
+    ),
+    StepDef(
+        id="alternative_framing",
+        title="Alternative Framing",
+        phase="CHALLENGE",
+        actions=STEPS[6]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "synthesis"},
+    ),
+    StepDef(
+        id="synthesis",
+        title="Synthesis and Verdict",
+        phase="SYNTHESIS",
+        actions=STEPS[7]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: None},
+    ),
+    description="Structured decision criticism workflow",
+)
+
+register_workflow(WORKFLOW)
+
+
+def main(
+    step: int = None,
+    total_steps: int = None,
+    decision: str | None = None,
+):
+    """Entry point with parameter annotations for testing framework.
+
+    Note: Parameters have defaults because actual values come from argparse.
+    The annotations are metadata for the testing framework.
+    """
     parser = argparse.ArgumentParser(
         description="Decision Critic - Structured criticism workflow",
         epilog="Phases: decompose (1-2) -> verify (3-4) -> challenge (5-6) -> synthesize (7)",
@@ -185,22 +280,32 @@ def main():
     if args.step == 1 and not args.decision:
         sys.exit("Error: --decision required for step 1")
 
-    info = STEPS.get(args.step, STEPS[7])
-    next_info = STEPS.get(args.step + 1, STEPS[7]) if args.step < args.total_steps else None
+    # Map step number to step_id using workflow
+    step_ids = list(WORKFLOW.steps.keys())
+    step_id = step_ids[args.step - 1]
+    step_def = WORKFLOW.steps[step_id]
+
+    # Get next step info
+    next_step_def = None
+    if args.step < args.total_steps:
+        next_step_id = step_ids[args.step]
+        next_step_def = WORKFLOW.steps[next_step_id]
 
     # Add decision context to actions for step 1
-    actions = info["actions"]
+    actions = step_def.actions
     if args.step == 1 and args.decision:
         actions = [f"DECISION UNDER REVIEW: {args.decision}", ""] + actions
 
-    print(format_text_output(
-        step=args.step,
-        total=args.total_steps,
-        title=f"DECISION CRITIC - {info['title']}",
-        actions=actions,
-        brief=f"Phase: {info['phase']}",
-        next_title=next_info["title"] if next_info else None,
-    ))
+    print(
+        format_text_output(
+            step=args.step,
+            total=args.total_steps,
+            title=f"DECISION CRITIC - {step_def.title}",
+            actions=actions,
+            brief=f"Phase: {step_def.phase}",
+            next_title=next_step_def.title if next_step_def else None,
+        )
+    )
 
 
 if __name__ == "__main__":

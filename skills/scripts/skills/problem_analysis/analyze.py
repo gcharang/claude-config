@@ -15,7 +15,16 @@ is identified with supporting evidence. Solution discovery is downstream.
 
 import argparse
 import sys
+from typing import Annotated
 
+from skills.lib.workflow.core import (
+    Outcome,
+    StepContext,
+    StepDef,
+    Workflow,
+    Arg,
+    register_workflow,
+)
 from skills.lib.workflow.formatters.text import format_text_output, build_invoke_command
 
 
@@ -318,7 +327,94 @@ def get_phase_3_completion_message(confidence: str, iteration: int) -> list[str]
         ]
 
 
-def main():
+# Handler functions
+def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Generic handler for output-only steps."""
+    return Outcome.OK, {}
+
+
+def step_investigate(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Handler for iterative investigation phase.
+
+    Checks confidence level and iteration count to determine whether to
+    continue investigating or proceed to formulation.
+    """
+    iteration = ctx.step_state.get("iteration", 1)
+    confidence = ctx.workflow_params.get("confidence", "exploring")
+
+    # Exit conditions
+    if confidence == "high":
+        return Outcome.OK, {"confidence": confidence, "iteration": iteration}
+    elif iteration >= MAX_ITERATIONS:
+        return Outcome.OK, {"confidence": confidence, "iteration": iteration}
+    else:
+        # Continue iterating
+        return Outcome.ITERATE, {"iteration": iteration + 1, "confidence": confidence}
+
+
+# Workflow definition
+WORKFLOW = Workflow(
+    "problem-analysis",
+    StepDef(
+        id="gate",
+        title="Gate",
+        phase="VALIDATION",
+        actions=PHASES[1]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "hypothesize"},
+    ),
+    StepDef(
+        id="hypothesize",
+        title="Hypothesize",
+        phase="EXPLORATION",
+        actions=PHASES[2]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "investigate"},
+    ),
+    StepDef(
+        id="investigate",
+        title="Investigate",
+        phase="EVIDENCE",
+        actions=PHASES[3]["actions"],
+        handler=step_investigate,
+        next={
+            Outcome.OK: "formulate",
+            Outcome.ITERATE: "investigate",
+        },
+    ),
+    StepDef(
+        id="formulate",
+        title="Formulate",
+        phase="SYNTHESIS",
+        actions=PHASES[4]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: "output"},
+    ),
+    StepDef(
+        id="output",
+        title="Output",
+        phase="REPORT",
+        actions=PHASES[5]["actions"],
+        handler=step_handler,
+        next={Outcome.OK: None},
+    ),
+    description="Root cause identification workflow",
+)
+
+register_workflow(WORKFLOW)
+
+
+def main(
+    step: int = None,
+    total_steps: int = None,
+    confidence: str | None = None,
+    iteration: int | None = None,
+):
+    """Entry point with parameter annotations for testing framework.
+
+    Note: Parameters have defaults because actual values come from argparse.
+    The annotations are metadata for the testing framework.
+    """
     parser = argparse.ArgumentParser(
         description="Problem Analysis - Root cause identification workflow",
         epilog="Phases: gate (1) -> hypothesize (2) -> investigate (3) -> formulate (4) -> output (5)",

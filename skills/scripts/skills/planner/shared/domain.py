@@ -39,35 +39,6 @@ class GuidanceResult:
 
 
 # =============================================================================
-# Gate Configuration
-# =============================================================================
-
-
-@dataclass
-class GateConfig:
-    """Configuration for a QR gate step.
-
-    Encapsulates the gate configuration that was previously stored
-    as tuples in gate_config dicts.
-
-    Attributes:
-        qr_name: QR checkpoint name (e.g., "QR-COMPLETENESS")
-        work_step: Step to return to for fixes
-        pass_step: Step to proceed to on pass (None for final gate)
-        pass_message: Message shown when gate passes
-        self_fix: If True, orchestrator fixes issues directly
-        fix_target: Agent to delegate to if self_fix is False
-    """
-
-    qr_name: str
-    work_step: int
-    pass_step: int | None
-    pass_message: str
-    self_fix: bool
-    fix_target: str | None = None
-
-
-# =============================================================================
 # QR Severity and Categories
 # =============================================================================
 

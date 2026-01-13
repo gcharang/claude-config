@@ -15,7 +15,16 @@ import random
 import re
 import sys
 from pathlib import Path
+from typing import Annotated
 
+from skills.lib.workflow.core import (
+    Arg,
+    Outcome,
+    StepContext,
+    StepDef,
+    Workflow,
+    register_workflow,
+)
 from skills.lib.workflow.formatters import (
     format_step_header,
     format_xml_mandate,
@@ -188,6 +197,87 @@ STEPS = {
         "brief": "Generate actionable work items",
     },
 }
+
+
+# =============================================================================
+# Step Handlers
+# =============================================================================
+
+
+def step_dispatch(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Handler for dispatch step - output only."""
+    return Outcome.OK, {}
+
+
+def step_triage(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Handler for triage step - output only."""
+    return Outcome.OK, {}
+
+
+def step_cluster(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Handler for cluster step - output only."""
+    return Outcome.OK, {}
+
+
+def step_contextualize(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Handler for contextualize step - output only."""
+    return Outcome.OK, {}
+
+
+def step_synthesize(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Handler for synthesize step - output only."""
+    return Outcome.OK, {}
+
+
+# =============================================================================
+# Workflow Definition
+# =============================================================================
+
+
+WORKFLOW = Workflow(
+    "refactor",
+    StepDef(
+        id="dispatch",
+        title="Dispatch",
+        actions=[
+            "IDENTIFY the scope from user's request:",
+            "  - Could be: file(s), directory, subsystem, entire codebase",
+        ],
+        handler=step_dispatch,
+        next={Outcome.OK: "triage"},
+    ),
+    StepDef(
+        id="triage",
+        title="Triage",
+        actions=STEPS[2]["actions"],
+        handler=step_triage,
+        next={Outcome.OK: "cluster"},
+    ),
+    StepDef(
+        id="cluster",
+        title="Cluster",
+        actions=[],
+        handler=step_cluster,
+        next={Outcome.OK: "contextualize"},
+    ),
+    StepDef(
+        id="contextualize",
+        title="Contextualize",
+        actions=[],
+        handler=step_contextualize,
+        next={Outcome.OK: "synthesize"},
+    ),
+    StepDef(
+        id="synthesize",
+        title="Synthesize",
+        actions=[],
+        handler=step_synthesize,
+        next={Outcome.OK: None},
+    ),
+    description="Category-based code smell detection and synthesis",
+)
+
+register_workflow(WORKFLOW)
 
 
 # =============================================================================
@@ -643,12 +733,16 @@ def format_output(step: int, total_steps: int, n: int = DEFAULT_CATEGORY_COUNT) 
     return "\n".join(parts)
 
 
-# =============================================================================
-# Main
-# =============================================================================
+def main(
+    step: int = None,
+    total_steps: int = None,
+    n: int = None,
+):
+    """Entry point with parameter annotations for testing framework.
 
-
-def main():
+    Note: Parameters have defaults because actual values come from argparse.
+    The annotations are metadata for the testing framework.
+    """
     parser = argparse.ArgumentParser(
         description="Refactor Skill - Category-based code smell detection and synthesis",
         epilog="Phases: dispatch -> triage -> cluster -> contextualize -> synthesize",

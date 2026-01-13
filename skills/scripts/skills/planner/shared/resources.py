@@ -5,33 +5,13 @@ Handles loading of resource files and path resolution.
 
 from pathlib import Path
 
-# Re-export QR constants from lib layer for backwards compatibility
-from skills.lib.workflow.constants import QR_ITERATION_LIMIT, get_blocking_severities
+from skills.lib.io import read_text_or_exit
 
 __all__ = [
-    "QR_ITERATION_LIMIT",
-    "get_blocking_severities",
-    "create_qr_report_dir",
     "get_resource",
     "get_mode_script_path",
     "get_exhaustiveness_prompt",
 ]
-
-
-# =============================================================================
-# QR Report Token Optimization
-# =============================================================================
-
-
-def create_qr_report_dir() -> Path:
-    """Create temp directory for QR report.
-
-    WHY: Token optimization. QR reports can be 1000+ tokens. Main agent only
-    needs PASS/FAIL to route. Full report goes to file, executor reads directly.
-    This reduces main agent context by ~95% for QR results.
-    """
-    import tempfile
-    return Path(tempfile.mkdtemp(prefix="qr-report-"))
 
 
 # =============================================================================
@@ -51,12 +31,12 @@ def get_resource(name: str) -> str:
     Returns:
         Full content of the resource file
 
-    Raises:
-        FileNotFoundError: If resource doesn't exist
+    Exits:
+        With contextual error message if resource doesn't exist
     """
     # shared -> planner -> skills -> scripts -> skills -> planner/resources
     resource_path = Path(__file__).resolve().parents[4] / "planner" / "resources" / name
-    return resource_path.read_text()
+    return read_text_or_exit(resource_path, "loading planner resource")
 
 
 def get_mode_script_path(script_name: str) -> str:
