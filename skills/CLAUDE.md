@@ -24,6 +24,7 @@ Script-based agent workflows with shared orchestration framework.
 | `incoherence/`        | Consistency detection                    | Finding spec/implementation mismatches  |
 | `doc-sync/`           | Documentation synchronization            | Syncing docs across repos               |
 | `leon-writing-style/` | Style-matched content generation         | Writing content matching user's style   |
+| `arxiv-to-md/`        | arXiv paper to markdown conversion       | Converting papers for LLM consumption   |
 
 ## Script Invocation
 
