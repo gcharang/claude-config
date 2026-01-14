@@ -749,9 +749,14 @@ def main(
     if args.total_steps < 13:
         sys.exit("Error: workflow requires at least 13 steps")
 
-    # Gate steps require --qr-status
+    # Gate steps require --qr-status; provide helpful output if missing
     if args.step in (7, 10, 13) and not args.qr_status:
-        sys.exit(f"Error: --qr-status required for gate step {args.step}")
+        gate = GATES[args.step]
+        print(f"PLANNER - Step {args.step}/{args.total_steps}: {gate.qr_name} Gate")
+        print()
+        print("This is a gate step. Re-invoke with --qr-status pass or --qr-status fail")
+        print("based on the QR output from the previous step.")
+        sys.exit(0)
 
     print(format_output(args.step, args.total_steps,
                         args.qr_iteration, args.qr_fail, args.qr_status))

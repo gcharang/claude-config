@@ -57,7 +57,17 @@ def generate_boundary_inputs(workflow: Workflow) -> Iterator[dict[str, Any]]:
         if pspec.get("default") is not None:
             base[pname] = pspec["default"]
         elif pspec.get("choices"):
-            base[pname] = pspec["choices"][0]
+            # For scope params, try to match workflow name suffix to a choice
+            # e.g. prompt-engineer-ecosystem -> scope='ecosystem'
+            choices = pspec["choices"]
+            if pname == "scope":
+                matched = next(
+                    (c for c in choices if workflow.name.endswith(f"-{c}")),
+                    None,
+                )
+                base[pname] = matched if matched else choices[0]
+            else:
+                base[pname] = choices[0]
         else:
             # Provide synthetic values for non-defaulted params
             base[pname] = _synthetic_value(pname, pspec)
@@ -87,6 +97,8 @@ def _synthetic_value(pname: str, pspec: dict[str, Any]) -> Any:
         return "Test question for validation"
     if pname == "prompt":
         return "Test prompt for validation"
+    if pname == "qr_status":
+        return "pass"  # Gate steps require qr_status
 
     # Fall back to type-based defaults
     min_val = pspec.get("min")

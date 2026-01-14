@@ -2,23 +2,23 @@
 """
 DeepThink Skill - Structured reasoning for open-ended analytical questions.
 
-Fourteen-step workflow (0-13):
-  0. Context Clarification  - Remove bias from input (S2A)
-  1. Abstraction            - Domain, first principles, key concepts
-  2. Characterization       - Question type, answer structure, mode determination
-  3. Analogical Recall      - Direct/cross-domain analogies, anti-patterns
-  4. Planning               - Sub-questions, success criteria
-  5. Sub-Agent Design       - Generate sub-agent task definitions (Full only)
-  6. Design Critique        - Coverage, overlap, appropriateness (Full only)
-  7. Design Revision        - Revise based on critique (Full only)
-  8. Dispatch               - Launch sub-agents in parallel (Full only)
-  9. Quality Gate           - Filter low-quality outputs (Full only)
-  10. Aggregation           - Agreement/disagreement maps (Full only)
-  11. Initial Synthesis     - First-pass integration
-  12. Iterative Refinement  - Verification loop until confident
-  13. Formatting & Output   - Format and present final answer
+Fourteen-step workflow (1-14):
+  1. Context Clarification  - Remove bias from input (S2A)
+  2. Abstraction            - Domain, first principles, key concepts
+  3. Characterization       - Question type, answer structure, mode determination
+  4. Analogical Recall      - Direct/cross-domain analogies, anti-patterns
+  5. Planning               - Sub-questions, success criteria
+  6. Sub-Agent Design       - Generate sub-agent task definitions (Full only)
+  7. Design Critique        - Coverage, overlap, appropriateness (Full only)
+  8. Design Revision        - Revise based on critique (Full only)
+  9. Dispatch               - Launch sub-agents in parallel (Full only)
+  10. Quality Gate          - Filter low-quality outputs (Full only)
+  11. Aggregation           - Agreement/disagreement maps (Full only)
+  12. Initial Synthesis     - First-pass integration
+  13. Iterative Refinement  - Verification loop until confident
+  14. Formatting & Output   - Format and present final answer
 
-Two modes: Full (all steps) and Quick (skips 5-10).
+Two modes: Full (all steps) and Quick (skips 6-11).
 """
 
 import argparse
@@ -93,7 +93,7 @@ def format_step_output(
 
 
 STEPS = {
-    0: {
+    1: {
         "title": "Context Clarification",
         "brief": "Extract objective content, remove bias from input",
         "actions": [
@@ -135,7 +135,7 @@ STEPS = {
             "The CLARIFIED QUESTION will be used as the working question for all subsequent steps.",
         ],
     },
-    1: {
+    2: {
         "title": "Abstraction",
         "brief": "Identify domain, first principles, key concepts",
         "actions": [
@@ -175,7 +175,7 @@ STEPS = {
             "```",
         ],
     },
-    2: {
+    3: {
         "title": "Characterization",
         "brief": "Classify question type, determine mode",
         "actions": [
@@ -225,7 +225,7 @@ STEPS = {
             "```",
         ],
     },
-    3: {
+    4: {
         "title": "Analogical Recall",
         "brief": "Retrieve similar problems from memory",
         "actions": [
@@ -264,7 +264,7 @@ STEPS = {
             "```",
         ],
     },
-    4: {
+    5: {
         "title": "Planning",
         "brief": "Define sub-questions and success criteria",
         "actions": [
@@ -307,7 +307,7 @@ STEPS = {
             "```",
         ],
     },
-    5: {
+    6: {
         "title": "Sub-Agent Design",
         "brief": "Generate sub-agent task definitions",
         "actions": [
@@ -380,14 +380,14 @@ STEPS = {
             "```",
         ],
     },
-    6: {
+    7: {
         "title": "Design Critique",
         "brief": "Self-critique sub-agent design",
         "actions": [
-            "Critically evaluate the sub-agent design from Step 5.",
+            "Critically evaluate the sub-agent design from Step 6.",
             "",
             "PART A - COVERAGE:",
-            "  Do sub-agents collectively cover all sub-questions from Step 4?",
+            "  Do sub-agents collectively cover all sub-questions from Step 5?",
             "  Are there important angles NO sub-agent will address?",
             "  List any gaps.",
             "",
@@ -431,11 +431,11 @@ STEPS = {
             "```",
         ],
     },
-    7: {
+    8: {
         "title": "Design Revision",
         "brief": "Revise sub-agent definitions based on critique",
         "actions": [
-            "Revise sub-agent design based on critique from Step 6.",
+            "Revise sub-agent design based on critique from Step 7.",
             "",
             "For each issue identified, either:",
             "  1. Revise the design to address it, OR",
@@ -461,15 +461,15 @@ STEPS = {
             "[etc.]",
             "```",
             "",
-            "These definitions will be used to dispatch sub-agents in Step 8.",
+            "These definitions will be used to dispatch sub-agents in Step 9.",
         ],
     },
-    8: {
+    9: {
         "title": "Dispatch",
         "brief": "Launch sub-agents in parallel",
         "needs_dispatch": True,
     },
-    9: {
+    10: {
         "title": "Quality Gate",
         "brief": "Filter sub-agent outputs before aggregation",
         "actions": [
@@ -506,7 +506,7 @@ STEPS = {
             "```",
         ],
     },
-    10: {
+    11: {
         "title": "Aggregation",
         "brief": "Collect findings, extract intermediate insights",
         "actions": [
@@ -524,7 +524,7 @@ STEPS = {
             "  For each disagreement, note which position has:",
             "  - More sub-agent support (majority)",
             "  - Stronger evidence grounding",
-            "  - Better alignment with first principles from Step 1",
+            "  - Better alignment with first principles from Step 2",
             "  Flag unresolvable conflicts explicitly.",
             "",
             "PART C - UNIQUE CONTRIBUTIONS:",
@@ -541,7 +541,7 @@ STEPS = {
             "  Group by theme.",
             "",
             "PART F - SUB-QUESTION COVERAGE:",
-            "  For each sub-question from Step 4, summarize responses.",
+            "  For each sub-question from Step 5, summarize responses.",
             "  Flag any with weak or no coverage.",
             "",
             "Preserve all disagreements exactly as found. Record positions without evaluation.",
@@ -569,17 +569,17 @@ STEPS = {
             "```",
         ],
     },
-    11: {
+    12: {
         "title": "Initial Synthesis",
         "brief": "First-pass integration into coherent response",
         "has_mode_variants": True,
     },
-    12: {
+    13: {
         "title": "Iterative Refinement",
         "brief": "Evaluate and refine until confident",
         "has_iteration": True,
     },
-    13: {
+    14: {
         "title": "Formatting & Output",
         "brief": "Format and present final answer to user",
     },
@@ -587,29 +587,29 @@ STEPS = {
 
 
 def get_dispatch_actions() -> list[str]:
-    """Generate dispatch actions for Step 8."""
+    """Generate dispatch actions for Step 9."""
     invoke_cmd = build_invoke_command(SUBAGENT_MODULE_PATH, 1, 8, as_xml=True)
     dispatch = format_parallel_dispatch(
         agent="general-purpose",
-        instruction="Launch ALL sub-agents from FINAL SUB-AGENT DEFINITIONS (Step 7).\nUse a SINGLE message with multiple Task tool calls.",
+        instruction="Launch ALL sub-agents from FINAL SUB-AGENT DEFINITIONS (Step 8).\nUse a SINGLE message with multiple Task tool calls.",
         model="SONNET",
         model_rationale="These require nuanced reasoning - do not downgrade to haiku.",
         shared_context=[
             "Each sub-agent receives:",
-            "- CLARIFIED QUESTION from Step 0",
-            "- DOMAIN and FIRST PRINCIPLES from Step 1",
-            "- QUESTION TYPE and EVALUATION CRITERIA from Step 2",
-            "- KEY ANALOGIES from Step 3",
-            "- Their specific task definition from Step 7",
+            "- CLARIFIED QUESTION from Step 1",
+            "- DOMAIN and FIRST PRINCIPLES from Step 2",
+            "- QUESTION TYPE and EVALUATION CRITERIA from Step 3",
+            "- KEY ANALOGIES from Step 4",
+            "- Their specific task definition from Step 8",
         ],
         template="""Explore this question from the assigned perspective.
 
-CLARIFIED QUESTION: [from Step 0]
-DOMAIN: [from Step 1]
-FIRST PRINCIPLES: [from Step 1]
-QUESTION TYPE: [from Step 2]
-EVALUATION CRITERIA: [from Step 2]
-KEY ANALOGIES: [from Step 3]
+CLARIFIED QUESTION: [from Step 1]
+DOMAIN: [from Step 2]
+FIRST PRINCIPLES: [from Step 2]
+QUESTION TYPE: [from Step 3]
+EVALUATION CRITERIA: [from Step 3]
+KEY ANALOGIES: [from Step 4]
 
 YOUR TASK:
 - Name: $SUBAGENT_NAME
@@ -625,19 +625,19 @@ def get_synthesis_actions_full() -> list[str]:
     """Generate synthesis actions for Full mode."""
     return [
         "Integrate aggregated findings into a coherent response.",
-        "Hint: Prioritize aspects matching the EVALUATION CRITERIA from Step 2.",
+        "Hint: Prioritize aspects matching the EVALUATION CRITERIA from Step 3.",
         "Work through thoroughly. Avoid shortcuts. Show reasoning step by step.",
         "",
         "SYNTHESIS GUIDELINES:",
-        "  1. Use evaluation criteria from Step 2 to guide integration",
-        "  2. Resolve disagreements using synthesis criteria from Step 4",
-        "  3. Draw on intermediate insights from Step 10, not just conclusions",
+        "  1. Use evaluation criteria from Step 3 to guide integration",
+        "  2. Resolve disagreements using synthesis criteria from Step 5",
+        "  3. Draw on intermediate insights from Step 11, not just conclusions",
         "  4. Acknowledge where genuine uncertainty remains",
         "  5. Do not artificially harmonize positions that genuinely conflict",
         "",
         "PART A - CORE ANSWER:",
         "  What is your integrated response to the original question?",
-        "  Structure appropriately for the question type from Step 2.",
+        "  Structure appropriately for the question type from Step 3.",
         "",
         "PART B - KEY TRADE-OFFS:",
         "  What trade-offs are inherent in this answer?",
@@ -649,9 +649,9 @@ def get_synthesis_actions_full() -> list[str]:
         "",
         "PART D - EVIDENCE GROUNDING:",
         "  For each major claim, cite the evidence source:",
-        "  - From Step 1 (first principles)",
-        "  - From Step 3 (analogies)",
-        "  - From Step 10 (sub-agent findings or intermediate insights)",
+        "  - From Step 2 (first principles)",
+        "  - From Step 4 (analogies)",
+        "  - From Step 11 (sub-agent findings or intermediate insights)",
         "  Claims without grounding: flag as UNGROUNDED.",
         "",
         "PART E - ACKNOWLEDGED LIMITATIONS:",
@@ -685,25 +685,25 @@ def get_synthesis_actions_full() -> list[str]:
         "CONFIDENCE: [overall assessment]",
         "```",
         "",
-        "This synthesis will be evaluated in Step 12. Expect to refine it.",
+        "This synthesis will be evaluated in Step 13. Expect to refine it.",
     ]
 
 
 def get_synthesis_actions_quick() -> list[str]:
     """Generate synthesis actions for Quick mode."""
     return [
-        "Based on abstraction (Step 1) and analogies (Step 3), synthesize response.",
-        "Hint: Prioritize aspects matching the EVALUATION CRITERIA from Step 2.",
+        "Based on abstraction (Step 2) and analogies (Step 4), synthesize response.",
+        "Hint: Prioritize aspects matching the EVALUATION CRITERIA from Step 3.",
         "Work through thoroughly. Avoid shortcuts. Show reasoning step by step.",
         "",
         "PART A - CORE ANSWER:",
         "  What is your response to the original question?",
-        "  Ground in first principles from Step 1 and analogies from Step 3.",
+        "  Ground in first principles from Step 2 and analogies from Step 4.",
         "",
         "PART B - EVIDENCE GROUNDING:",
         "  For each major claim, cite source:",
-        "  - First principles (Step 1)",
-        "  - Analogical reasoning (Step 3)",
+        "  - First principles (Step 2)",
+        "  - Analogical reasoning (Step 4)",
         "  - Domain knowledge",
         "  Claims without grounding: flag as UNGROUNDED.",
         "",
@@ -729,12 +729,12 @@ def get_synthesis_actions_quick() -> list[str]:
         "CONFIDENCE: [overall assessment]",
         "```",
         "",
-        "This synthesis will be evaluated in Step 12.",
+        "This synthesis will be evaluated in Step 13.",
     ]
 
 
 def get_refinement_actions(iteration: int) -> list[str]:
-    """Generate refinement actions for Step 12."""
+    """Generate refinement actions for Step 13."""
     return [
         f"ITERATION {iteration} OF {MAX_ITERATIONS}",
         "",
@@ -747,16 +747,16 @@ def get_refinement_actions(iteration: int) -> list[str]:
         "  Yes/no questions bias toward agreement regardless of correctness.",
         "  Focus on:",
         "  - Claims marked LOW or MEDIUM confidence",
-        "  - Any UNGROUNDED claims from Step 11",
+        "  - Any UNGROUNDED claims from Step 12",
         "  - Potential blind spots",
         "  - Failure modes that could invalidate key proposals",
         "  - Edge cases the synthesis might not handle",
         "",
         "PART B - INDEPENDENT VERIFICATION:",
         "  For each verification question, answer based ONLY on:",
-        "  - First principles from Step 1",
-        "  - Analogies from Step 3",
-        "  - Aggregated evidence from Step 10 (if Full mode)",
+        "  - First principles from Step 2",
+        "  - Analogies from Step 4",
+        "  - Aggregated evidence from Step 11 (if Full mode)",
         "",
         "  CRITICAL: Do NOT look at the synthesis while answering.",
         "  Answer based on evidence, not what the synthesis claims.",
@@ -819,7 +819,7 @@ def get_refinement_actions(iteration: int) -> list[str]:
 
 
 def get_completion_message(confidence: str) -> list[str]:
-    """Generate formatting instructions for Step 13."""
+    """Generate formatting instructions for Step 14."""
     base_actions = [
         f"Refinement complete. Confidence: {confidence.upper()}.",
         "",
@@ -827,7 +827,7 @@ def get_completion_message(confidence: str) -> list[str]:
         "",
         "FORMATTING REQUIREMENTS:",
         "  - Lead with the direct answer to the original question",
-        "  - Use the answer structure determined in Step 2",
+        "  - Use the answer structure determined in Step 3",
         "  - Integrate key trade-offs naturally into the explanation",
         "  - Note limitations only where they materially affect the answer",
         "  - Omit workflow artifacts (step references, sub-agent names, etc.)",
@@ -904,35 +904,35 @@ WORKFLOW = Workflow(
     StepDef(
         id="context_clarification",
         title="Context Clarification",
-        actions=STEPS[0]["actions"],
+        actions=STEPS[1]["actions"],
         handler=step_handler_simple,
         next={Outcome.OK: "abstraction"},
     ),
     StepDef(
         id="abstraction",
         title="Abstraction",
-        actions=STEPS[1]["actions"],
+        actions=STEPS[2]["actions"],
         handler=step_handler_simple,
         next={Outcome.OK: "characterization"},
     ),
     StepDef(
         id="characterization",
         title="Characterization",
-        actions=STEPS[2]["actions"],
+        actions=STEPS[3]["actions"],
         handler=step_handler_simple,
         next={Outcome.OK: "analogical_recall"},
     ),
     StepDef(
         id="analogical_recall",
         title="Analogical Recall",
-        actions=STEPS[3]["actions"],
+        actions=STEPS[4]["actions"],
         handler=step_handler_simple,
         next={Outcome.OK: "planning"},
     ),
     StepDef(
         id="planning",
         title="Planning",
-        actions=STEPS[4]["actions"],
+        actions=STEPS[5]["actions"],
         handler=step_planning,
         next={
             Outcome.OK: "subagent_design",
@@ -942,7 +942,7 @@ WORKFLOW = Workflow(
     StepDef(
         id="subagent_design",
         title="Sub-Agent Design",
-        actions=STEPS[5]["actions"],
+        actions=STEPS[6]["actions"],
         handler=step_full_only,
         next={
             Outcome.OK: "design_critique",
@@ -952,7 +952,7 @@ WORKFLOW = Workflow(
     StepDef(
         id="design_critique",
         title="Design Critique",
-        actions=STEPS[6]["actions"],
+        actions=STEPS[7]["actions"],
         handler=step_full_only,
         next={
             Outcome.OK: "design_revision",
@@ -962,7 +962,7 @@ WORKFLOW = Workflow(
     StepDef(
         id="design_revision",
         title="Design Revision",
-        actions=STEPS[7]["actions"],
+        actions=STEPS[8]["actions"],
         handler=step_full_only,
         next={
             Outcome.OK: "dispatch",
@@ -982,7 +982,7 @@ WORKFLOW = Workflow(
     StepDef(
         id="quality_gate",
         title="Quality Gate",
-        actions=STEPS[9]["actions"],
+        actions=STEPS[10]["actions"],
         handler=step_full_only,
         next={
             Outcome.OK: "aggregation",
@@ -992,7 +992,7 @@ WORKFLOW = Workflow(
     StepDef(
         id="aggregation",
         title="Aggregation",
-        actions=STEPS[10]["actions"],
+        actions=STEPS[11]["actions"],
         handler=step_full_only,
         next={
             Outcome.OK: "initial_synthesis",
@@ -1043,7 +1043,7 @@ def main(
     """
     parser = argparse.ArgumentParser(
         description="DeepThink - Structured reasoning for open-ended analytical questions",
-        epilog="Steps: 0-13 (Full mode) or 0-4,11-13 (Quick mode)",
+        epilog="Steps: 1-14 (Full mode) or 1-5,12-14 (Quick mode)",
     )
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument("--total-steps", type=int, required=True)
@@ -1052,36 +1052,36 @@ def main(
         type=str,
         choices=["exploring", "low", "medium", "high", "certain"],
         default="exploring",
-        help="Confidence level (for Step 12)",
+        help="Confidence level (for Step 13)",
     )
     parser.add_argument(
         "--iteration",
         type=int,
         default=1,
-        help="Current iteration within Step 12 (1-5)",
+        help="Current iteration within Step 13 (1-5)",
     )
     parser.add_argument(
         "--mode",
         type=str,
         choices=["quick", "full"],
         default="full",
-        help="Analysis mode (set in Step 2)",
+        help="Analysis mode (set in Step 3)",
     )
     args = parser.parse_args()
 
-    if args.step < 0:
-        sys.exit("ERROR: --step must be >= 0")
+    if args.step < 1:
+        sys.exit("ERROR: --step must be >= 1")
     if args.total_steps != 14:
-        sys.exit("ERROR: --total-steps must be 14 (steps 0-13)")
-    if args.step > 13:
-        sys.exit("ERROR: --step cannot exceed 13")
+        sys.exit("ERROR: --total-steps must be 14 (steps 1-14)")
+    if args.step > 14:
+        sys.exit("ERROR: --step cannot exceed 14")
 
     step_info = STEPS.get(args.step)
     if not step_info:
         sys.exit(f"ERROR: Invalid step {args.step}")
 
-    # Step 13: Formatting & Output (terminal step)
-    if args.step == 13:
+    # Step 14: Formatting & Output (terminal step)
+    if args.step == 14:
         actions = get_completion_message(args.confidence)
         print(format_step_output(
             step=args.step,
@@ -1092,15 +1092,15 @@ def main(
         ))
         return
 
-    # Step 12: Iterative refinement with loop logic
-    if args.step == 12:
+    # Step 13: Iterative refinement with loop logic
+    if args.step == 13:
         actions = get_refinement_actions(args.iteration)
 
         if args.confidence == "certain" or args.iteration >= MAX_ITERATIONS:
-            # Exit loop -> proceed to step 13
+            # Exit loop -> proceed to step 14
             next_cmd = build_invoke_command(
                 MODULE_PATH,
-                step=13,
+                step=14,
                 total_steps=args.total_steps,
                 confidence=args.confidence,
                 mode=args.mode,
@@ -1110,7 +1110,7 @@ def main(
             # Continue refinement loop
             next_cmd = build_invoke_command(
                 MODULE_PATH,
-                step=12,
+                step=13,
                 total_steps=args.total_steps,
                 confidence="<your_confidence>",
                 iteration=args.iteration + 1,
@@ -1127,8 +1127,8 @@ def main(
         ))
         return
 
-    # Step 11: Synthesis (mode-dependent)
-    if args.step == 11:
+    # Step 12: Synthesis (mode-dependent)
+    if args.step == 12:
         if args.mode == "quick":
             actions = get_synthesis_actions_quick()
         else:
@@ -1136,7 +1136,7 @@ def main(
 
         next_cmd = build_invoke_command(
             MODULE_PATH,
-            step=12,
+            step=13,
             total_steps=args.total_steps,
             confidence="<your_confidence>",
             iteration=1,
@@ -1151,12 +1151,12 @@ def main(
         ))
         return
 
-    # Step 8: Dispatch (needs special actions)
-    if args.step == 8:
+    # Step 9: Dispatch (needs special actions)
+    if args.step == 9:
         actions = get_dispatch_actions()
         next_cmd = build_invoke_command(
             MODULE_PATH,
-            step=9,
+            step=10,
             total_steps=args.total_steps,
             mode=args.mode,
         )
@@ -1169,18 +1169,18 @@ def main(
         ))
         return
 
-    # Step 4: Planning (branches based on mode)
-    if args.step == 4:
+    # Step 5: Planning (branches based on mode)
+    if args.step == 5:
         actions = list(step_info["actions"]) + [
             "",
             "<mode_branch>",
-            "  <if_full>Proceed to Step 5 (Sub-Agent Design)</if_full>",
-            "  <if_quick>Skip to Step 11 (Initial Synthesis)</if_quick>",
+            "  <if_full>Proceed to Step 6 (Sub-Agent Design)</if_full>",
+            "  <if_quick>Skip to Step 12 (Initial Synthesis)</if_quick>",
             "</mode_branch>",
         ]
 
-        next_cmd_full = build_invoke_command(MODULE_PATH, step=5, total_steps=args.total_steps, mode="full")
-        next_cmd_quick = build_invoke_command(MODULE_PATH, step=11, total_steps=args.total_steps, mode="quick")
+        next_cmd_full = build_invoke_command(MODULE_PATH, step=6, total_steps=args.total_steps, mode="full")
+        next_cmd_quick = build_invoke_command(MODULE_PATH, step=12, total_steps=args.total_steps, mode="quick")
 
         print(format_step_output(
             step=args.step,
@@ -1191,17 +1191,17 @@ def main(
         ))
         return
 
-    # Standard steps (0, 1, 2, 3, 5, 6, 7, 9, 10)
+    # Standard steps (1, 2, 3, 4, 6, 7, 8, 10, 11)
     actions = list(step_info.get("actions", []))
     next_step = args.step + 1
 
     # Determine next command
-    if next_step <= 13:
-        if next_step in [5, 6, 7, 8, 9, 10]:
-            next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps, mode=args.mode)
-        elif next_step == 11:
+    if next_step <= 14:
+        if next_step in [6, 7, 8, 9, 10, 11]:
             next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps, mode=args.mode)
         elif next_step == 12:
+            next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps, mode=args.mode)
+        elif next_step == 13:
             next_cmd = build_invoke_command(
                 MODULE_PATH,
                 step=next_step,
@@ -1210,7 +1210,7 @@ def main(
                 iteration=1,
                 mode=args.mode,
             )
-        elif next_step == 13:
+        elif next_step == 14:
             next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps, mode=args.mode)
         else:
             next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps)
@@ -1223,7 +1223,7 @@ def main(
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=next_cmd,
-        is_step_zero=(args.step == 0),
+        is_step_zero=(args.step == 1),
     ))
 
 
