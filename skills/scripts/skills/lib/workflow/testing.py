@@ -192,11 +192,10 @@ def run_all_tests(level: int = 2) -> list[TestResult]:
     return results
 
 
-def _import_all_skills():
+def _import_all_skills() -> list[TestResult]:
     """Import all skill modules to populate registry.
 
-    This discovers skills by importing known modules, not by scanning.
-    Add new skills here when created.
+    Returns TestResult for each import failure (L0 = import succeeds).
     """
     import importlib
 
@@ -213,11 +212,15 @@ def _import_all_skills():
         "skills.prompt_engineer.optimize",
     ]
 
+    failures: list[TestResult] = []
     for module in skill_modules:
         try:
             importlib.import_module(module)
         except Exception as e:
-            print(f"Warning: Could not import {module}: {e}", file=sys.stderr)
+            # Extract skill name from module path for readable output
+            skill_name = module.split(".")[-2]
+            failures.append(TestResult(skill_name, 0, False, f"Import failed: {e}"))
+    return failures
 
 
 def main():
@@ -231,28 +234,22 @@ def main():
     parser.add_argument("--skill", "-s", type=str, help="Test specific skill")
     args = parser.parse_args()
 
-    # Import all skills to populate registry
-    _import_all_skills()
+    # Import all skills, capturing any import failures as L0 test failures
+    import_failures = _import_all_skills()
 
     if args.skill:
         from .core import get_workflow_registry
 
-        spec = get_skill(args.skill)
         workflow = get_workflow_registry().get(args.skill)
 
-        if spec:
-            results = test_skill(spec, args.level)
-        elif workflow:
+        if workflow:
             results = test_workflow(workflow, args.level)
         else:
             print(f"[FAIL] Unknown skill: {args.skill}")
-            all_skills = list(get_registry().keys()) + list(
-                get_workflow_registry().keys()
-            )
-            print(f"Available: {', '.join(sorted(all_skills))}")
+            print(f"Available: {', '.join(sorted(get_workflow_registry().keys()))}")
             sys.exit(1)
     else:
-        results = run_all_tests(args.level)
+        results = import_failures + run_all_tests(args.level)
 
     # Report
     for r in results:

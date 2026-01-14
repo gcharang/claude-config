@@ -30,6 +30,7 @@ from skills.lib.workflow.formatters import (
     format_xml_mandate,
     format_current_action,
     format_invoke_after,
+    format_parallel_dispatch,
 )
 from skills.lib.workflow.types import FlatCommand
 
@@ -101,34 +102,22 @@ def select_categories(n: int = DEFAULT_CATEGORY_COUNT) -> list[dict]:
 # =============================================================================
 
 
-def format_parallel_dispatch(n: int = DEFAULT_CATEGORY_COUNT) -> str:
-    """Format the parallel dispatch block for step 1."""
+def build_explore_dispatch(n: int = DEFAULT_CATEGORY_COUNT) -> str:
+    """Build parallel dispatch block for explore agents."""
     selected = select_categories(n)
-
-    lines = [f'<parallel_dispatch agent="Explore" count="{len(selected)}">']
-    lines.append("  <instruction>")
-    lines.append(f"    Launch {len(selected)} Explore sub-agents IN PARALLEL (single message, {len(selected)} Task tool calls).")
-    lines.append("    Each agent explores ONE code smell category.")
-    lines.append("  </instruction>")
-    lines.append("")
-    lines.append("  <model_selection>")
-    lines.append("    Use HAIKU (default) for all explore agents.")
-    lines.append("    Each agent has a narrow, well-defined task - cheap models work well.")
-    lines.append("  </model_selection>")
-    lines.append("")
-    lines.append("  <template>")
-    lines.append("    Explore the codebase for this code smell.")
-    lines.append("")
-    lines.append(f'    Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {EXPLORE_MODULE_PATH} --step 1 --total-steps 5 --category $CATEGORY_REF" />')
-    lines.append("  </template>")
-    lines.append("")
-    lines.append("  <categories>")
-    for cat in selected:
-        ref = f"{cat['file']}:{cat['start_line']}-{cat['end_line']}"
-        lines.append(f'    <category ref="{ref}">{cat["name"]}</category>')
-    lines.append("  </categories>")
-    lines.append("</parallel_dispatch>")
-    return "\n".join(lines)
+    categories = [
+        {"ref": f"{cat['file']}:{cat['start_line']}-{cat['end_line']}", "name": cat["name"]}
+        for cat in selected
+    ]
+    return format_parallel_dispatch(
+        agent="Explore",
+        instruction=f"Launch {len(selected)} Explore sub-agents IN PARALLEL (single message, {len(selected)} Task tool calls).\nEach agent explores ONE code smell category.",
+        model="HAIKU",
+        model_rationale="Each agent has a narrow, well-defined task - cheap models work well.",
+        categories=categories,
+        template="Explore the codebase for this code smell.",
+        invoke_cmd=f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {EXPLORE_MODULE_PATH} --step 1 --total-steps 5 --category $CATEGORY_REF" />',
+    )
 
 
 def format_expected_output(sections: dict[str, str]) -> str:
@@ -689,7 +678,7 @@ def format_output(step: int, total_steps: int, n: int = DEFAULT_CATEGORY_COUNT) 
         actions.append("IDENTIFY the scope from user's request:")
         actions.append("  - Could be: file(s), directory, subsystem, entire codebase")
         actions.append("")
-        actions.append(format_parallel_dispatch(n))
+        actions.append(build_explore_dispatch(n))
         actions.append("")
         actions.append(f"WAIT for all {n} agents to complete before proceeding.")
         actions.append("")

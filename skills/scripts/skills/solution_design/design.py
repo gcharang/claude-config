@@ -34,7 +34,10 @@ from skills.lib.workflow.formatters import (
     format_step_header,
     format_xml_mandate,
     format_current_action,
+    format_parallel_dispatch,
+    format_invoke_after,
 )
+from skills.lib.workflow.types import FlatCommand
 from skills.solution_design.perspectives import PERSPECTIVES, PERSPECTIVE_ORDER
 from skills.solution_design.defaults import format_all_defaults
 
@@ -44,9 +47,6 @@ MODULE_PATH = "skills.solution_design.design"
 PERSPECTIVE_MODULE_PATH = "skills.solution_design.perspective"
 
 
-def format_invoke_after(command: str) -> str:
-    """Render invoke after block for design workflow."""
-    return f"<invoke_after>\n{command}\n</invoke_after>"
 
 
 # =============================================================================
@@ -64,6 +64,44 @@ PERSPECTIVE_SUMMARIES = [
 ]
 
 
+AGENT_PROMPT_TEMPLATE = """Generate solutions for this root cause from the $PERSPECTIVE perspective.
+
+ROOT CAUSE: [include verbatim from Step 1]
+HARD CONSTRAINTS: [include from Step 1]
+
+EVALUATION CRITERIA (from Step 3 - FINALIZED_CRITERIA):
+These criteria will be used to evaluate your solutions. Use them to:
+- Avoid proposing solutions with obviously fatal flaws
+- Flag risks that match significant/minor conditions
+- Be explicit about trade-offs on the weighted dimensions
+
+VIABILITY:
+  [Include viability criteria from FINALIZED_CRITERIA]
+  A solution must meet ALL these criteria to be considered viable.
+
+FLAW SEVERITY:
+  FATAL (solution will be eliminated):
+    [List fatal conditions from FINALIZED_CRITERIA]
+
+  SIGNIFICANT (solution viable but with documented issues):
+    [List significant conditions from FINALIZED_CRITERIA]
+
+  MINOR (noted as trade-off):
+    [List minor conditions from FINALIZED_CRITERIA]
+
+TRADEOFF DIMENSIONS:
+  PRIMARY (weighted in ranking):
+    [List primary dimensions with weights from FINALIZED_CRITERIA]
+
+  When describing trade-offs, address these dimensions explicitly.
+
+GUIDANCE:
+- Still explore your perspective FULLY--do not only generate 'safe' solutions
+- If your perspective suggests something that might hit a fatal condition,
+  either explain why it doesn't, or note the risk explicitly
+- Be specific about how your solutions perform on the primary trade-off dimensions"""
+
+
 # =============================================================================
 # XML Formatters (design-specific)
 # =============================================================================
@@ -78,72 +116,23 @@ def format_perspective_selection_guidance() -> str:
     return "\n".join(lines)
 
 
-def format_parallel_dispatch() -> str:
-    """Format the parallel dispatch block for step 4."""
-    lines = ['<parallel_dispatch agent="general-purpose">']
-    lines.append("  <mandatory>")
-    lines.append("    You MUST launch EXACTLY 7 sub-agents in a SINGLE message.")
-    lines.append("    One agent for each perspective listed below. No selection. No filtering.")
-    lines.append("    If you launch fewer than 7 agents, you have failed this step.")
-    lines.append("  </mandatory>")
-    lines.append("")
-    lines.append("  <agents_to_launch>")
-    for p_id, p_title, p_question in PERSPECTIVE_SUMMARIES:
-        lines.append(f'    <agent perspective="{p_id}">')
-        lines.append(f'      {p_title}: {p_question}')
-        lines.append("    </agent>")
-    lines.append("  </agents_to_launch>")
-    lines.append("")
-    lines.append("  <model_selection>")
-    lines.append("    If user requested a specific model, use that for ALL agents.")
-    lines.append("    Otherwise, default by perspective:")
-    lines.append("      - HAIKU: minimal")
-    lines.append("      - SONNET: structural, domain, stateless, removal, upstream")
-    lines.append("      - OPUS: firstprinciples")
-    lines.append("  </model_selection>")
-    lines.append("")
-    lines.append("  <agent_prompt_template>")
-    lines.append("    Generate solutions for this root cause from the $PERSPECTIVE perspective.")
-    lines.append("")
-    lines.append("    ROOT CAUSE: [include verbatim from Step 1]")
-    lines.append("    HARD CONSTRAINTS: [include from Step 1]")
-    lines.append("")
-    lines.append("    EVALUATION CRITERIA (from Step 3 - FINALIZED_CRITERIA):")
-    lines.append("    These criteria will be used to evaluate your solutions. Use them to:")
-    lines.append("    - Avoid proposing solutions with obviously fatal flaws")
-    lines.append("    - Flag risks that match significant/minor conditions")
-    lines.append("    - Be explicit about trade-offs on the weighted dimensions")
-    lines.append("")
-    lines.append("    VIABILITY: ")
-    lines.append("      [Include viability criteria from FINALIZED_CRITERIA]")
-    lines.append("      A solution must meet ALL these criteria to be considered viable.")
-    lines.append("")
-    lines.append("    FLAW SEVERITY:")
-    lines.append("      FATAL (solution will be eliminated):")
-    lines.append("        [List fatal conditions from FINALIZED_CRITERIA]")
-    lines.append("")
-    lines.append("      SIGNIFICANT (solution viable but with documented issues):")
-    lines.append("        [List significant conditions from FINALIZED_CRITERIA]")
-    lines.append("")
-    lines.append("      MINOR (noted as trade-off):")
-    lines.append("        [List minor conditions from FINALIZED_CRITERIA]")
-    lines.append("")
-    lines.append("    TRADEOFF DIMENSIONS:")
-    lines.append("      PRIMARY (weighted in ranking):")
-    lines.append("        [List primary dimensions with weights from FINALIZED_CRITERIA]")
-    lines.append("")
-    lines.append("      When describing trade-offs, address these dimensions explicitly.")
-    lines.append("")
-    lines.append("    GUIDANCE:")
-    lines.append("    - Still explore your perspective FULLY--do not only generate 'safe' solutions")
-    lines.append("    - If your perspective suggests something that might hit a fatal condition,")
-    lines.append("      either explain why it doesn't, or note the risk explicitly")
-    lines.append("    - Be specific about how your solutions perform on the primary trade-off dimensions")
-    lines.append("")
-    lines.append(f'    Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {PERSPECTIVE_MODULE_PATH} --step 1 --total-steps 2 --perspective $PERSPECTIVE_ID" />')
-    lines.append("  </agent_prompt_template>")
-    lines.append("</parallel_dispatch>")
-    return "\n".join(lines)
+def build_perspective_dispatch() -> str:
+    """Build parallel dispatch block for perspective agents."""
+    return format_parallel_dispatch(
+        agent="general-purpose",
+        instruction="Launch ALL perspective agents listed below.\nOne agent for each perspective. No selection. No filtering.",
+        mandatory_count=7,
+        agents=[
+            {"id": p_id, "title": p_title, "task": p_question}
+            for p_id, p_title, p_question in PERSPECTIVE_SUMMARIES
+        ],
+        model="SONNET",
+        model_per_agent={"minimal": "HAIKU", "firstprinciples": "OPUS"},
+        template=AGENT_PROMPT_TEMPLATE,
+        template_tag="agent_prompt_template",
+        id_attr="perspective",
+        invoke_cmd=f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {PERSPECTIVE_MODULE_PATH} --step 1 --total-steps 2 --perspective $PERSPECTIVE_ID" />',
+    )
 
 
 def format_forbidden(actions: list[str]) -> str:
@@ -825,7 +814,7 @@ WORKFLOW = Workflow(
             "",
             format_perspective_selection_guidance(),
             "",
-            format_parallel_dispatch(),
+            build_perspective_dispatch(),
             "",
             "WAIT for all perspective agents to complete before proceeding.",
         ],
@@ -906,7 +895,7 @@ def format_output(step: int, total_steps: int) -> str:
         actions.append("")
         actions.append(format_perspective_selection_guidance())
         actions.append("")
-        actions.append(format_parallel_dispatch())
+        actions.append(build_perspective_dispatch())
         actions.append("")
         actions.append("WAIT for all perspective agents to complete before proceeding.")
     else:
@@ -923,7 +912,7 @@ def format_output(step: int, total_steps: int) -> str:
     else:
         next_step = step + 1
         parts.append(format_invoke_after(
-            f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step {next_step} --total-steps {total_steps}" />'
+            FlatCommand(f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step {next_step} --total-steps {total_steps}" />')
         ))
 
     return "\n".join(parts)

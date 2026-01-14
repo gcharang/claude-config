@@ -309,6 +309,219 @@ def format_subagent_dispatch(
     return "\n".join(lines)
 
 
+# =============================================================================
+# Parallel and Conditional Dispatch Formatters
+# =============================================================================
+
+
+def format_model_selection(
+    model: str,
+    rationale: str = None,
+    per_agent: dict[str, str] = None,
+) -> str:
+    """Render the <model_selection> guidance block.
+
+    Args:
+        model: Default model to use (e.g., "SONNET", "HAIKU", "OPUS")
+        rationale: Why this model is appropriate for the task
+        per_agent: Optional dict of agent_id -> model for heterogeneous dispatch
+
+    Returns:
+        XML string: <model_selection>...</model_selection>
+    """
+    lines = ["  <model_selection>"]
+    lines.append(f"    Use {model} (default) for all agents.")
+    if rationale:
+        lines.append(f"    {rationale}")
+    if per_agent:
+        lines.append("    Per-agent overrides:")
+        for agent_id, agent_model in per_agent.items():
+            lines.append(f"      - {agent_model}: {agent_id}")
+    lines.append("  </model_selection>")
+    return "\n".join(lines)
+
+
+def format_parallel_dispatch(
+    agent: str,
+    instruction: str,
+    template: str = None,
+    invoke_cmd: str = None,
+    model: str = "SONNET",
+    model_rationale: str = None,
+    model_per_agent: dict[str, str] = None,
+    agents: list[dict[str, str]] = None,
+    categories: list[dict[str, str]] = None,
+    shared_context: list[str] = None,
+    mandatory_count: int = None,
+    wait_message: str = "WAIT for all sub-agents to complete before proceeding.",
+    template_tag: str = "template",
+    id_attr: str = "id",
+) -> str:
+    """Render the <parallel_dispatch> XML block for launching multiple agents.
+
+    This formatter supports three dispatch patterns:
+    1. Template-based: Each agent uses same template with $VAR substitution
+    2. Agent list: Explicit list of agents with individual configs
+    3. Category-based: Each agent handles one category from a list
+
+    Args:
+        agent: Agent type (e.g., "Explore", "general-purpose")
+        instruction: What the agents should do (appears in <instruction>)
+        template: Prompt template with $VAR placeholders for substitution
+        invoke_cmd: Script invocation command (appears in template if provided)
+        model: Default model for all agents
+        model_rationale: Why this model is appropriate
+        model_per_agent: Dict of agent_id -> model for heterogeneous dispatch
+        agents: Explicit list of agents: [{"id": "...", "title": "...", "task": "..."}]
+        categories: List of categories: [{"ref": "file:lines", "name": "..."}]
+        shared_context: List of context lines shared across all agents
+        mandatory_count: If set, adds <mandatory> block requiring exact count
+        wait_message: Message after dispatch block (set None to omit)
+        template_tag: Tag name for template block (default "template", use
+            "agent_prompt_template" for solution_design compatibility)
+        id_attr: Attribute name for agent ID (default "id", use "perspective"
+            for solution_design compatibility)
+
+    Returns:
+        XML string: <parallel_dispatch agent="...">...</parallel_dispatch>
+
+    Example (template-based):
+        format_parallel_dispatch(
+            agent="Explore",
+            instruction="Launch N Explore agents IN PARALLEL",
+            template="Explore this category: $CATEGORY_NAME",
+            invoke_cmd="python3 -m skills.explore --category $CATEGORY_REF",
+            model="HAIKU",
+            categories=[{"ref": "file.md:1-50", "name": "Error Handling"}],
+        )
+
+    Example (agent list):
+        format_parallel_dispatch(
+            agent="general-purpose",
+            instruction="Launch perspective agents",
+            agents=[
+                {"id": "structural", "title": "Structural", "task": "Find structural issues"},
+                {"id": "domain", "title": "Domain", "task": "Apply domain knowledge"},
+            ],
+            mandatory_count=7,
+        )
+    """
+    count = len(agents) if agents else len(categories) if categories else None
+    count_attr = f' count="{count}"' if count else ""
+    lines = [f'<parallel_dispatch agent="{agent}"{count_attr}>']
+
+    # Mandatory block (for fixed agent counts)
+    if mandatory_count:
+        lines.append("  <mandatory>")
+        lines.append(f"    You MUST launch EXACTLY {mandatory_count} sub-agents in a SINGLE message.")
+        lines.append("    If you launch fewer agents, you have failed this step.")
+        lines.append("  </mandatory>")
+        lines.append("")
+
+    # Instruction block
+    lines.append("  <instruction>")
+    for line in instruction.split("\n"):
+        lines.append(f"    {line}" if line else "")
+    lines.append("  </instruction>")
+    lines.append("")
+
+    # Model selection
+    lines.append(format_model_selection(model, model_rationale, model_per_agent))
+    lines.append("")
+
+    # Shared context (if provided)
+    if shared_context:
+        lines.append("  <shared_context>")
+        for line in shared_context:
+            lines.append(f"    {line}")
+        lines.append("  </shared_context>")
+        lines.append("")
+
+    # Agent list (explicit agents)
+    if agents:
+        lines.append("  <agents_to_launch>")
+        for a in agents:
+            agent_id = a.get("id", "")
+            lines.append(f'    <agent {id_attr}="{agent_id}">')
+            if "title" in a:
+                lines.append(f"      {a['title']}: {a.get('task', '')}")
+            elif "task" in a:
+                lines.append(f"      {a['task']}")
+            lines.append("    </agent>")
+        lines.append("  </agents_to_launch>")
+        lines.append("")
+
+    # Categories (for category-based dispatch)
+    if categories:
+        lines.append("  <categories>")
+        for cat in categories:
+            ref = cat.get("ref", "")
+            name = cat.get("name", "")
+            lines.append(f'    <category ref="{ref}">{name}</category>')
+        lines.append("  </categories>")
+        lines.append("")
+
+    # Template block
+    if template:
+        lines.append(f"  <{template_tag}>")
+        for line in template.split("\n"):
+            lines.append(f"    {line}" if line else "")
+        if invoke_cmd:
+            lines.append("")
+            lines.append(f"    Start: {invoke_cmd}")
+        lines.append(f"  </{template_tag}>")
+
+    lines.append("</parallel_dispatch>")
+
+    # Wait message
+    if wait_message:
+        lines.append("")
+        lines.append(wait_message)
+
+    return "\n".join(lines)
+
+
+def format_conditional_dispatch(
+    condition: str,
+    if_true: str,
+    if_false: str,
+) -> str:
+    """Render the <conditional_dispatch> XML block for control flow branching.
+
+    This wraps a condition evaluation with two branches. Unlike QR branching
+    (if_pass/if_fail), this evaluates a natural language condition and routes
+    to completely different code paths.
+
+    Args:
+        condition: Natural language condition to evaluate (e.g., "more than 1 item")
+        if_true: Content/actions when condition is true
+        if_false: Content/actions when condition is false
+
+    Returns:
+        XML string: <conditional_dispatch condition="...">...</conditional_dispatch>
+
+    Example:
+        format_conditional_dispatch(
+            condition="more than 1 arXiv ID",
+            if_true=format_parallel_dispatch(...) + "\\nWORKFLOW COMPLETE",
+            if_false="Single item - continue with processing below.",
+        )
+    """
+    lines = [f'<conditional_dispatch condition="{condition}">']
+    lines.append("  <if_true>")
+    for line in if_true.split("\n"):
+        # Indent non-empty lines
+        lines.append(f"    {line}" if line.strip() else "")
+    lines.append("  </if_true>")
+    lines.append("")
+    lines.append("  <if_false>")
+    for line in if_false.split("\n"):
+        lines.append(f"    {line}" if line.strip() else "")
+    lines.append("  </if_false>")
+    lines.append("</conditional_dispatch>")
+    return "\n".join(lines)
+
+
 def format_state_banner(
     checkpoint: str,
     iteration: int,
@@ -354,25 +567,33 @@ def format_qr_banner(checkpoint: str, qr: QRState) -> str:
 
 def format_expected_output(
     if_pass: str,
-    if_issues: str = None,
+    when_issues: str = None,
     categories: list[str] = None,
 ) -> str:
     """Render the <expected_output> XML block for mode script final steps.
 
+    This describes the expected OUTPUT FORMAT, not routing decisions.
+    Use <when_issues> (not <if_fail>) to distinguish from QR routing tags.
+
     Args:
         if_pass: Output format when no issues found
-        if_issues: Output format template when issues found
+        when_issues: Output format template when issues ARE found (describes format, not routing)
         categories: Optional list of issue categories for guidance
 
     Returns:
         XML string: <expected_output>...</expected_output>
+
+    Note:
+        <when_issues> is intentionally different from <if_fail> in invoke_after.
+        - <if_fail>: Routing tag - "which command to run when QR fails"
+        - <when_issues>: Format tag - "what output to produce when issues exist"
     """
     lines = ["<expected_output>"]
     lines.append(f"  <if_pass>{if_pass}</if_pass>")
-    if if_issues:
-        lines.append("  <if_issues>")
-        lines.append(if_issues)
-        lines.append("  </if_issues>")
+    if when_issues:
+        lines.append("  <when_issues>")
+        lines.append(when_issues)
+        lines.append("  </when_issues>")
     if categories:
         lines.append("  <categories>")
         for cat in categories:

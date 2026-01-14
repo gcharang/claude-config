@@ -92,6 +92,7 @@ Gate Step (--qr-status=pass|fail)
 ### Legacy Pattern (@skill decorator)
 
 Original approach:
+
 ```python
 STEPS = {
     1: {"title": "...", "actions": [...]},
@@ -105,6 +106,7 @@ def main(step: int = None, total_steps: int = None):
 ```
 
 Problems:
+
 - Step definitions separate from registration
 - Transitions buried in main() logic (not introspectable)
 - Manifest manually maintained (easy to drift from code)
@@ -113,6 +115,7 @@ Problems:
 ### New Pattern (Workflow class)
 
 Current approach:
+
 ```python
 from skills.lib.workflow.core import Workflow, StepDef, Outcome, register_workflow
 
@@ -132,21 +135,23 @@ register_workflow(WORKFLOW)
 ```
 
 Benefits:
+
 - **Single source of truth**: Steps + transitions + metadata in one structure
 - **Transitions as data**: Workflow graph is data, not code logic
-- **Auto-generated manifest**: Derived via `to_manifest()`, never drifts
 - **Validation at registration**: Catches dead-ends, orphans, invalid targets early
 - **Introspectable**: Tools can visualize, analyze, validate workflow structure
 
 ### Migration Status
 
 **Completed (4/10 skills)**:
+
 - decision-critic (7 steps, linear)
 - leon-writing-style (linear)
 - problem-analysis (5 steps, iterative with confidence)
 - codebase-analysis (4 steps, confidence-driven iteration)
 
 **Remaining**:
+
 - deepthink (14 steps, mode branching)
 - solution-design (9 steps, parallel dispatch)
 - refactor (5 steps, QR gates)
@@ -159,11 +164,13 @@ See `MIGRATION_STATUS.md` for detailed migration roadmap.
 ### Common Patterns
 
 **Linear workflow**:
+
 ```python
 StepDef(id="step1", next={Outcome.OK: "step2"})
 ```
 
 **Confidence-driven iteration**:
+
 ```python
 def step_investigate(ctx):
     if ctx.workflow_params["confidence"] == "high":
@@ -174,6 +181,7 @@ StepDef(id="investigate", next={Outcome.OK: "formulate", Outcome.ITERATE: "inves
 ```
 
 **Mode branching**:
+
 ```python
 def step_planning(ctx):
     return Outcome.SKIP if ctx.workflow_params["mode"] == "quick" else Outcome.OK
@@ -182,6 +190,7 @@ StepDef(id="planning", next={Outcome.OK: "subagent_design", Outcome.SKIP: "synth
 ```
 
 **QR gates**:
+
 ```python
 StepDef(id="qr_gate", handler=Dispatch(agent=AgentRole.QUALITY_REVIEWER, ...),
         next={Outcome.OK: "proceed", Outcome.FAIL: "revise"})
@@ -195,9 +204,9 @@ See `lib/workflow/README.md` for detailed pattern documentation.
 
 **lib/workflow/ shared framework**: Extracted 550+ lines of duplication from planner, refactor, problem-analysis, decision-critic. Framework provides types (AgentRole, Routing, Dispatch, Step, QRState), formatters (26 XML + text), and CLI utilities. New skills compose existing primitives instead of reimplementing orchestration.
 
-**Workflow-based architecture (new)**: Data-driven workflow definitions enable validation, introspection, and auto-manifest generation. Transitions are data (Outcome -> step_id mappings), not code logic. Single source of truth prevents drift.
+**Workflow-based architecture (new)**: Data-driven workflow definitions enable validation and introspection. Transitions are data (Outcome -> step_id mappings), not code logic. Single source of truth prevents drift.
 
-**Compatibility layer during migration**: Legacy @skill decorator still works. New Workflow pattern preferred for new skills. Both registries combine in manifest generation.
+**Compatibility layer during migration**: Legacy @skill decorator still works. New Workflow pattern preferred for new skills.
 
 **Bootstrap pattern over PYTHONPATH**: Skills use inline sys.path setup to add .claude/ for `from skills.*` imports. No external environment configuration. Pattern simplified from old 6-line repetitive `.parent.parent...` to 4-line `.parents[N]` approach documented in \_bootstrap.py.
 

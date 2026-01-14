@@ -38,23 +38,15 @@ from skills.lib.workflow.formatters import (
     format_xml_mandate,
     format_current_action,
     format_invoke_after,
+    format_parallel_dispatch,
 )
+from skills.lib.workflow.formatters.text import build_invoke_command
 from skills.lib.workflow.types import FlatCommand
 
 
 MAX_ITERATIONS = 5
 MODULE_PATH = "skills.deepthink.think"
 SUBAGENT_MODULE_PATH = "skills.deepthink.subagent"
-
-
-def build_invoke_cmd(step: int, total_steps: int, **kwargs) -> str:
-    """Build invoke command string."""
-    parts = [f"python3 -m {MODULE_PATH} --step {step} --total-steps {total_steps}"]
-    for key, value in kwargs.items():
-        arg_name = key.replace("_", "-")
-        parts.append(f"--{arg_name} {value}")
-    cmd = " ".join(parts)
-    return f'<invoke working-dir=".claude/skills/scripts" cmd="{cmd}" />'
 
 
 def format_step_output(
@@ -596,51 +588,37 @@ STEPS = {
 
 def get_dispatch_actions() -> list[str]:
     """Generate dispatch actions for Step 8."""
-    invoke_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {SUBAGENT_MODULE_PATH} --step 1 --total-steps 8" />'
+    invoke_cmd = build_invoke_command(SUBAGENT_MODULE_PATH, 1, 8, as_xml=True)
+    dispatch = format_parallel_dispatch(
+        agent="general-purpose",
+        instruction="Launch ALL sub-agents from FINAL SUB-AGENT DEFINITIONS (Step 7).\nUse a SINGLE message with multiple Task tool calls.",
+        model="SONNET",
+        model_rationale="These require nuanced reasoning - do not downgrade to haiku.",
+        shared_context=[
+            "Each sub-agent receives:",
+            "- CLARIFIED QUESTION from Step 0",
+            "- DOMAIN and FIRST PRINCIPLES from Step 1",
+            "- QUESTION TYPE and EVALUATION CRITERIA from Step 2",
+            "- KEY ANALOGIES from Step 3",
+            "- Their specific task definition from Step 7",
+        ],
+        template="""Explore this question from the assigned perspective.
 
-    return [
-        '<parallel_dispatch agent="general-purpose">',
-        "  <instruction>",
-        "    Launch ALL sub-agents from FINAL SUB-AGENT DEFINITIONS (Step 7).",
-        "    Use a SINGLE message with multiple Task tool calls.",
-        "  </instruction>",
-        "",
-        "  <model_selection>",
-        "    Use SONNET (default) for analytical sub-agents.",
-        "    These require nuanced reasoning - do not downgrade to haiku.",
-        "  </model_selection>",
-        "",
-        "  <shared_context>",
-        "    Each sub-agent receives:",
-        "    - CLARIFIED QUESTION from Step 0",
-        "    - DOMAIN and FIRST PRINCIPLES from Step 1",
-        "    - QUESTION TYPE and EVALUATION CRITERIA from Step 2",
-        "    - KEY ANALOGIES from Step 3",
-        "    - Their specific task definition from Step 7",
-        "  </shared_context>",
-        "",
-        "  <template>",
-        "    Explore this question from the assigned perspective.",
-        "",
-        "    CLARIFIED QUESTION: [from Step 0]",
-        "    DOMAIN: [from Step 1]",
-        "    FIRST PRINCIPLES: [from Step 1]",
-        "    QUESTION TYPE: [from Step 2]",
-        "    EVALUATION CRITERIA: [from Step 2]",
-        "    KEY ANALOGIES: [from Step 3]",
-        "",
-        "    YOUR TASK:",
-        "    - Name: $SUBAGENT_NAME",
-        "    - Strategy: $SUBAGENT_STRATEGY",
-        "    - Task: $SUBAGENT_TASK",
-        "    - Sub-Questions: $SUBAGENT_QUESTIONS",
-        "",
-        f"    Start: {invoke_cmd}",
-        "  </template>",
-        "</parallel_dispatch>",
-        "",
-        "WAIT for all sub-agents to complete before proceeding.",
-    ]
+CLARIFIED QUESTION: [from Step 0]
+DOMAIN: [from Step 1]
+FIRST PRINCIPLES: [from Step 1]
+QUESTION TYPE: [from Step 2]
+EVALUATION CRITERIA: [from Step 2]
+KEY ANALOGIES: [from Step 3]
+
+YOUR TASK:
+- Name: $SUBAGENT_NAME
+- Strategy: $SUBAGENT_STRATEGY
+- Task: $SUBAGENT_TASK
+- Sub-Questions: $SUBAGENT_QUESTIONS""",
+        invoke_cmd=invoke_cmd,
+    )
+    return dispatch.split("\n")
 
 
 def get_synthesis_actions_full() -> list[str]:
@@ -1120,7 +1098,8 @@ def main(
 
         if args.confidence == "certain" or args.iteration >= MAX_ITERATIONS:
             # Exit loop -> proceed to step 13
-            next_cmd = build_invoke_cmd(
+            next_cmd = build_invoke_command(
+                MODULE_PATH,
                 step=13,
                 total_steps=args.total_steps,
                 confidence=args.confidence,
@@ -1129,7 +1108,8 @@ def main(
             title = f"DEEPTHINK - {step_info['title']} (Iteration {args.iteration}) -> Complete"
         else:
             # Continue refinement loop
-            next_cmd = build_invoke_cmd(
+            next_cmd = build_invoke_command(
+                MODULE_PATH,
                 step=12,
                 total_steps=args.total_steps,
                 confidence="<your_confidence>",
@@ -1154,7 +1134,8 @@ def main(
         else:
             actions = get_synthesis_actions_full()
 
-        next_cmd = build_invoke_cmd(
+        next_cmd = build_invoke_command(
+            MODULE_PATH,
             step=12,
             total_steps=args.total_steps,
             confidence="<your_confidence>",
@@ -1173,7 +1154,8 @@ def main(
     # Step 8: Dispatch (needs special actions)
     if args.step == 8:
         actions = get_dispatch_actions()
-        next_cmd = build_invoke_cmd(
+        next_cmd = build_invoke_command(
+            MODULE_PATH,
             step=9,
             total_steps=args.total_steps,
             mode=args.mode,
@@ -1197,8 +1179,8 @@ def main(
             "</mode_branch>",
         ]
 
-        next_cmd_full = build_invoke_cmd(step=5, total_steps=args.total_steps, mode="full")
-        next_cmd_quick = build_invoke_cmd(step=11, total_steps=args.total_steps, mode="quick")
+        next_cmd_full = build_invoke_command(MODULE_PATH, step=5, total_steps=args.total_steps, mode="full")
+        next_cmd_quick = build_invoke_command(MODULE_PATH, step=11, total_steps=args.total_steps, mode="quick")
 
         print(format_step_output(
             step=args.step,
@@ -1216,11 +1198,12 @@ def main(
     # Determine next command
     if next_step <= 13:
         if next_step in [5, 6, 7, 8, 9, 10]:
-            next_cmd = build_invoke_cmd(step=next_step, total_steps=args.total_steps, mode=args.mode)
+            next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps, mode=args.mode)
         elif next_step == 11:
-            next_cmd = build_invoke_cmd(step=next_step, total_steps=args.total_steps, mode=args.mode)
+            next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps, mode=args.mode)
         elif next_step == 12:
-            next_cmd = build_invoke_cmd(
+            next_cmd = build_invoke_command(
+                MODULE_PATH,
                 step=next_step,
                 total_steps=args.total_steps,
                 confidence="<your_confidence>",
@@ -1228,9 +1211,9 @@ def main(
                 mode=args.mode,
             )
         elif next_step == 13:
-            next_cmd = build_invoke_cmd(step=next_step, total_steps=args.total_steps, mode=args.mode)
+            next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps, mode=args.mode)
         else:
-            next_cmd = build_invoke_cmd(step=next_step, total_steps=args.total_steps)
+            next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps)
     else:
         next_cmd = None
 

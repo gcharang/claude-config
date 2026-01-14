@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """arxiv-to-md sub-agent: Convert a single arXiv paper to markdown.
 
+Arguments:
+  --arxiv-id   Required. The arXiv ID to convert (YYMM.NNNNN format).
+  --dest-file  Optional. When provided by orchestrator, skip metadata extraction.
+               The orchestrator has already determined the destination filename.
+
 6-step workflow:
-  1. Fetch     - Download and extract arXiv source
+  1. Fetch     - Download and extract arXiv source; extract metadata if --dest-file not provided
   2. Preprocess - Expand inputs, normalize encoding
   3. Convert   - TeX to markdown via pandoc
   4. Clean     - Inventory sections, remove unwanted
   5. Verify    - Factored verification: source vs output
-  6. Validate  - Check output quality, return FILE: or FAIL:
+  6. Validate  - Check output quality, return FILE: (+ TITLE/DATE if no --dest-file) or FAIL:
 """
 
 import argparse
@@ -46,11 +51,33 @@ PHASES = {
             "  3. Stop when you find a version with .tex source",
             "  4. If no version has TeX source, respond: FAIL: PDF-only submission",
             "",
+            "EXTRACT PAPER METADATA (only when --dest-file NOT provided):",
+            "",
+            "IF --dest-file was NOT provided:",
+            "  1. TITLE - Extract from the main .tex file:",
+            "     - Look for \\title{...} command",
+            "     - May span multiple lines: \\title{First Line",
+            "         Second Line}",
+            "     - Strip LaTeX commands (\\textbf, \\emph, etc.)",
+            "     - Collapse whitespace to single spaces",
+            "     - Handle subtitles: if title contains ':' keep it",
+            "",
+            "  2. DATE - Fetch submission date from arXiv abstract page:",
+            "     - Use WebFetch on https://arxiv.org/abs/<id>",
+            "     - Find the first submission date (not revision date)",
+            "     - Format: look for 'Submitted' or '[v1]' date",
+            "     - Convert to YYYY-MM-DD format",
+            "",
+            "IF --dest-file WAS provided:",
+            "  Skip metadata extraction - orchestrator already determined filename.",
+            "",
             "OUTPUT:",
             "```",
             "source_dir: /tmp/arxiv_<id>",
             "main_tex: <filename>.tex",
             "version: <vN if not latest>",
+            "paper_title: <extracted title>      # only if --dest-file not provided",
+            "submission_date: YYYY-MM-DD         # only if --dest-file not provided",
             "```",
         ],
     },
@@ -216,11 +243,15 @@ PHASES = {
             "",
             "If validation PASSED:",
             "  FILE: <source_dir>/cleaned.md",
+            "  IF --dest-file was NOT provided:",
+            "    TITLE: <paper_title from step 1>",
+            "    DATE: <submission_date from step 1>",
             "",
             "If validation FAILED:",
             "  FAIL: <concise reason>",
             "",
-            "No other output. The orchestrator parses this response.",
+            "The orchestrator parses this response.",
+            "Include TITLE and DATE only when --dest-file was NOT provided.",
         ],
     },
 }
@@ -233,6 +264,11 @@ def main():
     )
     parser.add_argument("--step", type=int, required=True, help="Current step (1-6)")
     parser.add_argument("--arxiv-id", type=str, required=True, help="arXiv ID to convert")
+    parser.add_argument(
+        "--dest-file",
+        type=str,
+        help="Destination filename (when orchestrator determines it). Skips metadata extraction.",
+    )
     args = parser.parse_args()
 
     if args.step < 1 or args.step > 6:
@@ -241,19 +277,25 @@ def main():
     phase = PHASES[args.step]
     actions = list(phase["actions"])
 
-    # Prepend arxiv ID context on step 1
+    # Prepend context on step 1
     if args.step == 1:
-        actions = [f"arXiv ID: {args.arxiv_id}", ""] + actions
+        context_lines = [f"arXiv ID: {args.arxiv_id}"]
+        if args.dest_file:
+            context_lines.append(f"Destination: {args.dest_file}")
+        context_lines.append("")
+        actions = context_lines + actions
 
     # Build next invoke command
     next_step = args.step + 1
     if next_step <= 6:
-        next_cmd = build_invoke_command(
-            MODULE_PATH,
-            step=next_step,
-            total_steps=6,
-            arxiv_id=args.arxiv_id,
-        )
+        cmd_kwargs = {
+            "step": next_step,
+            "total_steps": 6,
+            "arxiv_id": args.arxiv_id,
+        }
+        if args.dest_file:
+            cmd_kwargs["dest_file"] = args.dest_file
+        next_cmd = build_invoke_command(MODULE_PATH, **cmd_kwargs)
     else:
         next_cmd = None  # Terminal step
 

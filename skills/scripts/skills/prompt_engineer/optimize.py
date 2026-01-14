@@ -228,6 +228,37 @@ def understand_actions_simple() -> list[str]:
     ]
 
 
+def compression_guide_framing() -> list[str]:
+    """Framing for how to interpret the compression guide.
+
+    The compression guide operates at the OUTPUT level -- it contains techniques
+    to embed in prompts that cause the target LLM to produce fewer tokens.
+    Without this framing, LLMs pattern-match compression techniques to whatever
+    text is salient, often applying them incorrectly to code structure or
+    prompt text itself.
+    """
+    return [
+        "",
+        "CRITICAL - How to interpret the compression guide:",
+        "  The compression guide reduces OUTPUT tokens from the TARGET LLM --",
+        "  the LLM that will eventually READ the prompt you're optimizing,",
+        "  NOT the LLM (you) currently doing the optimization.",
+        "",
+        "  These are techniques to EMBED in prompts. When the guide says",
+        "  'keep each step to 5 words', that instruction goes INTO the prompt",
+        "  you're creating, so the target LLM responds concisely.",
+        "",
+        "  FORBIDDEN:",
+        "    - Refactoring code structure (extracting to variables, consolidating",
+        "      templates). Source code structure does NOT affect token count.",
+        "    - Shortening the prompt text itself unless user explicitly requests.",
+        "",
+        "  CORRECT: Look for opportunities to add output-controlling instructions",
+        "  like response format constraints, per-step word limits, or MARP patterns.",
+        "",
+    ]
+
+
 def handoff_minimalism_test() -> list[str]:
     """Test for handoff minimalism in PLAN phase."""
     return [
@@ -960,6 +991,9 @@ def main(
             lines.append("READ:")
             for ref in read_refs:
                 lines.append(f"  - {ref}")
+                # Inject framing after compression guide is listed
+                if "compression" in ref.lower() and "Extract" not in ref:
+                    lines.extend(compression_guide_framing())
             lines.append("")
 
     lines.append("DO:")

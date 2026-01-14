@@ -9,6 +9,9 @@ from .xml import (
     format_xml_mandate,
     format_step_output,
     format_subagent_dispatch,
+    format_parallel_dispatch,
+    format_conditional_dispatch,
+    format_model_selection,
     format_state_banner,
     format_qr_banner,
     format_expected_output,
@@ -30,6 +33,7 @@ from .xml import (
 __all__ = [
     "format_step_header", "format_current_action", "format_invoke_after", "format_next_block",
     "format_gate_result", "format_xml_mandate", "format_step_output", "format_subagent_dispatch",
+    "format_parallel_dispatch", "format_conditional_dispatch", "format_model_selection",
     "format_state_banner", "format_qr_banner", "format_expected_output", "format_forbidden",
     "format_routing", "format_post_qr_routing", "format_resource", "format_detection_questions",
     "format_verification_checklist", "format_incorrect_behavior", "format_orchestrator_constraint",

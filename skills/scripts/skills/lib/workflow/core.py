@@ -2,7 +2,6 @@
 
 Pure data-driven Workflow/StepDef architecture where:
 - Workflows are frozen dataclasses with embedded callables
-- to_manifest() derives manifest -- no separate file to maintain
 - Transitions are explicit via next: dict[Outcome, str]
 - Parameters use Annotated[T, Arg(...)] on handlers
 - Step context passes runtime state between steps
@@ -183,29 +182,6 @@ class Workflow:
             )
         return params
 
-    def to_manifest(self) -> dict:
-        """Generate JSON-serializable manifest."""
-        return {
-            "name": self.name,
-            "module_path": self._module_path,
-            "total_steps": len(self.steps),
-            "description": self.description,
-            "steps": [
-                {
-                    "id": sid,
-                    "title": self.steps[sid].title,
-                    "phase": self.steps[sid].phase,
-                }
-                for sid in self._step_order
-            ],
-            "params": {
-                pname: pspec
-                for step_params in self._params.values()
-                for pspec in step_params
-                for pname in [pspec["name"]]
-            },
-        }
-
     def run(self, params: dict, start_step: str | None = None) -> dict:
         """Execute workflow from start_step."""
         ctx = StepContext(
@@ -245,7 +221,7 @@ class Workflow:
 
 
 def register_workflow(workflow: Workflow, module: str | None = None):
-    """Register workflow for manifest generation."""
+    """Register workflow in global registry."""
     if module is None:
         frame = inspect.currentframe()
         if frame and frame.f_back:

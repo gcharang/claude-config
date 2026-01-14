@@ -1,7 +1,7 @@
 # arxiv-to-md/
 
 Convert arXiv papers to LLM-consumable markdown. IMMEDIATELY invoke the script
-when user provides an arXiv ID or URL.
+when user provides an arXiv ID or URL. Do NOT explore first.
 
 ## Files
 

@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
 """arxiv-to-md orchestrator: Parse input, dispatch sub-agents, rename outputs.
 
+Two invocation modes:
+  MODE 1: Direct conversion (default)
+    - User provides arXiv IDs directly or via discovery
+    - Orchestrator constructs filename from paper title + date
+
+  MODE 2: PDF folder sync
+    - User specifies source PDF folder + destination markdown folder
+    - Orchestrator matches PDFs to existing .md files, identifies gaps
+    - Destination filename derived from PDF filename
+
 3-step workflow:
-  1. Discover/Parse - Find arXiv IDs from input or folder metadata, dispatch sub-agents
+  1. Discover/Parse - Detect mode, find arXiv IDs, dispatch sub-agents
   2. Wait          - Wait for all sub-agents to complete
-  3. Finalize      - Rename successful outputs to target location
+  3. Finalize      - Copy outputs to target location (filename construction varies by mode)
 """
 
 import argparse
@@ -18,8 +28,8 @@ MODULE_PATH = "skills.arxiv_to_md.main"
 SUBAGENT_MODULE = "skills.arxiv_to_md.sub_agent"
 
 
-def _build_parallel_dispatch():
-    """Build the parallel dispatch block for sub-agent invocation."""
+def _build_parallel_dispatch_mode1():
+    """Build parallel dispatch for MODE 1 (orchestrator constructs filename)."""
     return format_parallel_dispatch(
         agent="general-purpose",
         instruction="Launch one sub-agent per arXiv ID.\nUse a SINGLE message with multiple Task tool calls.",
@@ -33,8 +43,40 @@ Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {SUBAGENT_MO
 
 <expected_output>
 Sub-agent responds with ONLY:
+
+On success:
 FILE: <path-to-markdown>
-OR
+TITLE: <paper title>
+DATE: <YYYY-MM-DD>
+
+On failure:
+FAIL: <reason>
+</expected_output>""",
+        wait_message=None,
+    )
+
+
+def _build_parallel_dispatch_mode2():
+    """Build parallel dispatch for MODE 2 (orchestrator provides destination filename)."""
+    return format_parallel_dispatch(
+        agent="general-purpose",
+        instruction="Launch one sub-agent per arXiv ID.\nUse a SINGLE message with multiple Task tool calls.",
+        model="OPUS",
+        model_rationale="These markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
+        template=f"""Convert this arXiv paper to markdown.
+
+arXiv ID: $ARXIV_ID
+Destination: $DEST_FILE
+
+Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {SUBAGENT_MODULE} --step 1 --arxiv-id $ARXIV_ID --dest-file '$DEST_FILE'" />
+
+<expected_output>
+Sub-agent responds with ONLY:
+
+On success:
+FILE: <path-to-markdown>
+
+On failure:
 FAIL: <reason>
 </expected_output>""",
         wait_message=None,
@@ -46,11 +88,24 @@ PHASES = {
         "title": "Discover and Dispatch",
         "brief": "Find arXiv IDs and launch sub-agents",
         "actions": [
-            "DISCOVERY HINT:",
-            "Before asking the user for arXiv IDs, check current working directory for:",
+            "MODE DETECTION:",
+            "Determine which mode based on user input:",
+            "",
+            "MODE 1 (default): Direct conversion",
+            "  Trigger: User provides arXiv IDs directly, or asks to convert papers",
+            "  Filename: Orchestrator constructs from paper title + date",
+            "",
+            "MODE 2: PDF folder sync",
+            "  Trigger: User specifies source PDF folder AND destination markdown folder",
+            "  Filename: Derived from PDF filename (orchestrator provides to sub-agent)",
+            "",
+            "=" * 60,
+            "",
+            "MODE 1 DISCOVERY:",
+            "Before asking the user for arXiv IDs, check for:",
+            "  - CLAUDE.md in current directory (may list arXiv IDs)",
             "  - README.md or similar docs with arXiv links/IDs",
             "  - .bib files with arXiv entries",
-            "  - Filenames containing arXiv IDs (e.g., 2503.05179.pdf)",
             "If IDs found, confirm with user: 'Found arXiv ID(s) X, Y. Convert these?'",
             "",
             "PARSE USER INPUT:",
@@ -59,10 +114,53 @@ PHASES = {
             "  - Or full URL: https://arxiv.org/abs/YYMM.NNNNN",
             "  - May be multiple IDs (comma-separated, space-separated, or multiple URLs)",
             "",
-            "DISPATCH:",
-            "For EVERY arXiv ID found (even if just one), dispatch a sub-agent.",
+            "MODE 1 DISPATCH:",
+            _build_parallel_dispatch_mode1(),
             "",
-            _build_parallel_dispatch(),
+            "=" * 60,
+            "",
+            "MODE 2 DISCOVERY (PDF folder sync):",
+            "",
+            "FORBIDDEN - NEVER read PDF files. Resolve arXiv IDs by searching online for paper title.",
+            "",
+            "CRITICAL - CHECK EXISTING FILES FIRST:",
+            "",
+            "Most files WILL already exist. Skipping is the common case.",
+            "Before dispatching ANY sub-agent, check if output already exists.",
+            "",
+            "If a PDF already has a matching .md file, STOP. Do NOT dispatch.",
+            "Skip that PDF entirely.",
+            "",
+            "FILE NAMING CONVENTION:",
+            "  PDFs:     YYYY-MM-DD <title>.pdf",
+            "  Markdown: YYYY-MM-DD <title>.md",
+            "  Example:  2025-01-08 Pruning the Unsurprising.pdf",
+            "",
+            "1. SCAN DESTINATION FOLDER for existing markdown FIRST:",
+            "   - List all *.md files in destination folder",
+            "",
+            "2. SCAN SOURCE FOLDER for PDFs:",
+            "   - List all *.pdf files in source folder",
+            "   - Extract base filename (without .pdf extension)",
+            "",
+            "3. For EACH PDF, check if matching .md exists:",
+            "   Matching logic: same YYYY-MM-DD prefix + similar title",
+            "   - '2025-01-08 Pruning the Unsurprising.pdf' matches '2025-01-08 Pruning the Unsurprising.md'",
+            "   If match exists -> SKIP this PDF (do not dispatch)",
+            "",
+            "4. RESOLVE ARXIV IDs from unmatched PDFs:",
+            "   - Extract paper title from PDF filename (after YYYY-MM-DD prefix)",
+            "   - Use WebSearch to find arXiv ID for that paper title",
+            "   - DO NOT read the PDF file",
+            "",
+            "5. DETERMINE DESTINATION FILENAMES:",
+            "   For each unmatched PDF with resolved arXiv ID:",
+            "   - dest_file = '<dest_folder>/<pdf_basename>.md'",
+            "   - Example: source/2025-01-08 Pruning the Unsurprising.pdf",
+            "             -> dest/2025-01-08 Pruning the Unsurprising.md",
+            "",
+            "MODE 2 DISPATCH:",
+            _build_parallel_dispatch_mode2(),
         ],
     },
     2: {
@@ -72,15 +170,28 @@ PHASES = {
             "WAIT for all sub-agents to complete.",
             "",
             "Collect results from each sub-agent:",
-            "  - FILE: <path> -> successful conversion",
+            "",
+            "MODE 1 response format:",
+            "  - FILE: <path>   -> successful conversion",
+            "    TITLE: <title> -> paper title (for filename)",
+            "    DATE: <date>   -> submission date YYYY-MM-DD (for filename)",
+            "  - FAIL: <reason> -> conversion failed",
+            "",
+            "MODE 2 response format:",
+            "  - FILE: <path>   -> successful conversion (no TITLE/DATE)",
+            "    dest_file: already known from dispatch",
             "  - FAIL: <reason> -> conversion failed",
             "",
             "Build results summary:",
             "```",
+            "mode: 1 or 2",
             "results:",
             "  - arxiv_id: 2503.05179",
             "    status: success",
             "    temp_path: /tmp/arxiv_2503.05179/cleaned.md",
+            "    title: 'Pruning the Unsurprising'  # MODE 1 only",
+            "    date: 2025-03-08                   # MODE 1 only",
+            "    dest_file: /path/to/dest.md       # MODE 2 only",
             "  - arxiv_id: 2401.12345",
             "    status: failed",
             "    reason: PDF-only submission",
@@ -93,23 +204,65 @@ PHASES = {
         "actions": [
             "For each SUCCESSFUL conversion:",
             "",
-            "1. Determine target filename:",
-            "   - Default: <arxiv_id>.md in current working directory",
-            "   - Example: 2503.05179.md",
+            "MODE 1 (dest_file NOT provided - construct filename from metadata):",
+            "",
+            "1. CONSTRUCT FILENAME from metadata:",
+            "",
+            "   Format: YYYY-MM-DD Title - Subtitle.md",
+            "",
+            "   Transformation steps:",
+            "   a) Start with DATE from sub-agent (already YYYY-MM-DD)",
+            "   b) Take TITLE from sub-agent",
+            "   c) Replace ? ; : with ' - ' (space-dash-space)",
+            "      'Foo: Bar Baz' -> 'Foo - Bar Baz'",
+            "      'What? Why; How:' -> 'What - Why - How -'",
+            "   d) Remove characters unsafe for filenames: / \\ < > | \" *",
+            "   e) Collapse multiple spaces to single space",
+            "   f) Trim leading/trailing whitespace",
+            "   g) Concatenate: '<date> <title>.md'",
+            "",
+            "   Example:",
+            "     title: 'Pruning the Unsurprising: Efficient LLM Reasoning via First-Token Surprisal'",
+            "     date: 2026-01-08",
+            "     result: '2026-01-08 Pruning the Unsurprising - Efficient LLM Reasoning via First-Token Surprisal.md'",
+            "",
+            "   FALLBACK: If title/date missing, use <arxiv_id>.md",
             "",
             "2. Copy the cleaned.md to target:",
             "   ```bash",
-            "   cp /tmp/arxiv_<id>/cleaned.md ./<arxiv_id>.md",
+            "   cp /tmp/arxiv_<id>/cleaned.md './<constructed_filename>'",
+            "   ```",
+            "   Note: Quote the filename - it contains spaces.",
+            "",
+            "=" * 60,
+            "",
+            "MODE 2 (dest_file WAS provided - copy to pre-determined destination):",
+            "",
+            "1. Copy the cleaned.md to dest_file:",
+            "   ```bash",
+            "   cp /tmp/arxiv_<id>/cleaned.md '<dest_file>'",
             "   ```",
             "",
-            "3. Verify the copy succeeded:",
-            "   - Use Read tool to confirm file exists and has content",
+            "   The dest_file was determined in step 1 and passed to sub-agent.",
+            "   No filename construction needed.",
+            "",
+            "=" * 60,
+            "",
+            "VERIFICATION (both modes):",
+            "  - Use Read tool to confirm file exists and has content",
             "",
             "PRESENT FINAL SUMMARY to user:",
             "```",
-            "Converted N of M papers:",
-            "  [OK] 2503.05179 -> ./2503.05179.md",
-            "  [FAIL] 2401.12345: PDF-only submission",
+            "Processed M PDFs: N converted, K skipped (already exist), F failed",
+            "",
+            "Skipped (already exist):",
+            "  2025-01-08 Pruning the Unsurprising -> already exists",
+            "",
+            "Converted:",
+            "  [OK] 2025-01-10 New Paper Title -> ./2025-01-10 New Paper Title.md",
+            "",
+            "Failed:",
+            "  [FAIL] 2024-12-15 Some Paper -> PDF-only submission (no TeX source)",
             "```",
         ],
     },

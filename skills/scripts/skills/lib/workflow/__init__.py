@@ -12,9 +12,6 @@ from .core import (
     get_workflow_registry,
     register_workflow,
 )
-from .registry import (
-    generate_manifest,
-)
 from .types import (
     AgentRole,
     BranchRouting,
@@ -50,6 +47,4 @@ __all__ = [
     "QRState",
     "Step",
     "WorkflowDefinition",
-    # Registry
-    "generate_manifest",
 ]

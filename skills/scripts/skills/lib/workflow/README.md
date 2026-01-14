@@ -2,9 +2,7 @@
 
 ## Overview
 
-Framework for skill registration, testing, and manifest generation. Skills are defined using the `Workflow` class with `StepDef` instances - a data-driven approach where transitions are explicit data structures.
-
-The manifest is derived from registered workflows, not manually maintained.
+Framework for skill registration and testing. Skills are defined using the `Workflow` class with `StepDef` instances - a data-driven approach where transitions are explicit data structures.
 
 ## Architecture
 
@@ -12,13 +10,10 @@ The manifest is derived from registered workflows, not manually maintained.
 Workflow() -> register_workflow() -> _WORKFLOW_REGISTRY
                                           |
                                           v
-                                     to_manifest() -> manifest output
-                                          |
-                                          v
                                      testing.py -> L0/L1/L2 validation
 ```
 
-Registration happens at import time. Manifest is generated separately to avoid module identity issues when running as `__main__`.
+Registration happens at import time.
 
 ## Core Types
 
@@ -126,7 +121,7 @@ def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
 
 ### Arg (Parameter Metadata)
 
-Annotates handler parameters for manifest generation and testing:
+Annotates handler parameters for testing:
 
 ```python
 @dataclass(frozen=True)
@@ -151,7 +146,7 @@ def step_handler(
     ...
 ```
 
-The `Arg` metadata is extracted during workflow validation and included in the manifest.
+The `Arg` metadata is extracted during workflow validation for testing.
 
 ### Dispatch vs Callable Handlers
 
@@ -201,7 +196,7 @@ The `Dispatch` handler tells the orchestrator to:
 2. **All transition targets exist**: Every target in `next` dicts must be a valid step ID or `None` (terminal)
 3. **At least one terminal step**: At least one step must have `None` in its `next` dict
 4. **All steps reachable**: Every step must be reachable from the entry point (detects orphaned steps)
-5. **Parameter extraction**: Extract `Arg` metadata from handler signatures for manifest
+5. **Parameter extraction**: Extract `Arg` metadata from handler signatures for testing
 
 These checks run at registration time, catching errors early.
 
@@ -244,7 +239,7 @@ Benefits of this architecture:
 
 - Steps and transitions together in data structure
 - Transitions explicit and validatable
-- Manifest auto-generated from workflow structure
+- Workflow structure introspectable and validatable
 - Transition graph introspectable
 
 ## Design Decisions
@@ -255,7 +250,7 @@ Benefits of this architecture:
 
 **Why handler callables instead of strings?** Type safety, IDE support, and easier refactoring. Handlers are first-class functions, not magic strings.
 
-**Separate manifest_cli.py**: Running module as `__main__` causes module identity issues (registry imported by `__init__.py` vs executed as `__main__`). Separate CLI entry point avoids this.
+**Separate CLI entry points**: Running modules as `__main__` causes module identity issues (imported by `__init__.py` vs executed as `__main__`). Separate CLI entry points (`testing.py`) avoid this.
 
 **Three test levels**: L0 (import), L1 (registration valid), L2 (invocability).
 L2 runs the skill via subprocess with synthetic boundary inputs. L3 (output
@@ -341,12 +336,11 @@ StepDef(
 
 ## Invariants
 
-- Every skill module appears in `_import_all_skills()` in `manifest_cli.py` and `testing.py`
+- Every skill module appears in `_import_all_skills()` in `testing.py`
 - Workflow validation must pass (entry point exists, all transitions valid, at least one terminal, all steps reachable)
 - Handler signatures must match `(ctx: StepContext) -> tuple[Outcome, dict]` or be a `Dispatch` instance
 - `next` dict keys must be `Outcome` enum values
 - `next` dict values must be valid step IDs or `None` (terminal)
-- Manifest is derived from workflows, never manually edited
 
 ## Testing
 
@@ -367,26 +361,3 @@ python -m skills.lib.workflow.testing --skill decision-critic --level 2
 - **L0**: Import skill module successfully
 - **L1**: Registration valid (total_steps set, entry point exists)
 - **L2**: Invocability (skill executes without error for boundary inputs)
-
-## Manifest Generation
-
-```bash
-# Generate manifest to stdout
-python -m skills.lib.workflow.manifest_cli
-
-# Generate manifest to file
-python -m skills.lib.workflow.manifest_cli -o /tmp/manifest.json
-```
-
-Example output:
-
-```
-Generated manifest:
-  - Total skills: 14
-  - Skills: codebase-analysis, decision-critic, deepthink, incoherence,
-    leon-writing-style, planner, problem-analysis, prompt-engineer,
-    prompt-engineer-ecosystem, prompt-engineer-greenfield,
-    prompt-engineer-problem, prompt-engineer-single, refactor, solution-design
-```
-
-The manifest is derived from registered workflows and auto-generated. Do not edit manually.

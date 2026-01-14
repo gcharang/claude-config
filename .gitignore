@@ -2,6 +2,8 @@
 *
 
 # Track these directories and their contents
+!.github/
+!.github/**
 !agents/
 !agents/**
 !commands/

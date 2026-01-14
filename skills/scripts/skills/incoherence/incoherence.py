@@ -179,7 +179,7 @@ def get_step_guidance(step_number, total_steps):
             "actions": [
                 "CODEBASE SURVEY",
                 "",
-                "Gather MINIMAL context (README first 50 lines, CLAUDE.md, dir listing, manifest).",
+                "Gather MINIMAL context (README first 50 lines, CLAUDE.md, dir listing).",
                 "Do NOT read detailed docs, source code, configs, or tests.",
                 "",
                 "Identify: codebase type, primary language, doc locations, info source types",

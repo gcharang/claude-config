@@ -13,7 +13,9 @@ import sys
 from skills.lib.workflow.formatters import (
     format_xml_mandate,
     format_current_action,
+    format_invoke_after,
 )
+from skills.lib.workflow.types import FlatCommand
 from skills.solution_design.perspectives import PERSPECTIVES, PERSPECTIVE_ORDER
 
 
@@ -24,11 +26,6 @@ MODULE_PATH = "skills.solution_design.perspective"
 # =============================================================================
 # XML Formatters (perspective-specific)
 # =============================================================================
-
-
-def format_invoke_after(command: str) -> str:
-    """Render invoke after block for perspective workflow."""
-    return f"<invoke_after>\n{command}\n</invoke_after>"
 
 
 def format_step_header(step: int, total: int, title: str, perspective: str) -> str:
@@ -149,7 +146,7 @@ def format_step_1(perspective_id: str) -> str:
         format_current_action(actions),
         "",
         format_invoke_after(
-            f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 2 --total-steps 2 --perspective {perspective_id}" />'
+            FlatCommand(f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 2 --total-steps 2 --perspective {perspective_id}" />')
         ),
     ]
     return "\n".join(parts)
