@@ -4,9 +4,12 @@ on:
   push:
     paths:
       - 'skills/scripts/**'
+      - '.github/workflows/skills-test.yml'
   pull_request:
     paths:
       - 'skills/scripts/**'
+      - '.github/workflows/skills-test.yml'
+  workflow_dispatch:
 
 jobs:
   test-skills:
