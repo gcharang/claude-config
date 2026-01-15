@@ -1,9 +1,9 @@
-"""Workflow formatters for XML and text output.
+"""AST module for workflow output representation.
 
-This module re-exports AST types for backward compatibility.
+Export all node types, builder, renderer, and convenience functions.
 """
 
-from ..ast import (
+from skills.lib.workflow.ast.nodes import (
     Node,
     Document,
     TextNode,
@@ -17,11 +17,9 @@ from ..ast import (
     DispatchNode,
     GuidanceNode,
     TextOutputNode,
-    ASTBuilder,
-    XMLRenderer,
-    render,
-    W,
 )
+from skills.lib.workflow.ast.builder import ASTBuilder, W
+from skills.lib.workflow.ast.renderer import XMLRenderer, render
 
 __all__ = [
     "Node",

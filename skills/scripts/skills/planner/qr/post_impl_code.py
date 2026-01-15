@@ -14,10 +14,7 @@ The script provides step-by-step guidance; the agent follows exactly.
 import sys
 
 from skills.lib.workflow.types import QRState
-from skills.lib.workflow.formatters import (
-    format_qr_banner,
-    format_factored_verification_rationale,
-)
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 from skills.lib.conventions import get_convention
 from skills.planner.shared.resources import get_resource
 
@@ -39,7 +36,7 @@ def get_step_guidance(
 
     # Step 1: Task description
     if step == 1:
-        banner = format_qr_banner("CODE QR", qr)
+        banner = render(W.el("state_banner", checkpoint="CODE QR", iteration=str(qr.iteration), mode="fresh_review").build(), XMLRenderer())
         return {
             "title": "Code Quality Review",
             "actions": [banner, ""]
@@ -78,12 +75,25 @@ def get_step_guidance(
 
     # Step 2: Acceptance criteria extraction (factored - read criteria first)
     if step == 2:
+        factored_rationale = """<factored_verification_rationale>
+WHY FACTORED: Read criteria -> Examine code -> Compare
+
+PREVENTS:
+  - Confirmation bias (seeing what you expect)
+  - Post-hoc rationalization (making code fit criteria)
+  - Selective attention (missing what doesn't fit)
+
+REQUIRES:
+  - Write expectations BEFORE reading code
+  - No modifications after code examination
+  - Explicit comparison in separate step
+</factored_verification_rationale>"""
         return {
             "title": "Extract Acceptance Criteria (Factored Step 1)",
             "actions": [
                 "FACTORED VERIFICATION PROTOCOL - Step 1 of 3",
                 "",
-                format_factored_verification_rationale(),
+                factored_rationale,
                 "",
                 "For EACH milestone in the plan:",
                 "",

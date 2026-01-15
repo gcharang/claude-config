@@ -21,7 +21,32 @@ import argparse
 import sys
 
 from skills.lib.workflow import Confidence
-from skills.lib.workflow.formatters.text import format_text_output
+from skills.lib.workflow.ast import W, XMLRenderer, render
+
+
+def _format_text_output(
+    step: int,
+    total: int,
+    title: str,
+    actions: list[str],
+    next_title: str | None = None,
+) -> str:
+    """Format complete plain text step output using AST builder."""
+    lines = [f"STEP {step}/{total}: {title}", "", "DO:"]
+
+    for action in actions:
+        if action:
+            lines.append(f"  {action}")
+        else:
+            lines.append("")
+
+    lines.append("")
+    if step >= total - 1:
+        lines.append("WORKFLOW COMPLETE - Present results to user.")
+    elif next_title:
+        lines.append(f"NEXT: Step {step + 1} - {next_title}")
+
+    return render(W.text("\n".join(lines)).build(), XMLRenderer())
 
 
 def _scope_non_certain() -> tuple[str, list[str], str | None]:
@@ -526,7 +551,7 @@ def main():
         title, actions, next_title = get_synthesize_actions(confidence)
 
     print(
-        format_text_output(
+        _format_text_output(
             step=args.step,
             total=args.total_steps,
             title=f"CODEBASE ANALYSIS - {title}",

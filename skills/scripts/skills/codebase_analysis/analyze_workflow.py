@@ -21,7 +21,7 @@ from skills.lib.workflow.core import (
     Arg,
     register_workflow,
 )
-from skills.lib.workflow.formatters.text import format_text_output
+from skills.lib.workflow.ast import W, XMLRenderer, render
 
 
 # Maximum iterations for DEEPEN phase
@@ -441,15 +441,13 @@ def main():
 
     phase, (title, actions, next_title) = step_map[args.step]
 
-    print(
-        format_text_output(
-            step=args.step,
-            total=args.total_steps,
-            title=f"CODEBASE ANALYSIS - {title}",
-            actions=actions,
-            next_title=next_title,
-        )
-    )
+    output = render(W.text_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"CODEBASE ANALYSIS - {title}",
+        actions=actions
+    ).build(), XMLRenderer())
+    print(output)
 
 
 def get_scope_actions(confidence: str) -> tuple[str, list[str], str | None]:

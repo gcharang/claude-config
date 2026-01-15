@@ -25,13 +25,7 @@ from skills.lib.workflow.core import (
     Workflow,
     register_workflow,
 )
-from skills.lib.workflow.formatters import (
-    format_step_header,
-    format_xml_mandate,
-    format_current_action,
-    format_invoke_after,
-    format_parallel_dispatch,
-)
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 from skills.lib.workflow.types import FlatCommand
 
 
@@ -109,15 +103,40 @@ def build_explore_dispatch(n: int = DEFAULT_CATEGORY_COUNT) -> str:
         {"ref": f"{cat['file']}:{cat['start_line']}-{cat['end_line']}", "name": cat["name"]}
         for cat in selected
     ]
-    return format_parallel_dispatch(
-        agent="Explore",
-        instruction=f"Launch {len(selected)} Explore sub-agents IN PARALLEL (single message, {len(selected)} Task tool calls).\nEach agent explores ONE code smell category.",
-        model="HAIKU",
-        model_rationale="Each agent has a narrow, well-defined task - cheap models work well.",
-        categories=categories,
-        template="Explore the codebase for this code smell.",
-        invoke_cmd=f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {EXPLORE_MODULE_PATH} --step 1 --total-steps 5 --category $CATEGORY_REF" />',
-    )
+    invoke_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {EXPLORE_MODULE_PATH} --step 1 --total-steps 5 --category $CATEGORY_REF" />'
+
+    lines = [f'<parallel_dispatch agent="Explore" count="{len(categories)}">']
+
+    lines.append("  <instruction>")
+    instruction = f"Launch {len(selected)} Explore sub-agents IN PARALLEL (single message, {len(selected)} Task tool calls).\nEach agent explores ONE code smell category."
+    for line in instruction.split("\n"):
+        lines.append(f"    {line}" if line else "")
+    lines.append("  </instruction>")
+    lines.append("")
+
+    lines.append("  <model_selection>")
+    lines.append("    Use HAIKU (default) for all agents.")
+    lines.append("    Each agent has a narrow, well-defined task - cheap models work well.")
+    lines.append("  </model_selection>")
+    lines.append("")
+
+    lines.append("  <categories>")
+    for cat in categories:
+        ref = cat.get("ref", "")
+        name = cat.get("name", "")
+        lines.append(f'    <category ref="{ref}">{name}</category>')
+    lines.append("  </categories>")
+    lines.append("")
+
+    lines.append("  <template>")
+    lines.append("    Explore the codebase for this code smell.")
+    lines.append("")
+    lines.append(f"    Start: {invoke_cmd}")
+    lines.append("  </template>")
+
+    lines.append("</parallel_dispatch>")
+
+    return "\n".join(lines)
 
 
 def format_expected_output(sections: dict[str, str]) -> str:
@@ -654,72 +673,146 @@ Present the report directly to the user. The report should be immediately action
 # =============================================================================
 
 
-def format_output(step: int, total_steps: int, n: int = DEFAULT_CATEGORY_COUNT) -> str:
-    """Format output for display."""
-    info = STEPS.get(step, STEPS[5])  # Default to last step
-    is_complete = step >= total_steps
-
+def format_step_1_output(total_steps: int, n: int, info: dict) -> str:
+    """Format Step 1: Parallel dispatch output."""
     parts = []
 
-    # Step header
-    parts.append(format_step_header("refactor", step, total_steps, info["title"]))
+    parts.append(render(W.el("step_header", TextNode(info["title"]), script="refactor", step="1", total=str(total_steps)).build(), XMLRenderer()))
     parts.append("")
 
-    # XML mandate for step 1
-    if step == 1:
-        parts.append(format_xml_mandate())
-        parts.append("")
+    xml_mandate_text = """<xml_format_mandate>
+CRITICAL: All script outputs use XML format. You MUST:
 
-    # Build actions
-    actions = []
+1. Execute the action in <current_action>
+2. When complete, invoke the exact command in <invoke_after>
+3. The <next> block re-states the command -- execute it
+4. For branching <invoke_after>, choose based on outcome:
+   - <if_pass>: Use when action succeeded / QR returned PASS
+   - <if_fail>: Use when action failed / QR returned ISSUES
 
-    if step == 1:
-        # Step 1: Parallel dispatch
-        actions.append("IDENTIFY the scope from user's request:")
-        actions.append("  - Could be: file(s), directory, subsystem, entire codebase")
-        actions.append("")
-        actions.append(build_explore_dispatch(n))
-        actions.append("")
-        actions.append(f"WAIT for all {n} agents to complete before proceeding.")
-        actions.append("")
-        actions.append(format_expected_output({
+DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
+</xml_format_mandate>"""
+    parts.append(xml_mandate_text)
+    parts.append("")
+
+    actions = [
+        "IDENTIFY the scope from user's request:",
+        "  - Could be: file(s), directory, subsystem, entire codebase",
+        "",
+        build_explore_dispatch(n),
+        "",
+        f"WAIT for all {n} agents to complete before proceeding.",
+        "",
+        format_expected_output({
             "Per category": "smell_report with severity (none/low/medium/high) and findings",
             "Format": "<smell_report> blocks from each Explore agent",
-        }))
-    elif step == 3:
-        # Step 3: Cluster - use the prompt function
-        actions.append(format_cluster_prompt())
-    elif step == 4:
-        # Step 4: Contextualize - use the prompt function
-        actions.append(format_contextualize_prompt())
-    elif step == 5:
-        # Step 5: Synthesize - use the prompt function
-        actions.append(format_synthesize_prompt())
-    else:
-        # Step 2 uses actions from STEPS dict
-        if "actions" in info:
-            actions.extend(info["actions"])
+        })
+    ]
 
-    parts.append(format_current_action(actions))
+    action_nodes = [TextNode(a) for a in actions]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
     parts.append("")
 
-    # Invoke after / completion message
-    if is_complete:
-        parts.append("COMPLETE - Present work items to user with recommended sequence.")
-        parts.append("")
-        parts.append("The user can now:")
-        parts.append("  - Execute work items in recommended order")
-        parts.append("  - Ask to implement a specific work item")
-        parts.append("  - Request adjustments to scope or approach")
-    else:
-        next_step = step + 1
-        parts.append(format_invoke_after(
-            FlatCommand(
-                f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step {next_step} --total-steps {total_steps}" />'
-            )
-        ))
+    cmd_text = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 2 --total-steps {total_steps}" />'
+    parts.append(render(W.el("invoke_after", TextNode(cmd_text)).build(), XMLRenderer()))
 
     return "\n".join(parts)
+
+
+def format_step_2_output(total_steps: int, info: dict) -> str:
+    """Format Step 2: Triage output."""
+    parts = []
+
+    parts.append(render(W.el("step_header", TextNode(info["title"]), script="refactor", step="2", total=str(total_steps)).build(), XMLRenderer()))
+    parts.append("")
+
+    actions = list(info.get("actions", []))
+    action_nodes = [TextNode(a) for a in actions]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append("")
+
+    cmd_text = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 3 --total-steps {total_steps}" />'
+    parts.append(render(W.el("invoke_after", TextNode(cmd_text)).build(), XMLRenderer()))
+
+    return "\n".join(parts)
+
+
+def format_step_3_output(total_steps: int, info: dict) -> str:
+    """Format Step 3: Cluster output."""
+    parts = []
+
+    parts.append(render(W.el("step_header", TextNode(info["title"]), script="refactor", step="3", total=str(total_steps)).build(), XMLRenderer()))
+    parts.append("")
+
+    actions = [format_cluster_prompt()]
+    action_nodes = [TextNode(a) for a in actions]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append("")
+
+    cmd_text = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 4 --total-steps {total_steps}" />'
+    parts.append(render(W.el("invoke_after", TextNode(cmd_text)).build(), XMLRenderer()))
+
+    return "\n".join(parts)
+
+
+def format_step_4_output(total_steps: int, info: dict) -> str:
+    """Format Step 4: Contextualize output."""
+    parts = []
+
+    parts.append(render(W.el("step_header", TextNode(info["title"]), script="refactor", step="4", total=str(total_steps)).build(), XMLRenderer()))
+    parts.append("")
+
+    actions = [format_contextualize_prompt()]
+    action_nodes = [TextNode(a) for a in actions]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append("")
+
+    cmd_text = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 5 --total-steps {total_steps}" />'
+    parts.append(render(W.el("invoke_after", TextNode(cmd_text)).build(), XMLRenderer()))
+
+    return "\n".join(parts)
+
+
+def format_step_5_output(total_steps: int, info: dict) -> str:
+    """Format Step 5: Synthesize output (terminal step)."""
+    parts = []
+
+    parts.append(render(W.el("step_header", TextNode(info["title"]), script="refactor", step="5", total=str(total_steps)).build(), XMLRenderer()))
+    parts.append("")
+
+    actions = [format_synthesize_prompt()]
+    action_nodes = [TextNode(a) for a in actions]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append("")
+
+    parts.append("COMPLETE - Present work items to user with recommended sequence.")
+    parts.append("")
+    parts.append("The user can now:")
+    parts.append("  - Execute work items in recommended order")
+    parts.append("  - Ask to implement a specific work item")
+    parts.append("  - Request adjustments to scope or approach")
+
+    return "\n".join(parts)
+
+
+STEP_FORMATTERS = {
+    1: format_step_1_output,
+    2: format_step_2_output,
+    3: format_step_3_output,
+    4: format_step_4_output,
+    5: format_step_5_output,
+}
+
+
+def format_output(step: int, total_steps: int, n: int = DEFAULT_CATEGORY_COUNT) -> str:
+    """Format output for display. Dispatches to step-specific formatters."""
+    info = STEPS.get(step, STEPS[5])
+    formatter = STEP_FORMATTERS.get(step, format_step_5_output)
+
+    if step == 1:
+        return formatter(total_steps, n, info)
+    else:
+        return formatter(total_steps, info)
 
 
 def main(

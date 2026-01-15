@@ -33,15 +33,8 @@ from skills.lib.workflow.core import (
     Workflow,
     register_workflow,
 )
-from skills.lib.workflow.formatters import (
-    format_step_header,
-    format_xml_mandate,
-    format_current_action,
-    format_invoke_after,
-    format_parallel_dispatch,
-)
-from skills.lib.workflow.formatters.text import build_invoke_command
-from skills.lib.workflow.types import FlatCommand
+from skills.lib.workflow.ast import W, XMLRenderer, render
+from skills.lib.workflow.ast.nodes import TextNode
 
 
 MAX_ITERATIONS = 5
@@ -57,36 +50,53 @@ def format_step_output(
     next_command: str = None,
     is_step_zero: bool = False,
 ) -> str:
-    """Format complete step output using XML formatters.
+    """Format complete step output using AST builder API.
 
     Args:
-        step: Current step number (0-indexed)
+        step: Current step number (1-indexed)
         total: Total steps
         title: Step title
         actions: List of action strings
         next_command: Command to invoke after (None = workflow complete)
-        is_step_zero: If True, prepend XML mandate
+        is_step_zero: If True, prepend XML mandate (for step 1)
     """
     parts = []
 
     # Step header
-    parts.append(format_step_header("deepthink", step, total, title))
+    parts.append(render(
+        W.el("step_header", TextNode(title),
+            script="deepthink", step=str(step), total=str(total)
+        ).build(),
+        XMLRenderer()
+    ))
     parts.append("")
 
-    # XML mandate for step 0
+    # XML mandate for step 1 (first step)
     if is_step_zero:
-        parts.append(format_xml_mandate())
+        parts.append("""<xml_format_mandate>
+CRITICAL: All script outputs use XML format. You MUST:
+
+1. Execute the action in <current_action>
+2. When complete, invoke the exact command in <invoke_after>
+3. The <next> block re-states the command -- execute it
+4. For branching <invoke_after>, choose based on outcome:
+   - <if_pass>: Use when action succeeded / QR returned PASS
+   - <if_fail>: Use when action failed / QR returned ISSUES
+
+DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
+</xml_format_mandate>""")
         parts.append("")
 
     # Current action
-    parts.append(format_current_action(actions))
+    action_nodes = [TextNode(a) for a in actions]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
     parts.append("")
 
     # Invoke after or complete
     if next_command:
-        parts.append(format_invoke_after(FlatCommand(next_command)))
-    elif step >= total - 1:
-        # step is 0-indexed, total is count
+        parts.append(render(W.el("invoke_after", TextNode(next_command)).build(), XMLRenderer()))
+    elif step >= total:
+        # step is 1-indexed, total is count, so step==total means last step
         parts.append("WORKFLOW COMPLETE - Present results to user.")
 
     return "\n".join(parts)
@@ -98,6 +108,25 @@ STEPS = {
         "brief": "Extract objective content, remove bias from input",
         "actions": [
             "You are an expert analytical reasoner tasked with systematic deep analysis.",
+            "",
+            "PART 0 - CONTEXT SUFFICIENCY:",
+            "  Before analyzing, assess whether you have sufficient context:",
+            "  ",
+            "  A. EXISTING CONTEXT: What relevant information is already in this conversation?",
+            "     (prior codebase analysis, problem discoveries, architecture understanding)",
+            "  ",
+            "  B. SUFFICIENCY JUDGMENT: For this question, is existing context:",
+            "     - SUFFICIENT: Can reason directly from available information",
+            "     - PARTIAL: Have some context but need targeted exploration",
+            "     - INSUFFICIENT: Need exploration before meaningful reasoning",
+            "  ",
+            "  C. IF NOT SUFFICIENT: Before proceeding to Part A, explore:",
+            "     - Use Read/Glob/Grep tools to gather necessary context",
+            "     - Focus on specific files/patterns relevant to the question",
+            "     - Stop exploring when you have enough to reason -- avoid over-exploration",
+            "     - Document what you found in a brief EXPLORATION SUMMARY",
+            "  ",
+            "  If context is SUFFICIENT, proceed directly to Part A.",
             "",
             "Extract objective, relevant content from the user's question.",
             "",
@@ -588,37 +617,51 @@ STEPS = {
 
 def get_dispatch_actions() -> list[str]:
     """Generate dispatch actions for Step 9."""
-    invoke_cmd = build_invoke_command(SUBAGENT_MODULE_PATH, 1, 8, as_xml=True)
-    dispatch = format_parallel_dispatch(
-        agent="general-purpose",
-        instruction="Launch ALL sub-agents from FINAL SUB-AGENT DEFINITIONS (Step 8).\nUse a SINGLE message with multiple Task tool calls.",
-        model="SONNET",
-        model_rationale="These require nuanced reasoning - do not downgrade to haiku.",
-        shared_context=[
-            "Each sub-agent receives:",
-            "- CLARIFIED QUESTION from Step 1",
-            "- DOMAIN and FIRST PRINCIPLES from Step 2",
-            "- QUESTION TYPE and EVALUATION CRITERIA from Step 3",
-            "- KEY ANALOGIES from Step 4",
-            "- Their specific task definition from Step 8",
-        ],
-        template="""Explore this question from the assigned perspective.
+    invoke_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {SUBAGENT_MODULE_PATH} --step 1 --total-steps 8" />'
 
-CLARIFIED QUESTION: [from Step 1]
-DOMAIN: [from Step 2]
-FIRST PRINCIPLES: [from Step 2]
-QUESTION TYPE: [from Step 3]
-EVALUATION CRITERIA: [from Step 3]
-KEY ANALOGIES: [from Step 4]
-
-YOUR TASK:
-- Name: $SUBAGENT_NAME
-- Strategy: $SUBAGENT_STRATEGY
-- Task: $SUBAGENT_TASK
-- Sub-Questions: $SUBAGENT_QUESTIONS""",
-        invoke_cmd=invoke_cmd,
-    )
-    return dispatch.split("\n")
+    # Build parallel dispatch manually
+    dispatch_lines = [
+        '<parallel_dispatch agent="general-purpose">',
+        '  <instruction>',
+        '    Launch ALL sub-agents from FINAL SUB-AGENT DEFINITIONS (Step 8).',
+        '    Use a SINGLE message with multiple Task tool calls.',
+        '  </instruction>',
+        '',
+        '  <model_selection>',
+        '    Use SONNET (default) for all agents.',
+        '    These require nuanced reasoning - do not downgrade to haiku.',
+        '  </model_selection>',
+        '',
+        '  <shared_context>',
+        '    Each sub-agent receives:',
+        '    - CLARIFIED QUESTION from Step 1',
+        '    - DOMAIN and FIRST PRINCIPLES from Step 2',
+        '    - QUESTION TYPE and EVALUATION CRITERIA from Step 3',
+        '    - KEY ANALOGIES from Step 4',
+        '    - Their specific task definition from Step 8',
+        '  </shared_context>',
+        '',
+        '  <template>',
+        '    Explore this question from the assigned perspective.',
+        '',
+        '    CLARIFIED QUESTION: [from Step 1]',
+        '    DOMAIN: [from Step 2]',
+        '    FIRST PRINCIPLES: [from Step 2]',
+        '    QUESTION TYPE: [from Step 3]',
+        '    EVALUATION CRITERIA: [from Step 3]',
+        '    KEY ANALOGIES: [from Step 4]',
+        '',
+        '    YOUR TASK:',
+        '    - Name: $SUBAGENT_NAME',
+        '    - Strategy: $SUBAGENT_STRATEGY',
+        '    - Task: $SUBAGENT_TASK',
+        '    - Sub-Questions: $SUBAGENT_QUESTIONS',
+        '',
+        f'    Start: {invoke_cmd}',
+        '  </template>',
+        '</parallel_dispatch>',
+    ]
+    return dispatch_lines
 
 
 def get_synthesis_actions_full() -> list[str]:
@@ -738,6 +781,9 @@ def get_refinement_actions(iteration: int) -> list[str]:
     return [
         f"ITERATION {iteration} OF {MAX_ITERATIONS}",
         "",
+        "RULE 0 (MANDATORY): Follow the invoke_after command. Do NOT skip",
+        "to step 14 unless confidence is CERTAIN or this is iteration 5.",
+        "",
         "Critically evaluate the current synthesis.",
         "Work through thoroughly -- avoid quick 'looks good' assessments.",
         "",
@@ -760,6 +806,13 @@ def get_refinement_actions(iteration: int) -> list[str]:
         "",
         "  CRITICAL: Do NOT look at the synthesis while answering.",
         "  Answer based on evidence, not what the synthesis claims.",
+        "",
+        "  EXPLORATION OPTION:",
+        "  If a verification question cannot be answered with existing evidence:",
+        "  - Use Read/Glob/Grep to find concrete evidence in the codebase",
+        "  - This is especially valuable for UNGROUNDED claims from Step 12",
+        "  - Keep exploration bounded -- answer the specific question, then stop",
+        "  - Update answer with exploration findings and cite sources",
         "",
         "PART C - DISCREPANCY IDENTIFICATION:",
         "  Compare verification answers against current synthesis.",
@@ -794,6 +847,17 @@ def get_refinement_actions(iteration: int) -> list[str]:
         "  - CERTAIN: As good as it can get with available information",
         "",
         "  Provide specific justification for confidence level.",
+        "",
+        "<iteration_gate>",
+        "CRITICAL: You MUST follow the invoke_after command exactly.",
+        "",
+        "EXIT CONDITIONS (both required to proceed to step 14):",
+        "  1. Confidence = CERTAIN, OR",
+        "  2. This is iteration 5 (final iteration)",
+        "",
+        "If NEITHER condition is met, STOP.",
+        "Do NOT proceed to step 14. Continue to the next iteration.",
+        "</iteration_gate>",
         "",
         "OUTPUT FORMAT:",
         "```",
@@ -1029,6 +1093,226 @@ WORKFLOW = Workflow(
 register_workflow(WORKFLOW)
 
 
+def get_step_1_output(args, step_info):
+    """Handle Step 1: Context Clarification."""
+    actions = list(step_info.get("actions", []))
+    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 2 --total-steps {args.total_steps}" />'
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=next_cmd,
+        is_step_zero=True,
+    )
+
+
+def get_step_2_output(args, step_info):
+    """Handle Step 2: Abstraction."""
+    actions = list(step_info.get("actions", []))
+    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 3 --total-steps {args.total_steps}" />'
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=next_cmd,
+    )
+
+
+def get_step_3_output(args, step_info):
+    """Handle Step 3: Characterization."""
+    actions = list(step_info.get("actions", []))
+    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 4 --total-steps {args.total_steps}" />'
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=next_cmd,
+    )
+
+
+def get_step_4_output(args, step_info):
+    """Handle Step 4: Analogical Recall."""
+    actions = list(step_info.get("actions", []))
+    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 5 --total-steps {args.total_steps}" />'
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=next_cmd,
+    )
+
+
+def get_step_5_output(args, step_info):
+    """Handle Step 5: Planning (branches based on mode)."""
+    actions = list(step_info["actions"]) + [
+        "",
+        "<mode_branch>",
+        "  <if_full>Proceed to Step 6 (Sub-Agent Design)</if_full>",
+        "  <if_quick>Skip to Step 12 (Initial Synthesis)</if_quick>",
+        "</mode_branch>",
+    ]
+
+    next_cmd_full = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 6 --total-steps {args.total_steps} --mode full" />'
+    next_cmd_quick = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 12 --total-steps {args.total_steps} --mode quick" />'
+
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=f"If FULL: {next_cmd_full}\nIf QUICK: {next_cmd_quick}",
+    )
+
+
+def get_step_6_output(args, step_info):
+    """Handle Step 6: Sub-Agent Design."""
+    actions = list(step_info.get("actions", []))
+    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 7 --total-steps {args.total_steps} --mode {args.mode}" />'
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=next_cmd,
+    )
+
+
+def get_step_7_output(args, step_info):
+    """Handle Step 7: Design Critique."""
+    actions = list(step_info.get("actions", []))
+    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 8 --total-steps {args.total_steps} --mode {args.mode}" />'
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=next_cmd,
+    )
+
+
+def get_step_8_output(args, step_info):
+    """Handle Step 8: Design Revision."""
+    actions = list(step_info.get("actions", []))
+    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 9 --total-steps {args.total_steps} --mode {args.mode}" />'
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=next_cmd,
+    )
+
+
+def get_step_9_output(args, step_info):
+    """Handle Step 9: Dispatch."""
+    actions = get_dispatch_actions()
+    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 10 --total-steps {args.total_steps} --mode {args.mode}" />'
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=next_cmd,
+    )
+
+
+def get_step_10_output(args, step_info):
+    """Handle Step 10: Quality Gate."""
+    actions = list(step_info.get("actions", []))
+    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 11 --total-steps {args.total_steps} --mode {args.mode}" />'
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=next_cmd,
+    )
+
+
+def get_step_11_output(args, step_info):
+    """Handle Step 11: Aggregation."""
+    actions = list(step_info.get("actions", []))
+    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 12 --total-steps {args.total_steps} --mode {args.mode}" />'
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=next_cmd,
+    )
+
+
+def get_step_12_output(args, step_info):
+    """Handle Step 12: Initial Synthesis (mode-dependent)."""
+    if args.mode == "quick":
+        actions = get_synthesis_actions_quick()
+    else:
+        actions = get_synthesis_actions_full()
+
+    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 13 --total-steps {args.total_steps} --confidence <your_confidence> --iteration 1 --mode {args.mode}" />'
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=next_cmd,
+    )
+
+
+def get_step_13_output(args, step_info):
+    """Handle Step 13: Iterative Refinement with loop logic."""
+    actions = get_refinement_actions(args.iteration)
+
+    if args.confidence == "certain" or args.iteration >= MAX_ITERATIONS:
+        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 14 --total-steps {args.total_steps} --confidence {args.confidence} --mode {args.mode}" />'
+        title = f"DEEPTHINK - {step_info['title']} (Iteration {args.iteration}) -> Complete"
+    else:
+        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 13 --total-steps {args.total_steps} --confidence <your_confidence> --iteration {args.iteration + 1} --mode {args.mode}" />'
+        title = f"DEEPTHINK - {step_info['title']} (Iteration {args.iteration})"
+
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=title,
+        actions=actions,
+        next_command=next_cmd,
+    )
+
+
+def get_step_14_output(args, step_info):
+    """Handle Step 14: Formatting & Output (terminal step)."""
+    actions = get_completion_message(args.confidence)
+    return format_step_output(
+        step=args.step,
+        total=args.total_steps,
+        title=f"DEEPTHINK - {step_info['title']}",
+        actions=actions,
+        next_command=None,
+    )
+
+
+STEP_HANDLERS = {
+    1: get_step_1_output,
+    2: get_step_2_output,
+    3: get_step_3_output,
+    4: get_step_4_output,
+    5: get_step_5_output,
+    6: get_step_6_output,
+    7: get_step_7_output,
+    8: get_step_8_output,
+    9: get_step_9_output,
+    10: get_step_10_output,
+    11: get_step_11_output,
+    12: get_step_12_output,
+    13: get_step_13_output,
+    14: get_step_14_output,
+}
+
+
 def main(
     step: int = None,
     total_steps: int = None,
@@ -1080,151 +1364,12 @@ def main(
     if not step_info:
         sys.exit(f"ERROR: Invalid step {args.step}")
 
-    # Step 14: Formatting & Output (terminal step)
-    if args.step == 14:
-        actions = get_completion_message(args.confidence)
-        print(format_step_output(
-            step=args.step,
-            total=args.total_steps,
-            title=f"DEEPTHINK - {step_info['title']}",
-            actions=actions,
-            next_command=None,
-        ))
-        return
+    handler = STEP_HANDLERS.get(args.step)
+    if not handler:
+        sys.exit(f"ERROR: No handler for step {args.step}")
 
-    # Step 13: Iterative refinement with loop logic
-    if args.step == 13:
-        actions = get_refinement_actions(args.iteration)
-
-        if args.confidence == "certain" or args.iteration >= MAX_ITERATIONS:
-            # Exit loop -> proceed to step 14
-            next_cmd = build_invoke_command(
-                MODULE_PATH,
-                step=14,
-                total_steps=args.total_steps,
-                confidence=args.confidence,
-                mode=args.mode,
-            )
-            title = f"DEEPTHINK - {step_info['title']} (Iteration {args.iteration}) -> Complete"
-        else:
-            # Continue refinement loop
-            next_cmd = build_invoke_command(
-                MODULE_PATH,
-                step=13,
-                total_steps=args.total_steps,
-                confidence="<your_confidence>",
-                iteration=args.iteration + 1,
-                mode=args.mode,
-            )
-            title = f"DEEPTHINK - {step_info['title']} (Iteration {args.iteration})"
-
-        print(format_step_output(
-            step=args.step,
-            total=args.total_steps,
-            title=title,
-            actions=actions,
-            next_command=next_cmd,
-        ))
-        return
-
-    # Step 12: Synthesis (mode-dependent)
-    if args.step == 12:
-        if args.mode == "quick":
-            actions = get_synthesis_actions_quick()
-        else:
-            actions = get_synthesis_actions_full()
-
-        next_cmd = build_invoke_command(
-            MODULE_PATH,
-            step=13,
-            total_steps=args.total_steps,
-            confidence="<your_confidence>",
-            iteration=1,
-            mode=args.mode,
-        )
-        print(format_step_output(
-            step=args.step,
-            total=args.total_steps,
-            title=f"DEEPTHINK - {step_info['title']}",
-            actions=actions,
-            next_command=next_cmd,
-        ))
-        return
-
-    # Step 9: Dispatch (needs special actions)
-    if args.step == 9:
-        actions = get_dispatch_actions()
-        next_cmd = build_invoke_command(
-            MODULE_PATH,
-            step=10,
-            total_steps=args.total_steps,
-            mode=args.mode,
-        )
-        print(format_step_output(
-            step=args.step,
-            total=args.total_steps,
-            title=f"DEEPTHINK - {step_info['title']}",
-            actions=actions,
-            next_command=next_cmd,
-        ))
-        return
-
-    # Step 5: Planning (branches based on mode)
-    if args.step == 5:
-        actions = list(step_info["actions"]) + [
-            "",
-            "<mode_branch>",
-            "  <if_full>Proceed to Step 6 (Sub-Agent Design)</if_full>",
-            "  <if_quick>Skip to Step 12 (Initial Synthesis)</if_quick>",
-            "</mode_branch>",
-        ]
-
-        next_cmd_full = build_invoke_command(MODULE_PATH, step=6, total_steps=args.total_steps, mode="full")
-        next_cmd_quick = build_invoke_command(MODULE_PATH, step=12, total_steps=args.total_steps, mode="quick")
-
-        print(format_step_output(
-            step=args.step,
-            total=args.total_steps,
-            title=f"DEEPTHINK - {step_info['title']}",
-            actions=actions,
-            next_command=f"If FULL: {next_cmd_full}\nIf QUICK: {next_cmd_quick}",
-        ))
-        return
-
-    # Standard steps (1, 2, 3, 4, 6, 7, 8, 10, 11)
-    actions = list(step_info.get("actions", []))
-    next_step = args.step + 1
-
-    # Determine next command
-    if next_step <= 14:
-        if next_step in [6, 7, 8, 9, 10, 11]:
-            next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps, mode=args.mode)
-        elif next_step == 12:
-            next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps, mode=args.mode)
-        elif next_step == 13:
-            next_cmd = build_invoke_command(
-                MODULE_PATH,
-                step=next_step,
-                total_steps=args.total_steps,
-                confidence="<your_confidence>",
-                iteration=1,
-                mode=args.mode,
-            )
-        elif next_step == 14:
-            next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps, mode=args.mode)
-        else:
-            next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps)
-    else:
-        next_cmd = None
-
-    print(format_step_output(
-        step=args.step,
-        total=args.total_steps,
-        title=f"DEEPTHINK - {step_info['title']}",
-        actions=actions,
-        next_command=next_cmd,
-        is_step_zero=(args.step == 1),
-    ))
+    output = handler(args, step_info)
+    print(output)
 
 
 if __name__ == "__main__":

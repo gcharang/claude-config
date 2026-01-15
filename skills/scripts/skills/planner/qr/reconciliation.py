@@ -11,12 +11,7 @@ The script provides step-by-step guidance; the agent follows exactly.
 
 import sys
 
-from skills.lib.workflow.formatters import (
-    format_step_output,
-    format_expected_output,
-    format_routing,
-    format_open_question_guidance,
-)
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 
 
 def get_step_guidance(step: int, total_steps: int, module_path: str, **kwargs) -> dict:
@@ -88,12 +83,21 @@ def get_step_guidance(step: int, total_steps: int, module_path: str, **kwargs) -
 
     # Step 3: Verify Against Codebase
     if step == 3:
+        open_question_guidance = """<open_question_guidance>
+PRINCIPLE: Ask open questions to avoid confirmation bias.
+
+BAD (closed):  "Is the threshold 3?" -> biases toward yes/no
+GOOD (open):   "What is the retry threshold?" -> requires finding actual value
+
+BAD (leading): "Does it use mutex as expected?" -> assumes mutex exists
+GOOD (neutral): "What synchronization primitive is used?" -> discovers reality
+</open_question_guidance>"""
         return {
             "title": "Verify Against Codebase",
             "actions": [
                 "FACTORED VERIFICATION (check criteria against actual code):",
                 "",
-                format_open_question_guidance(),
+                open_question_guidance,
                 "",
                 "For EACH criterion from Step 2:",
                 "",

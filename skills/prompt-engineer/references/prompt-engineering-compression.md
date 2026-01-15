@@ -25,6 +25,9 @@ Compression techniques modify CoT behavior, not replace it.
 | **Dynamic Budget**    | TALE-EP              | Variable complexity; cost-sensitive         | Any reasoning task                               | --                     | Extra estimation call               | 67% token reduction; <3% acc. loss         |
 | **Cognitive**         | Sketch-of-Thought    | Multi-domain reasoning; maximum compression | Self-Refine, Multi-Agent Debate, Self-Consistency | --                     | Router overhead; paradigm selection | Up to 84% token reduction; +/- 1% accuracy |
 | **Path Optimization** | MARP                 | Math reasoning; known reasoning boundaries  | PoT, Tool Usage, Self-Consistency (for PFRB)    | Verbose demonstrations | Requires boundary knowledge         | +7% acc.; -20% tokens vs CoT               |
+| **Tool-Augmented**    | Program-of-Thoughts  | Math/computation requiring precise calc     | MARP, Self-Consistency                          | Pure text reasoning    | Requires code interpreter           | ~12% avg acc. improvement over CoT         |
+| **Input-Centric**     | Focused CoT (F-CoT)  | Verbose word problems with extractable facts| All output compression techniques               | --                     | Extra extraction step               | 2-3x token reduction; same accuracy        |
+| **Logic-Centric**     | Symbolic CoT         | Logical reasoning with formal structure     | SoT Expert Lexicons                             | Semantic reasoning     | Translation overhead                | +8-27% on logic benchmarks vs CoT          |
 
 ---
 
@@ -53,6 +56,10 @@ Compression techniques modify CoT behavior, not replace it.
    preserve logical step boundaries
 10. **Route by Task Type** -- Use routers or heuristics to select compression
     paradigm based on query structure
+11. **Token Complexity Floor** -- Each problem has an intrinsic minimum token
+    count for correct solution; compression below this threshold fails
+    regardless of technique. Per Anonymous (2025): "accurate answers are only
+    achieved when output length exceeds a certain threshold"
 
 ---
 
@@ -141,6 +148,10 @@ RIGHT: `"Limit to 45-100 words"` (reasonable constraint respects model limits)
 Constrains each reasoning step to ~5 words, mimicking human shorthand. Per Xu et
 al. (2025): "CoD matches or surpasses CoT in accuracy while using as little as
 only 7.6% of the tokens."
+
+**Note:** The 7.6% figure represents the extreme minimum (Sports Understanding
+task). Typical reduction ranges from 75-92% fewer tokens. On some tasks (Sports,
+Date Understanding), CoD actually exceeds CoT accuracy while compressing.
 
 **Process:**
 
@@ -302,6 +313,10 @@ a 2.50% reduction in accuracy when using SoT while reducing output length by
 75%." Visual grounding tasks requiring fine-grained image analysis show
 degradation with abstract sketching methods.
 
+**Logic-heavy domains:** For formal logical reasoning (syllogisms, constraint
+satisfaction), see Section 8 on Symbolic CoT (SymbCoT), which extends the Expert
+Lexicons paradigm with First-Order Logic translation.
+
 ---
 
 ## 5. Reasoning Path Optimization
@@ -348,6 +363,12 @@ Goal: Maximize calculation_per_step while minimizing total_steps
 | PFRB     | 10-90%         | Partial confidence; needs consensus | Apply MARP + Self-Consistency            |
 | CIRB     | <10%           | Model cannot solve                  | Use tools or decompose                   |
 
+**Scaling law:** Per Chen et al. (2024), reasoning boundary increases with model
+parameter count. Larger models have higher calculation-per-step limits and
+tolerate more aggressive compression. This explains why compression techniques
+(CCoT, CoD) work better on 40B+ models than on 7B models—the boundary simply
+starts higher.
+
 **Self-Consistency for PFRB:** Per Chen et al. (2024): "as the integration of
 reasoning paths increases, the accuracy improves significantly within PFRB
 compared with other RBs." When accuracy falls in the 10-90% zone, combine MARP
@@ -358,7 +379,193 @@ with Self-Consistency (sampling multiple reasoning paths) for best results.
 
 ---
 
-## 6. Metrics for Compression Evaluation
+## 6. Tool-Augmented Compression
+
+### Program-of-Thoughts (PoT): Delegating Computation
+
+Generates Python code instead of natural language reasoning for computation.
+Per Chen et al. (2023): "PoT has an average performance gain over CoT of around
+12% across all datasets" by delegating calculation to a Python interpreter.
+
+**Process:**
+
+```
+System: Write a Python program to solve this problem step by step.
+        Use semantically meaningful variable names.
+        Execute the program to get the answer.
+
+Example:
+Q: A bank offers 5% compound interest. Initial deposit $1000.
+   Value after 3 years?
+A:
+principal = 1000
+rate = 0.05
+years = 3
+final_value = principal * (1 + rate) ** years
+print(final_value)  # 1157.625
+```
+
+**Why this compresses:** Computation is delegated to an interpreter, not
+expressed in verbose natural language. The model's job is reasoning and
+planning; precise calculation happens externally.
+
+**Performance (Codex on GSM8K):**
+
+| Method        | Accuracy | vs CoT  |
+| ------------- | -------- | ------- |
+| CoT           | 63.1%    | --      |
+| PoT           | 71.6%    | +8.5%   |
+| PoT + SC      | 80.0%    | +16.9%  |
+
+**Best for:** Problems requiring iteration, large number arithmetic, polynomial
+equations, financial calculations, or any task where LLMs make calculation
+errors.
+
+**Limitation:** Not suitable for commonsense reasoning or tasks without
+computational structure. Per Chen et al. (2023): "PoT is suitable for problems
+which require highly symbolic reasoning skills. For semantic reasoning tasks
+like commonsense reasoning, we conjecture that PoT is not the best option."
+
+WRONG: Using PoT for "Is a penguin a bird?"
+RIGHT: Using PoT for "Calculate compound interest over 50 years"
+
+**Stacking:** Combines with MARP (PoT+MARP achieves 80.55% on BigGSM vs 64.37%
+for CoT+MARP). When PoT handles computation, only planning boundaries matter.
+
+---
+
+## 7. Input-Centric Compression
+
+### Focused Chain-of-Thought (F-CoT): Structured Input Extraction
+
+Separates information extraction from reasoning. Per Anonymous (2025): "F-CoT
+reduces generated tokens by 2-3x while maintaining accuracy comparable to
+standard zero-shot CoT."
+
+**Process:**
+
+```
+Step 1 (Extract): Prompt LLM to extract key information into structured format
+Step 2 (Reason):  Prompt LLM to reason ONLY over the structured context
+
+Extraction prompt:
+"Extract all critical information and the underlying question from the given
+sample. Format as XML with <info_N> tags and a <question> tag."
+
+Reasoning prompt:
+"Use ONLY the facts inside <context> to compute the answer.
+Show step-by-step reasoning. Cite relevant <info_k> entries when you use them."
+```
+
+**Example:**
+
+```
+Original problem: "Sarah went to the store and bought 5 apples at $2 each.
+                   She also got 3 oranges at $1.50 each. The store was having
+                   a sale and offered 10% off. What did Sarah pay?"
+
+Extracted context:
+<context>
+  <info_1>5 apples at $2 each</info_1>
+  <info_2>3 oranges at $1.50 each</info_2>
+  <info_3>10% discount applied</info_3>
+  <question>Total amount paid</question>
+</context>
+
+Reasoning (model sees only context, not original):
+From <info_1>: 5 × $2 = $10
+From <info_2>: 3 × $1.50 = $4.50
+Subtotal: $14.50
+From <info_3>: 10% off → $14.50 × 0.9 = $13.05
+Answer: $13.05
+```
+
+**Why this compresses:** By removing irrelevant details (store name, narrative
+framing), the model focuses only on essential facts. Filler sentences and
+redundant extraction during reasoning are eliminated.
+
+**Performance (Qwen3-14B on MATH-500):**
+
+| Method   | Pass@5 | Tokens |
+| -------- | ------ | ------ |
+| 0-CoT    | 99.4%  | 4,931  |
+| F-CoT    | 98.6%  | 2,437  |
+
+**Critical insight:** This technique is orthogonal to output compression
+methods. F-CoT structures the _input_; techniques like CoD, SoT, and MARP
+compress the _output_. They stack.
+
+**Stacking note:** F-CoT can be combined with any output compression technique.
+Extract first, then apply CoD or SoT to the reasoning step.
+
+---
+
+## 8. Logic-Centric Compression
+
+### Symbolic Chain-of-Thought (SymbCoT): First-Order Logic Translation
+
+Translates natural language into First-Order Logic (FOL) for precise logical
+reasoning. Per Lyu et al. (2024): SymbCoT "strikingly enhances the vanilla CoT
+on logical reasoning" with +8-27% accuracy on logic benchmarks.
+
+**Process:**
+
+```
+Four modules, all LLM-powered:
+1. Translator: NL -> FOL symbolic format
+2. Planner:    Break problem into sub-steps using symbolic form
+3. Solver:     Apply formal logic rules (Modus Ponens, etc.)
+4. Verifier:   Check translation consistency and logic validity
+```
+
+**Example:**
+
+```
+Original premises:
+P1: "A hawk never lands."
+P2: "Some birds are hawks."
+Statement: "All birds land."
+
+Translated to FOL:
+P1: ∀x (Hawk(x) → ¬Lands(x))
+P2: ∃x (Bird(x) ∧ Hawk(x))
+S:  ∀x (Bird(x) → Lands(x))
+
+Solving:
+From P2: ∃x (Bird(x) ∧ Hawk(x)) — there exists a bird that is a hawk
+From P1: That hawk does not land
+Therefore: Not all birds land
+Conclusion: Statement is FALSE
+```
+
+**Performance (GPT-4):**
+
+| Method      | PrOntoQA | ProofWriter | FOLIO | Avg   |
+| ----------- | -------- | ----------- | ----- | ----- |
+| CoT         | 98.79%   | 68.11%      | 70.58%| 79.16%|
+| Logic-LM    | 83.20%   | 79.66%      | 78.92%| 80.59%|
+| **SymbCoT** | 99.60%   | 82.50%      | 83.33%| 88.47%|
+
+**Why this compresses:** FOL expressions are inherently compact. `∀x (A(x) →
+B(x))` is shorter than "For all things, if that thing is an A, then that thing
+is also a B." Symbolic inference rules replace verbose natural language
+reasoning.
+
+**Best for:** Logical reasoning tasks (syllogisms, constraint satisfaction,
+formal proofs). Not suitable for commonsense or semantic reasoning where
+implicit context matters.
+
+**Stacking with SoT:** SymbCoT is essentially a specialized version of the
+Expert Lexicons paradigm from Sketch-of-Thought. For logic-heavy domains, use
+SymbCoT's FOL translation; for other technical domains, use SoT's abbreviation
+approach.
+
+WRONG: Using SymbCoT for "What would happen if it rained on a picnic?"
+RIGHT: Using SymbCoT for "Given these premises, is the conclusion valid?"
+
+---
+
+## 9. Metrics for Compression Evaluation
 
 ### Concise Correctness Metrics
 
@@ -396,7 +603,7 @@ Additional penalty for high variance in output lengths. Beta controls tolerance.
 
 ---
 
-## 7. Anti-Patterns
+## 10. Anti-Patterns
 
 ### Zero-Shot Compression
 
@@ -444,6 +651,21 @@ accuracy.
 
 WRONG: Expert Lexicons for simple arithmetic
 RIGHT: Chunked Symbolism for math; Conceptual Chaining for multi-hop
+
+### The Calculation-in-Language Trap
+
+Using CoT for precise calculations when PoT would be more accurate and compact.
+LLMs make arithmetic errors, especially with large numbers, iteration, or
+equations.
+
+WRONG: CoT for "Calculate compound interest over 50 iterations"
+       [Model makes calculation errors; verbose reasoning]
+RIGHT: PoT delegates to Python interpreter
+       [Precise results; compact code]
+
+Per Chen et al. (2023): "LLMs are very prone to arithmetic calculation errors,
+especially when dealing with large numbers" and "cannot solve complex
+mathematical expressions like polynomial equations."
 
 ### Ignoring Model Self-Awareness
 
@@ -503,9 +725,17 @@ Use MARP: combine operations into fewer, denser steps
 
 ## Research Citations
 
+- Anonymous (2025). "Focused Chain-of-Thought: Efficient LLM Reasoning via
+  Structured Input Information." arXiv.
+- Anonymous (2025). "How Well Do LLMs Compress Their Own Chain-of-Thought? A
+  Token Complexity Approach." arXiv.
+- Chen, W., et al. (2023). "Program of Thoughts Prompting: Disentangling
+  Computation from Reasoning for Numerical Reasoning Tasks." arXiv.
 - Chen, Y., et al. (2024). "Unlocking the Capabilities of Thought: A Reasoning
   Boundary Framework to Quantify and Optimize Chain-of-Thought." arXiv.
 - Han, T., et al. (2025). "Token-Budget-Aware LLM Reasoning." arXiv.
+- Lyu, Q., et al. (2024). "Faithful Logical Reasoning via Symbolic
+  Chain-of-Thought." arXiv.
 - Nayab, S., et al. (2024). "Concise Thoughts: Impact of Output Length on LLM
   Reasoning and Cost." arXiv.
 - Renze, M. (2024). "The Benefits of a Concise Chain of Thought on

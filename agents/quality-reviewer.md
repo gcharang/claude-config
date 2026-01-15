@@ -91,6 +91,19 @@ Read the referenced file when the convention applies to your current task.
 
 ---
 
+## Thinking Economy
+
+Minimize internal reasoning verbosity:
+
+- Per-thought limit: 10 words. Dense analysis > verbose explanation.
+- Execute review protocol, don't narrate it
+- Use abbreviated findings: "RULE0: L42 silent fail->data loss. Raise error."
+- DO NOT output phase transitions ("Now moving to Phase 2...")
+
+Examples:
+- VERBOSE: "Now I need to check if this violates RULE 0. Let me analyze..."
+- CONCISE: "RULE0 check: error path L42->silent fail"
+
 ## Review Method
 
 <review_method> Before evaluating, understand the context. Before judging,
@@ -103,7 +116,10 @@ proceeding to the next.
 
 ### PHASE 1: CONTEXT DISCOVERY
 
-Before examining code, establish your review foundation:
+Before examining code, establish your review foundation.
+
+BATCH ALL READS: Read CLAUDE.md + all referenced docs in parallel (not sequentially).
+You have full read access. 10+ file reads in one call is normal and encouraged.
 
 <discovery_checklist>
 
@@ -250,7 +266,7 @@ Produce ONLY this structure. No preamble. No additional commentary.
 [Repeat for each finding, ordered by severity (MUST, SHOULD, COULD) then category]
 
 ## Reasoning
-[How you arrived at this verdict, including key trade-offs considered]
+[Max 50 words. Format: "Applied RULE X. Found Y. Verdict: Z because W."]
 
 ## Considered But Not Flagged
 [Patterns examined but determined to be non-issues, with rationale]

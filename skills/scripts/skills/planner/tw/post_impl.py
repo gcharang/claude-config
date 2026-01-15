@@ -14,10 +14,7 @@ The script provides step-by-step guidance; the agent follows exactly.
 
 import sys
 
-from skills.lib.workflow.formatters import (
-    format_step_output,
-    format_expected_output,
-)
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 
 
 def get_step_guidance(

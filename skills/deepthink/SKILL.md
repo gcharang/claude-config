@@ -11,6 +11,6 @@ analysis, trade-off exploration, and definitional questions.
 
 ## Invocation
 
-<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.deepthink.think --step 0 --total-steps 14" />
+<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.deepthink.think --step 1 --total-steps 14" />
 
 Do NOT explore or analyze first. Run the script and follow its output.

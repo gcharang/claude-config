@@ -20,8 +20,7 @@ Two invocation modes:
 import argparse
 import sys
 
-from skills.lib.workflow.formatters.text import build_invoke_command, format_text_output
-from skills.lib.workflow.formatters import format_parallel_dispatch
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 
 
 MODULE_PATH = "skills.arxiv_to_md.main"
@@ -30,57 +29,75 @@ SUBAGENT_MODULE = "skills.arxiv_to_md.sub_agent"
 
 def _build_parallel_dispatch_mode1():
     """Build parallel dispatch for MODE 1 (orchestrator constructs filename)."""
-    return format_parallel_dispatch(
-        agent="general-purpose",
-        instruction="Launch one sub-agent per arXiv ID.\nUse a SINGLE message with multiple Task tool calls.",
-        model="OPUS",
-        model_rationale="These markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
-        template=f"""Convert this arXiv paper to markdown.
+    invoke_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {SUBAGENT_MODULE} --step 1 --arxiv-id $ARXIV_ID" />'
+    return f"""<parallel_dispatch agent="general-purpose">
+  <instruction>
+    Launch one sub-agent per arXiv ID.
+    Use a SINGLE message with multiple Task tool calls.
+  </instruction>
 
-arXiv ID: $ARXIV_ID
+  <model_selection>
+    Use OPUS (default) for all agents.
+    These markdown files become the scientific basis for downstream work.
+    Cost of error amplifies: subpar markdown -> subpar knowledge.
+  </model_selection>
 
-Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {SUBAGENT_MODULE} --step 1 --arxiv-id $ARXIV_ID" />
+  <template>
+    Convert this arXiv paper to markdown.
 
-<expected_output>
-Sub-agent responds with ONLY:
+    arXiv ID: $ARXIV_ID
 
-On success:
-FILE: <path-to-markdown>
-TITLE: <paper title>
-DATE: <YYYY-MM-DD>
+    Start: {invoke_cmd}
 
-On failure:
-FAIL: <reason>
-</expected_output>""",
-        wait_message=None,
-    )
+    <expected_output>
+    Sub-agent responds with ONLY:
+
+    On success:
+    FILE: <path-to-markdown>
+    TITLE: <paper title>
+    DATE: <YYYY-MM-DD>
+
+    On failure:
+    FAIL: <reason>
+    </expected_output>
+  </template>
+</parallel_dispatch>"""
 
 
 def _build_parallel_dispatch_mode2():
     """Build parallel dispatch for MODE 2 (orchestrator provides destination filename)."""
-    return format_parallel_dispatch(
-        agent="general-purpose",
-        instruction="Launch one sub-agent per arXiv ID.\nUse a SINGLE message with multiple Task tool calls.",
-        model="OPUS",
-        model_rationale="These markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
-        template=f"""Convert this arXiv paper to markdown.
+    invoke_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {SUBAGENT_MODULE} --step 1 --arxiv-id $ARXIV_ID --dest-file \'$DEST_FILE\'" />'
+    return f"""<parallel_dispatch agent="general-purpose">
+  <instruction>
+    Launch one sub-agent per arXiv ID.
+    Use a SINGLE message with multiple Task tool calls.
+  </instruction>
 
-arXiv ID: $ARXIV_ID
-Destination: $DEST_FILE
+  <model_selection>
+    Use OPUS (default) for all agents.
+    These markdown files become the scientific basis for downstream work.
+    Cost of error amplifies: subpar markdown -> subpar knowledge.
+  </model_selection>
 
-Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {SUBAGENT_MODULE} --step 1 --arxiv-id $ARXIV_ID --dest-file '$DEST_FILE'" />
+  <template>
+    Convert this arXiv paper to markdown.
 
-<expected_output>
-Sub-agent responds with ONLY:
+    arXiv ID: $ARXIV_ID
+    Destination: $DEST_FILE
 
-On success:
-FILE: <path-to-markdown>
+    Start: {invoke_cmd}
 
-On failure:
-FAIL: <reason>
-</expected_output>""",
-        wait_message=None,
-    )
+    <expected_output>
+    Sub-agent responds with ONLY:
+
+    On success:
+    FILE: <path-to-markdown>
+
+    On failure:
+    FAIL: <reason>
+    </expected_output>
+  </template>
+</parallel_dispatch>"""
 
 
 PHASES = {
@@ -282,22 +299,30 @@ def main():
 
     phase = PHASES[args.step]
 
+    # Build output using plain text format
+    lines = []
+    lines.append(f"STEP {args.step}/3: ARXIV-TO-MD - {phase['title']}")
+    if phase.get("brief"):
+        lines.append(f"  {phase['brief']}")
+    lines.append("")
+    lines.append("DO:")
+
+    for action in phase["actions"]:
+        if action:
+            lines.append(f"  {action}")
+        else:
+            lines.append("")
+
+    lines.append("")
+
     next_step = args.step + 1
     if next_step <= 3:
-        next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=3)
+        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step {next_step} --total-steps 3" />'
+        lines.append(f"INVOKE AFTER: {next_cmd}")
     else:
-        next_cmd = None
+        lines.append("WORKFLOW COMPLETE - Present results to user.")
 
-    print(
-        format_text_output(
-            step=args.step,
-            total=3,
-            title=f"ARXIV-TO-MD - {phase['title']}",
-            actions=phase["actions"],
-            brief=phase["brief"],
-            invoke_after=next_cmd,
-        )
-    )
+    print("\n".join(lines))
 
 
 if __name__ == "__main__":

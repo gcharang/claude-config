@@ -30,13 +30,7 @@ from skills.lib.workflow.core import (
     Arg,
     register_workflow,
 )
-from skills.lib.workflow.formatters import (
-    format_step_header,
-    format_xml_mandate,
-    format_current_action,
-    format_parallel_dispatch,
-    format_invoke_after,
-)
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode, ElementNode
 from skills.lib.workflow.types import FlatCommand
 from skills.solution_design.perspectives import PERSPECTIVES, PERSPECTIVE_ORDER
 from skills.solution_design.defaults import format_all_defaults
@@ -109,39 +103,75 @@ GUIDANCE:
 
 def format_perspective_selection_guidance() -> str:
     """Format guidance for launching all perspectives."""
-    lines = ['<perspective_dispatch>']
-    lines.append("  Launch ALL perspectives in parallel.")
-    lines.append("  Each perspective reasons differently; synthesis handles deduplication.")
-    lines.append("</perspective_dispatch>")
-    return "\n".join(lines)
+    return render(
+        W.el("perspective_dispatch",
+            TextNode("Launch ALL perspectives in parallel."),
+            TextNode("Each perspective reasons differently; synthesis handles deduplication.")
+        ).build(),
+        XMLRenderer()
+    )
 
 
 def build_perspective_dispatch() -> str:
     """Build parallel dispatch block for perspective agents."""
-    return format_parallel_dispatch(
-        agent="general-purpose",
-        instruction="Launch ALL perspective agents listed below.\nOne agent for each perspective. No selection. No filtering.",
-        mandatory_count=7,
-        agents=[
-            {"id": p_id, "title": p_title, "task": p_question}
-            for p_id, p_title, p_question in PERSPECTIVE_SUMMARIES
-        ],
-        model="SONNET",
-        model_per_agent={"minimal": "HAIKU", "firstprinciples": "OPUS"},
-        template=AGENT_PROMPT_TEMPLATE,
-        template_tag="agent_prompt_template",
-        id_attr="perspective",
-        invoke_cmd=f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {PERSPECTIVE_MODULE_PATH} --step 1 --total-steps 2 --perspective $PERSPECTIVE_ID" />',
-    )
+    agents = [
+        {"id": p_id, "title": p_title, "task": p_question}
+        for p_id, p_title, p_question in PERSPECTIVE_SUMMARIES
+    ]
+    model_per_agent = {"minimal": "HAIKU", "firstprinciples": "OPUS"}
+    invoke_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {PERSPECTIVE_MODULE_PATH} --step 1 --total-steps 2 --perspective $PERSPECTIVE_ID" />'
+
+    lines = [f'<parallel_dispatch agent="general-purpose" count="{len(agents)}">']
+
+    lines.append("  <mandatory>")
+    lines.append("    You MUST launch EXACTLY 7 sub-agents in a SINGLE message.")
+    lines.append("    If you launch fewer agents, you have failed this step.")
+    lines.append("  </mandatory>")
+    lines.append("")
+
+    lines.append("  <instruction>")
+    instruction = "Launch ALL perspective agents listed below.\nOne agent for each perspective. No selection. No filtering."
+    for line in instruction.split("\n"):
+        lines.append(f"    {line}" if line else "")
+    lines.append("  </instruction>")
+    lines.append("")
+
+    lines.append("  <model_selection>")
+    lines.append("    Use SONNET (default) for all agents.")
+    lines.append("    Per-agent overrides:")
+    for agent_id, agent_model in model_per_agent.items():
+        lines.append(f"      - {agent_model}: {agent_id}")
+    lines.append("  </model_selection>")
+    lines.append("")
+
+    lines.append("  <agents_to_launch>")
+    for a in agents:
+        agent_id = a.get("id", "")
+        lines.append(f'    <agent perspective="{agent_id}">')
+        if "title" in a:
+            lines.append(f"      {a['title']}: {a.get('task', '')}")
+        elif "task" in a:
+            lines.append(f"      {a['task']}")
+        lines.append("    </agent>")
+    lines.append("  </agents_to_launch>")
+    lines.append("")
+
+    lines.append("  <agent_prompt_template>")
+    for line in AGENT_PROMPT_TEMPLATE.split("\n"):
+        lines.append(f"    {line}" if line else "")
+    lines.append("")
+    lines.append(f"    Start: {invoke_cmd}")
+    lines.append("  </agent_prompt_template>")
+
+    lines.append("</parallel_dispatch>")
+
+    return "\n".join(lines)
 
 
 def format_forbidden(actions: list[str]) -> str:
     """Render forbidden actions block."""
-    lines = ["<forbidden>"]
-    for action in actions:
-        lines.append(f"  <action>{action}</action>")
-    lines.append("</forbidden>")
-    return "\n".join(lines)
+    action_nodes = [ElementNode("action", {}, [TextNode(a)]) for a in actions]
+    return render(W.el("forbidden", *action_nodes).build(), XMLRenderer())
 
 
 def format_synthesis_analysis_template() -> str:
@@ -875,12 +905,27 @@ def format_output(step: int, total_steps: int) -> str:
     parts = []
 
     # Step header
-    parts.append(format_step_header("design", step, total_steps, info["title"]))
+    parts.append(render(
+        W.el("step_header", TextNode(info["title"]),
+            script="design", step=str(step), total=str(total_steps)
+        ).build(),
+        XMLRenderer()
+    ))
     parts.append("")
 
     # XML mandate for step 1
     if step == 1:
-        parts.append(format_xml_mandate())
+        xml_mandate = """<xml_format_mandate>
+CRITICAL: All script outputs use XML format. You MUST:
+
+1. Execute the action in <current_action>
+2. When complete, invoke the exact command in <invoke_after>
+3. The <next> block re-states the command -- execute it
+4. For branching <invoke_after>, choose based on outcome:
+   - <if_pass>: Use when action succeeded / QR returned PASS
+   - <if_fail>: Use when action failed / QR returned ISSUES
+</xml_format_mandate>"""
+        parts.append(xml_mandate)
         parts.append("")
 
     # Build actions
@@ -903,7 +948,8 @@ def format_output(step: int, total_steps: int) -> str:
         if "actions" in info:
             actions.extend(info["actions"])
 
-    parts.append(format_current_action(actions))
+    action_nodes = [TextNode(a) for a in actions]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
     parts.append("")
 
     # Invoke after
@@ -911,9 +957,8 @@ def format_output(step: int, total_steps: int) -> str:
         parts.append("COMPLETE - Present final report to user.")
     else:
         next_step = step + 1
-        parts.append(format_invoke_after(
-            FlatCommand(f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step {next_step} --total-steps {total_steps}" />')
-        ))
+        cmd_text = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step {next_step} --total-steps {total_steps}" />'
+        parts.append(render(W.el("invoke_after", TextNode(cmd_text)).build(), XMLRenderer()))
 
     return "\n".join(parts)
 

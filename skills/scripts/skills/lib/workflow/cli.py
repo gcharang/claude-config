@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from .formatters import format_step_output
+from .ast import W, XMLRenderer, render, TextNode
 
 
 def _compute_module_path(script_file: str) -> str:
@@ -91,12 +91,34 @@ def mode_main(
         # Already a dict
         guidance_dict = guidance
 
-    print(format_step_output(
-        script=script_name,
-        step=parsed.step,
-        total=parsed.total_steps,
-        title=guidance_dict["title"],
-        actions=guidance_dict["actions"],
-        next_command=guidance_dict["next"],
-        is_step_one=(parsed.step == 1),
+    # Build step output using AST builder
+    parts = []
+    parts.append(render(
+        W.el("step_header", TextNode(guidance_dict["title"]),
+             script=script_name, step=str(parsed.step), total=str(parsed.total_steps)
+        ).build(), XMLRenderer()
     ))
+    if parsed.step == 1:
+        parts.append("")
+        parts.append("<xml_format_mandate>")
+        parts.append("  All workflow output MUST be well-formed XML.")
+        parts.append("  Use CDATA for code: <![CDATA[...]]>")
+        parts.append("</xml_format_mandate>")
+        parts.append("")
+        parts.append("<thinking_efficiency>")
+        parts.append("Max 5 words per step. Symbolic notation preferred.")
+        parts.append('Good: "Patterns needed -> grep auth -> found 3"')
+        parts.append('Bad: "For the patterns we need, let me search for auth..."')
+        parts.append("</thinking_efficiency>")
+    parts.append("")
+    parts.append(render(
+        W.el("current_action", *[TextNode(a) for a in guidance_dict["actions"]]).build(),
+        XMLRenderer()
+    ))
+    if guidance_dict["next"]:
+        parts.append("")
+        parts.append(render(
+            W.el("invoke_after", TextNode(guidance_dict["next"])).build(),
+            XMLRenderer()
+        ))
+    print("\n".join(parts))

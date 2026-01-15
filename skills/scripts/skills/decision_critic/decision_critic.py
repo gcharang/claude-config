@@ -25,7 +25,7 @@ from skills.lib.workflow.core import (
     Workflow,
     register_workflow,
 )
-from skills.lib.workflow.formatters.text import format_text_output
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 
 
 STEPS = {
@@ -292,20 +292,39 @@ def main(
         next_step_def = WORKFLOW.steps[next_step_id]
 
     # Add decision context to actions for step 1
-    actions = step_def.actions
+    actions = step_def.actions[:]
     if args.step == 1 and args.decision:
         actions = [f"DECISION UNDER REVIEW: {args.decision}", ""] + actions
 
-    print(
-        format_text_output(
-            step=args.step,
-            total=args.total_steps,
-            title=f"DECISION CRITIC - {step_def.title}",
-            actions=actions,
-            brief=f"Phase: {step_def.phase}",
-            next_title=next_step_def.title if next_step_def else None,
-        )
-    )
+    # Build output using AST builder API
+    parts = []
+
+    # Step header
+    parts.append(render(
+        W.el("step_header", TextNode(f"DECISION CRITIC - {step_def.title}"),
+            script="decision_critic", step=str(args.step), total=str(args.total_steps)
+        ).build(),
+        XMLRenderer()
+    ))
+    parts.append("")
+
+    # Phase info
+    if step_def.phase:
+        parts.append(f"Phase: {step_def.phase}")
+        parts.append("")
+
+    # Current action
+    action_nodes = [TextNode(a) for a in actions]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append("")
+
+    # Next step info
+    if next_step_def:
+        parts.append(f"Next: {next_step_def.title}")
+    elif args.step >= args.total_steps:
+        parts.append("COMPLETE - Present verdict to user.")
+
+    print("\n".join(parts))
 
 
 if __name__ == "__main__":

@@ -16,12 +16,7 @@ The script provides step-by-step guidance; the agent follows exactly.
 
 import sys
 
-from skills.lib.workflow.formatters import (
-    format_step_output,
-    format_state_banner,
-    format_resource,
-    format_expected_output,
-)
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 from skills.lib.conventions import get_convention
 from skills.planner.shared.resources import get_resource
 
@@ -44,7 +39,7 @@ def get_step_guidance(
     if step == 1:
         if qr_fail:
             # FIX MODE - address QR issues only
-            banner = format_state_banner("TW-PLAN-SCRUB", qr_iteration, "fix")
+            banner = render(W.el("state_banner", checkpoint="TW-PLAN-SCRUB", iteration=str(qr_iteration), mode="fix").build(), XMLRenderer())
             return {
                 "title": "Fix QR Issues",
                 "actions": [banner, ""] + [
@@ -68,7 +63,7 @@ def get_step_guidance(
             }
 
         # Normal initial work
-        banner = format_state_banner("TW-PLAN-SCRUB", 1, "work")
+        banner = render(W.el("state_banner", checkpoint="TW-PLAN-SCRUB", iteration="1", mode="work").build(), XMLRenderer())
         return {
             "title": "Task Description",
             "actions": [banner, ""]
@@ -136,14 +131,13 @@ def get_step_guidance(
     # Step 3: Temporal contamination review (inject resource)
     if step == 3:
         temporal_resource = get_convention("temporal.md")
+        resource_block = render(W.el("resource", TextNode(temporal_resource), name="temporal-contamination", purpose="plan-scrub").build(), XMLRenderer())
         return {
             "title": "Temporal Contamination Review",
             "actions": [
                 "AUTHORITATIVE REFERENCE FOR TEMPORAL CONTAMINATION:",
                 "",
-                "=" * 60,
-                temporal_resource,
-                "=" * 60,
+                resource_block,
                 "",
                 "SCAN all existing comments in Code Changes sections.",
                 "",

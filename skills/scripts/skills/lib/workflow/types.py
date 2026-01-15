@@ -5,7 +5,7 @@ Explicit, composable abstractions over stringly-typed dicts and parameter groups
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Literal, Protocol, TypeAlias
+from typing import Any, Callable, Literal, Protocol, TypeAlias
 
 
 class AgentRole(Enum):
@@ -193,3 +193,49 @@ Args:
 Returns:
     Dict or StepGuidance with title, actions, next hint
 """
+
+
+# =============================================================================
+# Domain Types for Test Generation
+# =============================================================================
+
+
+# Domain types implement __iter__ for use with itertools.product to generate
+# Cartesian products. frozen=True enables hashability for pytest param caching.
+@dataclass(frozen=True)
+class BoundedInt:
+    """Integer domain with inclusive bounds [lo, hi]."""
+
+    lo: int
+    hi: int
+
+    def __post_init__(self):
+        # Enforce lo <= hi: prevents empty ranges that would silently skip test cases
+        if self.lo > self.hi:
+            raise ValueError(f"BoundedInt: lo ({self.lo}) must be <= hi ({self.hi})")
+
+    def __iter__(self):
+        """Yield all integers in [lo, hi] inclusive."""
+        return iter(range(self.lo, self.hi + 1))
+
+
+@dataclass(frozen=True)
+class ChoiceSet:
+    """Discrete choice domain."""
+
+    choices: tuple
+
+    def __iter__(self):
+        """Yield all choices in order."""
+        return iter(self.choices)
+
+
+@dataclass(frozen=True)
+class Constant:
+    """Single-value domain."""
+
+    value: Any
+
+    def __iter__(self):
+        """Yield single value for uniform Cartesian product interface."""
+        return iter([self.value])

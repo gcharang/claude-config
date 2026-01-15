@@ -15,7 +15,7 @@ The script provides step-by-step guidance; the agent follows exactly.
 import sys
 
 from skills.lib.workflow.types import QRState
-from skills.lib.workflow.formatters import format_qr_banner
+from skills.lib.workflow.ast import W, render, XMLRenderer
 from skills.lib.conventions import get_convention
 from skills.planner.shared.resources import get_resource
 
@@ -37,7 +37,13 @@ def get_step_guidance(
 
     # Step 1: Task description
     if step == 1:
-        banner = format_qr_banner("DOC QR", qr)
+        banner = render(
+            W.el("state_banner",
+                 checkpoint="DOC QR",
+                 iteration=str(qr.iteration),
+                 mode="fresh_review").build(),
+            XMLRenderer()
+        )
         return {
             "title": "Documentation Quality Review",
             "actions": [banner, ""]

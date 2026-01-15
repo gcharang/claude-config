@@ -1,18 +1,17 @@
 # workflow/
 
-Workflow orchestration framework: types, formatters, registration, and testing.
+Workflow orchestration framework: types, formatters, and registration.
 
 ## Files
 
-| File           | What                                         | When to read                                           |
-| -------------- | -------------------------------------------- | ------------------------------------------------------ |
-| `README.md`    | Architecture, design decisions, patterns     | Understanding workflow design, common patterns         |
-| `core.py`      | Workflow, StepDef, StepContext, Outcome, Arg | Defining new skills, understanding workflow data model |
-| `__init__.py`  | Public API exports                           | Importing workflow types, checking available exports   |
-| `cli.py`       | CLI helpers for workflow entry points        | Adding CLI arguments, modifying step output            |
-| `constants.py` | Shared constants                             | Adding new constants, modifying defaults               |
-| `testing.py`   | L0-L2 test harness, boundary input gen       | Running skill tests, adding test coverage              |
-| `types.py`     | Domain types: Dispatch, AgentRole, etc       | QR gates, sub-agent dispatch                           |
+| File           | What                                                     | When to read                                           |
+| -------------- | -------------------------------------------------------- | ------------------------------------------------------ |
+| `README.md`    | Architecture, design decisions, patterns                 | Understanding workflow design, common patterns         |
+| `core.py`      | Workflow, StepDef, StepContext, Outcome, Arg             | Defining new skills, understanding workflow data model |
+| `__init__.py`  | Public API exports                                       | Importing workflow types, checking available exports   |
+| `cli.py`       | CLI helpers for workflow entry points                    | Adding CLI arguments, modifying step output            |
+| `constants.py` | Shared constants                                         | Adding new constants, modifying defaults               |
+| `types.py`     | Domain types: Dispatch, AgentRole, BoundedInt, ChoiceSet | QR gates, sub-agent dispatch, test domains             |
 
 ## Subdirectories
 
@@ -23,9 +22,12 @@ Workflow orchestration framework: types, formatters, registration, and testing.
 ## Test
 
 ```bash
-# Run all skill tests (L0-L2)
-python -m skills.lib.workflow.testing --level 2
+# Run all tests
+pytest tests/ -v
 
-# Test specific skill
-python -m skills.lib.workflow.testing --skill decision-critic --level 2
+# Run specific test file
+pytest tests/test_workflow_steps.py -v
+
+# Run tests for specific workflow
+pytest tests/ -k deepthink -v
 ```

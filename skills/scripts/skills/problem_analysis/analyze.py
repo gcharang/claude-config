@@ -25,7 +25,7 @@ from skills.lib.workflow.core import (
     Arg,
     register_workflow,
 )
-from skills.lib.workflow.formatters.text import format_text_output, build_invoke_command
+from skills.lib.workflow.ast import W, XMLRenderer, render
 
 
 # Maximum iterations for Phase 3 investigation loop
@@ -454,69 +454,63 @@ def main(
         if args.confidence == "high":
             # Exit loop due to high confidence
             actions = get_phase_3_completion_message(args.confidence, args.iteration)
-            next_cmd = build_invoke_command(MODULE_PATH, step=4, total_steps=args.total_steps)
-            print(format_text_output(
+            next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 4 --total-steps {args.total_steps}" />'
+            output = render(W.text_output(
                 step=args.step,
                 total=args.total_steps,
                 title=f"PROBLEM ANALYSIS - {phase['title']} Complete",
                 actions=actions,
-                brief="High confidence reached",
-                invoke_after=next_cmd,
-            ))
+                invoke_after=next_cmd
+            ).build(), XMLRenderer())
+            print(output)
             return
 
         if args.iteration >= MAX_ITERATIONS:
             # Exit loop due to iteration cap
             actions = get_phase_3_completion_message(args.confidence, args.iteration)
-            next_cmd = build_invoke_command(MODULE_PATH, step=4, total_steps=args.total_steps)
-            print(format_text_output(
+            next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 4 --total-steps {args.total_steps}" />'
+            output = render(W.text_output(
                 step=args.step,
                 total=args.total_steps,
                 title=f"PROBLEM ANALYSIS - {phase['title']} Complete",
                 actions=actions,
-                brief=f"Iteration cap ({MAX_ITERATIONS}) reached",
-                invoke_after=next_cmd,
-            ))
+                invoke_after=next_cmd
+            ).build(), XMLRenderer())
+            print(output)
             return
 
         # Continue investigation - emit iteration prompt
         next_iteration = args.iteration + 1
-        next_cmd = build_invoke_command(
-            MODULE_PATH,
-            step=3,
-            total_steps=args.total_steps,
-            confidence="<your_confidence>",
-            iteration=next_iteration,
-        )
+        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 3 --total-steps {args.total_steps} --confidence <your_confidence> --iteration {next_iteration}" />'
 
         # Add iteration context to title
         title = f"PROBLEM ANALYSIS - {phase['title']} (Iteration {args.iteration} of {MAX_ITERATIONS})"
 
-        print(format_text_output(
+        output = render(W.text_output(
             step=args.step,
             total=args.total_steps,
             title=title,
             actions=phase["actions"],
-            brief=phase["brief"],
-            invoke_after=next_cmd,
-        ))
+            invoke_after=next_cmd
+        ).build(), XMLRenderer())
+        print(output)
         return
 
     # Standard phases (1, 2, 4, 5)
     next_step = args.step + 1
     if next_step <= args.total_steps:
-        next_cmd = build_invoke_command(MODULE_PATH, step=next_step, total_steps=args.total_steps)
+        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step {next_step} --total-steps {args.total_steps}" />'
     else:
         next_cmd = None
 
-    print(format_text_output(
+    output = render(W.text_output(
         step=args.step,
         total=args.total_steps,
         title=f"PROBLEM ANALYSIS - {phase['title']}",
         actions=phase["actions"],
-        brief=phase["brief"],
-        invoke_after=next_cmd,
-    ))
+        invoke_after=next_cmd
+    ).build(), XMLRenderer())
+    print(output)
 
 
 if __name__ == "__main__":

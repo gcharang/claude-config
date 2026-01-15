@@ -10,7 +10,7 @@ Framework for skill registration and testing. Skills are defined using the `Work
 Workflow() -> register_workflow() -> _WORKFLOW_REGISTRY
                                           |
                                           v
-                                     testing.py -> L0/L1/L2 validation
+                                     pytest tests/
 ```
 
 Registration happens at import time.
@@ -250,15 +250,7 @@ Benefits of this architecture:
 
 **Why handler callables instead of strings?** Type safety, IDE support, and easier refactoring. Handlers are first-class functions, not magic strings.
 
-**Separate CLI entry points**: Running modules as `__main__` causes module identity issues (imported by `__init__.py` vs executed as `__main__`). Separate CLI entry points (`testing.py`) avoid this.
-
-**Three test levels**: L0 (import), L1 (registration valid), L2 (invocability).
-L2 runs the skill via subprocess with synthetic boundary inputs. L3 (output
-validation) is not implemented -- invocability is sufficient for regression
-detection.
-
-**Single-factor variation**: Test inputs vary one parameter at a time from
-defaults rather than Cartesian product. Avoids test explosion (5^5 = 3125 vs 5\*5 = 25).
+**Separate CLI entry points**: Running modules as `__main__` causes module identity issues (imported by `__init__.py` vs executed as `__main__`). Separate CLI entry points avoid this.
 
 ## Common Patterns
 
@@ -336,28 +328,107 @@ StepDef(
 
 ## Invariants
 
-- Every skill module appears in `_import_all_skills()` in `testing.py`
+- Every skill module appears in `SKILL_MODULES` in `tests/conftest.py`
 - Workflow validation must pass (entry point exists, all transitions valid, at least one terminal, all steps reachable)
 - Handler signatures must match `(ctx: StepContext) -> tuple[Outcome, dict]` or be a `Dispatch` instance
 - `next` dict keys must be `Outcome` enum values
 - `next` dict values must be valid step IDs or `None` (terminal)
 
+## Exhaustive Testing Framework
+
+Exhaustive testing framework generates all valid parameter combinations for workflow steps, using typed domain abstractions to represent parameter spaces.
+
+### Architecture
+
+```
+Workflow AST          Domain Types           Test Generation
+     |                     |                       |
+     v                     v                       v
++----------+        +-------------+         +--------------+
+| Workflow |  --->  | BoundedInt  |  --->   | generate_    |
+| _params  |        | ChoiceSet   |         | test_inputs  |
+| _step_   |        | Constant    |         +--------------+
+|  order   |        +-------------+                |
++----------+                                       v
+                                           +-------------+
+                                           | pytest      |
+                                           | parametrize |
+                                           +-------------+
+```
+
+### Why This Structure
+
+Domain types separate from generation logic:
+
+- Domains are reusable (could drive fuzzing, documentation)
+- Generation logic depends on workflow structure, not domain semantics
+- Test file adds pytest-specific concerns
+
+### Data Flow
+
+1. Import skills -> Workflow objects registered
+2. extract_schema(workflow) -> {step: {param: Domain}}
+3. generate_inputs(workflow) -> Iterator[dict] (Cartesian product)
+4. pytest.parametrize -> test cases with IDs
+5. run_skill_invocation(workflow, params) -> subprocess exit code
+
+### Key Design Decisions
+
+**Exhaustive vs sampling**: Domains are small (5 iterations x 5 confidences x 2 modes = ~300-500 total). Exhaustive enumeration is tractable and provides complete coverage. Sampling would miss edge combinations.
+
+**Hardcoded mode-gating**: Only deepthink has mode parameter (quick mode skips steps 6-11). Introspection complexity not justified for single case. Explicit hardcoding is clearer and maintainable.
+
+**Iteration detection**: Step.next dict contains Outcome.ITERATE for self-looping steps. Direct check without heuristics works for all current and future iterating workflows.
+
+**Step-index mapping**: \_params keyed by step_id (string) not step number. \_step_order provides authoritative index for CLI invocation.
+
+### Invariants
+
+- Each test case must have unique ID (workflow-step-params combo)
+- Conditional params only apply to applicable steps (iteration only at iterating steps)
+- Mode-gated steps skipped when mode value gates them out
+- step param always present (1 to total_steps)
+- total_steps always matches workflow.total_steps
+- Workflow.\_step_order must provide authoritative step index mapping: len(\_step_order) == total_steps and indices correspond to CLI --step values
+
+### Domain Types
+
+Located in types.py:
+
+**BoundedInt**: Integer domain with inclusive bounds [lo, hi]
+
+```python
+list(BoundedInt(1, 5))  # [1, 2, 3, 4, 5]
+```
+
+**ChoiceSet**: Discrete choice domain
+
+```python
+list(ChoiceSet(("full", "quick")))  # ["full", "quick"]
+```
+
+**Constant**: Single-value domain
+
+```python
+list(Constant(42))  # [42]
+```
+
+All implement **iter** for use with itertools.product. frozen=True enables hashability for pytest param caching.
+
 ## Testing
 
-### Run All Tests
+All tests use pytest. Run from `skills/scripts/`:
 
 ```bash
-python -m skills.lib.workflow.testing --level 2
+# Run all tests
+pytest tests/ -v
+
+# Test specific workflow
+pytest tests/ -k deepthink -v
+
+# Test categories
+pytest tests/test_workflow_import.py -v     # Import tests
+pytest tests/test_workflow_structure.py -v  # Structure validation
+pytest tests/test_workflow_steps.py -v      # Step invocability (exhaustive)
+pytest tests/test_domain_types.py -v        # Domain type unit tests
 ```
-
-### Test Specific Skill
-
-```bash
-python -m skills.lib.workflow.testing --skill decision-critic --level 2
-```
-
-### Test Levels
-
-- **L0**: Import skill module successfully
-- **L1**: Registration valid (total_steps set, entry point exists)
-- **L2**: Invocability (skill executes without error for boundary inputs)

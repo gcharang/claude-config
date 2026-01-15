@@ -27,14 +27,31 @@ When CLAUDE.md is missing or conventions are unclear: use standard language idio
 
 ## Efficiency
 
-Batch multiple file edits in a single call when possible. When implementing changes
-across several files or multiple locations in one file:
+BATCH AGGRESSIVELY: Read all targets first, then execute all edits in one call.
+
+You have full read/write access. 10+ edits in a single response is normal and encouraged.
+Batching is ALWAYS preferred over sequential edits.
+
+When implementing changes across several files or multiple locations:
 
 1. Read all target files first to understand full scope
 2. Group related changes that can be made together
-3. Prefer fewer, larger edits over many small edits
+3. Execute all edits in a single response
 
 This reduces round-trips and improves performance.
+
+## Thinking Economy
+
+Minimize internal reasoning verbosity:
+
+- Keep each thought to 5-10 words
+- Use abbreviated notation: "Spec->X; File->Y; Apply Z"
+- DO NOT narrate phases ("Now I will verify...")
+- Execute tasks silently; output results only
+
+Examples:
+- VERBOSE: "Now I need to check if the imports are correct. Let me verify..."
+- CONCISE: "Imports: check stdlib, add missing"
 
 ## Core Mission
 
@@ -374,8 +391,8 @@ Return ONLY the XML structure below. Start immediately with `<implementation>`. 
 </tests>
 
 <verification>
-- Linting: [PASS/FAIL, only if spec instructed]
-- Checklist: [Summary of verification checks]
+[5-word summary per check; max 3 checks]
+Examples: "Imports: added 3 missing" | "Paths: corrected typo" | "Security: RULE0 pass"
 </verification>
 
 <notes>

@@ -14,11 +14,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from skills.lib.workflow.formatters import (
-    format_xml_mandate,
-    format_current_action,
-    format_invoke_after,
-)
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 from skills.lib.workflow.types import FlatCommand
 
 
@@ -66,13 +62,12 @@ def format_step_header(step: int, total: int, title: str, category_ref: str) -> 
 
 def format_next_step(step: int, category_ref: str) -> str:
     """Format the invoke-after block for next step."""
-    return format_invoke_after(
-        FlatCommand(
-            f'<invoke working-dir=".claude/skills/scripts" '
-            f'cmd="python3 -m {MODULE_PATH} --step {step} --total-steps {TOTAL_STEPS} '
-            f'--category {category_ref}" />'
-        )
+    cmd = (
+        f'<invoke working-dir=".claude/skills/scripts" '
+        f'cmd="python3 -m {MODULE_PATH} --step {step} --total-steps {TOTAL_STEPS} '
+        f'--category {category_ref}" />'
     )
+    return render(W.el("invoke_after", TextNode(cmd)).build(), XMLRenderer())
 
 
 # =============================================================================
@@ -114,9 +109,9 @@ def format_step_1(category_ref: str) -> str:
     parts = [
         format_step_header(1, TOTAL_STEPS, "Domain Context", category_ref),
         "",
-        format_xml_mandate(),
+        render(W.el("xml_mandate").build(), XMLRenderer()),
         "",
-        format_current_action(actions),
+        render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
         "",
         format_next_step(2, category_ref),
     ]
@@ -177,7 +172,7 @@ def format_step_2(category_ref: str) -> str:
     parts = [
         format_step_header(2, TOTAL_STEPS, "Principle + Violations", category_ref),
         "",
-        format_current_action(actions),
+        render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
         "",
         format_next_step(3, category_ref),
     ]
@@ -224,7 +219,7 @@ def format_step_3(category_ref: str) -> str:
     parts = [
         format_step_header(3, TOTAL_STEPS, "Pattern Generation", category_ref),
         "",
-        format_current_action(actions),
+        render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
         "",
         format_next_step(4, category_ref),
     ]
@@ -275,7 +270,7 @@ def format_step_4(category_ref: str) -> str:
     parts = [
         format_step_header(4, TOTAL_STEPS, "Search", category_ref),
         "",
-        format_current_action(actions),
+        render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
         "",
         format_next_step(5, category_ref),
     ]
@@ -316,7 +311,7 @@ def format_step_5(category_ref: str) -> str:
     parts = [
         format_step_header(5, TOTAL_STEPS, "Synthesis", category_ref),
         "",
-        format_current_action(actions),
+        render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
         "",
         "COMPLETE - Return smell_report to orchestrator.",
     ]

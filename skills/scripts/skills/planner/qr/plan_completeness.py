@@ -15,13 +15,7 @@ The script provides step-by-step guidance; the agent follows exactly.
 import sys
 
 from skills.lib.workflow.types import QRState
-from skills.lib.workflow.formatters import (
-    format_step_output,
-    format_qr_banner,
-    format_resource,
-    format_verification_checklist,
-    format_expected_output,
-)
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 from skills.lib.conventions import get_convention
 from skills.planner.shared.resources import get_resource
 
@@ -43,7 +37,7 @@ def get_step_guidance(
 
     # Step 1: Task description
     if step == 1:
-        banner = format_qr_banner("QR-COMPLETENESS", qr)
+        banner = render(W.el("state_banner", checkpoint="QR-COMPLETENESS", iteration=str(qr.iteration), mode="fresh_review").build(), XMLRenderer())
         return {
             "title": "Plan Completeness Review",
             "actions": [banner, ""]
@@ -78,11 +72,7 @@ def get_step_guidance(
     # Step 2: Resource injection (default conventions)
     if step == 2:
         defaults_resource = get_convention("structural.md")
-        resource_block = format_resource(
-            "default-conventions",
-            "policy-default-verification",
-            defaults_resource
-        )
+        resource_block = render(W.el("resource", TextNode(defaults_resource), name="default-conventions", purpose="policy-default-verification").build(), XMLRenderer())
         return {
             "title": "Reference: Default Conventions",
             "actions": [
@@ -166,34 +156,25 @@ def get_step_guidance(
 
     # Step 4: Plan structure verification
     if step == 4:
-        structure_checklist = format_verification_checklist(
-            "plan-structure",
-            [
-                {"element": "Milestones", "criterion": "Each has acceptance criteria", "if_missing": "CONVENTION_VIOLATION"},
-                {"element": "Invisible Knowledge", "criterion": "Populated if README.md expected", "if_missing": "IK_TRANSFER_FAILURE"},
-                {"element": "Planning Context", "criterion": "Decision Log, Constraints, Risks", "if_missing": "CONVENTION_VIOLATION"},
-                {"element": "Documentation MS", "criterion": "Plan includes doc deliverables", "if_missing": "CONVENTION_VIOLATION"},
-            ]
-        )
-        code_presence_checklist = format_verification_checklist(
-            "code-presence",
-            [
-                {"element": "Code Intent with file paths", "criterion": "Section present with changes", "if_missing": "PASS"},
-                {"element": "Documentation-only + all .md", "criterion": "Skip reason valid", "if_missing": "PASS"},
-                {"element": "No Code Intent + source files", "criterion": "Must have Code Intent", "if_missing": "CONVENTION_VIOLATION"},
-                {"element": "Skip reason + source files", "criterion": "Skip invalid for source", "if_missing": "CONVENTION_VIOLATION"},
-            ]
-        )
-        test_spec_checklist = format_verification_checklist(
-            "test-specification",
-            [
-                {"element": "Test file paths + type + scenarios", "criterion": "Fully specified", "if_missing": "PASS"},
-                {"element": "No tests with rationale", "criterion": "Explicit skip OK", "if_missing": "PASS"},
-                {"element": "Documentation-only milestone", "criterion": "No tests needed", "if_missing": "PASS"},
-                {"element": "Empty Tests section", "criterion": "Must specify or skip", "if_missing": "TESTING_STRATEGY_VIOLATION"},
-                {"element": "Implementation MS no Tests", "criterion": "Must have Tests section", "if_missing": "TESTING_STRATEGY_VIOLATION"},
-            ]
-        )
+        structure_checklist = """<verification_checklist category="plan-structure">
+  <item element="Milestones" criterion="Each has acceptance criteria" if_missing="CONVENTION_VIOLATION" />
+  <item element="Invisible Knowledge" criterion="Populated if README.md expected" if_missing="IK_TRANSFER_FAILURE" />
+  <item element="Planning Context" criterion="Decision Log, Constraints, Risks" if_missing="CONVENTION_VIOLATION" />
+  <item element="Documentation MS" criterion="Plan includes doc deliverables" if_missing="CONVENTION_VIOLATION" />
+</verification_checklist>"""
+        code_presence_checklist = """<verification_checklist category="code-presence">
+  <item element="Code Intent with file paths" criterion="Section present with changes" if_missing="PASS" />
+  <item element="Documentation-only + all .md" criterion="Skip reason valid" if_missing="PASS" />
+  <item element="No Code Intent + source files" criterion="Must have Code Intent" if_missing="CONVENTION_VIOLATION" />
+  <item element="Skip reason + source files" criterion="Skip invalid for source" if_missing="CONVENTION_VIOLATION" />
+</verification_checklist>"""
+        test_spec_checklist = """<verification_checklist category="test-specification">
+  <item element="Test file paths + type + scenarios" criterion="Fully specified" if_missing="PASS" />
+  <item element="No tests with rationale" criterion="Explicit skip OK" if_missing="PASS" />
+  <item element="Documentation-only milestone" criterion="No tests needed" if_missing="PASS" />
+  <item element="Empty Tests section" criterion="Must specify or skip" if_missing="TESTING_STRATEGY_VIOLATION" />
+  <item element="Implementation MS no Tests" criterion="Must have Tests section" if_missing="TESTING_STRATEGY_VIOLATION" />
+</verification_checklist>"""
         return {
             "title": "Verify Plan Structure",
             "actions": [

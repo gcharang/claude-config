@@ -278,7 +278,17 @@ def handoff_minimalism_test() -> list[str]:
 # =============================================================================
 
 
-def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
+def step_handler(
+    ctx: StepContext,
+    scope: Annotated[
+        str,
+        Arg(
+            required=True,
+            description="Workflow scope (required for steps 2+)",
+            choices=("single-prompt", "ecosystem", "greenfield", "problem"),
+        ),
+    ],
+) -> tuple[Outcome, dict]:
     """Generic handler for output-only steps."""
     return Outcome.OK, {}
 
@@ -359,6 +369,26 @@ STEP_REFINE = StepDef(
         "  Verify triggers truly don't match",
         "",
         "UPDATE proposals based on verification.",
+        "",
+        "META-CONSTRAINT VERIFICATION:",
+        "  For EACH proposed change:",
+        "  Q: Does this change modify PROMPT TEXT STRUCTURE or add OUTPUT INSTRUCTIONS?",
+        "  A: [Classify: quote the change and state which]",
+        "",
+        "  PROMPT TEXT STRUCTURE changes include:",
+        "    - Shortening/compressing existing prompt text",
+        "    - Removing sections or examples from prompt",
+        "    - Refactoring code structure (extracting to variables, etc.)",
+        "",
+        "  OUTPUT INSTRUCTIONS changes include:",
+        "    - Adding response format constraints",
+        "    - Adding per-step word limits",
+        "    - Adding output structure requirements",
+        "",
+        "  If ANY changes modify prompt text structure:",
+        "    -> VIOLATION of meta-constraint",
+        "    -> REMOVE these changes",
+        "    -> REVISE to add output instructions instead",
         "",
         "CONTEXT-CORRECTNESS VERIFICATION (for greenfield/problem scopes):",
         "  If execution context was identified (STANDALONE/SKILL/SUB-AGENT/COMPONENT):",
@@ -962,11 +992,22 @@ def main(
             "If multi-turn patterns detected: also read multi-turn reference.",
         ]),
         "ecosystem": (5, [
-            "references/prompt-engineering-single-turn.md",
-            "references/prompt-engineering-multi-turn.md (always for ecosystem)",
-            "references/prompt-engineering-compression.md (always)",
-            "  -> Extract: Technique Selection Guide from each",
+            "PROCESS SEQUENTIALLY (complete each before next):",
+            "",
+            "First: references/prompt-engineering-single-turn.md",
+            "  -> Extract: Technique Selection Guide",
             "  -> For each technique: note Trigger Condition column",
+            "  -> Complete extraction before proceeding",
+            "",
+            "Then: references/prompt-engineering-multi-turn.md",
+            "  -> Extract: Technique Selection Guide",
+            "  -> For each technique: note Trigger Condition column",
+            "  -> Complete extraction before proceeding",
+            "",
+            "Finally: references/prompt-engineering-compression.md",
+            "  -> Extract: Technique Selection Guide",
+            "  -> For each technique: note Trigger Condition column",
+            "",
             "If orchestration or human gates: also read subagents/hitl refs.",
         ]),
         "greenfield": (4, [
@@ -985,18 +1026,24 @@ def main(
         ]),
     }
 
+    # Track if compression guide is in refs for DO section framing injection
+    compression_in_refs = False
     if args.scope in read_specs:
         read_step, read_refs = read_specs[args.scope]
         if args.step == read_step:
             lines.append("READ:")
             for ref in read_refs:
                 lines.append(f"  - {ref}")
-                # Inject framing after compression guide is listed
+                # Track compression guide presence (don't inject framing here)
                 if "compression" in ref.lower() and "Extract" not in ref:
-                    lines.extend(compression_guide_framing())
+                    compression_in_refs = True
             lines.append("")
 
     lines.append("DO:")
+    # Inject framing immediately before actions if compression guide was read
+    if compression_in_refs:
+        lines.extend(compression_guide_framing())
+        lines.append("")
     for action in step_def.actions:
         lines.append(f"  {action}" if action else "")
 

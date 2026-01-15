@@ -160,11 +160,8 @@ def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
     return Outcome.OK, {}
 
 
-def step_survey(
-    ctx: StepContext,
-    thoughts: Annotated[str, Arg(required=True, description="Step context and findings")],
-) -> tuple[Outcome, dict]:
-    """Handler for step 1 (survey) with thoughts parameter."""
+def step_survey(ctx: StepContext) -> tuple[Outcome, dict]:
+    """Handler for step 1 (survey)."""
     return Outcome.OK, {}
 
 
@@ -717,7 +714,6 @@ register_workflow(WORKFLOW)
 def main(
     step_number: int = None,
     total_steps: int = None,
-    thoughts: str = None,
 ):
     """Entry point with parameter annotations for testing framework.
 
@@ -727,7 +723,6 @@ def main(
     parser = argparse.ArgumentParser(description="Incoherence Detector")
     parser.add_argument("--step-number", type=int, required=True)
     parser.add_argument("--total-steps", type=int, required=True)
-    parser.add_argument("--thoughts", type=str, required=True)
     args = parser.parse_args()
 
     guidance = get_step_guidance(args.step_number, args.total_steps)

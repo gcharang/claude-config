@@ -18,7 +18,7 @@ Arguments:
 import argparse
 import sys
 
-from skills.lib.workflow.formatters.text import build_invoke_command, format_text_output
+from skills.lib.workflow.ast import W, XMLRenderer, render
 
 
 MODULE_PATH = "skills.arxiv_to_md.sub_agent"
@@ -288,27 +288,27 @@ def main():
     # Build next invoke command
     next_step = args.step + 1
     if next_step <= 6:
-        cmd_kwargs = {
-            "step": next_step,
-            "total_steps": 6,
-            "arxiv_id": args.arxiv_id,
-        }
+        cmd_parts = [
+            "python3 -m", MODULE_PATH,
+            f"--step {next_step}",
+            "--total-steps 6",
+            f"--arxiv-id {args.arxiv_id}"
+        ]
         if args.dest_file:
-            cmd_kwargs["dest_file"] = args.dest_file
-        next_cmd = build_invoke_command(MODULE_PATH, **cmd_kwargs)
+            cmd_parts.append(f"--dest-file {args.dest_file}")
+        cmd_str = " ".join(cmd_parts)
+        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="{cmd_str}" />'
     else:
         next_cmd = None  # Terminal step
 
-    print(
-        format_text_output(
-            step=args.step,
-            total=6,
-            title=f"ARXIV-TO-MD SUB-AGENT - {phase['title']}",
-            actions=actions,
-            brief=phase["brief"],
-            invoke_after=next_cmd,
-        )
-    )
+    output = render(W.text_output(
+        step=args.step,
+        total=6,
+        title=f"ARXIV-TO-MD SUB-AGENT - {phase['title']}",
+        actions=actions,
+        invoke_after=next_cmd
+    ).build(), XMLRenderer())
+    print(output)
 
 
 if __name__ == "__main__":

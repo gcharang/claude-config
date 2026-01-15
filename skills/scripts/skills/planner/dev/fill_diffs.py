@@ -14,12 +14,7 @@ The script provides step-by-step guidance; the agent follows exactly.
 
 import sys
 
-from skills.lib.workflow.formatters import (
-    format_step_output,
-    format_state_banner,
-    format_resource,
-    format_expected_output,
-)
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 from skills.lib.conventions import get_convention
 
 
@@ -41,7 +36,7 @@ def get_step_guidance(
     if step == 1:
         if qr_fail:
             # FIX MODE - address QR issues only
-            banner = format_state_banner("DEV-FILL-DIFFS", qr_iteration, "fix")
+            banner = render(W.el("state_banner", checkpoint="DEV-FILL-DIFFS", iteration=str(qr_iteration), mode="fix").build(), XMLRenderer())
             return {
                 "title": "Fix QR Issues",
                 "actions": [banner, ""] + [
@@ -65,7 +60,7 @@ def get_step_guidance(
             }
 
         # Normal initial work
-        banner = format_state_banner("DEV-FILL-DIFFS", 1, "work")
+        banner = render(W.el("state_banner", checkpoint="DEV-FILL-DIFFS", iteration="1", mode="work").build(), XMLRenderer())
         return {
             "title": "Task Description",
             "actions": [banner, ""]

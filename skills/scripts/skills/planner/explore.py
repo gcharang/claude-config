@@ -14,10 +14,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from skills.lib.workflow.formatters import (
-    format_step_output,
-    format_step_header,
-)
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 
 
 # Module path for -m invocation
@@ -244,15 +241,59 @@ def format_output(step: int, total_steps: int) -> str:
     if "error" in guidance:
         return f"Error: {guidance['error']}"
 
-    return format_step_output(
-        script="explore",
-        step=step,
-        total=total_steps,
-        title=guidance["title"],
-        actions=guidance["actions"],
-        next_command=guidance.get("next"),
-        is_step_one=(step == 1),
-    )
+    parts = []
+
+    # Step header
+    parts.append(render(
+        W.el("step_header", TextNode(guidance["title"]),
+            script="explore", step=str(step), total=str(total_steps)
+        ).build(),
+        XMLRenderer()
+    ))
+    parts.append("")
+
+    # XML mandate for step 1
+    if step == 1:
+        parts.append("<xml_format_mandate>")
+        parts.append("CRITICAL: All script outputs use XML format. You MUST:")
+        parts.append("")
+        parts.append("1. Execute the action in <current_action>")
+        parts.append("2. When complete, invoke the exact command in <invoke_after>")
+        parts.append("3. The <next> block re-states the command -- execute it")
+        parts.append("4. For branching <invoke_after>, choose based on outcome:")
+        parts.append("   - <if_pass>: Use when action succeeded / QR returned PASS")
+        parts.append("   - <if_fail>: Use when action failed / QR returned ISSUES")
+        parts.append("")
+        parts.append("DO NOT modify commands. DO NOT skip steps. DO NOT interpret.")
+        parts.append("</xml_format_mandate>")
+        parts.append("")
+        parts.append("<thinking_efficiency>")
+        parts.append("Max 5 words per step. Symbolic notation preferred.")
+        parts.append('Good: "Patterns needed -> grep auth -> found 3"')
+        parts.append('Bad: "For the patterns we need, let me search for auth..."')
+        parts.append("</thinking_efficiency>")
+        parts.append("")
+
+    # Current action
+    action_nodes = [TextNode(a) for a in guidance["actions"]]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+
+    # Invoke after and next block
+    next_command = guidance.get("next")
+    if next_command:
+        parts.append("")
+        parts.append(render(W.el("invoke_after", TextNode(next_command)).build(), XMLRenderer()))
+        parts.append("")
+        parts.append(render(
+            W.el("next",
+                TextNode("After current_action completes, execute invoke_after."),
+                TextNode(f"Re-read now: {next_command}"),
+                required="true"
+            ).build(),
+            XMLRenderer()
+        ))
+
+    return "\n".join(parts)
 
 
 def main():

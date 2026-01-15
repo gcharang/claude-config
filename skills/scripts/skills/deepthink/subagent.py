@@ -16,7 +16,7 @@ Eight-step workflow:
 import argparse
 import sys
 
-from skills.lib.workflow.formatters.text import format_text_output, build_invoke_command
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 
 
 MODULE_PATH = "skills.deepthink.subagent"
@@ -153,6 +153,13 @@ STEPS = {
         "actions": [
             "Execute your analysis plan from Step 3.",
             "Work through each aspect step by step.",
+            "",
+            "EXPLORATION OPTION:",
+            "  If your analysis requires concrete evidence not in the shared context:",
+            "  - Use Read/Glob/Grep to examine specific files or patterns",
+            "  - Keep exploration targeted -- only what your perspective needs",
+            "  - Cite evidence from exploration with file:line references",
+            "  If shared context is sufficient, proceed without exploration.",
             "",
             "REQUIREMENTS:",
             "  - Follow your plan systematically",
@@ -427,25 +434,34 @@ def main():
     if not step_info:
         sys.exit(f"ERROR: Invalid step {args.step}")
 
-    # Determine next step
-    next_step = args.step + 1
-    if next_step <= args.total_steps:
-        next_cmd = build_invoke_command(
-            MODULE_PATH,
-            step=next_step,
-            total_steps=args.total_steps,
-        )
-    else:
-        next_cmd = None
+    # Build output
+    is_complete = args.step >= args.total_steps
 
-    print(format_text_output(
-        step=args.step,
-        total=args.total_steps,
-        title=f"DEEPTHINK SUB-AGENT - {step_info['title']}",
-        actions=step_info["actions"],
-        brief=step_info["brief"],
-        invoke_after=next_cmd,
+    parts = []
+
+    # Step header
+    parts.append(render(
+        W.el("step_header", TextNode(f"DEEPTHINK SUB-AGENT - {step_info['title']}"),
+            script="subagent", step=str(args.step), total=str(args.total_steps)
+        ).build(),
+        XMLRenderer()
     ))
+    parts.append("")
+
+    # Actions
+    action_nodes = [TextNode(a) for a in step_info["actions"]]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append("")
+
+    # Invoke after
+    if is_complete:
+        parts.append("COMPLETE - Return structured output to parent workflow.")
+    else:
+        next_step = args.step + 1
+        cmd_text = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step {next_step} --total-steps {args.total_steps}" />'
+        parts.append(render(W.el("invoke_after", TextNode(cmd_text)).build(), XMLRenderer()))
+
+    print("\n".join(parts))
 
 
 if __name__ == "__main__":

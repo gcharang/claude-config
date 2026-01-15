@@ -14,13 +14,7 @@ The script provides step-by-step guidance; the agent follows exactly.
 import sys
 
 from skills.lib.workflow.types import QRState
-from skills.lib.workflow.formatters import (
-    format_step_output,
-    format_qr_banner,
-    format_resource,
-    format_detection_questions,
-    format_expected_output,
-)
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 from skills.lib.conventions import get_convention
 from skills.planner.shared.resources import get_resource
 
@@ -42,7 +36,7 @@ def get_step_guidance(
 
     # Step 1: Task description
     if step == 1:
-        banner = format_qr_banner("QR-DOCS", qr)
+        banner = render(W.el("state_banner", checkpoint="QR-DOCS", iteration=str(qr.iteration), mode="fresh_review").build(), XMLRenderer())
         return {
             "title": "Documentation Quality Review",
             "actions": [banner, ""]
@@ -66,11 +60,7 @@ def get_step_guidance(
     # Step 2: Resource injection (temporal contamination reference)
     if step == 2:
         temporal_resource = get_convention("temporal.md")
-        resource_block = format_resource(
-            "temporal-contamination",
-            "documentation-review",
-            temporal_resource
-        )
+        resource_block = render(W.el("resource", TextNode(temporal_resource), name="temporal-contamination", purpose="documentation-review").build(), XMLRenderer())
         return {
             "title": "Reference: Temporal Contamination Heuristics",
             "actions": [
@@ -86,16 +76,13 @@ def get_step_guidance(
 
     # Step 3: Verification checks (factored)
     if step == 3:
-        detection_qs = format_detection_questions(
-            "temporal-contamination",
-            [
-                {"id": "CHANGE_RELATIVE", "text": "Does it describe an action taken? Signal: 'Added', 'Replaced', 'Now uses'"},
-                {"id": "BASELINE_REFERENCE", "text": "Does it compare to removed code? Signal: 'Instead of', 'Previously', 'Replaces'"},
-                {"id": "LOCATION_DIRECTIVE", "text": "Does it describe WHERE to put code? Signal: 'After', 'Before', 'Insert'"},
-                {"id": "PLANNING_ARTIFACT", "text": "Does it describe future intent? Signal: 'TODO', 'Will', 'Planned'"},
-                {"id": "INTENT_LEAKAGE", "text": "Does it describe author's choice? Signal: 'intentionally', 'deliberately', 'chose'"},
-            ]
-        )
+        detection_qs = """<detection_questions category="temporal-contamination">
+  <question id="CHANGE_RELATIVE" text="Does it describe an action taken? Signal: 'Added', 'Replaced', 'Now uses'" />
+  <question id="BASELINE_REFERENCE" text="Does it compare to removed code? Signal: 'Instead of', 'Previously', 'Replaces'" />
+  <question id="LOCATION_DIRECTIVE" text="Does it describe WHERE to put code? Signal: 'After', 'Before', 'Insert'" />
+  <question id="PLANNING_ARTIFACT" text="Does it describe future intent? Signal: 'TODO', 'Will', 'Planned'" />
+  <question id="INTENT_LEAKAGE" text="Does it describe author's choice? Signal: 'intentionally', 'deliberately', 'chose'" />
+</detection_questions>"""
         return {
             "title": "Execute Verification Checks",
             "actions": [

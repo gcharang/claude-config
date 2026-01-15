@@ -25,16 +25,16 @@ Two modes: Full (14 steps) and Quick (8 steps, bypasses sub-agents).
 
 | Phase                 | Steps | Purpose                                  |
 | --------------------- | ----- | ---------------------------------------- |
-| Input Processing      | 0     | Remove bias from input (S2A)             |
-| Problem Understanding | 1-3   | Abstraction, characterization, analogies |
-| Planning              | 4     | Sub-questions, success criteria          |
-| Sub-Agent Design      | 5-7   | Design, critique, revise (Full only)     |
-| Divergent Exploration | 8-10  | Dispatch, gate, aggregate (Full only)    |
-| Convergent Synthesis  | 11    | Initial synthesis                        |
-| Iterative Refinement  | 12    | Verification loop until confident        |
-| Formatting & Output   | 13    | Format and present final answer          |
+| Input Processing      | 1     | Remove bias from input (S2A)             |
+| Problem Understanding | 2-4   | Abstraction, characterization, analogies |
+| Planning              | 5     | Sub-questions, success criteria          |
+| Sub-Agent Design      | 6-8   | Design, critique, revise (Full only)     |
+| Divergent Exploration | 9-11  | Dispatch, gate, aggregate (Full only)    |
+| Convergent Synthesis  | 12    | Initial synthesis                        |
+| Iterative Refinement  | 13    | Verification loop until confident        |
+| Formatting & Output   | 14    | Format and present final answer          |
 
-Step 2 determines mode. Quick mode jumps from step 4 directly to step 11.
+Step 3 determines mode. Quick mode jumps from step 5 directly to step 12.
 
 ## Invisible Knowledge
 
@@ -112,7 +112,7 @@ between shallow analysis and indefinite loops.
 
 ## Output Formats
 
-Final output adapts to question type (determined in Step 2):
+Final output adapts to question type (determined in Step 3):
 
 - **Taxonomy**: Structure + rationale + edge cases + alternatives rejected
 - **Trade-off**: Dimensions + balance point + shift conditions + framework
@@ -123,6 +123,6 @@ Final output adapts to question type (determined in Step 2):
 ## Implementation Notes
 
 The workflow uses `skills.lib.workflow.formatters.text` for output formatting.
-Step 4 generates different invoke_after based on mode (quick vs full). Step 12
+Step 5 generates different invoke_after based on mode (quick vs full). Step 13
 uses `--iteration` parameter computed by the script, with MAX_ITERATIONS=5
 hardcoded.
