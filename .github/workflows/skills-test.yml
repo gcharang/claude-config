@@ -21,7 +21,7 @@ jobs:
 
       - name: Install test dependencies
         working-directory: skills/scripts
-        run: pip install pytest
+        run: pip install pytest hypothesis
 
       - name: Run tests
         working-directory: skills/scripts
