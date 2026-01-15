@@ -23,5 +23,8 @@
 # Always ignore these, even in tracked directories
 .DS_Store
 **/.DS_Store
-
 **/__pycache__
+**/.pytest_cache
+**/.hypothesis
+**/.venv
+**/*.pyc

@@ -4,14 +4,13 @@ AST module for workflow output representation with builder API and pluggable ren
 
 ## Files
 
-| File          | What                                               | When to read                                     |
-| ------------- | -------------------------------------------------- | ------------------------------------------------ |
-| `README.md`   | Architecture, data flow, invariants, tradeoffs     | Understanding AST design, extending renderers    |
-| `nodes.py`    | Node type definitions (11 frozen dataclasses)      | Adding node types, understanding node structure  |
-| `builder.py`  | Fluent builder API (W.header(), W.actions(), etc.) | Constructing AST nodes, building workflows       |
-| `renderer.py` | XMLRenderer and render() function                  | Implementing new renderers, debugging output     |
-| `__init__.py` | Public API exports                                 | Importing AST types, checking available exports  |
-| `test_ast.py` | Property-based tests for AST construction          | Verifying node behavior, exhaustiveness coverage |
+| File          | What                                               | When to read                                    |
+| ------------- | -------------------------------------------------- | ----------------------------------------------- |
+| `README.md`   | Architecture, data flow, invariants, tradeoffs     | Understanding AST design, extending renderers   |
+| `nodes.py`    | Node type definitions (11 frozen dataclasses)      | Adding node types, understanding node structure |
+| `builder.py`  | Fluent builder API (W.header(), W.actions(), etc.) | Constructing AST nodes, building workflows      |
+| `renderer.py` | XMLRenderer and render() function                  | Implementing new renderers, debugging output    |
+| `__init__.py` | Public API exports                                 | Importing AST types, checking available exports |
 
 ## Usage
 

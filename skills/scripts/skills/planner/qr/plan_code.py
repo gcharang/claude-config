@@ -153,6 +153,8 @@ def get_step_guidance(
 
     # Step 5: Category application
     if step == 5:
+        baseline_resource = get_convention("code-quality/baseline.md")
+        coherence_resource = get_convention("code-quality/coherence.md")
         return {
             "title": "Apply Taxonomy to Proposed Code",
             "actions": [
@@ -170,23 +172,33 @@ def get_step_guidance(
                 "  LLM_COMPREHENSION_RISK: Pattern confusing to future LLM",
                 "",
                 "STRUCTURAL CATEGORIES (SHOULD severity):",
-                "  GOD_OBJECT: >15 public methods OR >10 deps OR mixed concerns",
-                "  GOD_FUNCTION: >50 lines OR >3 nesting levels",
-                "  DUPLICATE_LOGIC: Copy-pasted blocks or parallel functions",
-                "  INCONSISTENT_ERROR_HANDLING: Mixed exceptions/codes in same module",
+                "  Apply baseline.md and coherence.md categories. Key checks:",
+                "  - Function Composition (baseline #2): god functions, >50 lines, >3 nesting",
+                "  - Duplication (coherence #1): copy-pasted blocks, parallel functions",
+                "  - Error Handling (baseline #11 + coherence #6): swallowed exceptions, mixed patterns",
+                "  - Zombie Code (coherence #8): unused functions, impossible branches",
                 "  CONVENTION_VIOLATION: Violates documented project convention",
                 "",
                 "COSMETIC CATEGORIES (COULD severity):",
-                "  DEAD_CODE: Unused functions, impossible branches",
                 "  FORMATTER_FIXABLE: Style fixable by formatter/linter",
                 "  MINOR_INCONSISTENCY: Non-conformance with no documented rule",
                 "",
                 "PLAN-CODE SPECIFIC:",
-                "  - Module bloat: adds many functions to already-large module? -> GOD_OBJECT",
-                "  - Responsibility overlap: similar scope to existing module? -> DUPLICATE_LOGIC",
+                "  - Module bloat: adds many functions to already-large module?",
+                "  - Responsibility overlap: similar scope to existing module?",
                 "",
                 "Record each finding with:",
                 "  [CATEGORY] [SEVERITY]: description (file:line)",
+                "",
+                "=" * 60,
+                "BASELINE CODE QUALITY REFERENCE:",
+                "=" * 60,
+                baseline_resource,
+                "",
+                "=" * 60,
+                "COHERENCE REFERENCE:",
+                "=" * 60,
+                coherence_resource,
             ],
             "next": f"python3 -m {module_path} --step 6 --total-steps {total_steps}",
         }

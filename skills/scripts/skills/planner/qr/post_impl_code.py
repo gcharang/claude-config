@@ -151,6 +151,8 @@ REQUIRES:
     # Step 4: Comparison and category application
     if step == 4:
         defaults_resource = get_convention("structural.md")
+        baseline_resource = get_convention("code-quality/baseline.md")
+        coherence_resource = get_convention("code-quality/coherence.md")
         return {
             "title": "Compare and Apply Categories (Factored Step 3)",
             "actions": [
@@ -183,21 +185,31 @@ REQUIRES:
                 "  Ask: 'Would future reader understand without knowing prior state?'",
                 "",
                 "STRUCTURAL CATEGORIES (SHOULD severity):",
-                "  GOD_OBJECT: >15 public methods OR >10 deps OR mixed concerns",
-                "  GOD_FUNCTION: >50 lines OR >3 nesting levels",
-                "  DUPLICATE_LOGIC: Copy-pasted blocks or parallel functions",
-                "  INCONSISTENT_ERROR_HANDLING: Mixed exceptions/codes in same module",
+                "  Apply baseline.md and coherence.md categories. Key checks:",
+                "  - Function Composition (baseline #2): god functions, >50 lines, >3 nesting",
+                "  - Duplication (coherence #1): copy-pasted blocks, parallel functions",
+                "  - Error Handling (baseline #11 + coherence #6): swallowed exceptions, mixed patterns",
+                "  - Zombie Code (coherence #8): unused functions, impossible branches",
                 "  CONVENTION_VIOLATION: Violates documented project convention",
                 "  Ask: 'What project documentation specifies this standard?'",
                 "",
                 "COSMETIC CATEGORIES (COULD severity):",
-                "  DEAD_CODE: Unused functions, impossible branches",
                 "  FORMATTER_FIXABLE: Style fixable by formatter/linter",
                 "  MINOR_INCONSISTENCY: Non-conformance with no documented rule",
                 "",
                 "Reference for structural thresholds:",
                 "",
                 defaults_resource,
+                "",
+                "=" * 60,
+                "BASELINE CODE QUALITY REFERENCE:",
+                "=" * 60,
+                baseline_resource,
+                "",
+                "=" * 60,
+                "COHERENCE REFERENCE:",
+                "=" * 60,
+                coherence_resource,
             ],
             "next": f"python3 -m {module_path} --step 5 --total-steps {total_steps}",
         }
