@@ -43,6 +43,8 @@ from skills.lib.workflow.core import (
     Workflow,
     register_workflow,
 )
+from skills.lib.workflow.ast import W, XMLRenderer, render
+from skills.lib.workflow.ast.nodes import TextNode
 
 MODULE_PATH = "skills.incoherence.incoherence"
 
@@ -163,6 +165,41 @@ def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
 def step_survey(ctx: StepContext) -> tuple[Outcome, dict]:
     """Handler for step 1 (survey)."""
     return Outcome.OK, {}
+
+
+def format_incoherence_output(step, total, phase, agent_type, guidance):
+    """Format output using AST builder API."""
+    parts = []
+    title = f"INCOHERENCE [{phase}] [{agent_type}]"
+    parts.append(render(
+        W.el("step_header", TextNode(title),
+            script="incoherence", step=str(step), total=str(total),
+            phase=phase, agent_type=agent_type
+        ).build(), XMLRenderer()
+    ))
+    parts.append("")
+
+    if step == 1:
+        parts.append("""<xml_format_mandate>
+CRITICAL: All script outputs use XML format. You MUST:
+1. Execute the action in <current_action>
+2. When complete, invoke the exact command in <invoke_after>
+3. DO NOT modify commands. DO NOT skip steps.
+</xml_format_mandate>""")
+        parts.append("")
+
+    action_nodes = [TextNode(a) for a in guidance["actions"]]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append("")
+
+    next_text = guidance.get("next", "")
+    if step >= total or "COMPLETE" in next_text.upper():
+        parts.append("WORKFLOW COMPLETE - Present report to user.")
+    else:
+        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.incoherence.incoherence --step-number {step + 1} --total-steps {total}" />'
+        parts.append(render(W.el("invoke_after", TextNode(next_cmd)).build(), XMLRenderer()))
+
+    return "\n".join(parts)
 
 
 def get_step_guidance(step_number, total_steps):
@@ -749,21 +786,10 @@ def main(
         agent_type = "PARENT"
         phase = "APPLICATION"
 
-    print(f"STEP {args.step_number}/{args.total_steps} [{phase}] [{agent_type}]")
-    print()
-    print("ACTIONS:")
-    for action in guidance["actions"]:
-        print(f"  {action}")
-    print()
-
-    # Phase boundary reminders (condensed)
-    if args.step_number == 12:
-        print("NOTE: Detection complete. Proceed to resolution via AskUserQuestion.")
-    if args.step_number == 15:
-        print("NOTE: Resolution complete. Proceed to dispatch agents for application.")
-
-    print()
-    print("NEXT:", guidance["next"])
+    output = format_incoherence_output(
+        args.step_number, args.total_steps, phase, agent_type, guidance
+    )
+    print(output)
 
 
 if __name__ == "__main__":

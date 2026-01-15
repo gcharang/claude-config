@@ -30,6 +30,8 @@ from skills.lib.workflow.core import (
     Workflow,
     register_workflow,
 )
+from skills.lib.workflow.ast import W, XMLRenderer, render
+from skills.lib.workflow.ast.nodes import TextNode
 
 
 # =============================================================================
@@ -904,6 +906,46 @@ SCOPES = {
 }
 
 
+def format_prompt_engineer_output(step, total, scope, step_def, read_section, next_command, is_step_one=False):
+    """Format output using AST builder API."""
+    parts = []
+    title = f"PROMPT ENGINEER - {step_def.title}"
+    attrs = {"script": "prompt_engineer", "step": str(step), "total": str(total)}
+    if scope:
+        attrs["scope"] = scope
+    parts.append(render(W.el("step_header", TextNode(title), **attrs).build(), XMLRenderer()))
+    parts.append("")
+
+    if scope:
+        parts.append(f"Scope: {scope.upper()}")
+        parts.append("")
+
+    if is_step_one:
+        parts.append("""<xml_format_mandate>
+CRITICAL: All script outputs use XML format. You MUST:
+1. Execute the action in <current_action>
+2. When complete, invoke the exact command in <invoke_after>
+3. DO NOT modify commands. DO NOT skip steps.
+</xml_format_mandate>""")
+        parts.append("")
+
+    if read_section:
+        read_nodes = [TextNode(line) for line in read_section]
+        parts.append(render(W.el("read_section", *read_nodes).build(), XMLRenderer()))
+        parts.append("")
+
+    action_nodes = [TextNode(a) for a in step_def.actions]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append("")
+
+    if next_command:
+        parts.append(render(W.el("invoke_after", TextNode(next_command)).build(), XMLRenderer()))
+    else:
+        parts.append("WORKFLOW COMPLETE - Present results to user.")
+
+    return "\n".join(parts)
+
+
 # =============================================================================
 # CLI Entry Point
 # =============================================================================
@@ -936,19 +978,11 @@ def main(
         workflow = WORKFLOW_SINGLE
         step_def = STEP_TRIAGE
         total = 6
-        lines = [
-            f"PROMPT ENGINEER - Step {args.step}/{total}: {step_def.title}",
-            "",
-            "DO:",
-        ]
-        for action in step_def.actions:
-            lines.append(f"  {action}" if action else "")
-
-        lines.extend([
-            "",
-            "NEXT: Invoke step 2 with --scope <determined-scope>",
-        ])
-        print("\n".join(lines))
+        next_cmd = "python3 -m skills.prompt_engineer.optimize --step 2 --scope <determined-scope>"
+        output = format_prompt_engineer_output(
+            args.step, total, None, step_def, None, next_cmd, is_step_one=True
+        )
+        print(output)
         return
 
     # Steps 2+ require scope
@@ -976,23 +1010,18 @@ def main(
         next_step_id = step_ids[args.step]
         next_step_def = workflow.steps[next_step_id]
 
-    lines = [
-        f"PROMPT ENGINEER - Step {args.step}/{total}: {step_def.title}",
-        f"  Scope: {args.scope.upper()}",
-        "",
-    ]
-
     # Inject READ section at plan/design steps
     read_specs = {
         "single-prompt": (4, [
-            "references/prompt-engineering-single-turn.md",
-            "references/prompt-engineering-compression.md (always)",
-            "  -> Extract: Technique Selection Guide tables from both",
-            "  -> For each technique: note Trigger Condition column",
+            "READ:",
+            "  - references/prompt-engineering-single-turn.md",
+            "  - references/prompt-engineering-compression.md (always)",
+            "  - Extract: Technique Selection Guide tables from both",
+            "  - For each technique: note Trigger Condition column",
             "If multi-turn patterns detected: also read multi-turn reference.",
         ]),
         "ecosystem": (5, [
-            "PROCESS SEQUENTIALLY (complete each before next):",
+            "READ (PROCESS SEQUENTIALLY):",
             "",
             "First: references/prompt-engineering-single-turn.md",
             "  -> Extract: Technique Selection Guide",
@@ -1011,55 +1040,42 @@ def main(
             "If orchestration or human gates: also read subagents/hitl refs.",
         ]),
         "greenfield": (4, [
-            "references/prompt-engineering-single-turn.md",
-            "references/prompt-engineering-compression.md (always)",
-            "  -> Extract: Technique Selection Guide tables from both",
-            "  -> For each technique: note Trigger Condition column",
+            "READ:",
+            "  - references/prompt-engineering-single-turn.md",
+            "  - references/prompt-engineering-compression.md (always)",
+            "  - Extract: Technique Selection Guide tables from both",
+            "  - For each technique: note Trigger Condition column",
             "If multi-turn architecture chosen: also read multi-turn reference.",
         ]),
         "problem": (4, [
-            "references/prompt-engineering-single-turn.md",
-            "references/prompt-engineering-compression.md (always)",
-            "  -> Extract: Technique Selection Guide tables from both",
-            "  -> Focus on techniques matching the problem class",
+            "READ:",
+            "  - references/prompt-engineering-single-turn.md",
+            "  - references/prompt-engineering-compression.md (always)",
+            "  - Extract: Technique Selection Guide tables from both",
+            "  - Focus on techniques matching the problem class",
             "If problem involves multi-turn patterns: also read multi-turn reference.",
         ]),
     }
 
-    # Track if compression guide is in refs for DO section framing injection
-    compression_in_refs = False
+    read_section = None
     if args.scope in read_specs:
         read_step, read_refs = read_specs[args.scope]
         if args.step == read_step:
-            lines.append("READ:")
-            for ref in read_refs:
-                lines.append(f"  - {ref}")
-                # Track compression guide presence (don't inject framing here)
-                if "compression" in ref.lower() and "Extract" not in ref:
-                    compression_in_refs = True
-            lines.append("")
-
-    lines.append("DO:")
-    # Inject framing immediately before actions if compression guide was read
-    if compression_in_refs:
-        lines.extend(compression_guide_framing())
-        lines.append("")
-    for action in step_def.actions:
-        lines.append(f"  {action}" if action else "")
-
-    lines.append("")
+            read_section = read_refs
 
     # Next step or completion
-    if step_def.next.get(Outcome.OK) is None:
-        lines.append("COMPLETE - Present results to user.")
-    else:
+    next_command = None
+    if step_def.next.get(Outcome.OK) is not None:
         next_step = args.step + 1
-        lines.append(
-            f"NEXT: python3 -m skills.prompt_engineer.optimize "
+        next_command = (
+            f"python3 -m skills.prompt_engineer.optimize "
             f"--step {next_step} --scope {args.scope}"
         )
 
-    print("\n".join(lines))
+    output = format_prompt_engineer_output(
+        args.step, total, args.scope, step_def, read_section, next_command
+    )
+    print(output)
 
 
 if __name__ == "__main__":

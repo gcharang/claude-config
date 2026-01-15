@@ -25,6 +25,8 @@ from skills.lib.workflow.core import (
     Arg,
     register_workflow,
 )
+from skills.lib.workflow.ast import W, XMLRenderer, render
+from skills.lib.workflow.ast.nodes import TextNode
 
 
 def get_phase_name(step: int) -> str:
@@ -946,40 +948,44 @@ CONTEXT ACCUMULATION: Your --thoughts MUST include:
 
 
 def format_output(step: int, total_steps: int, guidance: dict, thoughts: str) -> str:
-    """Format the output for display."""
-    lines = []
-
+    """Format output using AST builder API."""
+    parts = []
     is_complete = step >= total_steps
-    status = "complete" if is_complete else "in_progress"
 
-    lines.append("=" * 70)
-    lines.append(f"WRITING STYLE - {guidance['phase']} - Step {step}/{total_steps}")
-    lines.append("=" * 70)
-    lines.append("")
-    lines.append(f"STATUS: {status}")
-    lines.append(f"STEP: {guidance['step_title']}")
-    lines.append("")
-    lines.append("YOUR THOUGHTS:")
-    lines.append(thoughts)
-    lines.append("")
+    title = f"WRITING STYLE - {guidance['phase']} - {guidance['step_title']}"
+    parts.append(render(
+        W.el("step_header", TextNode(title),
+            script="leon_writing_style", step=str(step), total=str(total_steps),
+            phase=guidance["phase"]
+        ).build(), XMLRenderer()
+    ))
+    parts.append("")
 
-    if is_complete:
-        lines.append("FINAL CHECKLIST:")
+    if step == 1:
+        parts.append("""<xml_format_mandate>
+CRITICAL: All script outputs use XML format. You MUST:
+1. Execute the action in <current_action>
+2. When complete, invoke the exact command in <invoke_after>
+3. DO NOT modify commands. DO NOT skip steps.
+</xml_format_mandate>""")
+        parts.append("")
+
+    if thoughts:
+        parts.append(render(W.el("accumulated_thoughts", TextNode(thoughts)).build(), XMLRenderer()))
+        parts.append("")
+
+    action_nodes = [TextNode(a) for a in guidance["actions"]]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append("")
+
+    next_text = guidance.get("next", "")
+    if is_complete or "COMPLETE" in next_text.upper():
+        parts.append("WORKFLOW COMPLETE - Deliver final content.")
     else:
-        lines.append("REQUIRED ACTIONS:")
+        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.leon_writing_style.writing_style --step {step + 1} --total-steps {total_steps} --thoughts \\"<accumulated>\\"" />'
+        parts.append(render(W.el("invoke_after", TextNode(next_cmd)).build(), XMLRenderer()))
 
-    for action in guidance["actions"]:
-        if action:
-            lines.append(f"  {action}")
-        else:
-            lines.append("")
-    lines.append("")
-
-    lines.append(f"NEXT: {guidance['next']}")
-    lines.append("")
-    lines.append("=" * 70)
-
-    return "\n".join(lines)
+    return "\n".join(parts)
 
 
 # Handler functions (output-only steps just return OK)

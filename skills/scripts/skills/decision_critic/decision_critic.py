@@ -308,6 +308,16 @@ def main(
     ))
     parts.append("")
 
+    # XML mandate for step 1
+    if args.step == 1:
+        parts.append("""<xml_format_mandate>
+CRITICAL: All script outputs use XML format. You MUST:
+1. Execute the action in <current_action>
+2. When complete, invoke the exact command in <invoke_after>
+3. DO NOT modify commands. DO NOT skip steps.
+</xml_format_mandate>""")
+        parts.append("")
+
     # Phase info
     if step_def.phase:
         parts.append(f"Phase: {step_def.phase}")
@@ -320,9 +330,17 @@ def main(
 
     # Next step info
     if next_step_def:
-        parts.append(f"Next: {next_step_def.title}")
+        next_cmd = (
+            f'<invoke working-dir=".claude/skills/scripts" '
+            f'cmd="python3 -m skills.decision_critic.decision_critic '
+            f'--step {args.step + 1} --total-steps {args.total_steps}" />'
+        )
+        parts.append(render(
+            W.el("invoke_after", TextNode(next_cmd)).build(),
+            XMLRenderer()
+        ))
     elif args.step >= args.total_steps:
-        parts.append("COMPLETE - Present verdict to user.")
+        parts.append("WORKFLOW COMPLETE - Present verdict to user.")
 
     print("\n".join(parts))
 
