@@ -12,21 +12,26 @@ This document synthesizes practical prompt engineering patterns for **orchestrat
 
 ## Technique Selection Guide
 
-| Domain              | Technique                  | Trigger Condition                             | Stacks With                    | Conflicts With           | Cost/Tradeoff                     | Effect                                    |
-| ------------------- | -------------------------- | --------------------------------------------- | ------------------------------ | ------------------------ | --------------------------------- | ----------------------------------------- |
-| **Parallelization** | Skeleton-of-Thought        | Long-form answers with plannable structure    | Any single-turn technique      | Step-by-step reasoning   | N parallel API calls + synthesis  | 1.89x-2.39x latency reduction             |
-| **Parallelization** | SoT with Router            | Mixed query types requiring adaptive dispatch | Skeleton-of-Thought            | --                       | Router call overhead              | Enables SoT for suitable queries only     |
-| **Search**          | Tree of Thoughts (BFS)     | Problems requiring exploration with pruning   | State evaluation, backtracking | Sequential CoT           | b x T LLM calls (beam x steps)    | Game of 24: 4%->74% vs CoT                |
-| **Search**          | Tree of Thoughts (DFS)     | Deep exploration with early termination       | Value-based pruning            | Parallel expansion       | Variable; supports backtracking   | Crosswords: 15.6%->60% word accuracy      |
-| **Decomposition**   | Least-to-Most              | Complex problems harder than examples         | Any verification technique     | Single-turn CoT          | 2+ sequential LLM calls           | SCAN: 99.7% vs 16% standard               |
-| **Decomposition**   | Task Orchestration         | Complex task requiring multiple model types   | Any technique                  | Monolithic single-model  | Planning + dispatch overhead      | Enables specialized models per subtask    |
-| **Reflection**      | Explicit Reflection        | Tool returns error; retry needed              | Tool-augmented workflows       | Immediate retry          | One reflection step per retry     | Concrete diagnosis improves next attempt  |
-| **Reflection**      | Self-Contrast              | Self-evaluation unreliable                    | Multi-perspective generation   | Single-path reflection   | 3-stage process                   | GSM8K +7.8%; invalid reflections -30.8%   |
-| **Reflection**      | Anticipatory Reflection    | Agent tasks with potential early failures     | Tree search, plan execution    | Post-hoc only reflection | R backup actions per step         | WebArena: 23.5%; 45% fewer plan revisions |
-| **Verification**    | Multi-Perspective SC       | Code generation requiring implicit verify     | Solution + spec + test gen     | Single-perspective vote  | 3-partite graph construction      | HumanEval +15.91%; CodeContests +9.37%    |
-| **Verification**    | LM^2 (Decomposer-Solver)   | Complex reasoning requiring step verification | Concept generation             | Monolithic prompting     | 3 models + policy coordination    | MATH: +8.1%; MedQA: +9.7%                 |
-| **Coordination**    | Multi-Expert Prompting     | Open-ended tasks; diverse expertise needed    | NGT aggregation                | Single-expert prompting  | n experts + 7-subtask aggregation | TruthfulQA: 89.35% SOTA                   |
-| **Coordination**    | Role-Specialized Subagents | Task requires distinct expertise areas        | Any verification technique     | Monolithic prompting     | Role setup overhead               | Specialized responses per domain          |
+| Domain              | Technique                  | Trigger Condition                              | Stacks With                    | Conflicts With           | Cost/Tradeoff                     | Effect                                    |
+| ------------------- | -------------------------- | ---------------------------------------------- | ------------------------------ | ------------------------ | --------------------------------- | ----------------------------------------- |
+| **Parallelization** | Skeleton-of-Thought        | Long-form answers with plannable structure     | Any single-turn technique      | Step-by-step reasoning   | N parallel API calls + synthesis  | 1.89x-2.39x latency reduction             |
+| **Parallelization** | SoT with Router            | Mixed query types requiring adaptive dispatch  | Skeleton-of-Thought            | --                       | Router call overhead              | Enables SoT for suitable queries only     |
+| **Parallelization** | Branch-Solve-Merge         | Multi-faceted tasks with independent aspects   | Self-Consistency               | Sequential reasoning     | k parallel branches + merge       | +26% human agreement; -50% position bias  |
+| **Parallelization** | Diversity of Thought       | Ensembles needed; diverse reasoning preferred  | Any voting aggregation         | Single-path sampling     | n diverse approaches in parallel  | +29.6pp on planning; Pareto-optimal cost  |
+| **Parallelization** | Dipper (Prompt Diversity)  | Small model; need ensemble without retraining  | Majority vote, Best-of-N       | Single-prompt sampling   | n diverse prompts + selection     | 3×1.5B ≈ 7B; ~10% gain over self-consist  |
+| **Search**          | Tree of Thoughts (BFS)     | Problems requiring exploration with pruning    | State evaluation, backtracking | Sequential CoT           | b x T LLM calls (beam x steps)    | Game of 24: 4%->74% vs CoT                |
+| **Search**          | Tree of Thoughts (DFS)     | Deep exploration with early termination        | Value-based pruning            | Parallel expansion       | Variable; supports backtracking   | Crosswords: 15.6%->60% word accuracy      |
+| **Decomposition**   | Least-to-Most              | Complex problems harder than examples          | Any verification technique     | Single-turn CoT          | 2+ sequential LLM calls           | SCAN: 99.7% vs 16% standard               |
+| **Decomposition**   | Divide-and-Conquer         | Long inputs with parallel homogeneous subtasks | DaC recursive expansion        | Sequential decomposition | k parallel subtasks + merge       | S(DaC) ⊇ NC¹; reduces intermediate errors |
+| **Decomposition**   | Task Orchestration         | Complex task requiring multiple model types    | Any technique                  | Monolithic single-model  | Planning + dispatch overhead      | Enables specialized models per subtask    |
+| **Reflection**      | Explicit Reflection        | Tool returns error; retry needed               | Tool-augmented workflows       | Immediate retry          | One reflection step per retry     | Concrete diagnosis improves next attempt  |
+| **Reflection**      | Self-Contrast              | Self-evaluation unreliable                     | Multi-perspective generation   | Single-path reflection   | 3-stage process                   | GSM8K +7.8%; invalid reflections -30.8%   |
+| **Reflection**      | Anticipatory Reflection    | Agent tasks with potential early failures      | Tree search, plan execution    | Post-hoc only reflection | R backup actions per step         | WebArena: 23.5%; 45% fewer plan revisions |
+| **Verification**    | Multi-Perspective SC       | Code generation requiring implicit verify      | Solution + spec + test gen     | Single-perspective vote  | 3-partite graph construction      | HumanEval +15.91%; CodeContests +9.37%    |
+| **Verification**    | LM^2 (Decomposer-Solver)   | Complex reasoning requiring step verification  | Concept generation             | Monolithic prompting     | 3 models + policy coordination    | MATH: +8.1%; MedQA: +9.7%                 |
+| **Coordination**    | Multi-Expert Prompting     | Open-ended tasks; diverse expertise needed     | NGT aggregation                | Single-expert prompting  | n experts + 7-subtask aggregation | TruthfulQA: 89.35% SOTA                   |
+| **Coordination**    | Multi-Chain Reasoning      | Multi-hop QA; SC loses intermediate evidence   | Parallel chain sampling        | Answer-only voting       | n chains + meta-reasoner call     | +5.7% over SC; 20-25% benefit from fusion |
+| **Coordination**    | Role-Specialized Subagents | Task requires distinct expertise areas         | Self-Consistency (mitigates)   | Monolithic prompting     | Role setup overhead               | ⚠️ Degrades 7/12 datasets; use with SC    |
 
 ---
 
@@ -52,6 +57,11 @@ This document synthesizes practical prompt engineering patterns for **orchestrat
 18. **Nuanced Verification Beats Binary** -- 9-category error feedback (conceptual, computational, procedural, position) enables targeted response
 19. **Complexity-Weighted Voting** -- Top-K complex chains: 80.5% vs 78.0% standard SC on GSM8K; more steps -> more likely correct
 20. **Self Red-Team Against Overconfidence** -- "Why opponent could win" reduces confidence escalation 10.34%->3.05%; debates 61.7% end with both claiming >=75%
+21. **Branch-Solve-Merge for Multi-Faceted Tasks** -- Dynamic branching into parallel criteria; +26% human agreement on eval; LLaMA-2-70B matches GPT-4
+22. **Divide Long Inputs into Parallel Subtasks** -- DaC: divide input → parallel solve → merge; expressive power S(DaC) ⊇ NC¹; reduces intermediate errors vs sequential
+23. **Meta-Reason Across Chains, Not Just Answers** -- MCR: +5.7% over SC; reads full reasoning chains, not just final answers; 20-25% examples benefit from chain fusion
+24. **Diverse Approaches Beat Diverse Samples** -- Div-Se: vary reasoning method, not just temperature; +29.6pp on planning; IDiv-Se: single prompt for cost reduction
+25. **Prompt Diversity > Temperature Diversity** -- Dipper: optimized diverse prompts; 3×1.5B ≈ 7B performance; fidelity-diversity selection outperforms random
 
 ---
 
@@ -157,14 +167,148 @@ RIGHT: `Generate 8 samples for complex reasoning with multiple valid paths`
 
 **Stacking:** Combine with complexity-weighted voting (select top-K complex chains before majority vote: 80.5% vs 78.0% standard SC on GSM8K).
 
+### Diverse Prompt Ensembles (Div-Se and Dipper)
+
+Generates ensemble diversity through varied reasoning prompts rather than temperature sampling alone. Per Naik et al. (2024): "Linguistic token diversity does not always ensure diverse and independent solution approaches." Per Loh et al. (2025): "Prompt diversity is an influential yet overlooked source of diversity" for LLM ensembles.
+
+**Key insight:** Self-Consistency uses temperature to induce diversity at the token level. Prompt ensembles induce diversity at the reasoning approach level--fundamentally different ways to solve the problem.
+
+**Div-Se Process:**
+
+```
+O (Generate approaches): Task description -> [approach_1, ..., approach_n]
+                        (e.g., "method of elimination", "visualization", "work backwards")
+S1..Sn (Solve): Each approach solves task independently (PARALLEL)
+O (Aggregate): Majority vote across approaches
+```
+
+**Approach generation prompt:**
+
+```
+For this task: {task_description}
+
+Generate {n} distinct approaches to solve it. Each approach should use
+a fundamentally different reasoning strategy.
+
+Example approaches: method of elimination, visualization, working backwards,
+analogy to simpler problem, constraint satisfaction, case analysis.
+```
+
+**Performance (Blocksworld 4/5 planning):**
+
+| Method           | Accuracy | Cost Factor        |
+| ---------------- | -------- | ------------------ |
+| CoT (single)     | 31.8%    | 1x                 |
+| Self-Consistency | 42.3%    | 8x                 |
+| Div-Se           | 61.4%    | 8x (parallel)      |
+| IDiv-Se          | 58.7%    | 1x (single prompt) |
+
+**IDiv-Se variant:** Combines all approaches within a single prompt to reduce cost:
+
+```
+Solve this problem using EACH of the following approaches:
+
+Approach 1 (Method of Elimination): [solution]
+Approach 2 (Visualization): [solution]
+Approach 3 (Working Backwards): [solution]
+
+Final answer (majority from above):
+```
+
+**Dipper Framework (Fidelity-Diversity Optimization):**
+
+Selects optimal prompt subset from candidate pool by maximizing both fidelity (individual prompt accuracy) and diversity (semantic distance between prompts). Per Loh et al. (2025): "Three 1.5B models with diverse prompts can match or outperform a single 7B model."
+
+**Process:**
+
+```
+O (Generate): Create candidate pool of 200+ reasoning prompts
+O (Select): Optimize for fidelity-adjusted semantic volume
+            (accuracy × diversity metric)
+S1..Sn (Solve): Selected prompts solve task in parallel
+O (Aggregate): Majority vote or Best-of-N with reward model
+```
+
+| Ensemble Size | Self-Consistency | Dipper (FASV) | Improvement |
+| ------------- | ---------------- | ------------- | ----------- |
+| n=3           | 52.1%            | 57.8%         | +5.7pp      |
+| n=5           | 54.3%            | 60.2%         | +5.9pp      |
+| n=9           | 55.8%            | 65.1%         | +9.3pp      |
+
+**Critical insight:** Prompt diversity in the candidate pool matters more than selection algorithm. Clustering prompts and selecting from diverse clusters outperforms uniform random selection.
+
+WRONG: `SC with temp=0.7, n=8` -- Diversity only at token level
+RIGHT: `Div-Se with 5 distinct reasoning approaches` -- Diversity at strategy level
+
+**Stacking:** Combine with Reflexion--apply self-reflection to each approach independently before aggregation (+8% additional gain).
+
+### Branch-Solve-Merge (BSM)
+
+Decomposes multi-faceted tasks into parallel sub-tasks with LLM-generated branching. Per Saha et al. (2024): "BSM is an LLM program that aims to solve complex planning-based tasks with three neural modules: branch, solve, and merge."
+
+**Process:**
+
+```
+O (Branch): Task -> [criterion_1, criterion_2, ..., criterion_k] (LLM decides k)
+S1..Sk (Solve): Each criterion evaluated independently IN PARALLEL
+O (Merge): Combine sub-solutions (sum scores, or neural aggregation)
+```
+
+**Branch prompt (evaluation example):**
+
+```
+You will evaluate two responses to a question. First, generate an evaluation
+plan: a list of up to five criteria relevant to judging this specific question.
+For each criterion, provide a title and brief description of what to assess.
+
+Question: {question}
+
+Evaluation plan:
+1.
+```
+
+**Solve prompt (per branch):**
+
+```
+Evaluate the following two responses ONLY on the criterion: {criterion_title}
+{criterion_description}
+
+Question: {question}
+Response A: {response_a}
+Response B: {response_b}
+
+Score each response 1-5 and explain your reasoning.
+```
+
+**Performance (MT-Bench LLM evaluation):**
+
+| Metric          | Zero-shot LLaMA-2-70B | BSM LLaMA-2-70B | GPT-4  |
+| --------------- | --------------------- | --------------- | ------ |
+| Human Agreement | 43%                   | 55%             | 59%    |
+| Position Bias   | 51.66%                | 17.33%          | 17.33% |
+| Length Bias     | 54.88%                | 39.09%          | 39.09% |
+
+**Key finding:** BSM enables LLaMA-2-70B to match GPT-4 on most domains. The LLM decides the branching factor (k) dynamically based on task complexity—no fixed decomposition required.
+
+**Constrained generation application:** BSM also improves constrained story generation by 12% constraint satisfaction. Branch divides concepts into groups, solve generates intermediate stories per group, merge combines them coherently.
+
+WRONG: `Single-pass evaluation against all criteria at once` -- Loses focus on individual aspects
+RIGHT: `Branch into criteria -> evaluate each in parallel -> merge scores`
+
+**Stacking:** Combine with Self-Consistency within each branch (BSM+SC) for 2% additional reduction in position bias.
+
 ### Parallelization Techniques Compared
 
 | Technique         | Independence Requirement      | Output Type          | Best For                    |
 | ----------------- | ----------------------------- | -------------------- | --------------------------- |
 | SoT               | Points must be independent    | Structured long-form | Knowledge, generic, writing |
 | Parallel Sampling | N/A (samples are independent) | Multiple candidates  | Reasoning with valid paths  |
+| BSM               | Sub-tasks must be independent | Multi-faceted eval   | Evaluation, constrained gen |
+| Div-Se/Dipper     | Approaches are independent    | Ensemble of answers  | Complex reasoning, planning |
 
-**Why SoT differs from Parallel Sampling:** SoT parallelizes within a single answer (expanding independent points concurrently). Parallel Sampling parallelizes across multiple complete answers (N independent attempts). SoT reduces latency for structured responses; Parallel Sampling increases quality through selection/voting.
+**Why BSM differs from SoT:** SoT decomposes structure (skeleton → expand points). BSM decomposes evaluation criteria (branch → solve per criterion → merge). SoT is content generation; BSM is multi-faceted judgment.
+
+**Why Div-Se differs from Parallel Sampling:** Parallel Sampling uses same prompt with temperature diversity. Div-Se uses different reasoning approaches (methodological diversity). Div-Se produces more independent solutions that benefit ensemble voting.
 
 ---
 
@@ -345,6 +489,68 @@ RIGHT: `[{task: "OCR", id: 1}, {task: "translate", id: 2, dep: [1]}, ...]` -- St
 | Task Orchestration | Dependency-based DAG   | Passes outputs between tasks   | Multi-model specialization |
 
 **Why Least-to-Most differs from Task Orchestration:** Least-to-Most solves subproblems in complexity order, accumulating context--each solution feeds into harder problems. Task Orchestration routes independent subtasks to specialized models based on dependencies. Least-to-Most excels at length/complexity generalization; Task Orchestration excels at leveraging diverse model capabilities.
+
+### Divide-and-Conquer (DaC) Prompting
+
+Decomposes long inputs into parallel homogeneous sub-tasks for independent processing. Per Wang et al. (2024): DaC prompting explicitly separates task decomposition and resolution, making models "less prone to deception" and enabling provably stronger expressive power than IO prompting.
+
+**Process (single-level):**
+
+```
+O (Decompose): Long input -> [segment_1, ..., segment_k] (parallel sub-tasks)
+S1..Sk (Solve): Each segment -> independent solution (EXECUTE IN PARALLEL)
+O (Merge): All solutions -> aggregated final answer
+```
+
+**Key distinction from Least-to-Most:** DaC creates parallel homogeneous sub-tasks (same operation on different input segments), while Least-to-Most creates sequential heterogeneous sub-tasks (different operations building on each other).
+
+| Technique     | Decomposition      | Execution  | Context Flow           |
+| ------------- | ------------------ | ---------- | ---------------------- |
+| Least-to-Most | Easy→hard subprob  | Sequential | Accumulates solutions  |
+| DaC           | Input segmentation | Parallel   | Independent processing |
+
+**Decomposition prompt (hallucination detection example):**
+
+```
+Divide this document into individual claims that can be fact-checked independently:
+
+Document: {long_document}
+
+Output format: [claim_1, claim_2, ...]
+```
+
+**Solve prompt:**
+
+```
+Verify this claim against the provided evidence:
+Claim: {claim_i}
+Evidence: {evidence}
+
+Is this claim supported, contradicted, or unverifiable?
+```
+
+**Performance:**
+
+| Task                    | IO Prompting | CoT   | DaC   | Improvement      |
+| ----------------------- | ------------ | ----- | ----- | ---------------- |
+| Hallucination Detection | 62.3%        | 71.2% | 84.7% | +13.5pp over CoT |
+| Fake News Detection     | 58.1%        | 63.4% | 79.2% | +15.8pp over CoT |
+
+**Theoretical result:** DaC expressive power ⊇ NC¹ (problems solvable in logarithmic depth), strictly stronger than IO prompting (⊆ TC⁰).
+
+**Multi-level variant:** For very long inputs, recursively apply DaC until sub-tasks reach manageable size:
+
+```
+If f(segment_i) > threshold:
+    Recursively decompose segment_i
+Else:
+    Solve segment_i directly
+```
+
+WRONG: `Fact-check entire article in one pass` -- Long context triggers hallucination/deception
+RIGHT: `Segment into claims -> verify each independently -> merge verdicts`
+
+**Stacking:** Combine with Self-Consistency on individual segment solutions before merging.
 
 ---
 
@@ -644,9 +850,63 @@ S7. Best response selection:
 WRONG: `Generate 3 experts, pick best` -- Missing NGT aggregation
 RIGHT: `NGT: agreement -> conflict resolution -> unique perspectives -> aggregate -> select`
 
+### Multi-Chain Reasoning (MCR)
+
+Meta-reasons across multiple sampled reasoning chains rather than just voting on answers. Per Yoran et al. (2023): "MCR concatenates intermediate steps from each chain into a unified context, which is passed to a meta-reasoner to produce a final answer along with an explanation."
+
+**Key distinction from Self-Consistency:** SC votes only on final answers, discarding intermediate reasoning. MCR reads full chains and can combine facts from different chains.
+
+| Method | Uses          | Aggregation    | Key Advantage                   |
+| ------ | ------------- | -------------- | ------------------------------- |
+| SC     | Final answers | Majority vote  | Simple, no additional LLM call  |
+| MCR    | Full chains   | Meta-reasoning | Combines evidence across chains |
+
+**Process:**
+
+```
+S1..Sn (Sample): Generate n reasoning chains with temp > 0
+O (Concatenate): Collect all intermediate (q_i, a_i) pairs from all chains
+O (Meta-reason): Given multi-chain context -> final answer + explanation
+```
+
+**Meta-reasoner prompt:**
+
+```
+You are given multiple reasoning chains for the question: {question}
+
+Chain 1:
+{intermediate_qa_pairs_1}
+
+Chain 2:
+{intermediate_qa_pairs_2}
+...
+
+Review all chains. Combine relevant facts to determine the final answer.
+Provide your reasoning and final answer.
+```
+
+**Performance:**
+
+| Dataset    | Self-Consistency | MCR   | Improvement |
+| ---------- | ---------------- | ----- | ----------- |
+| StrategyQA | 70.0%            | 73.6% | +3.6pp      |
+| Fermi      | 38.1%            | 38.9% | +0.8pp      |
+| HotpotQA   | 56.4%            | 57.0% | +0.6pp      |
+
+**When MCR helps most:** In 20-25% of examples, the MCR explanation results from combining facts across different chains—neither chain alone contained all needed information.
+
+**Critical insight:** MCR gains are highest when the meta-reasoner uses chains other than the greedy-decoded chain. If chains are too similar, MCR adds cost without benefit.
+
+WRONG: `SC with n=15 for complex multi-hop reasoning` -- Ignores intermediate evidence
+RIGHT: `MCR with n=5 for multi-hop QA requiring fact combination`
+
+**Stacking:** Combine with retrieval-augmented chains for knowledge-intensive tasks.
+
 ### Role-Specialized Subagents
 
 Assigns distinct roles to different LLM calls for specialized handling. Per Kong et al. (2024): role-play prompting provides +10pp accuracy on math benchmarks through implicit role-based reasoning.
+
+**Critical limitation:** Per Kim et al. (2024): persona prompting degrades performance in 7/12 datasets studied. Even well-matched personas can fail—"Math Expert" on GSM8K drops accuracy by 4.2pp. The mechanism: personas can "dilute useful priors" when the role conflicts with task requirements. Mitigation: pair persona-based subagents with self-consistency voting rather than relying on single role-based responses.
 
 **Role assignment pattern:**
 
@@ -721,19 +981,32 @@ RIGHT: `Self-Contrast: multiple perspectives -> contrast differences -> checklis
 WRONG: `Subtask completes -> add to context -> continue` -- Errors propagate
 RIGHT: `Subtask completes -> validate format/sanity -> if valid continue; else retry`
 
+### The Persona Overconfidence Trap
+
+Per Kim et al. (2024): Persona prompting degrades performance in 7/12 datasets. Even seemingly well-matched personas fail—"Math Expert" on GSM8K drops accuracy by 4.2pp due to "dilution of useful priors."
+
+WRONG: `"You are a Math Expert" -> single response` -- Persona may hurt more than help
+RIGHT: `"You are a Math Expert" -> generate 5 responses -> self-consistency vote` -- Mitigates persona-induced errors
+
 ---
 
 ## Research Citations
 
 - Huang, B., et al. (2024). "Enhancing Large Language Models in Coding Through Multi-Perspective Self-Consistency." ACL.
 - Juneja, G., Dutta, S., & Chakraborty, T. (2024). "LM^2: A Simple Society of Language Models Solves Complex Reasoning." arXiv.
+- Kim, J., et al. (2024). "Persona is a Double-edged Sword: Mitigating the Negative Impact of Role-playing Prompts in Zero-shot Reasoning Tasks." arXiv.
 - Kong, A., et al. (2024). "Better Zero-Shot Reasoning with Role-Play Prompting." arXiv.
+- Loh, J., et al. (2025). "Dipper: Diversity in Prompts for Producing Large Language Model Ensembles in Reasoning Tasks." arXiv.
 - Long, D.X., et al. (2024). "Multi-expert Prompting Improves Reliability, Safety and Usefulness of Large Language Models." EMNLP.
+- Naik, R., et al. (2024). "Diversity of Thought Improves Reasoning Abilities of Large Language Models." arXiv.
 - Ning, X., Lin, Z., Zhou, Z., et al. (2024). "Skeleton-of-Thought: Prompting LLMs for Efficient Parallel Generation." ICLR.
 - Prasad, P.S. & Nguyen, M.N. (2025). "When Two LLMs Debate, Both Think They'll Win." arXiv.
+- Saha, S., et al. (2024). "Branch-Solve-Merge Improves Large Language Model Evaluation and Generation." arXiv.
 - Shen, Y., et al. (2023). "HuggingGPT: Solving AI Tasks with ChatGPT and its Friends in Hugging Face." arXiv.
 - Shinn, N., et al. (2023). "Reflexion: Language Agents with Verbal Reinforcement Learning." NeurIPS.
 - Wang, H., et al. (2024). "Devil's Advocate: Anticipatory Reflection for LLM Agents." arXiv.
+- Wang, Z., et al. (2024). "An Examination on the Effectiveness of Divide-and-Conquer Prompting in Large Language Models." arXiv.
 - Yao, S., et al. (2023). "Tree of Thoughts: Deliberate Problem Solving with Large Language Models." NeurIPS.
+- Yoran, O., et al. (2023). "Answering Questions by Meta-Reasoning over Multiple Chains of Thought." arXiv.
 - Zhang, W., et al. (2024). "Self-Contrast: Better Reflection Through Inconsistent Solving Perspectives." arXiv.
 - Zhou, D., et al. (2023). "Least-to-Most Prompting Enables Complex Reasoning in Large Language Models." ICLR.

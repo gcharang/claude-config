@@ -17,17 +17,17 @@ Compression techniques modify CoT behavior, not replace it.
 
 ## Technique Selection Guide
 
-| Domain                | Technique            | Trigger Condition                           | Stacks With                                      | Conflicts With         | Cost/Tradeoff                       | Effect                                     |
-| --------------------- | -------------------- | ------------------------------------------- | ------------------------------------------------ | ---------------------- | ----------------------------------- | ------------------------------------------ |
-| **Explicit Limits**   | Concise CoT          | General verbosity reduction needed          | Any CoT variant                                  | --                     | Few-shot examples required          | ~49% token reduction; negligible acc. loss |
-| **Explicit Limits**   | Constrained-CoT      | Predictable output length needed            | CoT, larger models                               | Small models (<13B)    | May miss constraint on hard limits  | 28-68% token reduction; +5% acc. on large  |
-| **Per-Step Limits**   | Chain of Draft (CoD) | Maximum compression with accuracy           | Few-shot only                                    | Zero-shot              | 5-word-per-step limit               | 75-92% token reduction; ~same accuracy     |
-| **Dynamic Budget**    | TALE-EP              | Variable complexity; cost-sensitive         | Any reasoning task                               | --                     | Extra estimation call               | 67% token reduction; <3% acc. loss         |
-| **Cognitive**         | Sketch-of-Thought    | Multi-domain reasoning; maximum compression | Self-Refine, Multi-Agent Debate, Self-Consistency | --                     | Router overhead; paradigm selection | Up to 84% token reduction; +/- 1% accuracy |
-| **Path Optimization** | MARP                 | Math reasoning; known reasoning boundaries  | PoT, Tool Usage, Self-Consistency (for PFRB)    | Verbose demonstrations | Requires boundary knowledge         | +7% acc.; -20% tokens vs CoT               |
-| **Tool-Augmented**    | Program-of-Thoughts  | Math/computation requiring precise calc     | MARP, Self-Consistency                          | Pure text reasoning    | Requires code interpreter           | ~12% avg acc. improvement over CoT         |
-| **Input-Centric**     | Focused CoT (F-CoT)  | Verbose word problems with extractable facts| All output compression techniques               | --                     | Extra extraction step               | 2-3x token reduction; same accuracy        |
-| **Logic-Centric**     | Symbolic CoT         | Logical reasoning with formal structure     | SoT Expert Lexicons                             | Semantic reasoning     | Translation overhead                | +8-27% on logic benchmarks vs CoT          |
+| Domain                | Technique            | Trigger Condition                            | Stacks With                                       | Conflicts With         | Cost/Tradeoff                       | Effect                                     |
+| --------------------- | -------------------- | -------------------------------------------- | ------------------------------------------------- | ---------------------- | ----------------------------------- | ------------------------------------------ |
+| **Explicit Limits**   | Concise CoT          | General verbosity reduction needed           | Any CoT variant                                   | --                     | Few-shot examples required          | ~49% token reduction; negligible acc. loss |
+| **Explicit Limits**   | Constrained-CoT      | Predictable output length needed             | CoT, larger models                                | Small models (<13B)    | May miss constraint on hard limits  | 28-68% token reduction; +5% acc. on large  |
+| **Per-Step Limits**   | Chain of Draft (CoD) | Maximum compression with accuracy            | Few-shot only                                     | Zero-shot              | 5-word-per-step limit               | 75-92% token reduction; ~same accuracy     |
+| **Dynamic Budget**    | TALE-EP              | Variable complexity; cost-sensitive          | Any reasoning task                                | --                     | Extra estimation call               | 67% token reduction; <3% acc. loss         |
+| **Cognitive**         | Sketch-of-Thought    | Multi-domain reasoning; maximum compression  | Self-Refine, Multi-Agent Debate, Self-Consistency | --                     | Router overhead; paradigm selection | Up to 84% token reduction; +/- 1% accuracy |
+| **Path Optimization** | MARP                 | Math reasoning; known reasoning boundaries   | PoT, Tool Usage, Self-Consistency (for PFRB)      | Verbose demonstrations | Requires boundary knowledge         | +7% acc.; -20% tokens vs CoT               |
+| **Tool-Augmented**    | Program-of-Thoughts  | Math/computation requiring precise calc      | MARP, Self-Consistency                            | Pure text reasoning    | Requires code interpreter           | ~12% avg acc. improvement over CoT         |
+| **Input-Centric**     | Focused CoT (F-CoT)  | Verbose word problems with extractable facts | All output compression techniques                 | --                     | Extra extraction step               | 2-3x token reduction; same accuracy        |
+| **Logic-Centric**     | Symbolic CoT         | Logical reasoning with formal structure      | SoT Expert Lexicons                               | Semantic reasoning     | Translation overhead                | +8-27% on logic benchmarks vs CoT          |
 
 ---
 
@@ -248,11 +248,11 @@ minimal accuracy loss."
 
 **Three paradigms:**
 
-| Paradigm            | Use Case                | Style                     |
-| ------------------- | ----------------------- | ------------------------- |
-| Conceptual Chaining | Commonsense, multi-hop  | Concept -> Concept -> ... |
-| Chunked Symbolism   | Math, arithmetic        | Variables and equations   |
-| Expert Lexicons     | Technical, domain-specific | Abbreviations, notation  |
+| Paradigm            | Use Case                   | Style                     |
+| ------------------- | -------------------------- | ------------------------- |
+| Conceptual Chaining | Commonsense, multi-hop     | Concept -> Concept -> ... |
+| Chunked Symbolism   | Math, arithmetic           | Variables and equations   |
+| Expert Lexicons     | Technical, domain-specific | Abbreviations, notation   |
 
 **Conceptual Chaining example:**
 
@@ -357,11 +357,11 @@ Goal: Maximize calculation_per_step while minimizing total_steps
 
 **Three reasoning boundaries (from RBF theory):**
 
-| Boundary | Accuracy Range | Model Behavior                      | Optimization Strategy                    |
-| -------- | -------------- | ----------------------------------- | ---------------------------------------- |
-| CFRB     | >90%           | Complete mastery; zero-shot capable | No compression needed                    |
-| PFRB     | 10-90%         | Partial confidence; needs consensus | Apply MARP + Self-Consistency            |
-| CIRB     | <10%           | Model cannot solve                  | Use tools or decompose                   |
+| Boundary | Accuracy Range | Model Behavior                      | Optimization Strategy         |
+| -------- | -------------- | ----------------------------------- | ----------------------------- |
+| CFRB     | >90%           | Complete mastery; zero-shot capable | No compression needed         |
+| PFRB     | 10-90%         | Partial confidence; needs consensus | Apply MARP + Self-Consistency |
+| CIRB     | <10%           | Model cannot solve                  | Use tools or decompose        |
 
 **Scaling law:** Per Chen et al. (2024), reasoning boundary increases with model
 parameter count. Larger models have higher calculation-per-step limits and
@@ -411,11 +411,11 @@ planning; precise calculation happens externally.
 
 **Performance (Codex on GSM8K):**
 
-| Method        | Accuracy | vs CoT  |
-| ------------- | -------- | ------- |
-| CoT           | 63.1%    | --      |
-| PoT           | 71.6%    | +8.5%   |
-| PoT + SC      | 80.0%    | +16.9%  |
+| Method   | Accuracy | vs CoT |
+| -------- | -------- | ------ |
+| CoT      | 63.1%    | --     |
+| PoT      | 71.6%    | +8.5%  |
+| PoT + SC | 80.0%    | +16.9% |
 
 **Best for:** Problems requiring iteration, large number arithmetic, polynomial
 equations, financial calculations, or any task where LLMs make calculation
@@ -486,10 +486,10 @@ redundant extraction during reasoning are eliminated.
 
 **Performance (Qwen3-14B on MATH-500):**
 
-| Method   | Pass@5 | Tokens |
-| -------- | ------ | ------ |
-| 0-CoT    | 99.4%  | 4,931  |
-| F-CoT    | 98.6%  | 2,437  |
+| Method | Pass@5 | Tokens |
+| ------ | ------ | ------ |
+| 0-CoT  | 99.4%  | 4,931  |
+| F-CoT  | 98.6%  | 2,437  |
 
 **Critical insight:** This technique is orthogonal to output compression
 methods. F-CoT structures the _input_; techniques like CoD, SoT, and MARP
@@ -540,11 +540,11 @@ Conclusion: Statement is FALSE
 
 **Performance (GPT-4):**
 
-| Method      | PrOntoQA | ProofWriter | FOLIO | Avg   |
-| ----------- | -------- | ----------- | ----- | ----- |
-| CoT         | 98.79%   | 68.11%      | 70.58%| 79.16%|
-| Logic-LM    | 83.20%   | 79.66%      | 78.92%| 80.59%|
-| **SymbCoT** | 99.60%   | 82.50%      | 83.33%| 88.47%|
+| Method      | PrOntoQA | ProofWriter | FOLIO  | Avg    |
+| ----------- | -------- | ----------- | ------ | ------ |
+| CoT         | 98.79%   | 68.11%      | 70.58% | 79.16% |
+| Logic-LM    | 83.20%   | 79.66%      | 78.92% | 80.59% |
+| **SymbCoT** | 99.60%   | 82.50%      | 83.33% | 88.47% |
 
 **Why this compresses:** FOL expressions are inherently compact. `∀x (A(x) →
 B(x))` is shorter than "For all things, if that thing is an A, then that thing
@@ -659,9 +659,9 @@ LLMs make arithmetic errors, especially with large numbers, iteration, or
 equations.
 
 WRONG: CoT for "Calculate compound interest over 50 iterations"
-       [Model makes calculation errors; verbose reasoning]
+[Model makes calculation errors; verbose reasoning]
 RIGHT: PoT delegates to Python interpreter
-       [Precise results; compact code]
+[Precise results; compact code]
 
 Per Chen et al. (2023): "LLMs are very prone to arithmetic calculation errors,
 especially when dealing with large numbers" and "cannot solve complex

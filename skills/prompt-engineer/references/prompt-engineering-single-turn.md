@@ -8,46 +8,53 @@ This document synthesizes practical prompt engineering patterns with academic re
 
 ## Technique Selection Guide
 
-| Domain             | Technique                     | Trigger Condition                               | Stacks With                        | Conflicts With                     | Cost/Tradeoff                                | Effect                                                                |
-| ------------------ | ----------------------------- | ----------------------------------------------- | ---------------------------------- | ---------------------------------- | -------------------------------------------- | --------------------------------------------------------------------- |
-| **Reasoning**      | Plan-and-Solve                | Multi-step problems with missing steps          | RE2, Thinking Tags, Step-Back      | Scope Limitation, Direct Prompting | Moderate token increase for planning phase   | Of incorrect answers: calc errors 7%→5%, missing-step 12%→7%          |
-| **Reasoning**      | Step-Back                     | Domain knowledge required before reasoning      | Plan-and-Solve                     | —                                  | Additional retrieval step                    | Up to 27% improvement on knowledge tasks                              |
-| **Reasoning**      | Chain of Draft                | Token efficiency needed                         | Any reasoning technique            | Verbose CoT                        | Minimal; up to 92% token reduction           | Matches CoT accuracy at as little as 7.6% token cost (varies by task) |
-| **Reasoning**      | Direct Prompting              | Pattern recognition, implicit learning          | —                                  | Any CoT variant                    | Minimal; no reasoning overhead               | Avoids 30%+ accuracy drops on pattern tasks                           |
-| **Reasoning**      | Thread of Thought             | Chaotic/multi-source context                    | RE2                                | —                                  | Moderate increase; benefits from two-phase   | Systematic context segmentation                                       |
-| **Reasoning**      | Self-Ask                      | Compositional questions requiring decomposition | Search/retrieval tools             | —                                  | Moderate increase (sub-question chains)      | Bamboogle: +11.2pp over few-shot CoT (64.9% vs 53.7%)                 |
-| **Reasoning**      | Program of Thoughts           | Numerical/computational problems                | Plan-and-Solve                     | Chain of Draft                     | Requires code interpreter                    | ~12% avg improvement over CoT on math benchmarks                      |
-| **Reasoning**      | Table as Thought              | Constraint planning, multi-constraint tasks     | Tab-CoT, Schema Design             | —                                  | Moderate (schema + verification)             | Calendar scheduling: 32.7%→42.3% over direct prompting                |
-| **Input**          | RE2 (Re-Reading)              | Any comprehension task (universal enhancer)     | All output-phase techniques        | —                                  | Minimal; question repetition only            | GSM8K: 77.79%→80.59% with CoT                                         |
-| **Input**          | RaR (Rephrase and Respond)    | Ambiguous questions, frame mismatch             | CoT                                | —                                  | Minimal; single rephrasing step              | Aligns intent with LLM interpretation                                 |
-| **Input**          | S2A (System 2 Attention)      | Heavily biased/opinionated context              | —                                  | Including original context         | ~2x tokens (preprocessing filter call)       | Factual QA: 62.8%→80.3% on opinion-contaminated prompts               |
-| **Input**          | Distractor-Robust Prompting   | Occasional noise, efficiency needed             | Explicit ignore instruction        | —                                  | Minimal; single-turn, no preprocessing       | Approaches S2A without preprocessing cost                             |
-| **Input**          | Document Positioning          | >20K tokens of source material                  | Quote Extraction, Opinion-Based    | —                                  | None; structural change only                 | Empirical improvement (Anthropic guidance)                            |
-| **Input**          | Quote Extraction              | Grounding required before analysis              | Document Positioning               | —                                  | Moderate increase for extraction step        | Forces evidence commitment                                            |
-| **Input**          | Opinion-Based Prompting       | Context conflicts with model knowledge          | Counterfactual Demos, Doc Position | —                                  | Minimal; reframing only                      | Memorization ratio: 35.2%→3.0%                                        |
-| **Example Design** | Contrastive Examples          | Model makes predictable mistakes                | Affirmative Directives, Categories | —                                  | ~2x example tokens (correct + incorrect)     | +9.8 to +16.0 points on reasoning tasks                               |
-| **Example Design** | Counterfactual Demonstrations | Knowledge conflicts with context                | Opinion-Based Prompting            | Factual demonstrations             | None; different demo selection               | Reduces memorization ratio significantly                              |
-| **Example Design** | Complexity-Based Selection    | Teaching thorough reasoning                     | Diversity-Based Selection          | —                                  | Fewer examples but longer; net neutral       | +5.3 avg, up to +18 accuracy (Fu et al.)                              |
-| **Example Design** | Diversity-Based Selection     | Selecting from example pool                     | Complexity-Based Selection         | —                                  | None; selection strategy only                | Robust even with 50% wrong demos                                      |
-| **Example Design** | Similarity-Based Selection    | Large example pool, matching patterns matter    | —                                  | May reduce diversity               | Requires embedding computation               | +15% accuracy on Natural Questions                                    |
-| **Example Design** | Auto-CoT                      | Need CoT demos without manual crafting          | Diversity-Based Selection          | Hand-crafted examples              | Requires clustering/embedding                | Matches Manual-CoT (within 1-2%)                                      |
-| **Example Design** | Analogical Prompting          | No hand-crafted examples available              | Diversity instruction              | Hand-crafted examples              | Moderate increase (self-generated examples)  | GSM8K: 77.8% (vs 72.5% 0-shot CoT)                                    |
-| **Example Design** | Contextual Calibration        | Few-shot with biased label predictions          | Any few-shot technique             | —                                  | Requires calibration pass                    | Up to +30% accuracy on classification                                 |
-| **Example Design** | Category-Based Generalization | Novel inputs need correct handling              | Edge-case examples                 | —                                  | Minimal; structural organization             | Enables analogical reasoning                                          |
-| **Output**         | Scope Limitation              | Well-defined task; model stuck in planning loop | —                                  | Plan-and-Solve                     | May reduce tokens by preventing overthinking | Prevents analysis paralysis                                           |
-| **Output**         | XML Structure Patterns        | Enforcing completeness                          | Instructive Tag Naming             | —                                  | Minimal; structural tags only                | Forces systematic reasoning                                           |
-| **Output**         | Format Strictness             | Exact format required                           | Forbidden Phrases                  | —                                  | Minimal                                      | "ONLY return X" compliance                                            |
-| **Output**         | Hint-Based Guidance           | Output missing key aspects                      | Any technique                      | —                                  | Minimal                                      | 4-13% improvement via directional stimulus                            |
-| **Output**         | Batch Prompting               | Processing multiple similar inputs              | Any technique                      | Cross-sample reasoning             | Reduced tokens per sample                    | Up to 5x token efficiency at b=6                                      |
-| **NLU**            | Metacognitive Prompting       | Deep comprehension required                     | —                                  | Simple tasks (causes overthinking) | Moderate to high (5-stage process)           | +4.8% to +6.4% over CoT                                               |
-| **Behavioral**     | Identity Establishment        | Any task (foundational)                         | Emotional Stimuli                  | —                                  | Minimal                                      | AQuA: +10.3pp; varies significantly by task (Last Letter: +60pp)      |
-| **Behavioral**     | Emotional Stimuli             | Reluctant execution                             | Identity Establishment             | —                                  | Minimal                                      | 8% on Instruction Induction, 115% on BIG-Bench                        |
-| **Behavioral**     | Confidence Building           | Hesitation/verification loops                   | Error Normalization                | —                                  | Minimal                                      | Eliminates hesitation loops (production pattern)                      |
-| **Behavioral**     | Error Normalization           | Expected failures cause stopping                | Confidence Building                | —                                  | Minimal                                      | Prevents apology spirals (production pattern)                         |
-| **Behavioral**     | Pre-Work Context Analysis     | Blind execution problems                        | Category-Based Examples            | —                                  | Slight increase for analysis phase           | Prevents context-blind execution (production pattern)                 |
-| **Behavioral**     | Emphasis Hierarchy            | Multiple priority levels                        | Numbered Rule Priority             | —                                  | Minimal                                      | Predictable priority system (production pattern)                      |
-| **Behavioral**     | Affirmative Directives        | Any instruction (foundational)                  | Contrastive Examples               | —                                  | Minimal                                      | 57.7% quality improvement (Bsharat et al. 2024)                       |
-| **Verification**   | Embedded Verification         | Factual accuracy concerns                       | —                                  | —                                  | Moderate increase for verification questions | List-based QA: 17%→70% (factored CoVe)                                |
+| Domain             | Technique                       | Trigger Condition                               | Stacks With                        | Conflicts With                     | Cost/Tradeoff                                | Effect                                                                |
+| ------------------ | ------------------------------- | ----------------------------------------------- | ---------------------------------- | ---------------------------------- | -------------------------------------------- | --------------------------------------------------------------------- |
+| **Reasoning**      | Plan-and-Solve                  | Multi-step problems with missing steps          | RE2, Thinking Tags, Step-Back      | Scope Limitation, Direct Prompting | Moderate token increase for planning phase   | Of incorrect answers: calc errors 7%→5%, missing-step 12%→7%          |
+| **Reasoning**      | Step-Back                       | Domain knowledge required before reasoning      | Plan-and-Solve                     | —                                  | Additional retrieval step                    | Up to 27% improvement on knowledge tasks                              |
+| **Reasoning**      | Chain of Draft                  | Token efficiency needed                         | Any reasoning technique            | Verbose CoT                        | Minimal; up to 92% token reduction           | Matches CoT accuracy at as little as 7.6% token cost (varies by task) |
+| **Reasoning**      | Direct Prompting                | Pattern recognition, implicit learning          | —                                  | Any CoT variant                    | Minimal; no reasoning overhead               | Avoids 30%+ accuracy drops on pattern tasks                           |
+| **Reasoning**      | Thread of Thought               | RAG/retrieval-augmented chaotic context         | RE2                                | —                                  | Moderate increase; benefits from two-phase   | Systematic context segmentation                                       |
+| **Reasoning**      | Self-Ask                        | Compositional questions requiring decomposition | Search/retrieval tools             | —                                  | Moderate increase (sub-question chains)      | Bamboogle: +11.2pp over few-shot CoT (64.9% vs 53.7%)                 |
+| **Reasoning**      | Program of Thoughts             | Numerical/computational problems                | Plan-and-Solve                     | Chain of Draft                     | Requires code interpreter                    | ~12% avg improvement over CoT on math benchmarks                      |
+| **Reasoning**      | Table as Thought                | Constraint planning, multi-constraint tasks     | Tab-CoT, Schema Design             | —                                  | Moderate (schema + verification)             | Calendar scheduling: 32.7%→42.3% over direct prompting                |
+| **Input**          | RE2 (Re-Reading)                | Any comprehension task (universal enhancer)     | All output-phase techniques        | —                                  | Minimal; question repetition only            | GSM8K: 77.79%→80.59% with CoT                                         |
+| **Input**          | RaR (Rephrase and Respond)      | Ambiguous questions, frame mismatch             | CoT                                | —                                  | Minimal; single rephrasing step              | Aligns intent with LLM interpretation                                 |
+| **Input**          | S2A (System 2 Attention)        | Heavily biased/opinionated context              | —                                  | Including original context         | ~2x tokens (preprocessing filter call)       | Factual QA: 62.8%→80.3% on opinion-contaminated prompts               |
+| **Input**          | Distractor-Robust Prompting     | Occasional noise, efficiency needed             | Explicit ignore instruction        | —                                  | Minimal; single-turn, no preprocessing       | Approaches S2A without preprocessing cost                             |
+| **Input**          | Document Positioning            | >20K tokens of source material                  | Quote Extraction, Opinion-Based    | —                                  | None; structural change only                 | Empirical improvement (Anthropic guidance)                            |
+| **Input**          | Quote Extraction                | Grounding required before analysis              | Document Positioning               | —                                  | Moderate increase for extraction step        | Forces evidence commitment                                            |
+| **Input**          | Opinion-Based Prompting         | Context conflicts with model knowledge          | Counterfactual Demos, Doc Position | —                                  | Minimal; reframing only                      | Memorization ratio: 35.2%→3.0%                                        |
+| **Example Design** | Contrastive Examples            | Model makes predictable mistakes                | Affirmative Directives, Categories | —                                  | ~2x example tokens (correct + incorrect)     | +9.8 to +16.0 points on reasoning tasks                               |
+| **Example Design** | Counterfactual Demonstrations   | Knowledge conflicts with context                | Opinion-Based Prompting            | Factual demonstrations             | None; different demo selection               | Reduces memorization ratio significantly                              |
+| **Example Design** | Complexity-Based Selection      | Teaching thorough reasoning                     | Diversity-Based Selection          | —                                  | Fewer examples but longer; net neutral       | +5.3 avg, up to +18 accuracy (Fu et al.)                              |
+| **Example Design** | Diversity-Based Selection       | Selecting from example pool                     | Complexity-Based Selection         | —                                  | None; selection strategy only                | Robust with 1-2 wrong demos out of 8                                  |
+| **Example Design** | Similarity-Based Selection      | Large example pool, matching patterns matter    | —                                  | May reduce diversity               | Requires embedding computation               | +15% accuracy on Natural Questions                                    |
+| **Example Design** | Auto-CoT                        | Need CoT demos without manual crafting          | Diversity-Based Selection          | Hand-crafted examples              | Requires clustering/embedding                | Matches Manual-CoT (within 1-2%)                                      |
+| **Example Design** | Analogical Prompting            | No hand-crafted examples available              | Diversity instruction              | Hand-crafted examples              | Moderate increase (self-generated examples)  | GSM8K: 77.8% (vs 72.5% 0-shot CoT)                                    |
+| **Example Design** | Contextual Calibration          | Few-shot with biased label predictions          | Any few-shot technique             | —                                  | Requires calibration pass                    | Up to +30% accuracy on classification                                 |
+| **Example Design** | Category-Based Generalization   | Novel inputs need correct handling              | Edge-case examples                 | —                                  | Minimal; structural organization             | Enables analogical reasoning                                          |
+| **Output**         | Scope Limitation                | Well-defined task; model stuck in planning loop | —                                  | Plan-and-Solve                     | May reduce tokens by preventing overthinking | Prevents analysis paralysis [Production observation]                  |
+| **Output**         | XML Structure Patterns          | Enforcing completeness                          | Instructive Tag Naming             | —                                  | Minimal; structural tags only                | Forces systematic reasoning                                           |
+| **Output**         | Format Strictness               | Exact format required                           | Forbidden Phrases                  | —                                  | Minimal                                      | "ONLY return X" compliance                                            |
+| **Output**         | Hint-Based Guidance             | Output missing key aspects                      | Any technique                      | —                                  | Minimal                                      | 4-13% improvement via directional stimulus                            |
+| **Output**         | Batch Prompting                 | Processing multiple similar inputs              | Any technique                      | Cross-sample reasoning             | Reduced tokens per sample                    | Up to 5x token efficiency at b=6                                      |
+| **NLU**            | Metacognitive Prompting         | Deep comprehension required                     | —                                  | Simple tasks (causes overthinking) | Moderate to high (5-stage process)           | +4.8% to +6.4% over CoT                                               |
+| **Behavioral**     | Identity Establishment          | Any task (foundational)                         | Emotional Stimuli                  | —                                  | Minimal                                      | AQuA: +10.3pp; varies significantly by task (Last Letter: +60pp)      |
+| **Behavioral**     | Emotional Stimuli               | Reluctant execution                             | Identity Establishment             | —                                  | Minimal                                      | 8% on Instruction Induction, 115% on BIG-Bench                        |
+| **Behavioral**     | Confidence Building             | Hesitation/verification loops                   | Error Normalization                | —                                  | Minimal                                      | Eliminates hesitation loops (production pattern)                      |
+| **Behavioral**     | Error Normalization             | Expected failures cause stopping                | Confidence Building                | —                                  | Minimal                                      | Prevents apology spirals (production pattern)                         |
+| **Behavioral**     | Pre-Work Context Analysis       | Blind execution problems                        | Category-Based Examples            | —                                  | Slight increase for analysis phase           | Prevents context-blind execution (production pattern)                 |
+| **Behavioral**     | Emphasis Hierarchy              | Multiple priority levels                        | Numbered Rule Priority             | —                                  | Minimal                                      | Predictable priority system (production pattern)                      |
+| **Behavioral**     | Affirmative Directives          | Any instruction (foundational)                  | Contrastive Examples               | —                                  | Minimal                                      | 57.7% quality improvement (Bsharat et al. 2024)                       |
+| **Behavioral**     | ExpertPrompting                 | Task requiring domain expertise                 | Identity Establishment             | —                                  | Moderate (expert identity generation)        | 48.5% win rate vs vanilla; 96% ChatGPT capability (Xu et al. 2023)    |
+| **Verification**   | Embedded Verification           | Factual accuracy concerns                       | —                                  | —                                  | Moderate increase for verification questions | List-based QA: 17%→70% (factored CoVe)                                |
+| **Reasoning**      | Question-Analysis Prompting     | Math/commonsense reasoning                      | CoT, Plan-and-Solve                | —                                  | Moderate (~50-150 word analysis)             | Outperforms CoT/PS+ on hard problems (Wan et al. 2024)                |
+| **Reasoning**      | Argument Generation             | Multiple-choice with implicit assumptions       | Contrastive CoT                    | —                                  | Moderate (argue both sides)                  | +35pp on DiFair, +21pp on IBM-30K (Sprague et al. 2024)               |
+| **Example Design** | Self-ICL                        | Zero-shot without example pool                  | Analogical Prompting               | Hand-crafted examples              | 3 inference passes (pseudo-demos)            | 18-0-5 win-tie-lose vs zero-shot on BBH (Chen et al. 2023)            |
+| **Example Design** | Contrastive In-Context Learning | Aligning output with user preference/style      | Contrastive Examples               | —                                  | ~2x example tokens                           | Outperforms few-shot with same token budget (Kim et al. 2024)         |
+| **Example Design** | Diverse Demonstrations          | Compositional generalization tasks              | Diversity-Based Selection          | Similarity-only selection          | Requires structure prediction                | +23pp on SMCalFlow-CS (50.3→73.5%) (Levy et al. 2024)                 |
+| **Example Design** | Fairness-Guided Few-Shot        | Bias-sensitive classification tasks             | Diversity-Based Selection          | —                                  | Requires protected attribute awareness       | Reduces demographic bias while maintaining accuracy (Ma et al. 2023)  |
 
 ---
 
@@ -102,6 +109,13 @@ This document synthesizes practical prompt engineering patterns with academic re
 47. **Batch Prompting** — Process multiple samples in one prompt for up to 5x token efficiency (Cheng et al. 2023)
 48. **Table as Thought** — Schema-driven structured reasoning excels on constraint planning (Cheng et al. 2025)
 49. **Principled Instructions** — 26 instruction patterns for 57.7% quality improvement (Bsharat et al. 2024)
+50. **Self-ICL for Zero-Shot** — Self-generate pseudo-demonstrations when no examples available; 18-0-5 vs zero-shot (Chen et al. 2023)
+51. **ExpertPrompting** — Auto-generate distinguished expert identity for each task; 48.5% win rate vs vanilla (Xu et al. 2023)
+52. **Question-Analysis Prompting** — Restate question before solving; outperforms CoT on hard problems (Wan et al. 2024)
+53. **Argument Generation** — Argue both sides before selecting; +35pp on implicit assumption tasks (Sprague et al. 2024)
+54. **Contrastive In-Context Learning** — Pair positive/negative examples to align with preferences (Kim et al. 2024)
+55. **Diverse Demonstrations** — Cover output structures, not just similarity; +23pp on compositional tasks (Levy et al. 2024)
+56. **Fairness-Guided Few-Shot** — Select examples considering demographic balance (Ma et al. 2023)
 
 ---
 
@@ -425,6 +439,8 @@ Now answer the original question using these principles.
 
 Chain of Thought often produces unnecessarily verbose outputs. **Chain of Draft (CoD)** addresses this by encouraging minimal intermediate steps. Per Xu et al. (2025): "CoD matches or surpasses CoT in accuracy while using as little as only 7.6% of the tokens, significantly reducing cost and latency across various reasoning tasks."
 
+**Performance note**: Token reduction varies significantly by task and model. The 7.6% figure represents best-case (GSM8K arithmetic); other benchmarks show 68-86% token usage compared to CoT. The benefit is most pronounced on simple arithmetic where verbose reasoning adds no value.
+
 **Key insight**: "Rather than elaborating on every detail, humans typically jot down only the essential intermediate results — minimal drafts — to facilitate their thought processes."
 
 **Example comparison from the paper:**
@@ -449,6 +465,8 @@ A: 20 - 12 = 8. #### 8
 ### Thread of Thought: Segmented Context Analysis
 
 When prompts contain substantial, potentially chaotic information from multiple sources, **Thread of Thought** structures comprehension of the context itself—not just reasoning about the problem.
+
+**Scope note**: ThoT specifically targets retrieval-augmented generation (RAG) scenarios with "Chaotic Context"—retrieved passages that may be interconnected, unrelated, or mixed. Per the paper, this differs from general "Long Context" handling; ThoT addresses semantic chaos, not just length.
 
 Per Zhou et al. (2023): "ThoT prompting adeptly maintains the logical progression of reasoning without being overwhelmed... ThoT represents the unbroken continuity of ideas that individuals maintain while sifting through vast information, allowing for the selective extraction of relevant details and the dismissal of extraneous ones."
 
@@ -526,6 +544,67 @@ So the final answer is: William Howard Taft.
 **Why this differs from Plan-and-Solve**: Plan-and-Solve structures _how_ to approach a problem. Self-Ask decomposes _what_ sub-questions need answering. Plan-and-Solve creates a procedural plan; Self-Ask creates an explicit Q&A trace. Use Self-Ask for compositional factual questions; use Plan-and-Solve for procedural multi-step reasoning.
 
 **Stacking note**: Self-Ask combines well with retrieval-augmented generation. The explicit sub-questions can be sent to a search API, and intermediate answers can be grounded in retrieved documents.
+
+---
+
+### Question-Analysis Prompting (QAP)
+
+Before solving a problem, have the model restate and analyze the question in its own words. Per Wan et al. (2024): "Question-Analysis Prompting focuses on how the model interprets the task given, and whether restating the question in its own words can further sophisticate its answer steps."
+
+**The trigger phrase:**
+
+```
+Explain the problem in approximately [n] words and then solve it.
+```
+
+**Performance**: QAP outperforms both CoT and Plan-and-Solve (PS+) on hard problems. On arithmetic reasoning (GSM8K, AQuA, SAT Math), QAP150 (150-word analysis) achieved 43.2% on hard problems vs 35.0% for CoT and 31.5% for PS+. The technique works across both math and commonsense reasoning.
+
+**Key insight**: The word count parameter (n) matters—longer analysis helps harder problems. QAP150 outperforms QAP25 on difficult questions by 13+ percentage points.
+
+**CORRECT:**
+
+```
+Q: Jason had 20 lollipops. He gave Denny some. Now Jason has 12. How many did he give?
+
+Explain the problem in approximately 50 words and then solve it.
+
+A: This problem asks us to find how many lollipops Jason gave away. We know
+his starting amount (20) and ending amount (12). The difference between
+these represents what he gave to Denny. 20 - 12 = 8 lollipops.
+```
+
+**Stacking note**: QAP differs from PS+ in being more general (not math-specific) and explicitly requiring output of the analysis. Combines well with CoT.
+
+---
+
+### Argument Generation: Reasoning Through Both Sides
+
+For multiple-choice questions, especially those with implicit assumptions, have the model argue both for and against each option before selecting. Per Sprague et al. (2024): "Argument Generation can force small models to utilize previously inaccessible reasoning capabilities."
+
+**The trigger phrase:**
+
+```
+When answering, first reason about each choice, and make an argument
+for why it can be the answer and why it cannot be the answer.
+Then select one of the choices based on the strongest argument.
+```
+
+**With implicit assumption extraction:**
+
+```
+When answering, first reason about each choice, and make an argument
+for why it can be the answer and why it cannot be the answer.
+Then identify, for each choice, what implicit assumptions you might be
+making for each of your arguments. By implicit assumption, we mean those
+propositions that are necessary so that the choice logically follows
+the question. Then select one of the choices based on the strongest argument.
+```
+
+**Performance**: On tasks requiring implicit reasoning, Argument Generation dramatically outperforms zero-shot and CoT. On DiFair (distinguishing correct from incorrect phrases): Gemma-2B improves from 0% (zero-shot) to 55.39% (+55pp); on IBM-30K argument quality: improves from 59.46% to 80.93% (+21pp).
+
+**Key insight**: The technique forces the model to articulate what must be true for each answer to be correct, exposing hidden assumptions that zero-shot and CoT miss.
+
+**Stacking note**: Argument Generation is conceptually related to Contrastive CoT (both consider alternatives), but focuses on rationalizing all options rather than demonstrating correct vs incorrect reasoning patterns.
 
 ---
 
@@ -724,11 +803,11 @@ In reality, Lady Gaga performed—but the counterfactual context says "Bosco." T
 
 **Key findings from the paper:**
 
-| Setting | Memorization Ratio (lower = more faithful) |
-| --- | --- |
-| Base prompts (zero-shot) | 35.2% |
-| + Counterfactual demonstrations | **3.0%** |
-| + Original (factual) demonstrations | Limited improvement or worse |
+| Setting                             | Memorization Ratio (lower = more faithful) |
+| ----------------------------------- | ------------------------------------------ |
+| Base prompts (zero-shot)            | 35.2%                                      |
+| + Counterfactual demonstrations     | **3.0%**                                   |
+| + Original (factual) demonstrations | Limited improvement or worse               |
 
 **When to use**: Whenever the model must prioritize provided context over its training knowledge—especially for retrieval-augmented generation, document QA, or tasks with frequently updated information.
 
@@ -769,7 +848,7 @@ When selecting few-shot examples from a pool of candidates, choose diverse examp
 
 **The problem with similar examples**: If you select examples most similar to the test question, you risk sampling from a "frequent-error cluster"—a set of questions where the model tends to fail. Similar examples reinforce the same failure patterns.
 
-**The diversity principle**: Select examples that cover different types or categories of the problem space. Even if some examples contain errors, diverse sampling is more robust. Per the paper: "Even when presented with 50% wrong demonstrations, Auto-CoT (using diversity-based clustering) performance does not degrade significantly."
+**The diversity principle**: Select examples that cover different types or categories of the problem space. Even if some examples contain errors, diverse sampling is more robust. Per Zhang et al. (2022): "Diversity-based clustering may mitigate misleading by similarity." The paper shows that with 1-2 wrong demonstrations out of 8, Auto-CoT performance does not degrade significantly—diversity compensates for individual errors.
 
 **Practical application**:
 
@@ -1055,15 +1134,13 @@ Techniques that control output format, verbosity, and completeness.
 
 ### Scope Limitation: Preventing Overthinking
 
-Plan-and-Solve improves complex reasoning, but unrestricted planning can cause "Analysis Paralysis."
+Plan-and-Solve improves complex reasoning, but unrestricted planning can cause "Analysis Paralysis." [Production observation]
 
-**Research basis**: Per Cuadra et al. (2025): "Analysis Paralysis: the agent spends excessive time planning future steps while making minimal environmental progress... Rather than addressing immediate errors, they construct intricate plans that often remain unexecuted, leading to a cycle of planning without progress."
-
-The research identifies three overthinking failure modes:
+**The problem**: When given open-ended instructions, models may over-plan, exploring tangential improvements rather than completing the core task. This manifests as:
 
 1. **Analysis Paralysis**: Excessive planning without action
-2. **Rogue Actions**: Multiple simultaneous actions under stress
-3. **Premature Disengagement**: Abandoning based on internal prediction rather than feedback
+2. **Scope Creep**: Adding unrequested features or improvements
+3. **Premature Optimization**: Refactoring before completing the basic requirement
 
 **Example:**
 
@@ -1241,11 +1318,11 @@ After populating, verify: Does the sum of Daily Cost stay under $1,100?
 
 **Performance findings**:
 
-| Method | Calendar Scheduling Accuracy |
-| --- | --- |
-| Direct Prompting | 32.7% |
-| CoT Prompting | 36.2% |
-| **Table as Thought** | **42.3%** |
+| Method               | Calendar Scheduling Accuracy |
+| -------------------- | ---------------------------- |
+| Direct Prompting     | 32.7%                        |
+| CoT Prompting        | 36.2%                        |
+| **Table as Thought** | **42.3%**                    |
 
 **Critical insight on schema design**: The paper found that LLM-designed schemas sometimes omit critical columns. Providing a schema template or prompting the LLM to "identify all constraints before designing the schema" improves results.
 
@@ -1351,6 +1428,7 @@ Now process these inputs:
 ```
 
 **Token efficiency formula**: For K few-shot examples and b samples per batch:
+
 - Standard: η = 1/(K+1) of tokens spent on output
 - Batch: η = b/(K+b) of tokens spent on output
 
@@ -1477,6 +1555,29 @@ You are an agent for Claude Code, Anthropic's official CLI for Claude.
 **Non-obvious insight**: The identity doesn't need to be elaborate. "You are an expert debugger" is sufficient—what matters is establishing a competent role that implies relevant capabilities. Overly detailed backstories can actually hurt performance by consuming context that could be used for the actual task.
 
 **Research finding on immersion depth** (Kong et al., 2024): Two-round dialogue prompts where the model first acknowledges its role outperform single-turn prompts. The model's response "That's great to hear! As your math teacher, I'll do my best to explain mathematical concepts correctly..." deepens immersion and improves subsequent reasoning.
+
+#### ExpertPrompting: Automatic Expert Identity Generation
+
+While basic role-play uses generic roles ("You are a helpful assistant"), **ExpertPrompting** automatically generates detailed, instruction-specific expert identities. Per Xu et al. (2023): "ExpertPrompting first envisions a distinguished expert agent that is best suited for the instruction, and then asks the LLMs to answer the instruction conditioned on such expert identity."
+
+**The process**: For each instruction, the model first generates a customized expert identity (profession, expertise, experience relevant to the specific task), then answers conditioned on that identity.
+
+**Performance**: In head-to-head comparisons, ExpertPrompting answers were preferred 48.5% vs 23% for vanilla prompting. The trained ExpertLLaMA model achieved approximately 96% of ChatGPT's capability using only expert-generated training data.
+
+**Example expert identity generation:**
+
+```
+Instruction: Explain the structure of an atom.
+
+Generated expert identity: "As a physicist specializing in atomic structure
+with 15 years of research experience in quantum mechanics..."
+
+Expert-conditioned response: [More detailed, technically accurate explanation]
+```
+
+**Key insight**: The expert identity should be "distinguished, informative, and automatic"—customized to each specific instruction with detailed background, not a generic role. The method uses in-context learning with k=3 instruction-expert pair exemplars to generate new identities.
+
+**Stacking note**: ExpertPrompting builds on Identity Establishment by making the identity generation automatic and task-specific rather than manual and generic.
 
 ---
 
@@ -1683,14 +1784,14 @@ The "26 Principles" research identifies additional instruction patterns that imp
 
 **High-impact principles beyond affirmative framing:**
 
-| Principle | Example | Effect |
-| --- | --- | --- |
-| Audience specification | "Explain this to a 5-year-old" or "Assume I'm an expert in [field]" | Calibrates complexity |
-| Penalty/reward framing | "I'm going to tip $20 for a perfect solution" | Increases attention |
-| Completeness instruction | "Ensure your answer is unbiased and avoids stereotypes" | Reduces problematic outputs |
-| Break down complex tasks | "Think step by step" + explicit subtasks | Reduces errors |
-| Assign a role | "You are a senior software engineer reviewing code" | Activates domain expertise |
-| Use delimiters | Separate sections with ###, XML tags, etc. | Prevents instruction/data conflation |
+| Principle                | Example                                                             | Effect                               |
+| ------------------------ | ------------------------------------------------------------------- | ------------------------------------ |
+| Audience specification   | "Explain this to a 5-year-old" or "Assume I'm an expert in [field]" | Calibrates complexity                |
+| Penalty/reward framing   | "I'm going to tip $20 for a perfect solution"                       | Increases attention                  |
+| Completeness instruction | "Ensure your answer is unbiased and avoids stereotypes"             | Reduces problematic outputs          |
+| Break down complex tasks | "Think step by step" + explicit subtasks                            | Reduces errors                       |
+| Assign a role            | "You are a senior software engineer reviewing code"                 | Activates domain expertise           |
+| Use delimiters           | Separate sections with ###, XML tags, etc.                          | Prevents instruction/data conflation |
 
 **Tip/penalty language patterns:**
 
@@ -2124,27 +2225,33 @@ Affirmative instructions directly specify the target behavior without requiring 
 
 - Bsharat et al. (2024). "Principled Instructions Are All You Need for Questioning LLaMA-1/2, GPT-3.5/4." arXiv.
 - Chen et al. (2023). "Program of Thoughts Prompting: Disentangling Computation from Reasoning for Numerical Reasoning Tasks." TMLR.
+- Chen et al. (2023). "Self-ICL: Zero-Shot In-Context Learning with Self-Generated Demonstrations." arXiv.
 - Chia et al. (2023). "Contrastive Chain-of-Thought Prompting." arXiv.
-- Cuadra et al. (2025). "The Danger of Overthinking: Examining the Reasoning-Action Dilemma in Agentic Tasks." arXiv.
 - Deng et al. (2023). "Rephrase and Respond: Let Large Language Models Ask Better Questions for Themselves." arXiv.
 - Dhuliawala et al. (2023). "Chain-of-Verification Reduces Hallucination in Large Language Models." arXiv.
 - Fu et al. (2023). "Complexity-Based Prompting for Multi-Step Reasoning." arXiv.
 - Jin & Lu (2023). "Tab-CoT: Zero-shot Tabular Chain of Thought." ACL Findings.
+- Kim et al. (2024). "Customizing Language Model Responses with Contrastive In-Context Learning." arXiv.
 - Kojima et al. (2022). "Large Language Models are Zero-Shot Reasoners." NeurIPS.
 - Kong et al. (2024). "Better Zero-Shot Reasoning with Role-Play Prompting." arXiv.
+- Levy et al. (2024). "Diverse Demonstrations Improve In-context Compositional Generalization." arXiv.
 - Li et al. (2023). "Large Language Models Understand and Can Be Enhanced by Emotional Stimuli." arXiv.
 - Li et al. (2023). "Guiding Large Language Models via Directional Stimulus Prompting." arXiv.
 - Liu et al. (2021). "What Makes Good In-Context Examples for GPT-3?" arXiv.
 - Lu et al. (2021). "Fantastically Ordered Prompts and Where to Find Them." ACL.
+- Ma et al. (2023). "Fairness-guided Few-shot Prompting for Large Language Models." NeurIPS.
 - Press et al. (2022). "Measuring and Narrowing the Compositionality Gap in Language Models." arXiv.
 - Schulhoff et al. (2024). "The Prompt Report: A Systematic Survey of Prompting Techniques." arXiv.
 - Shaikh et al. (2023). "On Second Thought, Let's Not Think Step by Step! Bias and Toxicity in Zero-Shot Reasoning." ACL.
 - Shi et al. (2023). "Large Language Models Can Be Easily Distracted by Irrelevant Context." arXiv.
+- Sprague et al. (2024). "Let's Argue Both Sides: Argument Generation Can Force Small Models to Utilize Previously Inaccessible Reasoning Capabilities." arXiv.
 - Sprague et al. (2025). "Mind Your Step (by Step): Chain-of-Thought can Reduce Performance on Tasks where Thinking Makes Humans Worse." arXiv.
 - Turpin et al. (2023). "Language Models Don't Always Say What They Think: Unfaithful Explanations in Chain-of-Thought Prompting." NeurIPS.
+- Wan et al. (2024). "Question-Analysis Prompting Improves LLM Performance in Reasoning Tasks." arXiv.
 - Wang et al. (2023). "Plan-and-Solve Prompting: Improving Zero-Shot Chain-of-Thought Reasoning." ACL.
 - Wang & Zhao (2024). "Metacognitive Prompting Improves Understanding in Large Language Models." arXiv.
 - Weston & Sukhbaatar (2023). "System 2 Attention (is something you might need too)." arXiv.
+- Xu et al. (2023). "ExpertPrompting: Instructing Large Language Models to be Distinguished Experts." arXiv.
 - Xu et al. (2023). "Re-Reading Improves Reasoning in Large Language Models." arXiv.
 - Xu et al. (2025). "Chain of Draft: Thinking Faster by Writing Less." arXiv.
 - Yasunaga et al. (2024). "Large Language Models as Analogical Reasoners." ICLR.
@@ -2163,16 +2270,15 @@ Affirmative instructions directly specify the target behavior without requiring 
 
 The following techniques in this guide are derived from production systems rather than academic research. They represent empirically observed patterns that have proven effective in real-world deployments but lack formal academic validation. This transparency helps practitioners distinguish between research-backed techniques and production heuristics.
 
-| Technique | Section | Description | Validation Source |
-| --- | --- | --- | --- |
-| Confidence Building | Behavioral Shaping | "Assume you have access" to eliminate hesitation loops | Production observation |
-| Error Normalization | Behavioral Shaping | "It is okay if X fails" prevents apology spirals | Production observation |
-| Pre-Work Context Analysis | Behavioral Shaping | "Before [action], analyze [context]" prevents blind execution | Production observation |
-| Emphasis Hierarchy | Behavioral Shaping | IMPORTANT → CRITICAL → RULE 0 priority levels | Production observation |
-| STOP Escalation | Behavioral Shaping | Explicit "STOP" creates metacognitive checkpoint | Production observation |
-| Numbered Rule Priority | Behavioral Shaping | Explicit RULE 0/1/2 numbering resolves conflicts | Production observation |
-| UX-Justified Defaults | Behavioral Shaping | Explain _why_ a default is preferred for UX | Production observation |
-| Conditional Sections | Output Control | Language-specific or context-specific sections in static prompts | Production observation |
-| Empty Input Handling | Output Control | Explicit guidance for when no input is needed | Production observation |
-
-**Guidance for practitioners**: These patterns have emerged from iterative development on production systems and address common failure modes. While they lack formal benchmarks, they represent accumulated domain knowledge. Consider them as "best practices" rather than "proven techniques."
+| Technique                 | Section            | Description                                                      | Validation Source      |
+| ------------------------- | ------------------ | ---------------------------------------------------------------- | ---------------------- |
+| Confidence Building       | Behavioral Shaping | "Assume you have access" to eliminate hesitation loops           | Production observation |
+| Error Normalization       | Behavioral Shaping | "It is okay if X fails" prevents apology spirals                 | Production observation |
+| Pre-Work Context Analysis | Behavioral Shaping | "Before [action], analyze [context]" prevents blind execution    | Production observation |
+| Emphasis Hierarchy        | Behavioral Shaping | IMPORTANT → CRITICAL → RULE 0 priority levels                    | Production observation |
+| STOP Escalation           | Behavioral Shaping | Explicit "STOP" creates metacognitive checkpoint                 | Production observation |
+| Numbered Rule Priority    | Behavioral Shaping | Explicit RULE 0/1/2 numbering resolves conflicts                 | Production observation |
+| UX-Justified Defaults     | Behavioral Shaping | Explain _why_ a default is preferred for UX                      | Production observation |
+| Scope Limitation          | Output Control     | "Nothing more, nothing less" prevents overthinking/scope creep   | Production observation |
+| Conditional Sections      | Output Control     | Language-specific or context-specific sections in static prompts | Production observation |
+| Empty Input Handling      | Output Control     | Explicit guidance for when no input is needed                    | Production observation |
