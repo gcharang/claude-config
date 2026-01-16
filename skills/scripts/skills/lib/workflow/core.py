@@ -218,21 +218,3 @@ class Workflow:
     @property
     def total_steps(self) -> int:
         return len(self.steps)
-
-
-def register_workflow(workflow: Workflow, module: str | None = None):
-    """Register workflow in global registry."""
-    if module is None:
-        frame = inspect.currentframe()
-        if frame and frame.f_back:
-            module = frame.f_back.f_globals.get("__name__", "unknown")
-    workflow._module_path = module
-    _WORKFLOW_REGISTRY[workflow.name] = workflow
-
-
-_WORKFLOW_REGISTRY: dict[str, Workflow] = {}
-
-
-def get_workflow_registry() -> dict[str, Workflow]:
-    """Return copy of workflow registry."""
-    return dict(_WORKFLOW_REGISTRY)

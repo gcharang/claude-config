@@ -21,21 +21,23 @@ Flow:
 import argparse
 import sys
 
-from skills.lib.workflow.types import QRState, QRStatus, GateConfig, AgentRole, Dispatch
+from skills.lib.workflow.types import QRState, QRStatus, GateConfig, AgentRole, Dispatch, LoopState
 from skills.lib.workflow.core import (
     Workflow,
     StepDef,
     StepContext,
     Outcome,
-    register_workflow,
 )
 from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 from skills.lib.workflow.cli import add_qr_args
-from skills.planner.shared.resources import get_mode_script_path, get_resource
+from skills.planner.shared.resources import get_mode_script_path, PlannerResourceProvider
 
 
 # Module path for -m invocation
 MODULE_PATH = "skills.planner.planner"
+
+# Resource provider instance
+_provider = PlannerResourceProvider()
 
 
 PLANNING_VERIFICATION = """\
@@ -150,7 +152,7 @@ If any step was skipped: STOP. Go back and complete it.
 
 def get_plan_format() -> str:
     """Read the plan format template from resources."""
-    return get_resource("plan-format.md")
+    return _provider.get_resource("plan-format.md")
 
 
 # Unified step definitions (1-13)
@@ -293,7 +295,7 @@ STEPS = {
         "is_dispatch": True,
         "dispatch_agent": "quality-reviewer",
         "mode_script": "qr/plan-completeness.py",
-        "mode_total_steps": 6,
+        "mode_total_steps": 7,  # Added step 6: Self-Validate Suggested Fixes
         "context_vars": {"PLAN_FILE": "path to the plan being reviewed"},
         "post_dispatch": [
             "The sub-agent MUST invoke the script and follow its guidance.",
@@ -324,7 +326,7 @@ STEPS = {
         "is_dispatch": True,
         "dispatch_agent": "quality-reviewer",
         "mode_script": "qr/plan-code.py",
-        "mode_total_steps": 7,
+        "mode_total_steps": 8,  # Added step 7: Self-Validate Suggested Fixes
         "context_vars": {"PLAN_FILE": "path to the plan being reviewed"},
         "post_dispatch": [
             "The sub-agent MUST invoke the script and follow its guidance.",
@@ -357,7 +359,7 @@ STEPS = {
         "is_dispatch": True,
         "dispatch_agent": "quality-reviewer",
         "mode_script": "qr/plan-docs.py",
-        "mode_total_steps": 5,
+        "mode_total_steps": 6,  # Added step 5: Self-Validate Suggested Fixes
         "context_vars": {"PLAN_FILE": "path to the plan being reviewed"},
         "post_dispatch": [
             "The sub-agent MUST invoke the script and follow its guidance.",
@@ -374,7 +376,7 @@ STEPS = {
 GATES = {
     7: GateConfig(
         qr_name="QR-COMPLETENESS",
-        work_step=5,  # Route to plan writing step, not QR step
+        work_step=5,
         pass_step=8,
         pass_message="Proceed to step 8 (Developer Fills Diffs).",
         self_fix=True,
@@ -391,10 +393,74 @@ GATES = {
         qr_name="QR-DOCS",
         work_step=11,
         pass_step=None,
-        pass_message="PLAN APPROVED. Ready for /plan-execution.",
+        pass_message="PLAN APPROVED. Ready for plan execution.",
         self_fix=False,
         fix_target=AgentRole.TECHNICAL_WRITER,
     ),
+}
+
+
+def step_gate_handler(step_info: dict, step: int, qr: QRState, **kwargs) -> str:
+    """Handle gate steps (7, 10, 13)."""
+    return format_gate(step, qr)
+
+
+def step_5_handler(step_info: dict, step: int, qr: QRState, total_steps: int, **kwargs) -> dict:
+    """Handle step 5 (planning) in normal or fix mode."""
+    if qr.state == LoopState.RETRY:
+        banner = render(W.el("state_banner", checkpoint="PLAN-FIX", iteration=str(qr.iteration), mode="fix").build(), XMLRenderer())
+        fix_actions = [banner, ""] + [
+            "FIX MODE: QR-COMPLETENESS found plan structure issues.",
+            "",
+            "Review the QR findings in your context.",
+            "Fix the identified issues in the plan file directly.",
+            "",
+            "Common issues:",
+            "  - Missing Decision Log entries",
+            "  - Incomplete Code Intent sections",
+            "  - Missing Invisible Knowledge",
+            "  - Incomplete milestone specifications",
+            "",
+            "Use Edit tool to fix the plan file.",
+            "After fixing, proceed to QR-Completeness for fresh verification.",
+        ]
+        return {
+            "title": f"{step_info['title']} - Fix Mode",
+            "actions": fix_actions,
+            "next": f"python3 -m {MODULE_PATH} --step 6 --total-steps {total_steps}",
+        }
+    return None
+
+
+def step_dispatch_handler(step_info: dict, step: int, qr: QRState, **kwargs) -> list:
+    """Add QR banner for QR dispatch steps."""
+    if step_info.get("is_qr"):
+        qr_name = step_info.get("qr_name", "QR")
+        banner = render(W.el("state_banner", checkpoint=qr_name, iteration=str(qr.iteration), mode="fresh_review").build(), XMLRenderer())
+        return [banner, ""]
+    return []
+
+
+def step_verification_handler(step_info: dict, **kwargs) -> list:
+    """Add verification checklist for step 5."""
+    if step_info.get("include_verification"):
+        return ["", PLANNING_VERIFICATION]
+    return []
+
+
+def step_format_handler(step_info: dict, **kwargs) -> list:
+    """Add plan format for step 5."""
+    if step_info.get("include_plan_format"):
+        plan_format = get_plan_format()
+        return ["", "Write plan using this format:", "", plan_format]
+    return []
+
+
+STEP_HANDLERS = {
+    5: step_5_handler,
+    7: step_gate_handler,
+    10: step_gate_handler,
+    13: step_gate_handler,
 }
 
 
@@ -460,7 +526,7 @@ WORKFLOW = Workflow(
         handler=Dispatch(
             agent=AgentRole.QUALITY_REVIEWER,
             script="skills.planner.qr.plan_completeness",
-            total_steps=6,
+            total_steps=7,  # Added step 6: Self-Validate Suggested Fixes
             context_vars={"PLAN_FILE": "path to the plan being reviewed"},
         ),
         next={Outcome.OK: "qr_completeness_gate", Outcome.FAIL: "qr_completeness_gate"},
@@ -522,7 +588,7 @@ WORKFLOW = Workflow(
         handler=Dispatch(
             agent=AgentRole.QUALITY_REVIEWER,
             script="skills.planner.qr.plan_docs",
-            total_steps=5,
+            total_steps=6,  # Added step 5: Self-Validate Suggested Fixes
             context_vars={"PLAN_FILE": "path to the plan being reviewed"},
         ),
         next={Outcome.OK: "qr_docs_gate", Outcome.FAIL: "qr_docs_gate"},
@@ -536,8 +602,6 @@ WORKFLOW = Workflow(
     ),
     description="Interactive sequential planner with QR gates",
 )
-
-register_workflow(WORKFLOW)
 
 
 def format_gate(step: int, qr: QRState) -> str:
@@ -707,81 +771,25 @@ def format_gate(step: int, qr: QRState) -> str:
     return "\n".join(parts)
 
 
-def get_step_guidance(step: int, total_steps: int,
-                      qr_iteration: int = 1, qr_fail: bool = False,
-                      qr_status: str = None) -> dict | str:
-    """Returns guidance for a step."""
+def generic_step_handler(step_info, step, total_steps, **kwargs):
+    """Generic handler for standard steps without special logic."""
+    actions = list(step_info.get("actions", []))
+    actions.extend(step_verification_handler(step_info))
+    actions.extend(step_format_handler(step_info))
 
-    # Construct QRState from parameters
-    status = QRStatus(qr_status) if qr_status else None
-    qr = QRState(iteration=qr_iteration, failed=qr_fail, status=status)
-
-    # Gate steps (7, 10, 13) use shared gate function
-    if step in (7, 10, 13):
-        if not qr_status:
-            return {"error": f"--qr-status required for gate step {step}"}
-        return format_gate(step, qr)
-
-    info = STEPS.get(step)
-    if not info:
-        return {"error": f"Invalid step {step}"}
-
-    # Build actions
-    actions = list(info.get("actions", []))
-
-    # Add verification checklist for step 4
-    if info.get("include_verification"):
-        actions.append("")
-        actions.append(PLANNING_VERIFICATION)
-
-    # Add plan format for step 5
-    if info.get("include_plan_format"):
-        plan_format = get_plan_format()
-        actions.extend([
-            "",
-            "Write plan using this format:",
-            "",
-            plan_format,
-        ])
-
-    # Handle planning step 5 in fix mode (main agent fixes plan structure)
-    if step == 5 and qr.failed:
-        banner = render(W.el("state_banner", checkpoint="PLAN-FIX", iteration=str(qr.iteration), mode="fix").build(), XMLRenderer())
-        fix_actions = [banner, ""] + [
-            "FIX MODE: QR-COMPLETENESS found plan structure issues.",
-            "",
-            "Review the QR findings in your context.",
-            "Fix the identified issues in the plan file directly.",
-            "",
-            "Common issues:",
-            "  - Missing Decision Log entries",
-            "  - Incomplete Code Intent sections",
-            "  - Missing Invisible Knowledge",
-            "  - Incomplete milestone specifications",
-            "",
-            "Use Edit tool to fix the plan file.",
-            "After fixing, proceed to QR-Completeness for fresh verification.",
-        ]
-        # After fix, proceed to step 6 (QR-Completeness) for fresh review
-        return {
-            "title": f"{info['title']} - Fix Mode",
-            "actions": fix_actions,
-            "next": f"python3 -m {MODULE_PATH} --step 6 --total-steps {total_steps}",
-        }
-
-    # Add QR banner for QR steps
-    if info.get("is_qr"):
-        qr_name = info.get("qr_name", "QR")
-        banner = render(W.el("state_banner", checkpoint=qr_name, iteration=str(qr.iteration), mode="fresh_review").build(), XMLRenderer())
-        actions.insert(0, banner)
-        actions.insert(1, "")
+    qr = kwargs.get("qr", QRState())
+    qr_banner = step_dispatch_handler(step_info, step=step, qr=qr)
+    if qr_banner:
+        actions[0:0] = qr_banner
 
     # Generate dispatch block for dispatch steps
-    if info.get("is_dispatch"):
-        mode_script = get_mode_script_path(info["mode_script"])
-        mode_total_steps = info.get("mode_total_steps", 5)
-        dispatch_agent = info.get("dispatch_agent", "agent")
-        context_vars = info.get("context_vars", {})
+    if step_info.get("is_dispatch"):
+        mode_script = get_mode_script_path(step_info["mode_script"])
+        mode_total_steps = step_info.get("mode_total_steps", 5)
+        dispatch_agent = step_info.get("dispatch_agent", "agent")
+        context_vars = step_info.get("context_vars", {})
+        qr_fail = kwargs.get("qr_fail", False)
+        qr_iteration = kwargs.get("qr_iteration", 1)
 
         # Add orchestrator constraint before dispatch
         constraint = render(
@@ -803,11 +811,11 @@ def get_step_guidance(step: int, total_steps: int,
 
         # Build invoke command with QR flags when in fix mode
         invoke_cmd = f"python3 -m {mode_script} --step 1 --total-steps {mode_total_steps}"
-        if qr.failed:
+        if qr.state == LoopState.RETRY:
             invoke_cmd += f" --qr-fail --qr-iteration {qr.iteration}"
 
         # Build dispatch block inline
-        if qr.failed:
+        if qr.state == LoopState.RETRY:
             context_vars_copy = dict(context_vars)
             context_vars_copy["QR_REPORT_PATH"] = "exact path from QR output"
         else:
@@ -824,7 +832,7 @@ def get_step_guidance(step: int, total_steps: int,
         dispatch_lines.append(f'    Your Task tool prompt MUST begin with: "Start by invoking: {invoke_cmd}"')
         dispatch_lines.append("    This is MANDATORY. The sub-agent follows the script, not free-form instructions.")
         dispatch_lines.append("  </handoff_instruction>")
-        if qr.failed:
+        if qr.state == LoopState.RETRY:
             dispatch_lines.append("  <qr_report_passthrough>")
             dispatch_lines.append("    CRITICAL: Include QR_REPORT_PATH verbatim in your Task prompt.")
             dispatch_lines.append("    DO NOT read QR_REPORT_PATH yourself.")
@@ -837,11 +845,11 @@ def get_step_guidance(step: int, total_steps: int,
         actions.append("")
 
         # Add post-dispatch instructions
-        post_dispatch = info.get("post_dispatch", [])
+        post_dispatch = step_info.get("post_dispatch", [])
         actions.extend(post_dispatch)
 
         # Add post-QR routing block for QR steps
-        post_qr_config = info.get("post_qr_routing")
+        post_qr_config = step_info.get("post_qr_routing")
         if post_qr_config:
             from skills.lib.workflow.constants import QR_ITERATION_LIMIT
             from skills.lib.workflow.ast.nodes import ElementNode
@@ -881,7 +889,7 @@ def get_step_guidance(step: int, total_steps: int,
     if step in (6, 9, 12):
         base_cmd = f"python3 -m {MODULE_PATH} --step {next_step} --total-steps {total_steps}"
         return {
-            "title": info["title"],
+            "title": step_info["title"],
             "actions": actions,
             "if_pass": f"{base_cmd} --qr-status pass",
             "if_fail": f"{base_cmd} --qr-status fail",
@@ -890,10 +898,40 @@ def get_step_guidance(step: int, total_steps: int,
         # Non-QR steps use simple next command
         next_cmd = f"python3 -m {MODULE_PATH} --step {next_step} --total-steps {total_steps}"
         return {
-            "title": info["title"],
+            "title": step_info["title"],
             "actions": actions,
             "next": next_cmd,
         }
+
+
+def get_step_guidance(step: int, total_steps: int,
+                      qr_iteration: int = 1, qr_fail: bool = False,
+                      qr_status: str = None) -> dict | str:
+    """Returns guidance for a step."""
+
+    status = QRStatus(qr_status) if qr_status else None
+    state = LoopState.RETRY if qr_fail else LoopState.INITIAL
+    qr = QRState(iteration=qr_iteration, state=state, status=status)
+
+    handler = STEP_HANDLERS.get(step)
+    if handler:
+        step_info = STEPS.get(step, {})
+        result = handler(step_info=step_info, step=step, qr=qr, total_steps=total_steps,
+                        qr_iteration=qr_iteration, qr_fail=qr_fail, qr_status=qr_status)
+        if isinstance(result, str):
+            return result
+        if result is not None:
+            return result
+        if not qr_status and step in (7, 10, 13):
+            return {"error": f"--qr-status required for gate step {step}"}
+
+    info = STEPS.get(step)
+    if not info:
+        return {"error": f"Invalid step {step}"}
+
+    # Use generic handler for non-special steps
+    return generic_step_handler(info, step, total_steps, qr=qr, qr_fail=qr_fail,
+                                qr_iteration=qr_iteration, qr_status=qr_status)
 
 
 def format_output(step: int, total_steps: int,

@@ -119,14 +119,19 @@ Mechanisms used:
 
 ## Code Quality Categories
 
-Categories are defined in `conventions/code-quality/` and organized by detection
-scope:
+Categories are defined in `conventions/code-quality/` and organized by cognitive
+mode:
 
-| File           | Scope                   | Detection Method         |
-| -------------- | ----------------------- | ------------------------ |
-| `baseline.md`  | Single code unit        | Snippet analysis         |
-| `coherence.md` | Repetition across files | Cross-reference patterns |
-| `drift.md`     | Codebase-wide structure | Full system view         |
+| File                               | Scope                      | Cognitive Mode  |
+| ---------------------------------- | -------------------------- | --------------- |
+| `01-naming-and-types.md`           | Names, types, interfaces   | Local           |
+| `02-structure-and-composition.md`  | Functions, control flow    | Local           |
+| `03-patterns-and-idioms.md`        | Language idioms, patterns  | Local           |
+| `04-repetition-and-consistency.md` | Duplication, uniformity    | Cross-Reference |
+| `05-documentation-and-tests.md`    | Comments, tests, examples  | Local           |
+| `06-module-and-dependencies.md`    | Module structure, imports  | Local           |
+| `07-cross-file-consistency.md`     | Shared concerns, contracts | Cross-Reference |
+| `08-codebase-patterns.md`          | Architecture, system view  | System          |
 
 Each file contains numbered categories (`## N. Title`) with:
 

@@ -1,12 +1,30 @@
 # code-quality/
 
-Code quality checks for LLM-assisted development, organized by detection scope.
+Code quality checks for LLM-assisted development, organized by cognitive mode.
 
 ## Files
 
-| File           | What                                              | When to read                                             |
-| -------------- | ------------------------------------------------- | -------------------------------------------------------- |
-| `README.md`    | Format rationale, integration with skills         | Understanding category format, modifying categories      |
-| `baseline.md`  | Atomic smells detectable in isolation             | QR baseline audit, planner pre-implementation checks     |
-| `coherence.md` | Repetition/consistency patterns (file + codebase) | QR consistency review, refactoring at any scope          |
-| `drift.md`     | Codebase-wide architectural issues                | Periodic architecture review, detecting accumulated debt |
+| File                               | What                                               | When to read                                                       |
+| ---------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------ |
+| `README.md`                        | Format rationale, integration, invisible knowledge | Understanding document format, modifying categories                |
+| `01-naming-and-types.md`           | Names and types expressing intent                  | QR/refactor for naming, domain modeling, type design               |
+| `02-structure-and-composition.md`  | Code structure and composition                     | QR/refactor for function composition, control flow, error handling |
+| `03-patterns-and-idioms.md`        | Idiomatic patterns                                 | QR/refactor for expression patterns, modern idioms, dead code      |
+| `04-repetition-and-consistency.md` | DRY and consistency                                | QR/refactor for duplication, validation, business rules            |
+| `05-documentation-and-tests.md`    | Documentation and tests                            | QR/refactor for docs, tests, schema coherence                      |
+| `06-module-and-dependencies.md`    | Module boundaries                                  | QR/refactor for module structure, architecture                     |
+| `07-cross-file-consistency.md`     | Cross-file consistency                             | QR/refactor for interface, naming, error consistency               |
+| `08-codebase-patterns.md`          | Codebase-wide patterns                             | QR/refactor for comprehension, abstraction opportunities           |
+
+## Applicability Quick Reference
+
+| Document                      | Design Review | Diff Review | Codebase Review | Refactor Design | Refactor Code |
+| ----------------------------- | :-----------: | :---------: | :-------------: | :-------------: | :-----------: |
+| 01-naming-and-types           |      Yes      |     Yes     |       Yes       |       Yes       |      Yes      |
+| 02-structure-and-composition  |      Yes      |     Yes     |       Yes       |       Yes       |      Yes      |
+| 03-patterns-and-idioms        |      No       |     Yes     |       Yes       |       No        |      Yes      |
+| 04-repetition-and-consistency |      No       |     Yes     |       Yes       |       No        |      Yes      |
+| 05-documentation-and-tests    |      No       |     Yes     |       Yes       |       No        |      Yes      |
+| 06-module-and-dependencies    |      Yes      |     No      |       Yes       |       Yes       |      Yes      |
+| 07-cross-file-consistency     |      Yes      |     No      |       Yes       |       Yes       |      Yes      |
+| 08-codebase-patterns          |      No       |     No      |       Yes       |       No        |      Yes      |

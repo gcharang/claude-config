@@ -28,7 +28,6 @@ from skills.lib.workflow.core import (
     StepContext,
     StepDef,
     Workflow,
-    register_workflow,
 )
 from skills.lib.workflow.ast import W, XMLRenderer, render
 from skills.lib.workflow.ast.nodes import TextNode
@@ -889,12 +888,6 @@ WORKFLOW_ROOT = Workflow(
     description="Scope-adaptive prompt optimization (triage entry point)",
 )
 
-# Register workflows
-register_workflow(WORKFLOW_ROOT)
-register_workflow(WORKFLOW_SINGLE)
-register_workflow(WORKFLOW_ECOSYSTEM)
-register_workflow(WORKFLOW_GREENFIELD)
-register_workflow(WORKFLOW_PROBLEM)
 
 
 # Scope mapping

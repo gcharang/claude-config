@@ -28,7 +28,6 @@ from skills.lib.workflow.core import (
     StepContext,
     Outcome,
     Arg,
-    register_workflow,
 )
 from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode, ElementNode
 from skills.lib.workflow.types import FlatCommand
@@ -893,8 +892,6 @@ WORKFLOW = Workflow(
     ),
     description="Perspective-parallel solution generation workflow",
 )
-
-register_workflow(WORKFLOW)
 
 
 def format_output(step: int, total_steps: int) -> str:

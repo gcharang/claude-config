@@ -11,7 +11,40 @@ __all__ = [
     "get_resource",
     "get_mode_script_path",
     "get_exhaustiveness_prompt",
+    "PlannerResourceProvider",
 ]
+
+
+# =============================================================================
+# Resource Provider Implementation
+# =============================================================================
+
+
+class PlannerResourceProvider:
+    """ResourceProvider implementation for planner workflows.
+
+    Provides access to conventions and step guidance.
+    """
+
+    def get_resource(self, name: str) -> str:
+        """Retrieve resource content from conventions directory.
+
+        Implements ResourceProvider protocol for planner workflows.
+        Maps resource name to file in CONVENTIONS_DIR.
+        """
+        resource_path = Path(__file__).resolve().parents[4] / "planner" / "resources" / name
+        try:
+            return read_text_or_exit(resource_path, "loading planner resource")
+        except SystemExit:
+            raise FileNotFoundError(f"Resource not found: {name}")
+
+    def get_step_guidance(self, **kwargs) -> dict:
+        """Get step-specific guidance (placeholder for forward compatibility).
+
+        Returns empty dict until per-step guidance requirements emerge.
+        Decision Log (get_step_guidance placeholder) explains deferral rationale.
+        """
+        return {}
 
 
 # =============================================================================

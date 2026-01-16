@@ -7,13 +7,37 @@ Framework for skill registration and testing. Skills are defined using the `Work
 ## Architecture
 
 ```
-Workflow() -> register_workflow() -> _WORKFLOW_REGISTRY
-                                          |
-                                          v
-                                     pytest tests/
+Skills Layer (12 modules)
+       |
+       v
+   Workflow API (Workflow/StepDef/Outcome)
+       |
+       v
+Discovery Layer (importlib scanning)
+       |
+       v
+Core Framework (types, registry, ResourceProvider)
+       |
+       v
+CLI / Test Harness
 ```
 
-Registration happens at import time.
+### Data Flow
+
+```
+CLI invocation
+      |
+      v
+discover_workflows() -> scan skills/ -> build registry
+      |
+      v
+Workflow.run(step_id) -> STEPS[step_id].handler(context)
+      |
+      v
+StepOutput (title, actions, next_command)
+```
+
+Discovery uses importlib scanning to find workflows without executing module-level code. This pull-based approach eliminates import-time side effects and enables isolated testing.
 
 ## Core Types
 
@@ -203,8 +227,9 @@ These checks run at registration time, catching errors early.
 ## Workflow Example
 
 ```python
+from skills.lib.workflow import discover_workflows
 from skills.lib.workflow.core import (
-    Workflow, StepDef, StepContext, Outcome, Arg, register_workflow
+    Workflow, StepDef, StepContext, Outcome, Arg
 )
 
 def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
@@ -232,7 +257,9 @@ WORKFLOW = Workflow(
     description="Structured decision criticism workflow",
 )
 
-register_workflow(WORKFLOW)
+# Workflow discovery happens via discover_workflows('skills')
+# No registration needed - WORKFLOW constant is read directly
+# Pull-based discovery eliminates import-time side effects (Milestone 1)
 ```
 
 Benefits of this architecture:
@@ -241,6 +268,14 @@ Benefits of this architecture:
 - Transitions explicit and validatable
 - Workflow structure introspectable and validatable
 - Transition graph introspectable
+
+## Invariants
+
+- **INVARIANT 1**: Every skill entry point defines exactly ONE Workflow
+- **INVARIANT 2**: discover_workflows() finds all Workflows without import errors
+- **INVARIANT 3**: Dispatcher routing produces same output as old if-step chains
+- **INVARIANT 4**: ResourceProvider protocol supports all 5 access patterns (conventions, file I/O, resources, Workflow objects, step data)
+- **INVARIANT 5**: QR iteration blocking severities: iter 1-2 block all; iter 3-4 block MUST/SHOULD; iter 5+ block MUST only
 
 ## Design Decisions
 
@@ -251,6 +286,14 @@ Benefits of this architecture:
 **Why handler callables instead of strings?** Type safety, IDE support, and easier refactoring. Handlers are first-class functions, not magic strings.
 
 **Separate CLI entry points**: Running modules as `__main__` causes module identity issues (imported by `__init__.py` vs executed as `__main__`). Separate CLI entry points avoid this.
+
+## Tradeoffs
+
+**Idiomatic API vs Minimal**: Higher refactoring scope for consistent architecture across all skills. The think.py pattern proves Workflow/StepDef API works; extending it creates consistency without inventing new abstractions.
+
+**Centralized enums vs Local**: One more place to update for discoverability and shared understanding. Enums (LoopState, DocumentAvailability) make state machines explicit and enable property-based testing.
+
+**Clean break vs Dual-path**: Simpler implementation at cost of no migration period. Refactoring scope is internal (no external callers) so clean break reduces total work and eliminates transition bugs.
 
 ## Common Patterns
 

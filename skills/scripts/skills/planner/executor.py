@@ -17,7 +17,7 @@ Nine-step workflow:
 import argparse
 import sys
 
-from skills.lib.workflow.types import QRState, QRStatus, GateConfig, AgentRole
+from skills.lib.workflow.types import QRState, QRStatus, GateConfig, AgentRole, LoopState
 from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 from skills.lib.workflow.cli import add_qr_args
 from skills.planner.shared.resources import get_mode_script_path
@@ -347,7 +347,7 @@ def format_step_3_implementation(qr: QRState, total_steps: int, milestone_count:
     parts = []
 
     # Step header
-    if qr.failed:
+    if qr.state == LoopState.RETRY:
         parts.append(render(
             W.el("step_header", TextNode("Implementation - Fix Mode"),
                 script="executor", step="3", total=str(total_steps)
@@ -366,7 +366,7 @@ def format_step_3_implementation(qr: QRState, total_steps: int, milestone_count:
     parts.append("<workflow>")
 
     actions = []
-    if qr.failed:
+    if qr.state == LoopState.RETRY:
         # Fix mode
         banner = render(W.el("state_banner", checkpoint="IMPLEMENTATION FIX", iteration=str(qr.iteration), mode="fix").build(), XMLRenderer())
         actions.append(banner)
@@ -490,7 +490,7 @@ def format_step_6_documentation(qr: QRState, total_steps: int) -> str:
     parts = []
 
     # Step header
-    if qr.failed:
+    if qr.state == LoopState.RETRY:
         parts.append(render(
             W.el("step_header", TextNode("Documentation - Fix Mode"),
                 script="executor", step="6", total=str(total_steps)
@@ -519,7 +519,7 @@ def format_step_6_documentation(qr: QRState, total_steps: int) -> str:
         XMLRenderer(),
     )
 
-    if qr.failed:
+    if qr.state == LoopState.RETRY:
         # Fix mode
         banner = render(W.el("state_banner", checkpoint="DOCUMENTATION FIX", iteration=str(qr.iteration), mode="fix").build(), XMLRenderer())
         actions.append(banner)
@@ -609,6 +609,340 @@ def format_step_6_documentation(qr: QRState, total_steps: int) -> str:
     return "\n".join(parts)
 
 
+def format_step_1_planning(qr: QRState, total_steps: int, reconciliation_check: bool, **kw) -> str:
+    """Format step 1 planning output."""
+    info = STEPS[1]
+    parts = []
+
+    parts.append(render(
+        W.el("step_header", TextNode(info["title"]),
+            script="executor", step="1", total=str(total_steps)
+        ).build(),
+        XMLRenderer()
+    ))
+    parts.append("")
+
+    parts.append("""<xml_format_mandate>
+CRITICAL: All script outputs use XML format. You MUST:
+
+1. Execute the action in <current_action>
+2. When complete, invoke the exact command in <invoke_after>
+3. The <next> block re-states the command -- execute it
+4. For branching <invoke_after>, choose based on outcome:
+   - <if_pass>: Use when action succeeded / QR returned PASS
+   - <if_fail>: Use when action failed / QR returned ISSUES
+
+DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
+</xml_format_mandate>""")
+    parts.append("")
+
+    parts.append("<workflow>")
+
+    actions = list(info["actions"])
+    actions.extend([
+        "",
+        "=" * 70,
+        "MANDATORY NEXT ACTION",
+        "=" * 70,
+    ])
+    if reconciliation_check:
+        next_command = f"python3 -m {MODULE_PATH} --step 2 --total-steps {total_steps} --reconciliation-check"
+    else:
+        actions.extend([
+            "Proceed to Implementation step.",
+            "Use the wave groupings from your analysis.",
+            "=" * 70,
+        ])
+        next_command = f"python3 -m {MODULE_PATH} --step 3 --total-steps {total_steps}"
+
+    action_nodes = [TextNode(a) for a in actions]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append("")
+
+    parts.append(render(W.el("invoke_after", TextNode(next_command)).build(), XMLRenderer()))
+    parts.append("")
+    parts.append(render(
+        W.el("next",
+            TextNode("After current_action completes, execute invoke_after."),
+            TextNode(f"Re-read now: {next_command}"),
+            required="true"
+        ).build(),
+        XMLRenderer()
+    ))
+    parts.append("</workflow>")
+
+    return "\n".join(parts)
+
+
+def format_step_4_code_qr(qr: QRState, total_steps: int, **kw) -> str:
+    """Format step 4 code QR output with branching."""
+    info = STEPS[4]
+    parts = []
+
+    parts.append(render(
+        W.el("step_header", TextNode(info["title"]),
+            script="executor", step="4", total=str(total_steps)
+        ).build(),
+        XMLRenderer()
+    ))
+    parts.append("")
+
+    parts.append("<workflow>")
+
+    actions = []
+    banner = render(W.el("state_banner", checkpoint=info["qr_name"], iteration=str(qr.iteration), mode="fresh_review").build(), XMLRenderer())
+    actions.append(banner)
+    actions.append("")
+
+    pre_dispatch = info.get("pre_dispatch", [])
+    actions.extend(pre_dispatch)
+
+    constraint = render(
+        W.el(
+            "orchestrator_constraint",
+            TextNode("You are the ORCHESTRATOR. You delegate, you never implement."),
+            TextNode("Your agents are highly capable. Trust them with ANY issue."),
+            TextNode("PROHIBITED: Edit, Write tools. REQUIRED: Task tool dispatch."),
+        ).build(),
+        XMLRenderer(),
+    )
+    actions.append(constraint)
+    actions.append("")
+
+    mode_script = get_mode_script_path(info["mode_script"])
+    mode_total_steps = info.get("mode_total_steps", 5)
+    dispatch_agent = info.get("dispatch_agent", "agent")
+    context_vars = info.get("context_vars", {})
+    invoke_suffix = info.get("invoke_suffix", "")
+    invoke_cmd = f"python3 -m {mode_script} --step 1 --total-steps {mode_total_steps}{invoke_suffix}"
+
+    dispatch_lines = [f'<subagent_dispatch agent="{dispatch_agent}" mode="script">']
+    if context_vars:
+        dispatch_lines.append("  <context>")
+        for name, description in context_vars.items():
+            dispatch_lines.append(f'    <var name="{name}">{description}</var>')
+        dispatch_lines.append("  </context>")
+    dispatch_lines.append(f"  <invoke>{invoke_cmd}</invoke>")
+    dispatch_lines.append("  <handoff_instruction>")
+    dispatch_lines.append(f'    Your Task tool prompt MUST begin with: "Start by invoking: {invoke_cmd}"')
+    dispatch_lines.append("    This is MANDATORY. The sub-agent follows the script, not free-form instructions.")
+    dispatch_lines.append("  </handoff_instruction>")
+    dispatch_lines.append("</subagent_dispatch>")
+    actions.append("\n".join(dispatch_lines))
+    actions.append("")
+
+    post_dispatch = info.get("post_dispatch", [])
+    actions.extend(post_dispatch)
+
+    post_qr_config = info.get("post_qr_routing")
+    if post_qr_config:
+        from skills.lib.workflow.constants import QR_ITERATION_LIMIT
+        from skills.lib.workflow.ast.nodes import ElementNode
+        fix_target = post_qr_config.get("fix_target", "developer")
+
+        routing_table = [
+            "| QR Result              | Your Action                         |",
+            "| ---------------------- | ----------------------------------- |",
+            "| PASS (no issues)       | Invoke command from <if_pass> below |",
+            "| ISSUES / concerns / *  | Invoke command from <if_fail> below |",
+        ]
+
+        routing_block = render(
+            W.el(
+                "post_qr_routing",
+                ElementNode("role", {}, [TextNode("You are the ORCHESTRATOR. After QR returns, your ONLY action is routing.")]),
+                ElementNode(
+                    "pedantic_mode",
+                    {},
+                    [
+                        TextNode("EVERY issue is blocking. There are no 'minor concerns' or 'non-critical issues'."),
+                        TextNode("If QR returns ANYTHING other than clean PASS, route to <if_fail>."),
+                        TextNode(f"Defense: Max {QR_ITERATION_LIMIT} iterations, then escalate to user via AskUserQuestion."),
+                    ],
+                ),
+                ElementNode("routing_table", {}, [TextNode("\n".join(routing_table))]),
+            ).build(),
+            XMLRenderer(),
+        )
+        actions.append(routing_block)
+
+    routing = info.get("routing")
+    if routing:
+        from skills.lib.workflow.ast.nodes import ElementNode
+        cases = [ElementNode("case", {"result": result}, [TextNode(action)]) for result, action in routing.items()]
+        routing_block = render(W.el("routing", *cases).build(), XMLRenderer())
+        actions.append("")
+        actions.append(routing_block)
+
+    extra_instructions = info.get("extra_instructions", [])
+    actions.extend(extra_instructions)
+
+    action_nodes = [TextNode(a) for a in actions]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append("")
+
+    if_pass = f"python3 -m {MODULE_PATH} --step 5 --total-steps {total_steps} --qr-status pass"
+    if_fail = f"python3 -m {MODULE_PATH} --step 5 --total-steps {total_steps} --qr-status fail"
+
+    from skills.lib.workflow.ast.nodes import ElementNode
+    if_pass_node = ElementNode("if_pass", {}, [TextNode(if_pass)])
+    if_fail_node = ElementNode("if_fail", {}, [TextNode(if_fail)])
+    parts.append(render(W.el("invoke_after", if_pass_node, if_fail_node).build(), XMLRenderer()))
+    parts.append("")
+    parts.append(render(
+        W.el("next",
+            TextNode("After current_action completes, execute invoke_after."),
+            TextNode(f"Re-read now: if_pass -> {if_pass}"),
+            TextNode(f"            if_fail -> {if_fail}"),
+            required="true"
+        ).build(),
+        XMLRenderer()
+    ))
+    parts.append("</workflow>")
+
+    return "\n".join(parts)
+
+
+def format_step_7_doc_qr(qr: QRState, total_steps: int, **kw) -> str:
+    """Format step 7 doc QR output with branching."""
+    info = STEPS[7]
+    parts = []
+
+    parts.append(render(
+        W.el("step_header", TextNode(info["title"]),
+            script="executor", step="7", total=str(total_steps)
+        ).build(),
+        XMLRenderer()
+    ))
+    parts.append("")
+
+    parts.append("<workflow>")
+
+    actions = []
+    banner = render(W.el("state_banner", checkpoint=info["qr_name"], iteration=str(qr.iteration), mode="fresh_review").build(), XMLRenderer())
+    actions.append(banner)
+    actions.append("")
+
+    pre_dispatch = info.get("pre_dispatch", [])
+    actions.extend(pre_dispatch)
+
+    constraint = render(
+        W.el(
+            "orchestrator_constraint",
+            TextNode("You are the ORCHESTRATOR. You delegate, you never implement."),
+            TextNode("Your agents are highly capable. Trust them with ANY issue."),
+            TextNode("PROHIBITED: Edit, Write tools. REQUIRED: Task tool dispatch."),
+        ).build(),
+        XMLRenderer(),
+    )
+    actions.append(constraint)
+    actions.append("")
+
+    mode_script = get_mode_script_path(info["mode_script"])
+    mode_total_steps = info.get("mode_total_steps", 5)
+    dispatch_agent = info.get("dispatch_agent", "agent")
+    context_vars = info.get("context_vars", {})
+    invoke_suffix = info.get("invoke_suffix", "")
+    invoke_cmd = f"python3 -m {mode_script} --step 1 --total-steps {mode_total_steps}{invoke_suffix}"
+
+    dispatch_lines = [f'<subagent_dispatch agent="{dispatch_agent}" mode="script">']
+    if context_vars:
+        dispatch_lines.append("  <context>")
+        for name, description in context_vars.items():
+            dispatch_lines.append(f'    <var name="{name}">{description}</var>')
+        dispatch_lines.append("  </context>")
+    dispatch_lines.append(f"  <invoke>{invoke_cmd}</invoke>")
+    dispatch_lines.append("  <handoff_instruction>")
+    dispatch_lines.append(f'    Your Task tool prompt MUST begin with: "Start by invoking: {invoke_cmd}"')
+    dispatch_lines.append("    This is MANDATORY. The sub-agent follows the script, not free-form instructions.")
+    dispatch_lines.append("  </handoff_instruction>")
+    dispatch_lines.append("</subagent_dispatch>")
+    actions.append("\n".join(dispatch_lines))
+    actions.append("")
+
+    post_dispatch = info.get("post_dispatch", [])
+    actions.extend(post_dispatch)
+
+    post_qr_config = info.get("post_qr_routing")
+    if post_qr_config:
+        from skills.lib.workflow.constants import QR_ITERATION_LIMIT
+        from skills.lib.workflow.ast.nodes import ElementNode
+        fix_target = post_qr_config.get("fix_target", "developer")
+
+        routing_table = [
+            "| QR Result              | Your Action                         |",
+            "| ---------------------- | ----------------------------------- |",
+            "| PASS (no issues)       | Invoke command from <if_pass> below |",
+            "| ISSUES / concerns / *  | Invoke command from <if_fail> below |",
+        ]
+
+        routing_block = render(
+            W.el(
+                "post_qr_routing",
+                ElementNode("role", {}, [TextNode("You are the ORCHESTRATOR. After QR returns, your ONLY action is routing.")]),
+                ElementNode(
+                    "pedantic_mode",
+                    {},
+                    [
+                        TextNode("EVERY issue is blocking. There are no 'minor concerns' or 'non-critical issues'."),
+                        TextNode("If QR returns ANYTHING other than clean PASS, route to <if_fail>."),
+                        TextNode(f"Defense: Max {QR_ITERATION_LIMIT} iterations, then escalate to user via AskUserQuestion."),
+                    ],
+                ),
+                ElementNode("routing_table", {}, [TextNode("\n".join(routing_table))]),
+            ).build(),
+            XMLRenderer(),
+        )
+        actions.append(routing_block)
+
+    routing = info.get("routing")
+    if routing:
+        from skills.lib.workflow.ast.nodes import ElementNode
+        cases = [ElementNode("case", {"result": result}, [TextNode(action)]) for result, action in routing.items()]
+        routing_block = render(W.el("routing", *cases).build(), XMLRenderer())
+        actions.append("")
+        actions.append(routing_block)
+
+    extra_instructions = info.get("extra_instructions", [])
+    actions.extend(extra_instructions)
+
+    action_nodes = [TextNode(a) for a in actions]
+    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append("")
+
+    if_pass = f"python3 -m {MODULE_PATH} --step 8 --total-steps {total_steps} --qr-status pass"
+    if_fail = f"python3 -m {MODULE_PATH} --step 8 --total-steps {total_steps} --qr-status fail"
+
+    from skills.lib.workflow.ast.nodes import ElementNode
+    if_pass_node = ElementNode("if_pass", {}, [TextNode(if_pass)])
+    if_fail_node = ElementNode("if_fail", {}, [TextNode(if_fail)])
+    parts.append(render(W.el("invoke_after", if_pass_node, if_fail_node).build(), XMLRenderer()))
+    parts.append("")
+    parts.append(render(
+        W.el("next",
+            TextNode("After current_action completes, execute invoke_after."),
+            TextNode(f"Re-read now: if_pass -> {if_pass}"),
+            TextNode(f"            if_fail -> {if_fail}"),
+            required="true"
+        ).build(),
+        XMLRenderer()
+    ))
+    parts.append("</workflow>")
+
+    return "\n".join(parts)
+
+
+STEP_HANDLERS = {
+    1: format_step_1_planning,
+    3: lambda qr, total_steps, milestone_count, **kw: format_step_3_implementation(qr, total_steps, milestone_count),
+    4: format_step_4_code_qr,
+    5: lambda qr, total_steps, qr_status, **kw: format_gate(5, CODE_QR_GATE, qr, total_steps) if qr_status else "Error: --qr-status required for step 5",
+    6: lambda qr, total_steps, **kw: format_step_6_documentation(qr, total_steps),
+    7: format_step_7_doc_qr,
+    8: lambda qr, total_steps, qr_status, **kw: format_gate(8, DOC_QR_GATE, qr, total_steps) if qr_status else "Error: --qr-status required for step 8",
+}
+
+
 def format_output(step: int, total_steps: int,
                   qr_iteration: int, qr_fail: bool, qr_status: str,
                   reconciliation_check: bool, milestone_count: int) -> str:
@@ -616,32 +950,20 @@ def format_output(step: int, total_steps: int,
 
     # Construct QRState from legacy parameters
     status = QRStatus(qr_status) if qr_status else None
-    qr = QRState(iteration=qr_iteration, failed=qr_fail, status=status)
+    state = LoopState.RETRY if qr_fail else LoopState.INITIAL
+    qr = QRState(iteration=qr_iteration, state=state, status=status)
 
-    # Step 5 is the Code QR gate
-    if step == 5:
-        if not qr_status:
-            return "Error: --qr-status required for step 5"
-        return format_gate(5, CODE_QR_GATE, qr, total_steps)
+    # Dispatch to step-specific handlers
+    handler = STEP_HANDLERS.get(step)
+    if handler:
+        return handler(qr=qr, total_steps=total_steps, qr_status=qr_status,
+                      milestone_count=milestone_count, reconciliation_check=reconciliation_check)
 
-    # Step 8 is the Doc QR gate
-    if step == 8:
-        if not qr_status:
-            return "Error: --qr-status required for step 8"
-        return format_gate(8, DOC_QR_GATE, qr, total_steps)
-
-    # Step 3 has special handling (implementation with fix mode)
-    if step == 3:
-        return format_step_3_implementation(qr, total_steps, milestone_count)
-
-    # Step 6 has special handling (documentation with fix mode)
-    if step == 6:
-        return format_step_6_documentation(qr, total_steps)
-
+    # Generic step handling
     info = STEPS.get(step, STEPS[9])
 
     # Handle QR step in fix mode (developer/TW fixes, not QR re-run)
-    if info.get("is_qr") and qr.failed:
+    if info.get("is_qr") and qr.state == LoopState.RETRY:
         post_qr_config = info.get("post_qr_routing", {})
         fix_target = post_qr_config.get("fix_target", "developer")
         qr_name = info.get("qr_name", "QR")
@@ -840,31 +1162,6 @@ def format_output(step: int, total_steps: int,
         # Final step - no invoke_after, just present retrospective
         actions.append("")
         actions.append("EXECUTION COMPLETE - Present retrospective to user.")
-    elif step == 1:
-        # Step 1 has special guidance embedded in actions
-        actions.extend([
-            "",
-            "=" * 70,
-            "MANDATORY NEXT ACTION",
-            "=" * 70,
-        ])
-        if reconciliation_check:
-            next_command = f"python3 -m {MODULE_PATH} --step 2 --total-steps {total_steps} --reconciliation-check"
-        else:
-            actions.extend([
-                "Proceed to Implementation step.",
-                "Use the wave groupings from your analysis.",
-                "=" * 70,
-            ])
-            next_command = f"python3 -m {MODULE_PATH} --step 3 --total-steps {total_steps}"
-    elif step == 4:
-        # Code QR step uses branching
-        if_pass = f"python3 -m {MODULE_PATH} --step 5 --total-steps {total_steps} --qr-status pass"
-        if_fail = f"python3 -m {MODULE_PATH} --step 5 --total-steps {total_steps} --qr-status fail"
-    elif step == 7:
-        # Doc QR step uses branching
-        if_pass = f"python3 -m {MODULE_PATH} --step 8 --total-steps {total_steps} --qr-status pass"
-        if_fail = f"python3 -m {MODULE_PATH} --step 8 --total-steps {total_steps} --qr-status fail"
     else:
         next_command = f"python3 -m {MODULE_PATH} --step {step + 1} --total-steps {total_steps}"
 
@@ -879,22 +1176,6 @@ def format_output(step: int, total_steps: int,
         XMLRenderer()
     ))
     parts.append("")
-
-    # XML mandate for step 1
-    if step == 1:
-        parts.append("""<xml_format_mandate>
-CRITICAL: All script outputs use XML format. You MUST:
-
-1. Execute the action in <current_action>
-2. When complete, invoke the exact command in <invoke_after>
-3. The <next> block re-states the command -- execute it
-4. For branching <invoke_after>, choose based on outcome:
-   - <if_pass>: Use when action succeeded / QR returned PASS
-   - <if_fail>: Use when action failed / QR returned ISSUES
-
-DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
-</xml_format_mandate>""")
-        parts.append("")
 
     # Check if there's a next command
     if next_command or (if_pass and if_fail):

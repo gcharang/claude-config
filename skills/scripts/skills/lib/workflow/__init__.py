@@ -9,9 +9,8 @@ from .core import (
     StepContext,
     StepDef,
     Workflow,
-    get_workflow_registry,
-    register_workflow,
 )
+from .discovery import discover_workflows
 from .types import (
     AgentRole,
     BranchRouting,
@@ -19,6 +18,9 @@ from .types import (
     Dispatch,
     GateConfig,
     LinearRouting,
+    Mode,
+    Phase,
+    PHASE_TO_MODE,
     QRState,
     Routing,
     Step,
@@ -33,8 +35,7 @@ __all__ = [
     "StepContext",
     "Outcome",
     "Arg",
-    "register_workflow",
-    "get_workflow_registry",
+    "discover_workflows",
     # Types for backward compatibility
     "AgentRole",
     "Confidence",
@@ -47,4 +48,8 @@ __all__ = [
     "QRState",
     "Step",
     "WorkflowDefinition",
+    # Code quality document types
+    "Phase",
+    "Mode",
+    "PHASE_TO_MODE",
 ]

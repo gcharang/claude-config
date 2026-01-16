@@ -196,7 +196,17 @@ STEPS = {
             "  - Merge redundant information",
             "  - Keep file:line references for verifiable claims",
             "  - Patterns: HOW they work, not just THAT they exist",
-            "  - Aim for ~500 tokens per section (~1500 total)",
+            "",
+            "TOKEN BUDGET (ENFORCED - not soft guidance):",
+            "  - Total return: MAX 1500 tokens",
+            "  - Per section: MAX 500 tokens",
+            "  - Per finding: MAX 50 tokens",
+            "",
+            "  VERBOSE (wrong): 'The module implements a factory pattern that",
+            "                    creates service instances, enabling DI...'",
+            "  DRAFT (right):   'Factory pattern -> DI + testability'",
+            "",
+            "  If findings exceed budget, OMIT low-relevance items.",
             "",
             "OUTPUT: XML-formatted exploration output using this schema:",
             "",
@@ -206,32 +216,49 @@ STEPS = {
 }
 
 
+def step_5_handler(step_info, total_steps):
+    """Handler for step 5 (include output schema)."""
+    actions = list(step_info.get("actions", []))
+    schema = get_output_schema()
+    actions.append("<output_schema>")
+    actions.append(schema)
+    actions.append("</output_schema>")
+    return {
+        "title": step_info["title"],
+        "actions": actions,
+        "next": None,
+    }
+
+
+def generic_step_handler(step_info, step, total_steps):
+    """Generic handler for standard steps."""
+    actions = list(step_info.get("actions", []))
+    next_cmd = None
+    if step < total_steps:
+        next_cmd = f"python3 -m {MODULE_PATH} --step {step + 1} --total-steps {total_steps}"
+    return {
+        "title": step_info["title"],
+        "actions": actions,
+        "next": next_cmd,
+    }
+
+
+STEP_HANDLERS = {
+    5: step_5_handler,
+}
+
+
 def get_step_guidance(step: int, total_steps: int) -> dict:
     """Return guidance dict for the specified step."""
     info = STEPS.get(step)
     if not info:
         return {"error": f"Invalid step {step}"}
 
-    actions = list(info.get("actions", []))
-
-    # Append output schema for step 5
-    if info.get("include_output_format"):
-        schema = get_output_schema()
-        actions.append("<output_schema>")
-        actions.append(schema)
-        actions.append("</output_schema>")
-
-    # Determine next step
-    if step < total_steps:
-        next_cmd = f"python3 -m {MODULE_PATH} --step {step + 1} --total-steps {total_steps}"
+    handler = STEP_HANDLERS.get(step, generic_step_handler)
+    if step == 5:
+        return handler(info, total_steps)
     else:
-        next_cmd = None  # Final step
-
-    return {
-        "title": info["title"],
-        "actions": actions,
-        "next": next_cmd,
-    }
+        return handler(info, step, total_steps)
 
 
 def format_output(step: int, total_steps: int) -> str:

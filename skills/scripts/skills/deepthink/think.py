@@ -31,7 +31,6 @@ from skills.lib.workflow.core import (
     StepContext,
     StepDef,
     Workflow,
-    register_workflow,
 )
 from skills.lib.workflow.ast import W, XMLRenderer, render
 from skills.lib.workflow.ast.nodes import TextNode
@@ -1089,8 +1088,6 @@ WORKFLOW = Workflow(
     ),
     description="Structured reasoning for open-ended analytical questions",
 )
-
-register_workflow(WORKFLOW)
 
 
 def get_step_1_output(args, step_info):

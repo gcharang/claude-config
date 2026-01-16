@@ -34,8 +34,16 @@ CONVENTIONS_DIR = (
 # =============================================================================
 
 
-def load_category_block(category_ref: str) -> str:
-    """Load category text block from file:start-end reference."""
+def load_category_block(category_ref: str, mode: str = "code") -> str:
+    """Load category text block from file:start-end reference.
+
+    Args:
+        category_ref: File reference (file:start-end)
+        mode: "design" or "code" - extracts mode-specific guidance
+
+    Returns:
+        Category content with mode-specific guidance extracted
+    """
     file_part, line_range = category_ref.split(":")
     start, end = map(int, line_range.split("-"))
 
@@ -44,7 +52,22 @@ def load_category_block(category_ref: str) -> str:
     path = CONVENTIONS_DIR / file_part
     content = read_text_or_exit(path, "loading category file")
     lines = content.splitlines()
-    return "\n".join(lines[start - 1 : end])
+    category_block = "\n".join(lines[start - 1 : end])
+
+    mode_tag = f"<{mode}-mode>"
+    close_tag = f"</{mode}-mode>"
+
+    if mode_tag in category_block:
+        _, sep, after = category_block.partition(mode_tag)
+        if sep:
+            inner, sep, _ = after.partition(close_tag)
+            if sep:
+                category_block = category_block.replace(f"{mode_tag}{inner}{close_tag}", inner.strip())
+
+    for tag in ["<design-mode>", "</design-mode>", "<code-mode>", "</code-mode>"]:
+        category_block = category_block.replace(tag, "")
+
+    return category_block
 
 
 # =============================================================================
@@ -52,20 +75,20 @@ def load_category_block(category_ref: str) -> str:
 # =============================================================================
 
 
-def format_step_header(step: int, total: int, title: str, category_ref: str) -> str:
+def format_step_header(step: int, total: int, title: str, category_ref: str, mode: str = "code") -> str:
     """Render step header with category context."""
     return (
         f'<step_header script="explore" step="{step}" total="{total}" '
-        f'category="{category_ref}">{title}</step_header>'
+        f'category="{category_ref}" mode="{mode}">{title}</step_header>'
     )
 
 
-def format_next_step(step: int, category_ref: str) -> str:
+def format_next_step(step: int, category_ref: str, mode: str = "code") -> str:
     """Format the invoke-after block for next step."""
     cmd = (
         f'<invoke working-dir=".claude/skills/scripts" '
         f'cmd="python3 -m {MODULE_PATH} --step {step} --total-steps {TOTAL_STEPS} '
-        f'--category {category_ref}" />'
+        f'--category {category_ref} --mode {mode}" />'
     )
     return render(W.el("invoke_after", TextNode(cmd)).build(), XMLRenderer())
 
@@ -75,7 +98,7 @@ def format_next_step(step: int, category_ref: str) -> str:
 # =============================================================================
 
 
-def format_step_1(category_ref: str) -> str:
+def format_step_1(category_ref: str, mode: str = "code") -> str:
     """Step 1: Identify project domain context."""
     actions = [
         "DOMAIN CONTEXT ANALYSIS:",
@@ -107,13 +130,13 @@ def format_step_1(category_ref: str) -> str:
     ]
 
     parts = [
-        format_step_header(1, TOTAL_STEPS, "Domain Context", category_ref),
+        format_step_header(1, TOTAL_STEPS, "Domain Context", category_ref, mode),
         "",
         render(W.el("xml_mandate").build(), XMLRenderer()),
         "",
         render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
         "",
-        format_next_step(2, category_ref),
+        format_next_step(2, category_ref, mode),
     ]
     return "\n".join(parts)
 
@@ -123,16 +146,19 @@ def format_step_1(category_ref: str) -> str:
 # =============================================================================
 
 
-def format_step_2(category_ref: str) -> str:
+def format_step_2(category_ref: str, mode: str = "code") -> str:
     """Step 2: Extract principle and generate violation patterns."""
-    category_block = load_category_block(category_ref)
+    category_block = load_category_block(category_ref, mode)
+
+    mode_description = "architecture/intent" if mode == "design" else "implementation"
 
     actions = [
-        # Meta-instruction: Frame examples as exemplars
         "<interpretation>",
         "The violations listed below are ILLUSTRATIVE PATTERNS, not an exhaustive checklist.",
         "Detect ANY code violating the underlying <principle>, including unlisted patterns.",
         "</interpretation>",
+        "",
+        f"MODE: {mode} ({mode_description})",
         "",
         "<smell_category>",
         category_block,
@@ -170,11 +196,11 @@ def format_step_2(category_ref: str) -> str:
     ]
 
     parts = [
-        format_step_header(2, TOTAL_STEPS, "Principle + Violations", category_ref),
+        format_step_header(2, TOTAL_STEPS, "Principle + Violations", category_ref, mode),
         "",
         render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
         "",
-        format_next_step(3, category_ref),
+        format_next_step(3, category_ref, mode),
     ]
     return "\n".join(parts)
 
@@ -184,7 +210,7 @@ def format_step_2(category_ref: str) -> str:
 # =============================================================================
 
 
-def format_step_3(category_ref: str) -> str:
+def format_step_3(category_ref: str, mode: str = "code") -> str:
     """Step 3: Generate project-specific grep patterns."""
     actions = [
         "SEARCH PATTERN GENERATION:",
@@ -217,11 +243,11 @@ def format_step_3(category_ref: str) -> str:
     ]
 
     parts = [
-        format_step_header(3, TOTAL_STEPS, "Pattern Generation", category_ref),
+        format_step_header(3, TOTAL_STEPS, "Pattern Generation", category_ref, mode),
         "",
         render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
         "",
-        format_next_step(4, category_ref),
+        format_next_step(4, category_ref, mode),
     ]
     return "\n".join(parts)
 
@@ -231,7 +257,7 @@ def format_step_3(category_ref: str) -> str:
 # =============================================================================
 
 
-def format_step_4(category_ref: str) -> str:
+def format_step_4(category_ref: str, mode: str = "code") -> str:
     """Step 4: Execute search and document findings."""
     actions = [
         "SEARCH EXECUTION:",
@@ -268,11 +294,11 @@ def format_step_4(category_ref: str) -> str:
     ]
 
     parts = [
-        format_step_header(4, TOTAL_STEPS, "Search", category_ref),
+        format_step_header(4, TOTAL_STEPS, "Search", category_ref, mode),
         "",
         render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
         "",
-        format_next_step(5, category_ref),
+        format_next_step(5, category_ref, mode),
     ]
     return "\n".join(parts)
 
@@ -282,14 +308,19 @@ def format_step_4(category_ref: str) -> str:
 # =============================================================================
 
 
-def format_step_5(category_ref: str) -> str:
+def format_step_5(category_ref: str, mode: str = "code") -> str:
     """Step 5: Synthesize findings into smell report."""
     actions = [
         "SYNTHESIZE findings from Step 4 into final report.",
         "",
         "OUTPUT FORMAT (strict):",
         "",
-        '<smell_report category="$CATEGORY_NAME" severity="high|medium|low|none" count="N">',
+        "TOKEN BUDGET (ENFORCED):",
+        "  - Total return: MAX 500 tokens",
+        "  - Per finding: MAX 50 tokens (evidence + issue combined)",
+        "  - If findings exceed budget, keep highest severity only",
+        "",
+        '<smell_report category="$CATEGORY_NAME" mode="$MODE" severity="high|medium|low|none" count="N">',
         '  <finding location="file:line-range" severity="high|medium|low">',
         '    <evidence>quoted code (2-5 lines max)</evidence>',
         '    <issue>what is wrong (one sentence)</issue>',
@@ -304,12 +335,13 @@ def format_step_5(category_ref: str) -> str:
         "  NONE: No issues found (empty findings)",
         "",
         "Extract $CATEGORY_NAME from the ## heading in the category block.",
+        f'Use MODE: {mode}',
         "",
         "OUTPUT your smell_report now.",
     ]
 
     parts = [
-        format_step_header(5, TOTAL_STEPS, "Synthesis", category_ref),
+        format_step_header(5, TOTAL_STEPS, "Synthesis", category_ref, mode),
         "",
         render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
         "",
@@ -323,7 +355,7 @@ def format_step_5(category_ref: str) -> str:
 # =============================================================================
 
 
-def format_output(step: int, category_ref: str) -> str:
+def format_output(step: int, category_ref: str, mode: str = "code") -> str:
     """Route to appropriate step formatter."""
     formatters = {
         1: format_step_1,
@@ -335,7 +367,7 @@ def format_output(step: int, category_ref: str) -> str:
     formatter = formatters.get(step)
     if not formatter:
         sys.exit(f"ERROR: Unknown step {step}")
-    return formatter(category_ref)
+    return formatter(category_ref, mode)
 
 
 # =============================================================================
@@ -354,7 +386,14 @@ def main():
         "--category",
         type=str,
         required=True,
-        help="Category reference as file:startline-endline (e.g., baseline.md:5-13)",
+        help="Category reference as file:startline-endline (e.g., 01-naming-and-types.md:5-13)",
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["design", "code"],
+        default="code",
+        help="Evaluation mode: design (architecture/intent) or code (implementation)",
     )
 
     args = parser.parse_args()
@@ -366,11 +405,10 @@ def main():
     if args.step > args.total_steps:
         sys.exit("ERROR: --step cannot exceed --total-steps")
 
-    # Validate category format
     if ":" not in args.category or "-" not in args.category.split(":")[1]:
         sys.exit("ERROR: --category must be in format file.md:start-end")
 
-    print(format_output(args.step, args.category))
+    print(format_output(args.step, args.category, args.mode))
 
 
 if __name__ == "__main__":

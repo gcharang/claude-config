@@ -25,7 +25,6 @@ from skills.lib.workflow.core import (
     StepContext,
     StepDef,
     Workflow,
-    register_workflow,
 )
 from skills.lib.workflow.ast import W, XMLRenderer, render
 from skills.lib.workflow.ast.nodes import TextNode
@@ -317,8 +316,6 @@ WORKFLOW = Workflow(
     STEP_FINALIZE,
     description="Convert arXiv papers to LLM-consumable markdown",
 )
-
-register_workflow(WORKFLOW)
 
 
 def format_output(step: int, total: int, step_def: StepDef, is_step_one: bool = False) -> str:

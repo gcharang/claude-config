@@ -212,12 +212,16 @@ def format_step_2(perspective_id: str) -> str:
     return "\n".join(parts)
 
 
+STEP_HANDLERS = {
+    1: lambda perspective: format_step_1(perspective),
+    2: lambda perspective: format_step_2(perspective),
+}
+
+
 def format_output(step: int, total_steps: int, perspective: str) -> str:
     """Format output for the given step."""
-    if step == 1:
-        return format_step_1(perspective)
-    else:
-        return format_step_2(perspective)
+    handler = STEP_HANDLERS.get(step, lambda _: format_step_2(perspective))
+    return handler(perspective)
 
 
 # =============================================================================

@@ -8,6 +8,7 @@ Workflow orchestration framework: types, formatters, and registration.
 | -------------- | -------------------------------------------------------- | ------------------------------------------------------ |
 | `README.md`    | Architecture, design decisions, patterns                 | Understanding workflow design, common patterns         |
 | `core.py`      | Workflow, StepDef, StepContext, Outcome, Arg             | Defining new skills, understanding workflow data model |
+| `discovery.py` | Workflow discovery via importlib scanning                | Understanding pull-based discovery, troubleshooting    |
 | `__init__.py`  | Public API exports                                       | Importing workflow types, checking available exports   |
 | `cli.py`       | CLI helpers for workflow entry points                    | Adding CLI arguments, modifying step output            |
 | `constants.py` | Shared constants                                         | Adding new constants, modifying defaults               |

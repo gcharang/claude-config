@@ -23,7 +23,6 @@ from skills.lib.workflow.core import (
     StepDef,
     Workflow,
     Arg,
-    register_workflow,
 )
 from skills.lib.workflow.ast import W, XMLRenderer, render
 
@@ -400,8 +399,6 @@ WORKFLOW = Workflow(
     ),
     description="Root cause identification workflow",
 )
-
-register_workflow(WORKFLOW)
 
 
 def main(

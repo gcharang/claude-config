@@ -19,7 +19,6 @@ from skills.lib.workflow.core import (
     StepDef,
     Workflow,
     Arg,
-    register_workflow,
 )
 from skills.lib.workflow.ast import W, XMLRenderer, render
 
@@ -392,8 +391,6 @@ WORKFLOW = Workflow(
     ),
     description="Understanding-focused codebase comprehension workflow with confidence-driven iteration",
 )
-
-register_workflow(WORKFLOW)
 
 
 # Backward compatibility: CLI entry point

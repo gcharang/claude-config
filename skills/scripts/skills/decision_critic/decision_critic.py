@@ -23,7 +23,6 @@ from skills.lib.workflow.core import (
     StepContext,
     StepDef,
     Workflow,
-    register_workflow,
 )
 from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
 
@@ -249,8 +248,6 @@ WORKFLOW = Workflow(
     ),
     description="Structured decision criticism workflow",
 )
-
-register_workflow(WORKFLOW)
 
 
 def main(
