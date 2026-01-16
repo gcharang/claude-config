@@ -54,6 +54,9 @@ def discover_workflows(package: str) -> dict[str, "Workflow"]:
             module = importlib.import_module(modname)
             if hasattr(module, "WORKFLOW"):
                 workflow = module.WORKFLOW
+                # Set _module_path if not already set (frozen dataclass bypass)
+                if workflow._module_path is None:
+                    object.__setattr__(workflow, "_module_path", modname)
                 workflows[workflow.name] = workflow
         except Exception as e:
             # Collect ALL exceptions during import (syntax, name, import errors).

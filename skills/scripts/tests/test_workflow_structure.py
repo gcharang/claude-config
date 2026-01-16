@@ -2,17 +2,15 @@
 
 import pytest
 
-from skills.lib.workflow.core import get_workflow_registry
+from skills.lib.workflow import discover_workflows
 
 from conftest import EXCLUDED
 
 
 def _registered_workflows():
     """Collect registered workflows as pytest params."""
-    from conftest import import_all_skills
-
-    import_all_skills()
-    registry = get_workflow_registry()
+    # discover_workflows handles import and discovery in one call
+    registry = discover_workflows("skills")
 
     return [
         pytest.param(name, workflow, id=name)

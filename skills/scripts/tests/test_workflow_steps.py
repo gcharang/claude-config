@@ -6,11 +6,11 @@ Uses domain types (BoundedInt, ChoiceSet, Constant) to generate Cartesian produc
 
 import pytest
 
-from skills.lib.workflow.core import get_workflow_registry
+from skills.lib.workflow import discover_workflows
 
 from test_generation import generate_inputs
 
-from conftest import EXCLUDED, import_all_skills, run_skill_invocation
+from conftest import EXCLUDED, run_skill_invocation
 
 
 def _collect_test_cases():
@@ -18,10 +18,8 @@ def _collect_test_cases():
 
     Returns list of pytest.param with (workflow_name, workflow, params) and test IDs.
     """
-    # Import skills at collection time (before fixtures run)
-    import_all_skills()
-
-    registry = get_workflow_registry()
+    # discover_workflows handles import and discovery in one call
+    registry = discover_workflows("skills")
     test_cases = []
 
     for name, workflow in sorted(registry.items()):
