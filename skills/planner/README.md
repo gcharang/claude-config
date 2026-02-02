@@ -5,6 +5,8 @@ acceptance criteria, specs that nobody can implement. I built this skill with
 two workflows -- planning and execution -- connected by quality gates that catch
 these problems early.
 
+**Authoritative specification**: See INTENT.md for complete design rationale, invariants, and state file schemas. This README provides operational overview; INTENT.md is the source of truth for architectural decisions.
+
 ## Planning Workflow
 
 ```
@@ -78,3 +80,38 @@ remaining milestones. Building on unverified code means rework.
 **Issue Resolution** presents each QR finding individually with options (Fix /
 Skip / Alternative). Fixes delegate to developers or technical writers, then QR
 runs again. This cycle repeats until QR passes.
+
+## Invisible Knowledge
+
+### Why session.yaml was removed
+
+Initial design included session.yaml to track workflow state across invocations. Removed because context.json already captures task and architecture decisions -- the critical state that sub-agents need. Session-level tracking (current step, timestamps) belongs in the orchestrator's context window, not persisted state. Adding a separate file created redundancy without value.
+
+### Why 6-field decision schema
+
+Early design used 11 fields per decision (id, question, status, raised_at, decided_at, decided_by, answer, rationale, options, blocking, superseded_by). Reduced to 6 fields (id, question, status, decided_by, answer, rationale) because:
+
+- raised_at/decided_at: Timestamps added noise without improving decision reasoning
+- options: Better captured in findings.json during EXPLORING phase
+- blocking: Implicit in status=READY with orchestrator waiting for user input
+- superseded_by: Trackable via status=SUPERSEDED + new decision with same question
+
+Simpler schema means less for LLMs to get wrong when writing decisions.
+
+### Why per-phase qr-<phase>.json instead of single qa.json
+
+Separate qr-<phase>.json files (qr-plan-structure.json, qr-plan-code.json, qr-plan-docs.json, qr-impl-code.json, qr-impl-docs.json) prevent cross-phase contamination. With a single qa.json:
+
+- Plan QR items mix with implementation QR items (confusing for fixers)
+- Verification scope unclear (which phase is this item checking?)
+- Cannot isolate QR results per phase (plan QR should be independent from implementation QR)
+
+Per-phase files allow independent verification cycles with clear boundaries. Each file is deleted when its phase passes QR gate.
+
+## Plan Schema
+
+Key fields in plan.json:
+
+- milestones[].documentation.function_blocks[] (Tier 2 function-level rationale)
+- milestones[].documentation.inline_comments[] (Tier 1 WHY comments)
+- readme_entries[] (cross-cutting architecture spanning milestones)

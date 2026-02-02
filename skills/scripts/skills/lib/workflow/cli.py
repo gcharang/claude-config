@@ -4,11 +4,15 @@ Handles argument parsing and mode script entry points.
 """
 
 import argparse
-import sys
 from pathlib import Path
 from typing import Callable
 
 from .ast import W, XMLRenderer, render, TextNode
+from .ast.nodes import StepHeaderNode, CurrentActionNode, InvokeAfterNode
+from .ast.renderer import (
+    render_step_header, render_current_action, render_invoke_after,
+)
+from .types import UserInputResponse
 
 
 def _compute_module_path(script_file: str) -> str:
@@ -33,17 +37,31 @@ def _compute_module_path(script_file: str) -> str:
     return path.stem
 
 
-def add_qr_args(parser: argparse.ArgumentParser) -> None:
-    """Add standard QR verification arguments to argument parser.
-
-    Used by orchestrator scripts (planner.py, executor.py, wave-executor.py)
-    to ensure consistent QR-related CLI flags.
-    """
+def add_standard_args(parser: argparse.ArgumentParser) -> None:
+    """Add standard workflow arguments."""
+    parser.add_argument("--step", type=int, required=True)
     parser.add_argument("--qr-iteration", type=int, default=1)
-    parser.add_argument("--qr-fail", action="store_true",
-                        help="Work step is fixing QR issues")
-    parser.add_argument("--qr-status", type=str, choices=["pass", "fail"],
-                        help="QR result for gate steps")
+    parser.add_argument("--qr-fail", type=str, default=None)
+    parser.add_argument(
+        "--user-answer-id",
+        type=str,
+        help="Question ID that was answered"
+    )
+    parser.add_argument(
+        "--user-answer-value",
+        type=str,
+        help="User's selected option or custom text"
+    )
+
+
+def get_user_answer(args) -> UserInputResponse | None:
+    """Extract user answer from parsed args."""
+    if args.user_answer_id and args.user_answer_value:
+        return UserInputResponse(
+            question_id=args.user_answer_id,
+            selected=args.user_answer_value,
+        )
+    return None
 
 
 def mode_main(
@@ -65,17 +83,16 @@ def mode_main(
 
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--total-steps", type=int, required=True)
     parser.add_argument("--qr-iteration", type=int, default=1)
-    parser.add_argument("--qr-fail", action="store_true")
+    parser.add_argument("--qr-fail", type=str, default=None)
     for args, kwargs in (extra_args or []):
         parser.add_argument(*args, **kwargs)
     parsed = parser.parse_args()
 
     guidance = get_step_guidance(
-        parsed.step, parsed.total_steps, module_path,
+        parsed.step, module_path,
         **{k: v for k, v in vars(parsed).items()
-           if k not in ('step', 'total_steps')}
+           if k not in ('step',)}
     )
 
     # Handle both dict and dataclass (GuidanceResult) returns
@@ -93,11 +110,13 @@ def mode_main(
 
     # Build step output using AST builder
     parts = []
-    parts.append(render(
-        W.el("step_header", TextNode(guidance_dict["title"]),
-             script=script_name, step=str(parsed.step), total=str(parsed.total_steps)
-        ).build(), XMLRenderer()
-    ))
+    # step_header omits total attribute: cosmetic display ('step X of Y') never parsed
+    # by consumers. Omission eliminates workflow parameter coupling in mode_main().
+    parts.append(render_step_header(StepHeaderNode(
+        title=guidance_dict["title"],
+        script=script_name,
+        step=str(parsed.step)
+    )))
     if parsed.step == 1:
         parts.append("")
         parts.append("<xml_format_mandate>")
@@ -111,14 +130,8 @@ def mode_main(
         parts.append('Bad: "For the patterns we need, let me search for auth..."')
         parts.append("</thinking_efficiency>")
     parts.append("")
-    parts.append(render(
-        W.el("current_action", *[TextNode(a) for a in guidance_dict["actions"]]).build(),
-        XMLRenderer()
-    ))
-    if guidance_dict["next"]:
+    parts.append(render_current_action(CurrentActionNode(guidance_dict["actions"])))
+    if guidance_dict.get("next"):
         parts.append("")
-        parts.append(render(
-            W.el("invoke_after", TextNode(guidance_dict["next"])).build(),
-            XMLRenderer()
-        ))
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=guidance_dict["next"])))
     print("\n".join(parts))

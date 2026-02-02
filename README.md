@@ -152,19 +152,23 @@ This is relatively free-form. If the project and/or surface area is particularly
 large, use the `codebase-analysis` skill to explore the project's code properly
 before proposing a solution.
 
-**2. (Optional) Think through the problem.** For complex decisions, the
-`problem-analysis` skill forces structured analysis: decompose problems into
-constraints and variables, generate distinct approaches, verify assumptions
-against evidence. It produces a decision framework with explicit tradeoffs.
+**2. (Optional) Think it through.** I reach for `deepthink` very often, more than
+any other skill. It handles analytical questions where you do not know the answer
+structure yet -- taxonomy design, trade-offs, definitional questions, evaluative
+judgments, exploratory investigations.
 
-Use it when you need to gain a better understanding of the problem domain,
-potential solutions, their tradeoffs, and the cost of choosing wrong is high.
+It auto-detects complexity. Quick mode reasons directly. Full mode launches
+parallel sub-agents with different analytical perspectives, then synthesizes
+through agreement patterns. Both self-verify.
 
-**3. (Optional) Stress-test your approach.** If you are uncertain, use the
-`decision-critic` skill to find holes in your reasoning before you commit to a
-direction.
+So, for most analytical questions, deepthink is enough. It explores your
+codebase when context is missing. Reach for specialized skills only when the
+question is clearly scoped:
 
-**4. Write a plan.** "Use your planner skill to write a plan to
+- `problem-analysis`: Root cause analysis specifically
+- `decision-critic`: Stress-testing a specific decision
+
+**3. Write a plan.** "Use your planner skill to write a plan to
 plans/my-feature.md"
 
 The planner runs your plan through review cycles -- technical writer for
@@ -173,10 +177,10 @@ clarity, quality reviewer for completeness -- until it passes.
 The planner captures all decisions, tradeoffs, and information not visible from
 the code so that this context does not get lost.
 
-**5. Clear context.** `/clear` -- start fresh. You have written everything
+**4. Clear context.** `/clear` -- start fresh. You have written everything
 needed into the plan.
 
-**6. Execute.** "Use your planner skill to execute plans/my-feature.md"
+**5. Execute.** "Use your planner skill to execute plans/my-feature.md"
 
 The planner delegates to sub-agents. It never writes code directly. Each
 milestone goes through the developer, then the technical-writer and
@@ -186,6 +190,7 @@ Where possible, it executes multiple tasks in parallel.
 
 For detailed breakdowns of each skill, see their READMEs:
 
+- [DeepThink](skills/deepthink/README.md)
 - [Codebase Analysis](skills/codebase-analysis/README.md)
 - [Problem Analysis](skills/problem-analysis/README.md)
 - [Decision Critic](skills/decision-critic/README.md)
@@ -261,6 +266,51 @@ implementation deviated from the plan, I would know.
 
 Not every task needs the full planning workflow. These skills handle specific
 concerns.
+
+### DeepThink
+
+I use this skill multiple times a day -- whenever I do not know what shape the
+answer should take.
+
+Unlike `problem-analysis` or `decision-critic`, deepthink has no fixed
+structure. It handles trade-offs, taxonomy questions, evaluative judgments --
+whatever you throw at it.
+
+So, when do I reach for it?
+
+Meta-cognitive debugging. I keep making the same mistake. The LLM keeps
+misunderstanding the task. Why? Something is broken and I need to see it before
+I can fix it.
+
+Strategy evaluation. Multiple valid approaches exist (and gut feel is not
+enough). PDF conversion: download the TeX source, parse the PDF directly, or
+let the LLM render it visually. S3 artifact versioning: timestamp paths,
+pointer files, checksums. Systematic comparison beats intuition.
+
+Best practices research. What is the canonical approach? How do mature CI/CD
+systems handle artifact versioning? Industry patterns likely exist -- I just do
+not know them yet.
+
+Architecture and design. How should these components interact? Where do the
+delegation boundaries go? I think them through before committing to code.
+
+Consolidation decisions. Should these two skills be merged? Do they serve
+distinct purposes, or am I maintaining unnecessary complexity?
+
+Two modes, auto-detected. Quick mode reasons directly. Full mode launches
+parallel sub-agents with distinct analytical perspectives, then synthesizes
+through agreement patterns.
+
+```
+Use your deepthink skill to think through [question]
+```
+
+For explicit mode selection:
+
+```
+Use your deepthink skill (quick) to [question]
+Use your deepthink skill (full) to [question]
+```
 
 ### Refactor
 

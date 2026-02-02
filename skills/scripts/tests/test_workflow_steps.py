@@ -32,9 +32,9 @@ def _collect_test_cases():
             step = params["step"]
             id_parts = [name, f"s{step}"]
 
-            # Add param variants in alphabetical order (excluding step/total_steps)
+            # Add param variants in alphabetical order (excluding step)
             for key in sorted(params.keys()):
-                if key not in ("step", "total_steps"):
+                if key not in ("step",):
                     value = params[key]
                     # Shorten mode values: full/quick
                     if key == "mode":

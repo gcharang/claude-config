@@ -15,16 +15,19 @@ Research grounding:
 
 import argparse
 import sys
-from typing import Annotated
 
 from skills.lib.workflow.core import (
     Arg,
-    Outcome,
-    StepContext,
     StepDef,
     Workflow,
 )
 from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
+from skills.lib.workflow.ast.nodes import (
+    StepHeaderNode, CurrentActionNode, InvokeAfterNode,
+)
+from skills.lib.workflow.ast.renderer import (
+    render_step_header, render_current_action, render_invoke_after,
+)
 
 
 STEPS = {
@@ -173,18 +176,6 @@ STEPS = {
 }
 
 
-# Handler functions (output-only steps just return OK)
-def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Generic handler for output-only steps."""
-    return Outcome.OK, {}
-
-
-def step_extract_structure(
-    ctx: StepContext,
-    decision: Annotated[str, Arg(required=True, description="Decision to critique")],
-) -> tuple[Outcome, dict]:
-    """Handler for extract_structure step with decision parameter."""
-    return Outcome.OK, {}
 
 
 # Workflow definition
@@ -195,64 +186,50 @@ WORKFLOW = Workflow(
         title="Extract Structure",
         phase="DECOMPOSITION",
         actions=STEPS[1]["actions"],
-        handler=step_extract_structure,
-        next={Outcome.OK: "classify_verifiability"},
     ),
     StepDef(
         id="classify_verifiability",
         title="Classify Verifiability",
         phase="DECOMPOSITION",
         actions=STEPS[2]["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "generate_questions"},
     ),
     StepDef(
         id="generate_questions",
         title="Generate Verification Questions",
         phase="VERIFICATION",
         actions=STEPS[3]["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "factored_verification"},
     ),
     StepDef(
         id="factored_verification",
         title="Factored Verification",
         phase="VERIFICATION",
         actions=STEPS[4]["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "contrarian_perspective"},
     ),
     StepDef(
         id="contrarian_perspective",
         title="Contrarian Perspective",
         phase="CHALLENGE",
         actions=STEPS[5]["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "alternative_framing"},
     ),
     StepDef(
         id="alternative_framing",
         title="Alternative Framing",
         phase="CHALLENGE",
         actions=STEPS[6]["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "synthesis"},
     ),
     StepDef(
         id="synthesis",
         title="Synthesis and Verdict",
         phase="SYNTHESIS",
         actions=STEPS[7]["actions"],
-        handler=step_handler,
-        next={Outcome.OK: None},
     ),
     description="Structured decision criticism workflow",
+    validate=False,
 )
 
 
 def main(
     step: int = None,
-    total_steps: int = None,
     decision: str | None = None,
 ):
     """Entry point with parameter annotations for testing framework.
@@ -265,15 +242,12 @@ def main(
         epilog="Phases: decompose (1-2) -> verify (3-4) -> challenge (5-6) -> synthesize (7)",
     )
     parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--total-steps", type=int, required=True)
     parser.add_argument("--decision", type=str, help="Decision to critique (step 1)")
 
     args = parser.parse_args()
 
     if args.step < 1 or args.step > 7:
         sys.exit("Error: step must be 1-7")
-    if args.total_steps < 7:
-        sys.exit("Error: total-steps must be >= 7")
     if args.step == 1 and not args.decision:
         sys.exit("Error: --decision required for step 1")
 
@@ -284,7 +258,7 @@ def main(
 
     # Get next step info
     next_step_def = None
-    if args.step < args.total_steps:
+    if args.step < WORKFLOW.total_steps:
         next_step_id = step_ids[args.step]
         next_step_def = WORKFLOW.steps[next_step_id]
 
@@ -297,12 +271,11 @@ def main(
     parts = []
 
     # Step header
-    parts.append(render(
-        W.el("step_header", TextNode(f"DECISION CRITIC - {step_def.title}"),
-            script="decision_critic", step=str(args.step), total=str(args.total_steps)
-        ).build(),
-        XMLRenderer()
-    ))
+    parts.append(render_step_header(StepHeaderNode(
+        title=f"DECISION CRITIC - {step_def.title}",
+        script="decision_critic",
+        step=str(args.step)
+    )))
     parts.append("")
 
     # XML mandate for step 1
@@ -321,8 +294,7 @@ CRITICAL: All script outputs use XML format. You MUST:
         parts.append("")
 
     # Current action
-    action_nodes = [TextNode(a) for a in actions]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append(render_current_action(CurrentActionNode(actions)))
     parts.append("")
 
     # Next step info
@@ -330,13 +302,10 @@ CRITICAL: All script outputs use XML format. You MUST:
         next_cmd = (
             f'<invoke working-dir=".claude/skills/scripts" '
             f'cmd="python3 -m skills.decision_critic.decision_critic '
-            f'--step {args.step + 1} --total-steps {args.total_steps}" />'
+            f'--step {args.step + 1}" />'
         )
-        parts.append(render(
-            W.el("invoke_after", TextNode(next_cmd)).build(),
-            XMLRenderer()
-        ))
-    elif args.step >= args.total_steps:
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
+    elif args.step >= WORKFLOW.total_steps:
         parts.append("WORKFLOW COMPLETE - Present verdict to user.")
 
     print("\n".join(parts))

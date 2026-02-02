@@ -16,7 +16,6 @@ Script-based agent workflows with shared orchestration framework.
 | `planner/`            | Planning and execution workflows          | Creating implementation plans            |
 | `refactor/`           | Refactoring analysis across dimensions    | Technical debt review, code quality      |
 | `problem-analysis/`   | Structured problem decomposition          | Understanding complex issues             |
-| `solution-design/`    | Perspective-parallel solution generation  | Generating diverse solutions             |
 | `decision-critic/`    | Decision stress-testing and critique      | Validating architectural choices         |
 | `deepthink/`          | Structured reasoning for open questions   | Analytical questions without frameworks  |
 | `codebase-analysis/`  | Systematic codebase exploration           | Repository architecture review           |
@@ -31,8 +30,8 @@ Script-based agent workflows with shared orchestration framework.
 
 All Python skill scripts are invoked as modules from `scripts/`:
 
-<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.<skill_name>.<module> --step 1 --total-steps N" />
+<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.<skill_name>.<module> --step 1" />
 
 Example:
 
-<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.problem_analysis.analyze --step 1 --total-steps 5" />
+<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.problem_analysis.analyze --step 1" />

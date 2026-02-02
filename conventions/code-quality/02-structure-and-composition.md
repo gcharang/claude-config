@@ -12,6 +12,7 @@ Evaluate whether code is well-structured for comprehension and change.
 - Deep nesting obscuring control flow
 - Implicit state machines hidden in boolean flags
 - Hard-coded dependencies making code untestable
+- Component definitions scattered across multiple locations
 - Error handling that loses information
 
 **The threshold**: Flag when structure obscures intent or when changes would ripple unnecessarily. Length alone is not a smell; unclear responsibility is.
@@ -22,6 +23,7 @@ When evaluating Code Intent (Design Review phase):
 - Does the proposed function do one thing or multiple things?
 - Does the intent describe clear responsibility boundaries?
 - Does the design inject dependencies or hardcode them?
+- Is the component's definition complete in one place, or scattered across locations?
 
 Evidence format: Quote the Code Intent description showing structural issue.
 </design-mode>
@@ -32,6 +34,7 @@ When evaluating actual code (Diff Review, Codebase Review, Refactor):
 - Is the function too long or deeply nested?
 - Are boolean flags creating implicit state machines?
 - Is error handling preserving context?
+- Are component definitions scattered (requirements in one place, validation in another)?
 
 Evidence format: Quote code with file:line showing the issue.
 </code-mode>
@@ -197,7 +200,44 @@ Entry points that wire dependencies. Test utilities. Scripts meant to run direct
 Flag when untestable code is in business logic. Infrastructure code at boundaries is expected to have dependencies.
 </threshold>
 
-## 5. Error Handling
+## 5. Definition Locality
+
+<principle>
+A component's definition should be complete at a single site. When understanding what a component IS -- its identity, requirements, constraints, and behavior -- demands reading multiple locations, the definition is scattered.
+</principle>
+
+Detect: To understand what this component IS, how many locations must I read? If I change what this component requires, how many files must I edit?
+
+<grep-hints>
+Structural indicators (starting points, not definitive):
+Same requirement checked in 2+ locations, component identity split across files, extraction-with-default patterns (args.get, kwargs.get, getattr with default)
+</grep-hints>
+
+<violations>
+Illustrative patterns (not exhaustive -- similar violations exist):
+
+[high] Scattered specification
+
+- Same requirement declared in 2+ locations (e.g., parser marks required AND handler checks if missing)
+- Component identity split across files without clear ownership
+- Definition requiring "mental reassembly" from 3+ sources
+
+[medium] Split declaration/enforcement
+
+- Interface declared at one site, validated at another without shared reference
+- Defaults defined separately from schema (e.g., type in schema, default in code)
+- Same constraint checked in multiple places
+  </violations>
+
+<exceptions>
+Dependency injection (injected collaborator's definition lives with collaborator, not here -- that's runtime wiring, not scatter). Composition (A uses B; B's definition is B's concern). Inheritance (intentional decomposition). Plugin architectures (clear ownership boundaries). Registry + reference patterns (define once, reference many times -- this is the fix, not a smell).
+</exceptions>
+
+<threshold>
+Flag when a component's definition is split across 2+ locations without clear ownership. Key test: who owns this fact? If ownership is unclear or duplicated, it's scatter. Common in LLM-generated code.
+</threshold>
+
+## 6. Error Handling
 
 <principle>
 Errors should preserve context and reach appropriate handlers. Swallowed or generic catches lose information; errors at wrong levels confuse callers.

@@ -73,9 +73,8 @@ BoundedInt(1, 5) for iteration domain matches QR_ITERATION_LIMIT constant. Hardc
 - Each test case has unique ID (workflow-step-params combination)
 - Conditional params only apply to applicable steps (iteration only at iterating steps)
 - Mode-gated steps skipped when mode value gates them out
-- step param always present (1 to total_steps)
-- total_steps always matches workflow.total_steps
-- Workflow.\_step_order provides authoritative step index mapping: len(\_step_order) == total_steps and indices correspond to CLI --step values
+- step param always present (1 to workflow.total_steps)
+- Workflow.\_step_order provides authoritative step index mapping: len(\_step_order) == workflow.total_steps and indices correspond to CLI --step values
 
 ## Constraints
 

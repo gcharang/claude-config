@@ -49,6 +49,51 @@ required. Diminishing returns after 2-3 iterations. Struggles with detecting nua
 math errors -- feedback identifies location incorrectly 33% of time, suggests wrong
 fix 61% of time in failure cases.
 
+**Lightweight variant (SESO)**: Self-Evaluation Self-Optimization uses three prompt
+stages: (1) defect analysis ("list the defects of this answer"), (2) guided
+optimization ("refine the answer addressing the identified flaw"), (3) voting
+("which answer is better, 1 or 2?"). First-order memory (no history accumulation)
+keeps token costs constant per iteration. Stop when voting selects previous answer
+over refined version.
+
+---
+
+## Explanation-based Calibration
+
+Use the factuality of model-generated explanations to calibrate prediction
+confidence. Nonfactual explanations reliably signal incorrect predictions.
+
+**The process**:
+
+1. Generate prediction with explanation (Predict-then-Explain)
+2. Score explanation factuality via lexical overlap with input context
+3. If factuality score low: reject prediction or iterate with next candidate
+
+**Triggers**:
+
+- QA tasks where explanations can be grounded in provided context
+- NLI tasks where premise-hypothesis overlap indicates reasoning quality
+- Selective prediction scenarios (model can abstain on low-confidence cases)
+- Post-hoc verification when training a calibrator is feasible
+
+**Why this works**: LLMs generate consistent explanations (>80% entail predictions)
+but explanations may not be factually grounded. A nonfactual explanation is more
+likely paired with an incorrect prediction. Factuality assessment, even via simple
+lexical overlap, provides signal that probabilities alone cannot.
+
+**CoT unfaithfulness caveat**: Chain-of-thought explanations can systematically
+rationalize biased answers without mentioning the bias. Models alter explanations
+to justify bias-consistent predictions while the biasing feature (prompt structure,
+suggested answers, stereotypes) never appears in the reasoning trace. This means
+plausible-looking explanations may be post-hoc rationalizations rather than faithful
+reasoning records. Explanation-based calibration partially detects this via factuality
+mismatch -- unfaithful explanations tend to have lower grounding in input context.
+
+**Tradeoffs**: Requires explanation generation (1.5-2x tokens). Simple lexical
+overlap approximates factuality but is imperfect. Training a lightweight calibrator
+(few parameters) on 32-128 labeled examples measurably improves accuracy over
+uncalibrated few-shot learning.
+
 ---
 
 ## CRITIC
@@ -68,6 +113,20 @@ reasoning without external grounding.
 **Tradeoffs**: 2-4x tokens per iteration, plus tool API calls. Requires access to
 appropriate external tools. Verify-then-correct cycle can iterate until stopping
 condition met.
+
+**Why external verification matters**: Process reward models (trained verifiers)
+outperform both LLM-as-judge and self-critique on verification tasks. Long-chain-
+of-thought verifiers (ThinkPRM) achieve strong verification with minimal labeled
+data. When external verifiers are unavailable, tool-based grounding (CRITIC pattern)
+remains the most reliable alternative to intrinsic self-correction.
+
+**Schema-based validation variant**: For structured outputs (API calls, JSON, database
+queries), validate against a deterministic schema checker. The checker identifies
+specific error types: wrong method name, missing required parameter, invalid parameter
+value, incorrect operator. Feed fine-grained error descriptions back to LLM for
+targeted correction. This pattern significantly outperforms generic "try again"
+feedback because the LLM knows exactly what to fix. Iterate until schema validates
+or max attempts reached.
 
 ---
 
@@ -124,7 +183,7 @@ by examining differences between multiple solution approaches.
 
 **Tradeoffs**: 7-8x tokens, ~7.8 API calls average (2-9 perspectives + contrast +
 reflection). Requires clustering for selection, pairwise contrast comparisons.
-Outperforms multi-agent debate with 10% fewer calls.
+Outperforms multi-agent debate with fewer calls.
 
 ---
 
@@ -161,7 +220,7 @@ answers remain correct), drift (correct becomes incorrect), and stubbornness
 - Multi-iteration reasoning where stopping condition is unclear
 - Scenarios where self-correction degrades performance without oracle labels
 
-**Tradeoffs**: Variable overhead, average 2.2 iterations vs fixed 4. 18.8-47.9%
+**Tradeoffs**: Variable overhead, average 2.2 iterations vs fixed 4. Significantly
 fewer calls than fixed-iteration methods. Requires few-shot meta-thought examples,
 retrieval system for meta-thought memory, self-consistency classifier.
 
@@ -172,13 +231,37 @@ retrieval system for meta-thought memory, self-consistency classifier.
 LLMs review their initial reasoning and attempt refinement without external feedback,
 typically degrading performance. Documented to understand limitations.
 
-**Evidence**: GPT-4 accuracy drops from 95.5% to 89.0% on GSM8K after self-correction;
-Llama-2 drops from 62.0% to 36.5%. Multi-agent debate underperforms self-consistency
-with equivalent inference cost.
+**Evidence**: Self-correction without oracle labels consistently degrades reasoning
+accuracy across models and benchmarks. Models are more likely to change correct
+answers to incorrect than vice versa. The feedback prompt biases the model away
+from its optimal initial response.
 
-**Root cause**: LLMs cannot properly judge correctness of their own reasoning. More
-likely to change correct answers to incorrect than vice versa. Feedback prompt
-biases model away from optimal initial response.
+**Formal verification domains confirm this pattern**: On tasks with sound external
+verifiers (Game of 24 expression evaluation, Graph Coloring constraint checking,
+STRIPS planning validation), LLM self-verification performance collapses while
+LLM + sound verifier maintains benefits. The verifier LLM's false negative rate
+(rejecting correct solutions) is high enough that overall performance suffers
+compared to taking the initial answer. Critique generation compounds errors --
+LLMs hallucinate constraint violations, misidentify error locations, and provide
+misleading feedback that biases subsequent attempts away from correct solutions.
+
+**Root cause**: LLMs cannot properly judge correctness of their own reasoning.
+Without external ground truth, self-critique introduces errors at two points:
+verification (passing wrong answers, rejecting correct ones) and critique generation
+(misleading feedback). These errors compound across iterations.
+
+**Multi-turn debate escalation**: When two LLMs debate, both show systematic
+overconfidence (baseline confidence already exceeds rational bounds). Confidence
+escalates across turns even when answers are mutually incompatible. Models rarely
+update beliefs based on opponent arguments -- debates become confidence contests
+rather than truth-seeking. Red-teaming prompts ("argue against your position")
+partially mitigate escalation.
+
+**Detection via verbalization divergence**: Compare model answers to paraphrased
+versions of the same question. High divergence signals uncertainty and potential
+hallucination. Combine consistency check across verbalizations with atypicality
+scores (deviation from typical answer patterns) for lightweight hallucination
+detection without external tools.
 
 ---
 
@@ -186,26 +269,45 @@ biases model away from optimal initial response.
 
 **Choose based on feedback source availability:**
 
-| Feedback Source             | Technique                 |
-| --------------------------- | ------------------------- |
-| External tools available    | CRITIC                    |
-| Environment provides signal | Reflexion                 |
-| Source documents available  | Factored Verification     |
-| Trained critic available    | REFINER                   |
-| Human correction acceptable | MCS (HITL-CoT)            |
-| No external feedback        | Self-Contrast, CoVe       |
-| None (avoid)                | Intrinsic self-correction |
+| Feedback Source             | Technique                     |
+| --------------------------- | ----------------------------- |
+| External tools available    | CRITIC                        |
+| Schema/spec available       | CRITIC (schema validation)    |
+| Environment provides signal | Reflexion                     |
+| Source documents available  | Factored Verification         |
+| Trained critic available    | REFINER                       |
+| Human correction acceptable | MCS (see below)               |
+| Explanations groundable     | Explanation-based Calibration |
+| No external feedback        | Self-Contrast, CoVe           |
+| None (avoid)                | Intrinsic self-correction     |
+
+**Human-in-the-loop verification (MCS)**: When human expert correction is acceptable,
+use diversity-based filtering to identify which outputs need review. Generate multiple
+reasoning chains, compute answer diversity (Diversity Entropy). High diversity signals
+likely error -- route these cases to human review. Humans correct specific sub-logic
+errors (modify calculation, add missing step, delete redundant logic) rather than
+rewriting entire solutions. This targets human effort at high-uncertainty cases and
+leverages human ability to spot localized errors that self-correction misses.
+
+**Structured HITL feedback**: When collecting human corrections, use tagged feedback
+categories rather than free-form comments. Four response types: RATIFY (agree with
+both answer and explanation), REVISE (disagree but can update own understanding),
+REFUTE (disagree, cannot reconcile), REJECT (disagree with both answer and reasoning).
+Tagged feedback enables measuring communication quality and identifying when human-LLM
+interaction is productive vs. talking past each other.
 
 **Choose based on task type:**
 
-| Task Type                  | Technique                            |
-| -------------------------- | ------------------------------------ |
-| Factual QA / hallucination | CoVe, CRITIC, Factored Verification  |
-| Code generation            | CRITIC (with interpreter), Reflexion |
-| Math reasoning             | CRITIC (calculator), REFINER         |
-| Multi-aspect quality       | Self-Refine                          |
-| Summarization              | Factored Verification                |
-| Complex reasoning          | Self-Contrast, IoRT                  |
+| Task Type                    | Technique                            |
+| ---------------------------- | ------------------------------------ |
+| Factual QA / hallucination   | CoVe, CRITIC, Factored Verification  |
+| Code generation              | CRITIC (with interpreter), Reflexion |
+| Math reasoning               | CRITIC (calculator), REFINER         |
+| Structured output (API/JSON) | CRITIC (schema validation)           |
+| Multi-aspect quality         | Self-Refine                          |
+| Summarization                | Factored Verification                |
+| Complex reasoning            | Self-Contrast, IoRT                  |
+| Selective prediction         | Explanation-based Calibration        |
 
 ---
 
@@ -224,9 +326,18 @@ biases model away from optimal initial response.
 - Multiple verification loops without stopping criteria: token explosion
 - Generic feedback + refinement: specific, actionable feedback essential
 
+**Turn-wise iteration dynamics** (domain-specific collapse patterns):
+
+- Ideation: gains arrive early (turns 1-3); vague feedback causes repetition collapse
+- Code: early decision is decisive; if correct path not found by turn 3-4, stop/restart
+- Math: late turns matter when guided by elaboration ("explain each step in more
+  detail"); exploration prompts ("try alternative method") often stagnate
+- General pattern: vague feedback ("improve it") plateaus or reverses correctness
+  after first few turns; targeted steering reliably shifts intended quality axis
+
 **Cost optimization:**
 
 - Use factored/2-step variants to prevent hallucination repetition
 - Set maximum iterations (2-4 typical) -- diminishing returns after
 - For equivalent inference budget, self-consistency often outperforms debate
-- IoRT's adaptive stopping reduces overhead 27.6% vs fixed iterations
+- IoRT's adaptive stopping reduces overhead vs fixed iterations

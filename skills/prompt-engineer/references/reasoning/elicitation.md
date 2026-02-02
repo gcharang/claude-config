@@ -6,9 +6,11 @@ Reasoning elicitation techniques prompt LLMs to generate explicit reasoning trac
 before producing answers. Use these techniques when models skip steps, produce
 incorrect answers on multi-step problems, or fail to show their work. The core
 insight: CoT-style prompting helps primarily on mathematical and symbolic
-reasoning tasks (meta-analysis shows 14.2% avg improvement on symbolic, 12.3% on
-math, but only 0.7% on other tasks). For non-symbolic tasks, gains are minimal
-and CoT can even hurt performance. Apply selectively based on task type.
+reasoning tasks. Meta-analysis confirms substantial gains on tasks involving
+equations, formal logic, and multi-step arithmetic—questions containing "=" signs
+are strong indicators that CoT will help. For non-symbolic tasks (commonsense
+reasoning, factual QA), gains are minimal and CoT can even hurt performance.
+Apply selectively based on task type.
 
 ---
 
@@ -313,6 +315,141 @@ knowledge and strategic optimization. Multi-turn dialogue only.
 
 ---
 
+### AlignedCoT (Native-Style Demonstration Generation)
+
+**Mechanism:** Generate few-shot demonstrations by probing the LLM's own zero-shot
+reasoning style, then refining and formatting those outputs to create "native-style"
+exemplars that match how the model naturally reasons.
+
+**The process:**
+```
+Step 1 (Probe): For each example in your few-shot prompt, query the LLM in
+        zero-shot mode using "Let's think step by step" to generate its
+        native reasoning style.
+
+Step 2 (Refine): Check each generated CoT against ground truth. If errors exist,
+        identify the first error, correct it, then prompt the LLM to complete
+        the reasoning from that corrected point forward.
+
+Step 3 (Format): Unify the format of all generated CoTs (standardize answer
+        format, step numbering, solution structure).
+
+Step 4 (Use): Replace human-crafted demonstrations with these native-style
+        CoTs in your few-shot prompt.
+```
+
+**Why this works:** LLMs perform better when prompted with demonstrations matching
+their own generation style rather than imitating human-written examples. Native-style
+CoTs reduce the style gap between training and inference, requiring less
+generalization capability from the model.
+
+**Triggers:**
+
+- Few-shot CoT underperforming expectations despite correct exemplars
+- Model appears to mechanically copy demonstration format without genuine reasoning
+- Task requires diverse reasoning approaches where manual exemplar crafting is costly
+- Need to bootstrap better demonstrations without human annotation effort
+
+**Tradeoffs:** Initial setup requires n zero-shot queries plus refinement iterations
+(one per error in generated CoTs). Once created, native-style demonstrations are
+reusable. Single call at inference time. Refinement step requires ground truth
+answers for verification.
+
+**CORRECT:**
+```
+# Generate native-style demonstration
+User: [Question from training set]
+Assistant: Let's think step by step.
+[LLM generates its natural reasoning style]
+[Human verifies: if error at step 3, correct step 3, re-prompt to continue]
+[Final native-style CoT used as demonstration]
+```
+
+**INCORRECT:**
+```
+# Using raw human-written demonstrations
+User: [Question]
+Here's how to solve it: First, identify the variables. Second, set up equations.
+Third, solve algebraically. The answer is X.
+[LLM copies this rigid format without engaging its own reasoning]
+```
+
+The human-written style forces imitation rather than genuine reasoning activation.
+
+**Stacking note:** AlignedCoT produces demonstrations for use with standard few-shot
+CoT. Compatible with self-consistency (sample multiple outputs). Can be combined
+with retrieval-augmented generation by aligning retrieved exemplars to native style.
+
+---
+
+### Instance-Adaptive Prompting (IAP)
+
+**Mechanism:** Select the optimal zero-shot CoT prompt for each instance by analyzing
+information flow saliency between question, prompt, and rationale rather than using
+a single task-level prompt for all problems.
+
+**The process:**
+```
+Given: A pool of candidate prompts (e.g., "Let's think step by step",
+       "Take a deep breath and work on this step by step", etc.)
+
+For each test instance:
+  1. Compute saliency scores measuring information flow:
+     - Question → Prompt (does prompt absorb question semantics?)
+     - Question → Rationale (does rationale attend to question?)
+     - Prompt → Rationale (does rationale follow prompt guidance?)
+
+  2. Select prompt using one of two strategies:
+     - Sequential Substitution (IAP-ss): Test prompts in order until one
+       exceeds saliency thresholds, then use that prompt's answer.
+     - Majority Vote (IAP-mv): Compute scores for all prompts, select top-k
+       by combined saliency, take majority vote among their answers.
+```
+
+**Why this works:** Task-level optimal prompts can fail on individual instances
+where a different prompt would succeed. Good reasoning requires: (1) the prompt
+absorbs semantic information from the question, then (2) the rationale gathers
+information from both the question directly and via the prompt. Saliency analysis
+detects when this information flow is adequate.
+
+**Triggers:**
+
+- Zero-shot CoT shows high variance across similar problems
+- Some instances consistently fail with "best" task-level prompt
+- Need to maximize per-instance accuracy without fine-tuning
+- Computational budget allows evaluating multiple prompt candidates
+
+**Tradeoffs:** IAP-ss: 1-N calls depending on when threshold met (efficient early
+termination). IAP-mv: N calls for N candidate prompts (more robust but higher cost).
+Requires implementation of saliency score computation (attention weight analysis).
+Most beneficial for smaller/mid-size models where prompt sensitivity is higher.
+
+**CORRECT:**
+```
+# Instance-adaptive selection
+Question: "A train travels 60 mph for 2 hours. How far does it go?"
+
+Prompt candidates evaluated:
+- "Let's think step by step" → saliency: Q→P=0.72, Q→R=0.81 ✓ (exceeds threshold)
+[Use this prompt, return answer: 120 miles]
+```
+
+**INCORRECT:**
+```
+# Fixed task-level prompt for all instances
+Always use "Let's think step by step" regardless of instance characteristics.
+[Some instances fail because this prompt doesn't activate appropriate reasoning
+for their specific structure]
+```
+
+Using a single prompt ignores instance-level variation in what triggers good reasoning.
+
+**Stacking note:** IAP operates at the prompt selection layer, compatible with any
+base zero-shot CoT technique. Can be combined with self-consistency by applying
+IAP selection first, then sampling multiple outputs from the chosen prompt.
+
+---
+
 ## Decision Guidance
 
 1. **First, identify task type:**
@@ -336,6 +473,11 @@ knowledge and strategic optimization. Multi-turn dialogue only.
    - Multiple calls acceptable -> Step-Back, Symbolic CoT, Socratic
    - Minimal overhead -> Re2 (2x input only)
 
+5. **Optimize prompt selection:**
+   - High variance across instances -> IAP (instance-adaptive selection)
+   - Few-shot demos underperforming -> AlignedCoT (native-style generation)
+   - Fixed prompt works well -> Use standard zero-shot or few-shot CoT
+
 ---
 
 ## Composability Notes
@@ -346,12 +488,15 @@ knowledge and strategic optimization. Multi-turn dialogue only.
 - Contrastive CoT + Self-consistency: Further gains from sampling
 - HSP + CoT: Hint generation before standard CoT
 - Step-Back + CoT: Abstraction then detailed reasoning
+- AlignedCoT + Self-consistency: Native-style demos with multiple sampling
+- IAP + Self-consistency: Instance-adaptive selection then multiple samples
 
 **Conflicts/redundancy:**
 
 - Self-Explanation conflicts with standard CoT (different output structure)
 - Multiple elicitation techniques in sequence: diminishing returns
 - Symbolic CoT vs natural language CoT: choose one based on task
+- AlignedCoT vs manual few-shot: use one or the other, not both
 
 **Build-on relationships:**
 
@@ -359,6 +504,8 @@ knowledge and strategic optimization. Multi-turn dialogue only.
 - Step-Back builds on CoT (adds abstraction layer)
 - Thought Propagation works with IO, CoT, ToT, or ReAct as base method
 - Cognitive Prompting extends CoT with structured operations
+- AlignedCoT produces demonstrations for few-shot CoT
+- IAP selects prompts for any zero-shot CoT variant
 
 ---
 

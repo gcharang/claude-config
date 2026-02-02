@@ -1,43 +1,13 @@
 """Renderer for converting AST to string output.
 
-WHY EXTERNAL FUNCTION:
-External render(doc, renderer) pattern allows multiple dispatch without
-coupling nodes to renderer interface. Easier to add new renderers.
-
-WHY MATCH STATEMENT:
-Python 3.10 match with type narrowing. Adding new node type causes runtime
-error if case missing. assertNever pattern catches exhaustiveness at test time.
-
-WHY RENDERER PROTOCOL:
-Abstract interface for renderers. Multiple implementations (XML, plain text,
-JSON) can implement same interface.
+Simplified renderer handling only the core node types: TextNode, CodeNode, ElementNode.
 """
 
-from typing import Protocol, Never
+from typing import Protocol
 from skills.lib.workflow.ast.nodes import (
-    Node,
-    Document,
-    TextNode,
-    CodeNode,
-    RawNode,
-    ElementNode,
-    HeaderNode,
-    ActionsNode,
-    CommandNode,
-    RoutingNode,
-    DispatchNode,
-    GuidanceNode,
-    TextOutputNode,
+    Node, Document, TextNode, CodeNode, ElementNode, FileContentNode,
+    StepHeaderNode, CurrentActionNode, InvokeAfterNode
 )
-
-
-def assertNever(value: Never) -> Never:
-    """Exhaustiveness check for match statements.
-
-    If this function is reached, it means a case was not handled in the
-    match statement. Used to ensure all node types are covered.
-    """
-    raise AssertionError(f"Unhandled node type: {type(value).__name__}")
 
 
 class Renderer(Protocol):
@@ -45,33 +15,25 @@ class Renderer(Protocol):
 
     def render_text(self, node: TextNode) -> str: ...
     def render_code(self, node: CodeNode) -> str: ...
-    def render_raw(self, node: RawNode) -> str: ...
     def render_element(self, node: ElementNode) -> str: ...
-    def render_header(self, node: HeaderNode) -> str: ...
-    def render_actions(self, node: ActionsNode) -> str: ...
-    def render_command(self, node: CommandNode) -> str: ...
-    def render_routing(self, node: RoutingNode) -> str: ...
-    def render_dispatch(self, node: DispatchNode) -> str: ...
-    def render_guidance(self, node: GuidanceNode) -> str: ...
-    def render_text_output(self, node: TextOutputNode) -> str: ...
+    def render_file_content(self, node: FileContentNode) -> str: ...
+    def render_step_header(self, node: StepHeaderNode) -> str: ...
+    def render_current_action(self, node: CurrentActionNode) -> str: ...
+    def render_invoke_after(self, node: InvokeAfterNode) -> str: ...
 
 
 class XMLRenderer:
-    """Renders AST nodes to XML format matching existing formatter output."""
+    """Renders AST nodes to XML format."""
 
     def render_text(self, node: TextNode) -> str:
         """Render text node as plain string."""
         return node.content
 
     def render_code(self, node: CodeNode) -> str:
-        """Render code node as code block."""
+        """Render code node as markdown code block."""
         if node.language:
             return f"```{node.language}\n{node.content}\n```"
         return f"```\n{node.content}\n```"
-
-    def render_raw(self, node: RawNode) -> str:
-        """Render raw node as-is."""
-        return node.content
 
     def render_element(self, node: ElementNode) -> str:
         """Render generic element with attributes and children."""
@@ -85,89 +47,52 @@ class XMLRenderer:
         children_str = "\n".join(self._render_node(child) for child in node.children)
         return f"<{node.tag}{attrs_str}>\n{children_str}\n</{node.tag}>"
 
-    def render_header(self, node: HeaderNode) -> str:
-        """Render step header matching format_step_header output."""
-        attrs = [f'script="{node.script}"', f'step="{node.step}"', f'total="{node.total}"']
-        attrs_str = " ".join(attrs)
+    def render_file_content(self, node: FileContentNode) -> str:
+        """Render file content node with CDATA wrapping.
 
-        if node.title:
-            return f'<step_header {attrs_str}>{node.title}</step_header>'
-        return f'<step_header {attrs_str} />'
+        CDATA protects against content containing literal </file> strings
+        (e.g., code examples in markdown showing XML parsing).
 
-    def render_actions(self, node: ActionsNode) -> str:
-        """Render actions block matching format_current_action output."""
-        if not node.children:
-            return "<current_action>\n</current_action>"
+        Content containing "]]>" would break CDATA, so we escape by splitting
+        into multiple CDATA sections: "foo]]>bar" -> "foo]]]]><![CDATA[>bar"
+        """
+        # Escape "]]>" sequences to prevent premature CDATA termination
+        escaped = node.content.replace("]]>", "]]]]><![CDATA[>")
+        return f'<file path="{node.path}"><![CDATA[\n{escaped}\n]]></file>'
 
-        children_str = "\n".join(self._render_node(child) for child in node.children)
+    def render_step_header(self, node: StepHeaderNode) -> str:
+        """Render step header with title as content, metadata as attributes."""
+        attrs = {"script": node.script, "step": str(node.step)}
+        if node.category:
+            attrs["category"] = node.category
+        if node.mode:
+            attrs["mode"] = node.mode
+        if node.phase:
+            attrs["phase"] = node.phase
+        if node.total is not None:
+            attrs["total"] = str(node.total)
+
+        attrs_str = " " + " ".join(f'{k}="{v}"' for k, v in attrs.items())
+        return f"<step_header{attrs_str}>{node.title}</step_header>"
+
+    def render_current_action(self, node: CurrentActionNode) -> str:
+        """Render current_action with actions as text children."""
+        children_str = "\n".join(action for action in node.actions)
         return f"<current_action>\n{children_str}\n</current_action>"
 
-    def render_command(self, node: CommandNode) -> str:
-        """Render command directive."""
-        if node.cmd:
-            return f"<{node.directive}>{node.cmd}</{node.directive}>"
-        return f"<{node.directive} />"
+    def render_invoke_after(self, node: InvokeAfterNode) -> str:
+        """Render invoke_after with command or branching structure.
 
-    def render_routing(self, node: RoutingNode) -> str:
-        """Render routing block with branches."""
-        parts = ["<routing>"]
-        for label, children in node.branches:
-            children_str = "\n".join(self._render_node(child) for child in children)
-            parts.append(f'  <branch label="{label}">')
-            parts.append(f"    {children_str}")
-            parts.append("  </branch>")
-        parts.append("</routing>")
-        return "\n".join(parts)
-
-    def render_dispatch(self, node: DispatchNode) -> str:
-        """Render dispatch block."""
-        attrs = f'agent="{node.agent}"'
-        if node.model:
-            attrs += f' model="{node.model}"'
-
-        parts = [f"<dispatch {attrs}>"]
-        for child in node.instruction:
-            parts.append(f"  {self._render_node(child)}")
-        parts.append("</dispatch>")
-        return "\n".join(parts)
-
-    def render_guidance(self, node: GuidanceNode) -> str:
-        """Render guidance block (forbidden, constraints, etc)."""
-        if not node.children:
-            return f"<{node.kind} />"
-
-        parts = [f"<{node.kind}>"]
-        for child in node.children:
-            parts.append(f"  {self._render_node(child)}")
-        parts.append(f"</{node.kind}>")
-        return "\n".join(parts)
-
-    def render_text_output(self, node: TextOutputNode) -> str:
-        """Render text output node for plain text workflows.
-
-        FOOTER PRECEDENCE: invoke_after > next_title > completion message.
-        If multiple are provided, only the highest precedence renders.
-        Callers should provide exactly one of: invoke_after, next_title, or neither.
+        WHY no validation here: __post_init__ validates at construction time.
+        Renderer assumes valid node, focuses solely on XML generation.
         """
-        parts = [f"STEP {node.step}/{node.total}: {node.title}"]
-
-        if node.brief:
-            parts.append(node.brief)
-
-        parts.append("")
-        parts.append("DO:")
-        for action in node.actions:
-            parts.append(f"  {action}")
-
-        parts.append("")
-        if node.invoke_after:
-            parts.append(f"INVOKE AFTER: {node.invoke_after}")
-        elif node.next_title:
-            parts.append(f"NEXT: Step {node.step + 1} - {node.next_title}")
+        if node.cmd is not None:
+            invoke = f'<invoke working-dir="{node.working_dir}" cmd="{node.cmd}" />'
+            return f"<invoke_after>\n{invoke}\n</invoke_after>"
         else:
-            parts.append("WORKFLOW COMPLETE")
-
-        return "\n".join(parts)
+            if_pass_invoke = f'<invoke working-dir="{node.working_dir}" cmd="{node.if_pass}" />'
+            if_fail_invoke = f'<invoke working-dir="{node.working_dir}" cmd="{node.if_fail}" />'
+            return f"<invoke_after>\n  <if_pass>\n    {if_pass_invoke}\n  </if_pass>\n  <if_fail>\n    {if_fail_invoke}\n  </if_fail>\n</invoke_after>"
 
     def _render_node(self, node: Node) -> str:
         """Dispatch node to appropriate render method."""
@@ -176,34 +101,20 @@ class XMLRenderer:
                 return self.render_text(node)
             case CodeNode():
                 return self.render_code(node)
-            case RawNode():
-                return self.render_raw(node)
             case ElementNode():
                 return self.render_element(node)
-            case HeaderNode():
-                return self.render_header(node)
-            case ActionsNode():
-                return self.render_actions(node)
-            case CommandNode():
-                return self.render_command(node)
-            case RoutingNode():
-                return self.render_routing(node)
-            case DispatchNode():
-                return self.render_dispatch(node)
-            case GuidanceNode():
-                return self.render_guidance(node)
-            case TextOutputNode():
-                return self.render_text_output(node)
-            case _:
-                assertNever(node)
+            case FileContentNode():
+                return self.render_file_content(node)
+            case StepHeaderNode():
+                return self.render_step_header(node)
+            case CurrentActionNode():
+                return self.render_current_action(node)
+            case InvokeAfterNode():
+                return self.render_invoke_after(node)
 
 
 def render(doc: Document, renderer: Renderer) -> str:
     """Render document using provided renderer.
-
-    WHY EXTERNAL FUNCTION:
-    Separation of concerns - Document doesn't need to know about renderers.
-    Easier to add new renderers without modifying Document class.
 
     Args:
         doc: Document to render
@@ -217,3 +128,27 @@ def render(doc: Document, renderer: Renderer) -> str:
         return "\n".join(parts)
 
     raise NotImplementedError(f"Renderer {type(renderer).__name__} not implemented")
+
+
+def render_step_header(node: StepHeaderNode) -> str:
+    """Render StepHeaderNode directly without Document wrapper.
+
+    WHY convenience: Most callers need standalone XML fragments, not full documents.
+    """
+    return XMLRenderer().render_step_header(node)
+
+
+def render_current_action(node: CurrentActionNode) -> str:
+    """Render CurrentActionNode directly without Document wrapper.
+
+    WHY convenience: Most callers need standalone XML fragments, not full documents.
+    """
+    return XMLRenderer().render_current_action(node)
+
+
+def render_invoke_after(node: InvokeAfterNode) -> str:
+    """Render InvokeAfterNode directly without Document wrapper.
+
+    WHY convenience: Most callers need standalone XML fragments, not full documents.
+    """
+    return XMLRenderer().render_invoke_after(node)

@@ -5,12 +5,10 @@ description: Invoke IMMEDIATELY via python script when user requests structured 
 
 # DeepThink
 
-Structured multi-step reasoning for open-ended analytical questions where the
-answer structure is itself unknown. Handles taxonomy design, conceptual
-analysis, trade-off exploration, and definitional questions.
+When this skill activates, IMMEDIATELY invoke the script. The script IS the workflow.
 
-## Invocation
+Invoke:
 
-<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.deepthink.think --step 1 --total-steps 14" />
+<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.deepthink.think --step 1" />
 
 Do NOT explore or analyze first. Run the script and follow its output.

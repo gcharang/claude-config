@@ -11,10 +11,15 @@ Five-step workflow per category:
 """
 
 import argparse
+import shlex
 import sys
 from pathlib import Path
 
-from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
+from skills.lib.workflow.ast import (
+    W, XMLRenderer, render, TextNode,
+    StepHeaderNode, CurrentActionNode, InvokeAfterNode,
+    render_step_header, render_current_action, render_invoke_after,
+)
 from skills.lib.workflow.types import FlatCommand
 
 
@@ -75,22 +80,11 @@ def load_category_block(category_ref: str, mode: str = "code") -> str:
 # =============================================================================
 
 
-def format_step_header(step: int, total: int, title: str, category_ref: str, mode: str = "code") -> str:
-    """Render step header with category context."""
-    return (
-        f'<step_header script="explore" step="{step}" total="{total}" '
-        f'category="{category_ref}" mode="{mode}">{title}</step_header>'
-    )
-
-
-def format_next_step(step: int, category_ref: str, mode: str = "code") -> str:
+def format_next_step(step: int, category_ref: str, mode: str = "code", scope: str | None = None) -> str:
     """Format the invoke-after block for next step."""
-    cmd = (
-        f'<invoke working-dir=".claude/skills/scripts" '
-        f'cmd="python3 -m {MODULE_PATH} --step {step} --total-steps {TOTAL_STEPS} '
-        f'--category {category_ref} --mode {mode}" />'
-    )
-    return render(W.el("invoke_after", TextNode(cmd)).build(), XMLRenderer())
+    scope_arg = f" --scope {shlex.quote(scope)}" if scope else ""
+    cmd = f"python3 -m {MODULE_PATH} --step {step} --category {category_ref} --mode {mode}{scope_arg}"
+    return render_invoke_after(InvokeAfterNode(cmd=cmd))
 
 
 # =============================================================================
@@ -98,10 +92,13 @@ def format_next_step(step: int, category_ref: str, mode: str = "code") -> str:
 # =============================================================================
 
 
-def format_step_1(category_ref: str, mode: str = "code") -> str:
+def format_step_1(category_ref: str, mode: str = "code", scope: str | None = None) -> str:
     """Step 1: Identify project domain context."""
+    scope_display = f"SCOPE: {scope}" if scope else "SCOPE: Entire codebase"
     actions = [
         "DOMAIN CONTEXT ANALYSIS:",
+        "",
+        scope_display,
         "",
         "Before detecting smells, understand the project's technical context.",
         "This enables translating abstract patterns to project-specific ones.",
@@ -130,13 +127,13 @@ def format_step_1(category_ref: str, mode: str = "code") -> str:
     ]
 
     parts = [
-        format_step_header(1, TOTAL_STEPS, "Domain Context", category_ref, mode),
+        render_step_header(StepHeaderNode(title="Domain Context", script="explore", step=1, category=category_ref, mode=mode)),
         "",
         render(W.el("xml_mandate").build(), XMLRenderer()),
         "",
-        render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
+        render_current_action(CurrentActionNode(actions)),
         "",
-        format_next_step(2, category_ref, mode),
+        format_next_step(2, category_ref, mode, scope),
     ]
     return "\n".join(parts)
 
@@ -146,7 +143,7 @@ def format_step_1(category_ref: str, mode: str = "code") -> str:
 # =============================================================================
 
 
-def format_step_2(category_ref: str, mode: str = "code") -> str:
+def format_step_2(category_ref: str, mode: str = "code", scope: str | None = None) -> str:
     """Step 2: Extract principle and generate violation patterns."""
     category_block = load_category_block(category_ref, mode)
 
@@ -196,11 +193,11 @@ def format_step_2(category_ref: str, mode: str = "code") -> str:
     ]
 
     parts = [
-        format_step_header(2, TOTAL_STEPS, "Principle + Violations", category_ref, mode),
+        render_step_header(StepHeaderNode(title="Principle + Violations", script="explore", step=2, category=category_ref, mode=mode)),
         "",
-        render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
+        render_current_action(CurrentActionNode(actions)),
         "",
-        format_next_step(3, category_ref, mode),
+        format_next_step(3, category_ref, mode, scope),
     ]
     return "\n".join(parts)
 
@@ -210,7 +207,7 @@ def format_step_2(category_ref: str, mode: str = "code") -> str:
 # =============================================================================
 
 
-def format_step_3(category_ref: str, mode: str = "code") -> str:
+def format_step_3(category_ref: str, mode: str = "code", scope: str | None = None) -> str:
     """Step 3: Generate project-specific grep patterns."""
     actions = [
         "SEARCH PATTERN GENERATION:",
@@ -243,11 +240,11 @@ def format_step_3(category_ref: str, mode: str = "code") -> str:
     ]
 
     parts = [
-        format_step_header(3, TOTAL_STEPS, "Pattern Generation", category_ref, mode),
+        render_step_header(StepHeaderNode(title="Pattern Generation", script="explore", step=3, category=category_ref, mode=mode)),
         "",
-        render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
+        render_current_action(CurrentActionNode(actions)),
         "",
-        format_next_step(4, category_ref, mode),
+        format_next_step(4, category_ref, mode, scope),
     ]
     return "\n".join(parts)
 
@@ -257,11 +254,32 @@ def format_step_3(category_ref: str, mode: str = "code") -> str:
 # =============================================================================
 
 
-def format_step_4(category_ref: str, mode: str = "code") -> str:
-    """Step 4: Execute search and document findings."""
+def format_step_4(category_ref: str, mode: str = "code", scope: str | None = None) -> str:
+    """Step 4: Execute search and document findings.
+
+    If scope is provided, all Glob/Grep operations should be constrained
+    to that path to prevent findings from unrelated parts of the codebase.
+    """
+    # Build scope constraint instructions if scope provided
+    if scope:
+        scope_constraint = [
+            "SCOPE CONSTRAINT:",
+            f"  You are searching within: {scope}",
+            f'  - Glob patterns: Use "{scope}/**/*.py" instead of "**/*.py"',
+            f'  - Grep paths: Pass "{scope}" as the path argument',
+            "  - Do NOT search outside this scope",
+            "",
+        ]
+    else:
+        scope_constraint = [
+            "SCOPE: Entire codebase (no constraint)",
+            "",
+        ]
+
     actions = [
         "SEARCH EXECUTION:",
         "",
+        *scope_constraint,
         "Using the patterns from Step 3, search the codebase:",
         "",
         "  1. Use Glob to find relevant files in scope",
@@ -274,6 +292,38 @@ def format_step_4(category_ref: str, mode: str = "code") -> str:
         "  5. After finding an issue, Grep for similar patterns in OTHER files",
         "  6. Note when patterns appear in 3+ locations (abstraction candidates)",
         "",
+        # WHY occurrence counting is mandatory at Step 4 rather than optional or deferred:
+        #
+        # The explore agent has just executed search patterns and has Grep results in context.
+        # At this point, re-running the same pattern with output_mode="count" is trivial.
+        # Deferring to later steps would require:
+        #   - Storing patterns for later replay (fragile - patterns evolve during exploration)
+        #   - Re-executing searches (wasteful - same I/O cost paid twice)
+        #   - Estimating counts from grep output (inaccurate - misses pagination)
+        #
+        # By capturing NOW, we have:
+        #   - Zero marginal search cost (pattern already validated)
+        #   - Exact counts (not estimates)
+        #   - Verification commands that reproduce the search context
+        #
+        # WHY verification_cmd is required alongside count:
+        #
+        # A count like "47 occurrences" is unverifiable without the pattern that produced it.
+        # Storing the grep pattern makes evidence falsifiable:
+        #   - Reviewers can independently verify: grep -r "pattern" path/ | wc -l
+        #   - Future scans can detect count drift (codebase evolution)
+        #   - Work items can include reproducible scope claims
+        #
+        # The alternative (storing counts without patterns) creates uncheckable assertions.
+        "OCCURRENCE COUNTING (MANDATORY):",
+        "",
+        "  For EACH potential finding, run a count query:",
+        '    Grep with output_mode="count" to get total occurrences',
+        "",
+        "  Record:",
+        '    - exact_count: Number returned by Grep count',
+        '    - verification_cmd: The grep pattern used (for independent verification)',
+        "",
         "CALIBRATION:",
         "",
         "  - Finding zero issues is a valid outcome. Do not force findings.",
@@ -283,9 +333,12 @@ def format_step_4(category_ref: str, mode: str = "code") -> str:
         "OUTPUT (required):",
         '<findings>',
         '  <finding location="file:line-range">',
-        '    <evidence>quoted code (2-5 lines)</evidence>',
+        '    <evidence lines="N">quoted code (2-5 lines, preserve indentation)</evidence>',
         '    <issue>what violates the principle</issue>',
-        '    <similar_locations>file2:line, file3:line OR "Unique"</similar_locations>',
+        '    <occurrences count="N" verification="grep pattern to reproduce">',
+        '      file2:line, file3:line OR "unique - single occurrence"',
+        '    </occurrences>',
+        '    <impact>what breaks/degrades if unfixed (one sentence)</impact>',
         '  </finding>',
         '  <!-- repeat for each finding -->',
         '</findings>',
@@ -294,11 +347,11 @@ def format_step_4(category_ref: str, mode: str = "code") -> str:
     ]
 
     parts = [
-        format_step_header(4, TOTAL_STEPS, "Search", category_ref, mode),
+        render_step_header(StepHeaderNode(title="Search", script="explore", step=4, category=category_ref, mode=mode)),
         "",
-        render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
+        render_current_action(CurrentActionNode(actions)),
         "",
-        format_next_step(5, category_ref, mode),
+        format_next_step(5, category_ref, mode, scope),
     ]
     return "\n".join(parts)
 
@@ -308,25 +361,87 @@ def format_step_4(category_ref: str, mode: str = "code") -> str:
 # =============================================================================
 
 
-def format_step_5(category_ref: str, mode: str = "code") -> str:
+def format_step_5(category_ref: str, mode: str = "code", scope: str | None = None) -> str:
     """Step 5: Synthesize findings into smell report."""
     actions = [
         "SYNTHESIZE findings from Step 4 into final report.",
         "",
         "OUTPUT FORMAT (strict):",
         "",
+        # WHY token budget increased from 50 to 100 tokens per finding:
+        #
+        # Minimum viable evidence requires:
+        #   - Code snippet (2-5 lines): 45-75 tokens with indentation
+        #   - Impact statement: 25-40 tokens for "Blocks X because Y"
+        #   - Occurrences metadata: 15-25 tokens (count + verification)
+        #   Total: 85-140 tokens for complete evidence
+        #
+        # At 50 tokens, agents were forced to choose between:
+        #   - Code OR impact (incomplete evidence)
+        #   - Truncated code (not compilable/verifiable)
+        #   - Generic impact (not specific to this codebase)
+        #
+        # 100 tokens is the minimum that fits all 4 evidence components without truncation.
+        #
+        # WHY max 8 findings instead of unlimited with 50-token budget:
+        #
+        # Previous model: 500 tokens / 50 per finding = 10 findings (but all truncated)
+        # New model: 1200 tokens / 100 per finding = 12 findings (but capped at 8)
+        #
+        # The 8-finding cap forces prioritization BEFORE writing:
+        #   - Agents must rank by severity, not report exhaustively
+        #   - Cross-file evidence gets priority (more impactful than single-file)
+        #   - Low-severity findings get filtered at source, not downstream
+        #
+        # This is better than post-hoc filtering because:
+        #   - Agents have full search context (Cluster step does not)
+        #   - Severity judgment happens closest to the code
+        #   - Token budget concentrates on high-value findings
         "TOKEN BUDGET (ENFORCED):",
-        "  - Total return: MAX 500 tokens",
-        "  - Per finding: MAX 50 tokens (evidence + issue combined)",
-        "  - If findings exceed budget, keep highest severity only",
+        "  - Total return: MAX 1200 tokens",
+        "  - Finding count limit: MAX 8 findings",
+        "  - Per finding: MIN 100 tokens (evidence must be verifiable)",
+        "  - Budget breakdown: 75 tokens code (5 lines) + 40 impact + 25 occurrence = 140 typical",
+        "  - If > 8 findings, keep highest severity with cross-file evidence priority",
+        "  - If budget pressure, prefer 3-line code snippets over dropping findings",
         "",
+        # WHY impact tag requires "Blocks/Degrades/Risks" structure:
+        #
+        # Without structure, agents produce:
+        #   - Restatements: "This is inconsistent" (not an impact)
+        #   - Vague claims: "Could cause issues" (what issues?)
+        #   - Implementation details: "Should use HashMap" (not WHY)
+        #
+        # The 3-verb taxonomy forces causal reasoning:
+        #   - "Blocks X" -> identifies a concrete capability gap
+        #   - "Degrades X" -> quantifies a performance/quality cost
+        #   - "Risks X" -> names a failure mode
+        #
+        # This makes impact falsifiable: reviewers can verify whether X is actually affected.
         '<smell_report category="$CATEGORY_NAME" mode="$MODE" severity="high|medium|low|none" count="N">',
         '  <finding location="file:line-range" severity="high|medium|low">',
-        '    <evidence>quoted code (2-5 lines max)</evidence>',
-        '    <issue>what is wrong (one sentence)</issue>',
+        '    <evidence lines="N">',
+        '      quoted code (2-5 lines, preserve exact indentation)',
+        '    </evidence>',
+        '    <issue>what is wrong (one sentence, be specific)</issue>',
+        '    <impact>',
+        '      WHY fix this? One of:',
+        '      - "Blocks X" (prevents something)',
+        '      - "Degrades X" (makes something worse)',
+        '      - "Risks X" (could cause harm)',
+        '    </impact>',
+        '    <occurrences count="N" verification="grep -r PATTERN path/">',
+        '      Codebase-wide count. Verification command must reproduce the count.',
+        '    </occurrences>',
         '  </finding>',
         '  <!-- repeat for each finding -->',
         '</smell_report>',
+        "",
+        "EVIDENCE REQUIREMENTS (findings without these are INVALID):",
+        "  1. <evidence> must quote actual code, not describe it",
+        "  2. <impact> must state consequence, not just restate the issue",
+        "  3. <occurrences> count must come from actual Grep, not estimation",
+        "  4. verification attribute must be executable command",
         "",
         "SEVERITY LEVELS:",
         "  HIGH: Blocks maintainability, affects multiple areas",
@@ -341,9 +456,9 @@ def format_step_5(category_ref: str, mode: str = "code") -> str:
     ]
 
     parts = [
-        format_step_header(5, TOTAL_STEPS, "Synthesis", category_ref, mode),
+        render_step_header(StepHeaderNode(title="Synthesis", script="explore", step=5, category=category_ref, mode=mode)),
         "",
-        render(W.el("current_action", *[TextNode(a) for a in actions]).build(), XMLRenderer()),
+        render_current_action(CurrentActionNode(actions)),
         "",
         "COMPLETE - Return smell_report to orchestrator.",
     ]
@@ -355,7 +470,7 @@ def format_step_5(category_ref: str, mode: str = "code") -> str:
 # =============================================================================
 
 
-def format_output(step: int, category_ref: str, mode: str = "code") -> str:
+def format_output(step: int, category_ref: str, mode: str = "code", scope: str | None = None) -> str:
     """Route to appropriate step formatter."""
     formatters = {
         1: format_step_1,
@@ -367,7 +482,7 @@ def format_output(step: int, category_ref: str, mode: str = "code") -> str:
     formatter = formatters.get(step)
     if not formatter:
         sys.exit(f"ERROR: Unknown step {step}")
-    return formatter(category_ref, mode)
+    return formatter(category_ref, mode, scope)
 
 
 # =============================================================================
@@ -381,7 +496,6 @@ def main():
         epilog=f"Steps: context -> principle -> patterns -> search -> synthesis ({TOTAL_STEPS} total)",
     )
     parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--total-steps", type=int, required=True)
     parser.add_argument(
         "--category",
         type=str,
@@ -395,20 +509,24 @@ def main():
         default="code",
         help="Evaluation mode: design (architecture/intent) or code (implementation)",
     )
+    parser.add_argument(
+        "--scope",
+        type=str,
+        default=None,
+        help="Filesystem scope constraint for Glob/Grep operations (e.g., 'src/planner/')",
+    )
 
     args = parser.parse_args()
 
     if args.step < 1:
         sys.exit("ERROR: --step must be >= 1")
-    if args.total_steps != TOTAL_STEPS:
-        sys.exit(f"ERROR: --total-steps must be {TOTAL_STEPS}")
-    if args.step > args.total_steps:
-        sys.exit("ERROR: --step cannot exceed --total-steps")
+    if args.step > 5:
+        sys.exit(f"ERROR: --step cannot exceed 5")
 
     if ":" not in args.category or "-" not in args.category.split(":")[1]:
         sys.exit("ERROR: --category must be in format file.md:start-end")
 
-    print(format_output(args.step, args.category, args.mode))
+    print(format_output(args.step, args.category, args.mode, args.scope))
 
 
 if __name__ == "__main__":

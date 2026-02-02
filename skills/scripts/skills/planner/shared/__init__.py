@@ -9,7 +9,7 @@ QR Gate Pattern for Verification Loops:
   2. Outputs the EXACT next command to invoke
   3. Leaves no room for interpretation
 
-  Work steps that follow a FAIL gate take --qr-fail flag to focus on fixing.
+  Work steps detect fix mode via qr-{phase}.json file state inspection.
 
 This pattern is applied consistently across:
   - planner.py (steps 5-12: sequential QR with gates)
@@ -32,6 +32,15 @@ from .domain import (
     NextCommand,
 )
 
+# Re-export from routing
+from .routing import (
+    WORK_PHASES,
+    detect_qr_state,
+    route_work_phase,
+    get_work_phase_config,
+    get_all_work_phases,
+)
+
 __all__ = [
     # Resources
     "get_resource",
@@ -42,4 +51,10 @@ __all__ = [
     "FlatCommand",
     "BranchCommand",
     "NextCommand",
+    # Routing
+    "WORK_PHASES",
+    "detect_qr_state",
+    "route_work_phase",
+    "get_work_phase_config",
+    "get_all_work_phases",
 ]

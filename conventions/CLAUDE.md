@@ -15,6 +15,6 @@ Universal conventions for agents and skills.
 
 ## Subdirectories
 
-| Directory       | What                                   | When to read                                                  |
-| --------------- | -------------------------------------- | ------------------------------------------------------------- |
-| `code-quality/` | Baseline/split/drift quality checks    | QR code review, refactoring, planning-time quality validation |
+| Directory       | What                                   | When to read                                                       |
+| --------------- | -------------------------------------- | ------------------------------------------------------------------ |
+| `code-quality/` | Baseline/split/drift quality checks    | Design, code review, refactoring, planning-time quality validation |

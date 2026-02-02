@@ -1,34 +1,39 @@
 # workflow/
 
-Workflow orchestration framework: types, formatters, and registration.
+Workflow orchestration framework: types, discovery, and AST-based XML generation.
+
+## Architecture
+
+Skills use CLI-based step invocation. The workflow flow is:
+
+```
+main() -> format_output() -> print() -> LLM reads -> follows <invoke_after>
+```
+
+Workflow/StepDef are metadata containers for introspection. The execution engine
+(Workflow.run(), Outcome, StepContext) was removed as dead code.
 
 ## Files
 
-| File           | What                                                     | When to read                                           |
-| -------------- | -------------------------------------------------------- | ------------------------------------------------------ |
-| `README.md`    | Architecture, design decisions, patterns                 | Understanding workflow design, common patterns         |
-| `core.py`      | Workflow, StepDef, StepContext, Outcome, Arg             | Defining new skills, understanding workflow data model |
-| `discovery.py` | Workflow discovery via importlib scanning                | Understanding pull-based discovery, troubleshooting    |
-| `__init__.py`  | Public API exports                                       | Importing workflow types, checking available exports   |
-| `cli.py`       | CLI helpers for workflow entry points                    | Adding CLI arguments, modifying step output            |
-| `constants.py` | Shared constants                                         | Adding new constants, modifying defaults               |
-| `types.py`     | Domain types: Dispatch, AgentRole, BoundedInt, ChoiceSet | QR gates, sub-agent dispatch, test domains             |
+| File           | What                                      | When to read                                        |
+| -------------- | ----------------------------------------- | --------------------------------------------------- |
+| `core.py`      | Workflow, StepDef, Arg (metadata only)    | Defining new skills, workflow structure             |
+| `discovery.py` | Workflow discovery via importlib scanning | Understanding pull-based discovery, troubleshooting |
+| `__init__.py`  | Public API exports                        | Importing workflow types                            |
+| `cli.py`       | CLI helpers for workflow entry points     | Adding CLI arguments, step output helpers           |
+| `constants.py` | Shared constants, QR constants re-exports | Adding new constants                                |
+| `types.py`     | Domain types: Dispatch, AgentRole, etc.   | QR gates, sub-agent dispatch, test domains          |
 
 ## Subdirectories
 
-| Directory     | What                         | When to read                                    |
-| ------------- | ---------------------------- | ----------------------------------------------- |
-| `formatters/` | Output formatting (XML/text) | Modifying step output format, adding formatters |
+| Directory     | What                            | When to read                   |
+| ------------- | ------------------------------- | ------------------------------ |
+| `ast/`        | AST nodes, builder, renderer    | XML generation for step output |
+| `formatters/` | Re-exports from ast/ for compat | Use ast/ directly instead      |
 
 ## Test
 
 ```bash
-# Run all tests
 pytest tests/ -v
-
-# Run specific test file
-pytest tests/test_workflow_steps.py -v
-
-# Run tests for specific workflow
 pytest tests/ -k deepthink -v
 ```

@@ -9,23 +9,14 @@ When this skill activates, IMMEDIATELY invoke the script. The script IS the work
 
 ## Invocation
 
-<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.refactor.refactor --step 1 --total-steps 5 --n 10" />
+<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.refactor.refactor --step 1 --n 10" />
 
-| Argument        | Required | Description                                   |
-| --------------- | -------- | --------------------------------------------- |
-| `--step`        | Yes      | Current step (starts at 1)                    |
-| `--total-steps` | Yes      | Total steps (5 for full workflow)             |
-| `--n`           | No       | Number of categories to explore (default: 10) |
+| Argument | Required | Description                                   |
+| -------- | -------- | --------------------------------------------- |
+| `--step` | Yes      | Current step (starts at 1)                    |
+| `--n`    | No       | Number of categories to explore (default: 10) |
 
 Do NOT explore or analyze first. Run the script and follow its output.
-
-## Workflow Phases
-
-1. **Dispatch** - Launch parallel Explore agents (one per category)
-2. **Triage** - Structure smell findings with IDs
-3. **Cluster** - Group smells by shared root cause
-4. **Contextualize** - Extract user intent, prioritize issues
-5. **Synthesize** - Generate actionable work items
 
 ## Determining N (category count)
 

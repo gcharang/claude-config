@@ -49,7 +49,7 @@ User request
 Skill activation (.skill descriptor)
   |
   v
-Script invocation (python3 scripts/*.py --step N --total-steps M)
+Script invocation (python3 scripts/*.py --step N)
   |
   v
 Workflow orchestration (lib/workflow)
@@ -153,7 +153,6 @@ Benefits:
 **Remaining**:
 
 - deepthink (14 steps, mode branching)
-- solution-design (9 steps, parallel dispatch)
 - refactor (5 steps, QR gates)
 - planner (complex, QR gates + multi-mode)
 - incoherence (21 steps, multi-phase)
@@ -358,13 +357,11 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--total-steps", type=int, required=True)
     args = parser.parse_args()
 
     if args.step == 1:
         print(format_text_output(
             step=1,
-            total=args.total_steps,
             title="Analyze Problem",
             actions=["Read codebase", "Identify issues"],
             brief="Initial analysis",
@@ -373,7 +370,6 @@ def main():
     elif args.step == 2:
         print(format_text_output(
             step=2,
-            total=args.total_steps,
             title="Propose Solution",
             actions=["Design fix", "Document approach"],
             brief="Solution design",
@@ -419,7 +415,6 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--total-steps", type=int, required=True)
     parser.add_argument("--qr-iteration", type=int, default=1)
     parser.add_argument("--qr-fail", action="store_true")
     parser.add_argument("--qr-status", type=str, choices=["pass", "fail"])
@@ -443,7 +438,6 @@ def main():
         print(format_gate_step(
             script="script",
             step=3,
-            total=args.total_steps,
             title="Gate: Route Based on QR",
             qr=qr,
             gate=gate,

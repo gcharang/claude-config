@@ -30,10 +30,12 @@ format.
 
 **Tradeoffs:**
 
-- (+) 2-4% accuracy gain over vanilla CoT on arithmetic tasks
+- (+) ~2% average accuracy gain over vanilla CoT on arithmetic tasks
 - (+) More concise output (28 words vs 140 for equivalent reasoning)
-- (+) Task-specific columns can boost domain performance (e.g., `|step|word|last
-letter|answer|`)
+- (+) Task-specific columns can dramatically boost domain performance (e.g.,
+  Last Letter task: 25.2% -> 72.8% with `|step|word|last letter|answer|`)
+- (+) Self-consistency across 3 different schemas yields 68.2% avg (vs 62.6%
+  single best)
 - (-) Requires models pre-trained on tabular data
 - (-) Less effective on commonsense reasoning without fixed answer patterns
 
@@ -59,9 +61,12 @@ instead of natural language reasoning; delegate computation to interpreter.
 
 **Tradeoffs:**
 
-- (+) 8-20% accuracy gain over CoT on financial/math QA
+- (+) ~12% average accuracy gain over CoT (8% on math word problems, 15% on
+  financial QA)
 - (+) Eliminates arithmetic errors on iterative problems (50+ steps)
 - (+) Symbolic solver handles polynomial/differential equations
+- (+) Semantic binding is critical: removing meaningful variable names drops
+  GSM8K accuracy from 71.6% to 60.2%
 - (-) Requires code execution environment (security considerations)
 - (-) Value grounding errors (47% of failures) harder to detect than logic errors
 
@@ -120,10 +125,47 @@ define HOW to think rather than content examples showing WHAT to think.
 **Tradeoffs:**
 
 - (+) 46% MATH accuracy with Qwen-72B base (competitive with GPT-4 CoT)
-- (+) ~100x token efficiency vs few-shot on batched tasks (Game of 24)
+- (+) Dramatic token efficiency on batchable tasks: ~1/N API calls when N tasks
+  share structure (e.g., Game of 24 with N=1362 puzzles)
 - (+) Example-agnostic: no cherry-picked demonstrations
 - (-) Requires careful schema design; wrong structure hurts more than helps
 - (-) Less effective than few-shot when task semantics are ambiguous
+
+---
+
+## Prefill Technique
+
+**Mechanism:** Prefill the assistant response with the start of the expected
+output format to bypass preamble and enforce structure.
+
+**When to use:**
+
+- Need strict JSON/XML output without "Here's my analysis:" preamble
+- Forcing enumerated lists to start mid-flow
+- Continuing partial code blocks
+- Ensuring immediate structured output
+
+**Implementation:**
+
+```
+User: Classify this feedback: {{TEXT}}
+Assistant: {"sentiment":"
+```
+
+Claude continues from the prefill, maintaining the JSON structure. The model
+has no opportunity to add preamble because the response is already started.
+
+- Works with any format: JSON, XML, Markdown, code blocks
+- Combine with output primers (ending prompt with expected output start)
+- For multi-field JSON, prefill first key: `{"field_1":"`
+
+**Tradeoffs:**
+
+- (+) Eliminates preamble tokens entirely
+- (+) Forces consistent format without explicit instruction
+- (+) Works with any model supporting assistant prefill (Claude, GPT-4)
+- (-) Requires API-level access to prefill (not available in all interfaces)
+- (-) Model may struggle if prefill conflicts with natural response
 
 ---
 
@@ -148,7 +190,8 @@ feedback formats, and guardrails to prevent cascading errors.
 **Tradeoffs:**
 
 - (+) 64% relative improvement over shell-only on SWE-bench
-- (+) Linting guardrail prevents 51.7% of trajectories from cascading errors
+- (+) Linting guardrails help recovery from edit errors (51.7% of trajectories
+  have 1+ failed edits; agents recover 90.5% of the time on first attempt)
 - (+) Consistent output format reduces parsing failures
 - (-) Interface must be co-designed with task; not general-purpose
 - (-) Some guardrails (e.g., lint rejection) force specific edit orderings
@@ -199,7 +242,11 @@ and minor perturbations (whitespace, greetings) measurably change predictions.
 
 - No specified format often yields highest accuracy (ChatGPT)
 - JSON format works best for code-trained models (Llama)
-- Avoid XML: causes 5-10% accuracy drops on larger models
+- Avoid XML for general LLMs: causes 5-10% accuracy drops on larger models
+- Exception: Claude-specific XML patterns work well when used for structure:
+  - Separation: `<data>{{INPUT}}</data>` prevents instruction/data conflation
+  - Reference: Name tags descriptively, reference in prose
+  - Instruction-as-tag: `<prioritize_security>...</prioritize_security>`
 - Ensemble via majority vote across formats for robustness
 - Avoid: jailbreak patterns (even on innocuous tasks), unnecessary tokens
 
@@ -286,6 +333,7 @@ free to ignore irrelevant information given in the questions."
 - No code execution -> Tab-CoT or Table as Thought
 - Need programmatic verification -> Table as Thought (auto-check) or PoT
 - Labeled data available -> Directional Stimulus Prompting
+- Must eliminate preamble -> Prefill technique
 
 **Composability:**
 
@@ -294,11 +342,13 @@ free to ignore irrelevant information given in the questions."
 - Meta Prompting + PoT: Structured schema that specifies code generation slots
 - Table as Thought + Auto-check: Schema enables external constraint validation
 - Any technique + Contextual Calibration: Apply calibration as post-processing
+- Prefill + Any format technique: Prefill enforces format, technique structures content
 
 ---
 
 ## Sources
 
+- Anthropic Prompt Engineering: docs.anthropic.com (Prefill, XML patterns)
 - Tab-CoT: Jin & Lu (2023), arXiv:2305.17812
 - PoT: Chen et al. (2023), arXiv:2211.12588
 - Table as Thought: (2025), arXiv

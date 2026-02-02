@@ -10,12 +10,11 @@ workflow.
 
 ## Invocation
 
-<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.incoherence.incoherence --step-number 1 --total-steps 21 --thoughts '<context>'" />
+<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.incoherence.incoherence --step-number 1 --thoughts '<context>'" />
 
 | Argument        | Required | Description                               |
 | --------------- | -------- | ----------------------------------------- |
-| `--step-number` | Yes      | Current step (1-21)                       |
-| `--total-steps` | Yes      | Always 21                                 |
+| `--step-number` | Yes      | Current step (starts at 1)                |
 | `--thoughts`    | Yes      | Accumulated state from all previous steps |
 
 Do NOT explore or detect first. Run the script and follow its output.

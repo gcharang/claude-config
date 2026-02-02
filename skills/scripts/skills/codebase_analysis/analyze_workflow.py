@@ -12,19 +12,72 @@ Confidence progression: exploring -> low -> medium -> high -> certain
 Each step can loop internally until confidence = certain.
 """
 
-from typing import Annotated
-from skills.lib.workflow.core import (
-    Outcome,
-    StepContext,
-    StepDef,
-    Workflow,
-    Arg,
+import argparse
+import sys
+
+from skills.lib.workflow.core import StepDef, Workflow
+from skills.lib.workflow.ast import (
+    W, XMLRenderer, render, TextNode,
+    RosterDispatchNode, render_roster_dispatch,
 )
-from skills.lib.workflow.ast import W, XMLRenderer, render
+from skills.lib.workflow.ast.nodes import (
+    StepHeaderNode, CurrentActionNode, InvokeAfterNode,
+)
+from skills.lib.workflow.ast.renderer import (
+    render_step_header, render_current_action, render_invoke_after,
+)
+
+
+# Module path for -m invocation
+MODULE_PATH = "skills.codebase_analysis.analyze_workflow"
+
+
+# XML format mandate for step 1
+XML_FORMAT_MANDATE = """<xml_format_mandate>
+CRITICAL: All script outputs use XML format. You MUST:
+
+1. Execute the action in <current_action>
+2. When complete, invoke the exact command in <invoke_after>
+3. The <next> block re-states the command -- execute it
+4. For branching <invoke_after>, choose based on outcome
+
+DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
+</xml_format_mandate>"""
 
 
 # Maximum iterations for DEEPEN phase
 MAX_DEEPEN_ITERATIONS = 4
+
+
+def build_explore_dispatch_guidance() -> str:
+    """Generate Explore agent dispatch guidance using RosterDispatchNode pattern.
+
+    Exploration goals are user-driven; each agent has distinct focus based on codebase structure.
+    Actual agent targets determined at runtime by the LLM based on user's goals.
+    """
+    # Shared context from prior steps (SCOPE phase output)
+    shared_context = """Analysis goals from SCOPE step:
+- User intent and what they want to understand
+- Identified focus areas (architecture, components, flows, etc.)
+- Defined objectives (1-3 specific goals)"""
+
+    # Placeholder agents - actual exploration focuses determined at runtime
+    agents = (
+        "[Exploration focus 1: e.g., 'Explore authentication flow']",
+        "[Exploration focus 2: e.g., 'Explore database schema']",
+        "[Exploration focus N: based on scope and codebase structure]",
+    )
+
+    node = RosterDispatchNode(
+        agent_type="Explore",
+        shared_context=shared_context,
+        agents=agents,
+        command="Use Task tool with subagent_type='Explore'",
+        model="haiku",
+        instruction="Dispatch Explore agents targeting defined goals. Use Task tool with Explore subagent_type.",
+    )
+
+    return render_roster_dispatch(node)
 
 
 # Phase action definitions
@@ -51,23 +104,33 @@ SCOPE_ACTIONS = [
     "ADVANCE: When goals defined, re-invoke with higher confidence.",
 ]
 
-SURVEY_EXPLORING_ACTIONS = [
-    "DISPATCH Explore agent(s) targeting defined goals:",
-    "",
-    "Single codebase, focused scope:",
-    "  - One Explore agent with specific focus",
-    "",
-    "Large/broad scope:",
-    "  - Multiple parallel Explore agents by boundary",
-    "  - Example: frontend agent + backend agent + data agent",
-    "",
-    "Multiple repositories:",
-    "  - One Explore agent per repository",
-    "",
-    "WAIT for Explore results before re-invoking this step.",
-    "",
-    "ADVANCE: After results received, re-invoke with --confidence low.",
-]
+def get_survey_exploring_actions() -> list[str]:
+    """Generate SURVEY exploring actions with dispatch guidance."""
+    dispatch_xml = build_explore_dispatch_guidance()
+    return [
+        "DISPATCH Explore agent(s) targeting defined goals:",
+        "",
+        dispatch_xml,
+        "",
+        "DISPATCH GUIDANCE:",
+        "",
+        "Single codebase, focused scope:",
+        "  - One Explore agent with specific focus",
+        "",
+        "Large/broad scope:",
+        "  - Multiple parallel Explore agents by boundary",
+        "  - Example: frontend agent + backend agent + data agent",
+        "",
+        "Multiple repositories:",
+        "  - One Explore agent per repository",
+        "",
+        "WAIT for Explore results before re-invoking this step.",
+        "",
+        "ADVANCE: After results received, re-invoke with --confidence low.",
+    ]
+
+
+SURVEY_EXPLORING_ACTIONS = get_survey_exploring_actions()
 
 SURVEY_LOW_ACTIONS = [
     "EXTRACT findings from Explore output:",
@@ -150,18 +213,26 @@ DEEPEN_EXPLORING_ACTIONS = [
     "ADVANCE: Re-invoke with --confidence low.",
 ]
 
-DEEPEN_LOW_ACTIONS = [
-    "DISPATCH targeted Explore agent(s):",
-    "",
-    "Focus on specific targets identified:",
-    "  - Provide clear focus area",
-    "  - Include specific questions to answer",
-    "  - Reference files/components from SURVEY",
-    "",
-    "WAIT for results before re-invoking this step.",
-    "",
-    "ADVANCE: After results, re-invoke with --confidence medium.",
-]
+def get_deepen_low_actions() -> list[str]:
+    """Generate DEEPEN low-confidence actions with dispatch guidance."""
+    dispatch_xml = build_explore_dispatch_guidance()
+    return [
+        "DISPATCH targeted Explore agent(s):",
+        "",
+        dispatch_xml,
+        "",
+        "Focus on specific targets identified:",
+        "  - Provide clear focus area",
+        "  - Include specific questions to answer",
+        "  - Reference files/components from SURVEY",
+        "",
+        "WAIT for results before re-invoking this step.",
+        "",
+        "ADVANCE: After results, re-invoke with --confidence medium.",
+    ]
+
+
+DEEPEN_LOW_ACTIONS = get_deepen_low_actions()
 
 DEEPEN_MEDIUM_ACTIONS = [
     "PROCESS deep-dive findings:",
@@ -290,120 +361,119 @@ SYNTHESIZE_CERTAIN_ACTIONS = [
 ]
 
 
-# Handler functions
-def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Generic handler for output-only steps."""
-    return Outcome.OK, {}
-
-
-def step_scope(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for SCOPE step with confidence progression."""
-    confidence = ctx.workflow_params.get("confidence", "exploring")
-
-    if confidence == "certain":
-        return Outcome.OK, {"confidence": confidence}
-    else:
-        # Instruct to re-invoke with higher confidence when goals defined
-        return Outcome.ITERATE, {"confidence": confidence}
-
-
-def step_survey(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for SURVEY step with confidence progression."""
-    confidence = ctx.workflow_params.get("confidence", "exploring")
-
-    if confidence == "certain":
-        return Outcome.OK, {"confidence": confidence}
-    else:
-        return Outcome.ITERATE, {"confidence": confidence}
-
-
-def step_deepen(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for DEEPEN step with confidence progression and iteration cap."""
-    iteration = ctx.workflow_params.get("iteration", 1)
-    confidence = ctx.workflow_params.get("confidence", "exploring")
-
-    # Exit conditions
-    if confidence == "certain":
-        return Outcome.OK, {"confidence": confidence, "iteration": iteration}
-    elif iteration > MAX_DEEPEN_ITERATIONS:
-        # Force transition to SYNTHESIZE
-        return Outcome.OK, {"confidence": "capped", "iteration": iteration}
-    else:
-        return Outcome.ITERATE, {"iteration": iteration, "confidence": confidence}
-
-
-def step_synthesize(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for SYNTHESIZE step with confidence progression."""
-    confidence = ctx.workflow_params.get("confidence", "exploring")
-
-    if confidence == "certain":
-        return Outcome.OK, {"confidence": confidence}
-    else:
-        return Outcome.ITERATE, {"confidence": confidence}
-
-
-# Workflow definition
+# Workflow definition (metadata only, execution via CLI)
 WORKFLOW = Workflow(
     "codebase-analysis",
-    StepDef(
-        id="scope",
-        title="SCOPE - Define understanding goals",
-        phase="SCOPE",
-        actions=SCOPE_ACTIONS,
-        handler=step_scope,
-        next={
-            Outcome.OK: "survey",
-            Outcome.ITERATE: "scope",
-        },
-    ),
-    StepDef(
-        id="survey",
-        title="SURVEY - Initial exploration",
-        phase="SURVEY",
-        actions=SURVEY_EXPLORING_ACTIONS,  # Will be dynamic based on confidence
-        handler=step_survey,
-        next={
-            Outcome.OK: "deepen",
-            Outcome.ITERATE: "survey",
-        },
-    ),
-    StepDef(
-        id="deepen",
-        title="DEEPEN - Targeted deep-dives",
-        phase="DEEPEN",
-        actions=DEEPEN_EXPLORING_ACTIONS,  # Will be dynamic based on confidence/iteration
-        handler=step_deepen,
-        next={
-            Outcome.OK: "synthesize",
-            Outcome.ITERATE: "deepen",
-        },
-    ),
-    StepDef(
-        id="synthesize",
-        title="SYNTHESIZE - Structured summary output",
-        phase="SYNTHESIZE",
-        actions=SYNTHESIZE_EXPLORING_ACTIONS,  # Will be dynamic based on confidence
-        handler=step_synthesize,
-        next={
-            Outcome.OK: None,  # Terminal
-            Outcome.ITERATE: "synthesize",
-        },
-    ),
+    StepDef(id="scope", title="SCOPE - Define understanding goals", actions=SCOPE_ACTIONS, phase="SCOPE"),
+    StepDef(id="survey", title="SURVEY - Initial exploration", actions=SURVEY_EXPLORING_ACTIONS, phase="SURVEY"),
+    StepDef(id="deepen", title="DEEPEN - Targeted deep-dives", actions=DEEPEN_EXPLORING_ACTIONS, phase="DEEPEN"),
+    StepDef(id="synthesize", title="SYNTHESIZE - Structured summary output", actions=SYNTHESIZE_EXPLORING_ACTIONS, phase="SYNTHESIZE"),
     description="Understanding-focused codebase comprehension workflow with confidence-driven iteration",
+    validate=False,
 )
 
 
-# Backward compatibility: CLI entry point
-def main():
-    import argparse
-    import sys
+# =============================================================================
+# Output Formatting
+# =============================================================================
 
+
+def format_output(step: int, confidence: str, iteration: int) -> str:
+    """Format output for display using XML building blocks."""
+    # Map step to phase and get appropriate actions
+    step_map = {
+        1: ("SCOPE", get_scope_actions(confidence)),
+        2: ("SURVEY", get_survey_actions(confidence)),
+        3: ("DEEPEN", get_deepen_actions(confidence, iteration)),
+        4: ("SYNTHESIZE", get_synthesize_actions(confidence)),
+    }
+
+    phase, (title, actions, next_phase) = step_map[step]
+    full_title = f"CODEBASE ANALYSIS - {title}"
+
+    parts = []
+
+    # Step header
+    parts.append(render_step_header(StepHeaderNode(
+        title=full_title,
+        script="codebase-analysis",
+        step=str(step)
+    )))
+    parts.append("")
+
+    # XML mandate on step 1
+    if step == 1 and confidence == "exploring":
+        parts.append(XML_FORMAT_MANDATE)
+        parts.append("")
+
+    # Current action
+    parts.append(render_current_action(CurrentActionNode(actions)))
+    parts.append("")
+
+    # Invoke after - build the next command based on state
+    next_cmd = build_next_command(step, WORKFLOW.total_steps, confidence, iteration, next_phase)
+    if next_cmd:
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
+    else:
+        parts.append("WORKFLOW COMPLETE - Present summary to user.")
+
+    return "\n".join(parts)
+
+
+def build_next_command(step: int, total_steps: int, confidence: str, iteration: int, next_phase: str | None) -> str | None:
+    """Build the invoke command for the next step."""
+    base_cmd = f'python3 -m {MODULE_PATH}'
+
+    if step == 1:  # SCOPE
+        if confidence == "certain":
+            # Advance to SURVEY
+            return f'{base_cmd} --step 2 --confidence exploring'
+        else:
+            # Re-invoke SCOPE with placeholder for confidence
+            return f'{base_cmd} --step 1 --confidence {{exploring|low|medium|high|certain}}'
+
+    elif step == 2:  # SURVEY
+        if confidence == "certain":
+            # Advance to DEEPEN
+            return f'{base_cmd} --step 3 --confidence exploring --iteration 1'
+        else:
+            # Re-invoke SURVEY with placeholder for confidence
+            return f'{base_cmd} --step 2 --confidence {{exploring|low|medium|high|certain}}'
+
+    elif step == 3:  # DEEPEN
+        if confidence == "certain" or iteration > MAX_DEEPEN_ITERATIONS:
+            # Advance to SYNTHESIZE
+            return f'{base_cmd} --step 4 --confidence exploring'
+        elif confidence == "exploring" and iteration > 1:
+            # New iteration cycle
+            return f'{base_cmd} --step 3 --confidence {{exploring|low|medium|high|certain}} --iteration {iteration}'
+        else:
+            # Continue current iteration
+            next_iter = iteration if confidence != "exploring" else iteration
+            return f'{base_cmd} --step 3 --confidence {{exploring|low|medium|high|certain}} --iteration {next_iter}'
+
+    elif step == 4:  # SYNTHESIZE
+        if confidence == "certain":
+            # Workflow complete
+            return None
+        else:
+            # Re-invoke SYNTHESIZE with placeholder for confidence
+            return f'{base_cmd} --step 4 --confidence {{exploring|low|medium|high|certain}}'
+
+    return None
+
+
+# =============================================================================
+# CLI Entry Point
+# =============================================================================
+
+
+def main():
     parser = argparse.ArgumentParser(
         description="Codebase Analysis - Understanding-focused comprehension workflow",
         epilog="Phases: SCOPE (1) -> SURVEY (2) -> DEEPEN (3) -> SYNTHESIZE (4)",
     )
     parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--total-steps", type=int, required=True)
     parser.add_argument(
         "--confidence",
         type=str,
@@ -421,30 +491,12 @@ def main():
 
     if args.step < 1:
         sys.exit("ERROR: --step must be >= 1")
-    if args.total_steps != 4:
-        sys.exit("ERROR: --total-steps must be 4 for this workflow")
-    if args.step > args.total_steps:
-        sys.exit("ERROR: --step cannot exceed --total-steps")
+    if args.step > WORKFLOW.total_steps:
+        sys.exit(f"ERROR: --step cannot exceed {WORKFLOW.total_steps}")
     if args.iteration < 1:
         sys.exit("ERROR: --iteration must be >= 1")
 
-    # Map step to phase and get appropriate actions
-    step_map = {
-        1: ("SCOPE", get_scope_actions(args.confidence)),
-        2: ("SURVEY", get_survey_actions(args.confidence)),
-        3: ("DEEPEN", get_deepen_actions(args.confidence, args.iteration)),
-        4: ("SYNTHESIZE", get_synthesize_actions(args.confidence)),
-    }
-
-    phase, (title, actions, next_title) = step_map[args.step]
-
-    output = render(W.text_output(
-        step=args.step,
-        total=args.total_steps,
-        title=f"CODEBASE ANALYSIS - {title}",
-        actions=actions
-    ).build(), XMLRenderer())
-    print(output)
+    print(format_output(args.step, args.confidence, args.iteration))
 
 
 def get_scope_actions(confidence: str) -> tuple[str, list[str], str | None]:

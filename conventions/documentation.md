@@ -58,11 +58,11 @@ column and identify the right file?
 
 CLAUDE.md MUST flag files/directories that should not be manually edited:
 
-| Directory      | What                              | When to read         |
-| -------------- | --------------------------------- | -------------------- |
-| `proto/gen/`   | Generated from proto/. Run `make` | Never edit directly  |
-| `vendor/`      | Vendored deps, upstream: go.mod   | Never edit directly  |
-| `third_party/` | Copied from github.com/foo v1.2.3 | Never edit directly  |
+| Directory      | What                              | When to read        |
+| -------------- | --------------------------------- | ------------------- |
+| `proto/gen/`   | Generated from proto/. Run `make` | Never edit directly |
+| `vendor/`      | Vendored deps, upstream: go.mod   | Never edit directly |
+| `third_party/` | Copied from github.com/foo v1.2.3 | Never edit directly |
 
 The "When to read" column should indicate these are not editable. Include
 regeneration commands in the "What" column or in a dedicated Regenerate section.
@@ -198,3 +198,205 @@ behind the code, not descriptions of the code.
 
 [Rules that must be maintained; constraints not enforced by code]
 ```
+
+## Architecture Documentation
+
+For cross-cutting concerns and system-wide relationships that span multiple
+directories, create dedicated architecture documentation.
+
+### Structure
+
+```markdown
+# Architecture: [System/Feature Name]
+
+## Overview
+
+[One paragraph: problem and high-level approach]
+
+## Components
+
+[Each component with its single responsibility and boundaries]
+
+## Data Flow
+
+[Critical paths - prefer diagrams for complex flows]
+
+## Design Decisions
+
+[Key tradeoffs and rationale]
+
+## Boundaries
+
+[What this system does NOT do; where responsibility ends]
+```
+
+### Quality Standard
+
+Components must explain relationships, not just list responsibilities.
+
+Wrong -- lists without relationships:
+
+```markdown
+## Components
+
+- UserService: Handles user operations
+- AuthService: Handles authentication
+- Database: Stores data
+```
+
+Right -- explains boundaries and flow:
+
+```markdown
+## Components
+
+- UserService: User CRUD only. Delegates auth to AuthService. Never queries auth
+  state directly.
+- AuthService: Token validation, session management. Stateless; all state in
+  Redis.
+- PostgreSQL: Source of truth for user data. AuthService has no direct access.
+
+Flow: Request -> AuthService (validate) -> UserService (logic) -> Database
+```
+
+Prefer diagrams over prose for relationships.
+
+## In-Code Documentation
+
+Code-level documentation captures knowledge at the point where it is most useful.
+The principle: knowledge belongs as close as possible to the code it describes.
+Cross-cutting knowledge that cannot be localized belongs in README.md.
+
+### Tier 1: Inline WHY Comments
+
+Above statements or expressions where the choice is non-obvious.
+
+Document WHY this approach, never WHAT the code does. The reader can see what
+the code does -- they cannot see why it was chosen over alternatives.
+
+Good:
+
+```python
+# Polling: 30% webhook delivery failures observed in production
+result = poll_endpoint(url, interval=30)
+
+# Mutex-free: single-writer guarantee from caller contract
+counter.fetch_add(1, Ordering::Relaxed)
+```
+
+Bad:
+
+```python
+# Poll the endpoint
+result = poll_endpoint(url, interval=30)
+
+# Increment the counter
+counter.fetch_add(1, Ordering::Relaxed)
+```
+
+When a decision log entry exists, reference it: `# DL-003: Polling over webhooks`
+
+### Tier 2: Function-Level Explanation Blocks
+
+Near the top of non-trivial functions (after signature, before body logic).
+Required when a function has >3 distinct transformation steps, coordinates
+multiple subsystems, or implements a non-obvious algorithm.
+
+Content: what the function does, how it does it, how it fits in the overall
+architecture, what problem it solves.
+
+```python
+def reconcile_state(local, remote):
+    # Reconciles local state against remote source of truth. Operates in
+    # three phases:
+    # 1. Diff local vs remote to find divergent keys
+    # 2. For each divergence, apply conflict resolution (remote wins)
+    # 3. Write merged state back to local store
+    #
+    # Called by the sync loop after each heartbeat. Remote state is
+    # authoritative -- local is a cache that may lag behind.
+    ...
+```
+
+Skip for CRUD operations and standard patterns where the code speaks for itself.
+
+### Tier 3: Docstrings
+
+**Private functions**: One-line summary + trigger clause (when to call).
+
+```python
+def _normalize_key(k):
+    """Strip whitespace and lowercase. Use before cache lookup."""
+```
+
+**Public functions**: Summary + trigger clause + parameter semantics + example.
+Optimized for LLM consumption -- trigger clauses and examples enable accurate
+tool selection.
+
+```python
+def validate_config(path, strict=False):
+    """Validate configuration file against schema.
+
+    Use when loading user-provided config at startup or after hot-reload.
+    In strict mode, unknown keys are errors; otherwise warnings.
+
+    Args:
+        path: Absolute path to YAML config file.
+        strict: Treat unknown keys as errors.
+
+    Returns:
+        Validated Config object.
+
+    Example:
+        cfg = validate_config("/etc/app/config.yaml", strict=True)
+    """
+```
+
+### Tier 4: Module Documentation
+
+Top-of-file comment or module docstring. Documents what the module contains and
+why it exists as a separate unit.
+
+```python
+"""Rate limiting using sliding window counters.
+
+Provides per-client rate limiting for the API gateway. Sliding window
+chosen over fixed window to prevent burst-at-boundary attacks (DL-007).
+Token bucket rejected: memory overhead per client unacceptable at
+projected scale (>100k concurrent clients).
+"""
+```
+
+### Tier 5: Invisible Knowledge Placement
+
+Invisible knowledge is knowledge not visible from reading the code: business
+context, architectural rationale, tradeoffs, constraints, rejected alternatives.
+
+**Placement hierarchy** (closest viable location wins):
+
+1. **Inline WHY comment**: When knowledge applies to a specific statement
+2. **Function-level block**: When knowledge applies to an entire function's
+   approach or algorithm
+3. **Module docstring**: When knowledge applies to why this module exists or
+   its overall design
+4. **README.md**: When knowledge is cross-cutting (spans multiple files/modules)
+   or cannot be localized to a single code point
+
+What is NOT acceptable: invisible knowledge captured only in planning artifacts
+(decision logs, plan documents, conversation history) that are not carried
+forward into the codebase. Every decision, constraint, and tradeoff must land
+in code or README.md.
+
+### Priority Order
+
+When deciding what to document, prioritize by uncertainty:
+
+| Priority | Code Pattern                 | WHY Question           |
+| -------- | ---------------------------- | ---------------------- |
+| HIGH     | Multiple valid approaches    | Why this approach?     |
+| HIGH     | Thresholds, timeouts, limits | Why these values?      |
+| HIGH     | Error handling paths         | Recovery strategy?     |
+| HIGH     | External system interactions | What assumptions?      |
+| MEDIUM   | Non-standard pattern usage   | Why deviate from norm? |
+| MEDIUM   | Performance-critical paths   | Why this optimization? |
+| LOW      | Boilerplate/established      | Skip unless unusual    |
+| LOW      | Simple CRUD operations       | Skip unless unusual    |

@@ -40,9 +40,10 @@ symbolic reasoning, commonsense); latency is critical; standard CoT produces
 thinking step, with 5 words at most." Requires few-shot examples demonstrating the
 condensed format. Example output: "20 - x = 12; x = 8" instead of paragraph explanation.
 
-**Tradeoffs**: 76-92% token reduction. Requires few-shot examples (degrades significantly
-in zero-shot). Performance gap widens on small models (<3B). Maintains accuracy on
-arithmetic, commonsense, and symbolic tasks.
+**Tradeoffs**: 76-92% token reduction. Requires few-shot examples -- zero-shot mode
+degrades substantially (frontier models lose ~10 percentage points; smaller models show
+even larger gaps of ~16 points). Performance gap widens on small models (<3B). Maintains
+accuracy on arithmetic, commonsense, and symbolic tasks when few-shot examples provided.
 
 ---
 
@@ -52,7 +53,8 @@ arithmetic, commonsense, and symbolic tasks.
 of the answer to N words."
 
 **When to use**: Need predictable generation times; real-time systems with latency
-constraints; large models (70B+) that can follow length constraints reliably.
+constraints; specific large instruction-tuned models tested to follow length constraints
+(e.g., Llama2-70b, Falcon-40b).
 
 **Implementation**: Append length constraint after CoT instruction. Test with varying
 limits (15, 30, 45, 60, 100 words). Larger models (Llama2-70b) can improve accuracy
@@ -133,8 +135,9 @@ intermediate layer (l ~ L/2) for autoregressive token generation. Variable compr
 ratio (5-10% of original) controlled at training time.
 
 **Tradeoffs**: 10x speedup possible. Requires LoRA fine-tuning. Loses explicit reasoning
-trace interpretability. Accuracy plateaus around 20% compression ratio due to
-approximation error propagation.
+trace interpretability. Compression ratios typically range 5-20% of original token count.
+Accuracy plateaus around 20% compression ratio -- pushing beyond this threshold causes
+approximation errors to propagate and compound through the reasoning chain.
 
 ---
 
@@ -206,8 +209,9 @@ Use XML tags (`<info>`) for structured output. Parse model output, carry forward
 explicit history reminder.
 
 **Tradeoffs**: 59% token reduction, 73% latency reduction. Requires structured output
-parsing. Mitigates recency bias/forgetting. Both State Reconstruction and History Reminder
-components essential.
+parsing. Mitigates recency bias/forgetting. Three components are essential: State
+Reconstruction (injecting prior key info), History Reminder (explicit carry-forward),
+and XML Structured Output (using `<info>` tags for parseable extraction).
 
 ---
 
@@ -219,10 +223,13 @@ downstream behavior.
 **When to use**: Long system prompts (500-3000 tokens); prompt is fixed across many
 queries; have fine-tuning access; single-turn interactions.
 
-**Implementation**: Three-stage training: (1) Train universal [AE] trigger for text
-reconstruction, (2) Train prompt-specific [BE] to reconstruct prompt via [AE],
-(3) Distill behavioral alignment via KD from full-prompt teacher. Lambda=0.9 balances
-reconstruction vs behavior.
+**Implementation**: Three-stage training pipeline: (1) Pre-train universal [AE] trigger
+token for text reconstruction across diverse prompts, (2) Train prompt-specific [BE]
+token to reconstruct target prompt via the [AE] decoder, (3) Distill behavioral alignment
+via knowledge distillation from full-prompt teacher. Critical insight: reconstruction
+loss alone fails -- behavior distillation provides the essential learning signal that
+enables downstream task performance. Balance parameter weights behavior distillation
+heavily over reconstruction.
 
 **Tradeoffs**: 3000x prompt compression. 98% downstream performance retained. Requires
 per-prompt training. Single-turn only. 28-59% TTFT reduction depending on prompt length.
@@ -245,6 +252,45 @@ compression prompts lie on same Pareto frontier.
 prompt methods far from theoretical limit (3-11x gap). Verifier-based routing approaches
 theoretical bound but requires accurate verifier.
 
+---
+
+### Reasoning Boundary Framework (RBF) and MARP Prompting
+
+**Mechanism**: Quantifies upper bounds of chain-of-thought performance through
+"Reasoning Boundaries" (RBs) -- fundamental limits on what CoT can achieve for different
+operation types. A "combination law" (weighted harmonic mean) predicts composite task
+performance from individual RBs. MARP (Maximizing operations And Reducing Planning)
+prompting optimizes token efficiency by maximizing local computation per step while
+minimizing global planning steps.
+
+**When to use**: Want principled understanding of CoT limits before compressing;
+designing adaptive prompts; task involves multiple reasoning operations; want to
+maximize work-per-token ratio.
+
+**Implementation**: MARP prompt pattern: "Perform multi-step reasoning. Each step
+should carry out as many basic operations as possible while remaining correct. Minimize
+the number of planning or meta-reasoning steps." The approach consolidates multiple
+simple operations into single steps rather than spreading them across many verbose steps.
+
+**Example contrast**:
+```
+# VERBOSE (many planning steps)
+Step 1: First I need to identify what we're calculating.
+Step 2: The formula is distance = rate × time.
+Step 3: Let me plug in the values: rate = 60, time = 2.5.
+Step 4: Now I multiply: 60 × 2.5 = 150.
+Step 5: The answer is 150 miles.
+
+# MARP (maximized operations per step)
+distance = rate × time = 60 × 2.5 = 150 miles
+```
+
+**Tradeoffs**: Provides theoretical grounding for why compression works (and when it
+fails). Combination law explains why multi-operation tasks degrade faster than single-
+operation tasks under compression. MARP requires model to reliably execute compound
+operations -- smaller models may need more decomposition. Complements Token Complexity
+by explaining *why* certain problems have higher intrinsic complexity.
+
 ## Decision Guidance
 
 **Problem: Output too verbose, simple tasks**
@@ -257,7 +303,8 @@ theoretical bound but requires accurate verifier.
 
 - TALE-EP for prompt-based estimation
 - F-CoT if problems have extractable structure
-- Token complexity framework for understanding limits
+- Token Complexity + RBF framework for understanding limits
+- MARP prompting to maximize operations per step
 
 **Problem: High-volume batch processing**
 
@@ -288,6 +335,7 @@ theoretical bound but requires accurate verifier.
 - F-CoT extraction + CoD reasoning
 - S2A context cleaning + subsequent reasoning technique
 - TALE budget estimation + any constrained generation
+- MARP prompting + Token Complexity analysis (theoretical + practical)
 
 **Avoid combining:**
 

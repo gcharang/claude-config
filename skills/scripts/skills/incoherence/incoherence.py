@@ -32,18 +32,19 @@ No manual file editing required.
 """
 
 import argparse
-import sys
-from typing import Annotated
 
 from skills.lib.workflow.core import (
     Arg,
-    Outcome,
-    StepContext,
     StepDef,
     Workflow,
 )
 from skills.lib.workflow.ast import W, XMLRenderer, render
-from skills.lib.workflow.ast.nodes import TextNode
+from skills.lib.workflow.ast.nodes import (
+    TextNode, StepHeaderNode, CurrentActionNode, InvokeAfterNode,
+)
+from skills.lib.workflow.ast.renderer import (
+    render_step_header, render_current_action, render_invoke_after,
+)
 
 MODULE_PATH = "skills.incoherence.incoherence"
 
@@ -156,26 +157,19 @@ SELECTION RULES:
 """
 
 
-def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Generic handler for output-only steps."""
-    return Outcome.OK, {}
 
 
-def step_survey(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for step 1 (survey)."""
-    return Outcome.OK, {}
-
-
-def format_incoherence_output(step, total, phase, agent_type, guidance):
+def format_incoherence_output(step, phase, agent_type, guidance):
     """Format output using AST builder API."""
     parts = []
     title = f"INCOHERENCE [{phase}] [{agent_type}]"
-    parts.append(render(
-        W.el("step_header", TextNode(title),
-            script="incoherence", step=str(step), total=str(total),
-            phase=phase, agent_type=agent_type
-        ).build(), XMLRenderer()
-    ))
+    parts.append(render_step_header(StepHeaderNode(
+        title=title,
+        script="incoherence",
+        step=str(step),
+        phase=phase,
+        agent_type=agent_type
+    )))
     parts.append("")
 
     if step == 1:
@@ -187,16 +181,15 @@ CRITICAL: All script outputs use XML format. You MUST:
 </xml_format_mandate>""")
         parts.append("")
 
-    action_nodes = [TextNode(a) for a in guidance["actions"]]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append(render_current_action(CurrentActionNode(guidance["actions"])))
     parts.append("")
 
     next_text = guidance.get("next", "")
     if step >= total or "COMPLETE" in next_text.upper():
         parts.append("WORKFLOW COMPLETE - Present report to user.")
     else:
-        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.incoherence.incoherence --step-number {step + 1} --total-steps {total}" />'
-        parts.append(render(W.el("invoke_after", TextNode(next_cmd)).build(), XMLRenderer()))
+        next_cmd = f'python3 -m skills.incoherence.incoherence --step-number {step + 1}'
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
 
     return "\n".join(parts)
 
@@ -238,7 +231,7 @@ STEPS = {
             "",
             "AGENT PROMPT:",
             f"  DIMENSION: {{letter}} - {{name}}. DESCRIPTION: {{from_catalog}}",
-            f'  Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step-number 4 --total-steps 21 --thoughts \\"Dimension: {{{{letter}}}}\\"" />',
+            f'  Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step-number 4 --thoughts \\"Dimension: {{{{letter}}}}\\"" />',
         ],
         "next": "After all agents complete, invoke step 8 with combined findings"
     },
@@ -323,7 +316,7 @@ STEPS = {
             f"  CANDIDATE: {{id}} at {{location}} | DIMENSION: {{letter}} - {{name}}",
             f"  Claimed: {{summary}}",
             f"  Workflow: step 10 (explore) -> step 11 (format)",
-            f'  Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step-number 10 --total-steps 21 --thoughts \\"Verifying: {{{{id}}}}\\"" />',
+            f'  Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step-number 10 --thoughts \\"Verifying: {{{{id}}}}\\"" />',
         ],
         "next": "After all agents complete, invoke step 12 with all verdicts"
     },
@@ -467,7 +460,7 @@ STEPS = {
             f"  TARGET: {{file}} | ISSUES: {{ids}}",
             f"  Per issue: type, severity, sources, analysis, resolution_text",
             f"  Workflow: step 18 (apply) -> step 19 (format)",
-            f'  Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step-number 18 --total-steps 21 --thoughts \\"FILE: {{{{file}}}}\\"" />',
+            f'  Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step-number 18 --thoughts \\"FILE: {{{{file}}}}\\"" />',
             "",
             "Launch ALL wave agents in SINGLE message.",
         ],
@@ -542,177 +535,134 @@ WORKFLOW = Workflow(
         title="Codebase Survey",
         phase="DETECTION",
         actions=get_step_guidance(1, 21)["actions"],
-        handler=step_survey,
-        next={Outcome.OK: "dimension_selection"},
     ),
     StepDef(
         id="dimension_selection",
         title="Dimension Selection",
         phase="DETECTION",
         actions=get_step_guidance(2, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "exploration_dispatch"},
     ),
     StepDef(
         id="exploration_dispatch",
         title="Exploration Dispatch",
         phase="DETECTION",
         actions=get_step_guidance(3, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "broad_sweep"},
     ),
     StepDef(
         id="broad_sweep",
         title="Broad Sweep [SUB-AGENT]",
         phase="DETECTION",
         actions=get_step_guidance(4, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "coverage_check"},
     ),
     StepDef(
         id="coverage_check",
         title="Coverage Check [SUB-AGENT]",
         phase="DETECTION",
         actions=get_step_guidance(5, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "gap_fill"},
     ),
     StepDef(
         id="gap_fill",
         title="Gap-Fill Exploration [SUB-AGENT]",
         phase="DETECTION",
         actions=get_step_guidance(6, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "format_exploration"},
     ),
     StepDef(
         id="format_exploration",
         title="Format Exploration Findings [SUB-AGENT]",
         phase="DETECTION",
         actions=get_step_guidance(7, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "synthesize_candidates"},
     ),
     StepDef(
         id="synthesize_candidates",
         title="Synthesize Candidates",
         phase="DETECTION",
         actions=get_step_guidance(8, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "deep_dive_dispatch"},
     ),
     StepDef(
         id="deep_dive_dispatch",
         title="Deep-Dive Dispatch",
         phase="DETECTION",
         actions=get_step_guidance(9, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "deep_dive_exploration"},
     ),
     StepDef(
         id="deep_dive_exploration",
         title="Deep-Dive Exploration [SUB-AGENT]",
         phase="DETECTION",
         actions=get_step_guidance(10, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "format_results"},
     ),
     StepDef(
         id="format_results",
         title="Format Results [SUB-AGENT]",
         phase="DETECTION",
         actions=get_step_guidance(11, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "verdict_analysis"},
     ),
     StepDef(
         id="verdict_analysis",
         title="Verdict Analysis",
         phase="DETECTION",
         actions=get_step_guidance(12, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "prepare_resolution_batches"},
     ),
     StepDef(
         id="prepare_resolution_batches",
         title="Prepare Resolution Batches",
         phase="RESOLUTION",
         actions=get_step_guidance(13, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "present_batch"},
     ),
     StepDef(
         id="present_batch",
         title="Present Resolution Batch",
         phase="RESOLUTION",
         actions=get_step_guidance(14, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "resolution_loop"},
     ),
     StepDef(
         id="resolution_loop",
         title="Resolution Loop Controller",
         phase="RESOLUTION",
         actions=get_step_guidance(15, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "plan_dispatch"},
     ),
     StepDef(
         id="plan_dispatch",
         title="Plan Dispatch",
         phase="APPLICATION",
         actions=get_step_guidance(16, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "reconcile_dispatch"},
     ),
     StepDef(
         id="reconcile_dispatch",
         title="Reconcile Dispatch",
         phase="APPLICATION",
         actions=get_step_guidance(17, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "reconcile_apply"},
     ),
     StepDef(
         id="reconcile_apply",
         title="Reconcile Apply [SUB-AGENT]",
         phase="APPLICATION",
         actions=get_step_guidance(18, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "reconcile_format"},
     ),
     StepDef(
         id="reconcile_format",
         title="Reconcile Format [SUB-AGENT]",
         phase="APPLICATION",
         actions=get_step_guidance(19, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "reconcile_collect"},
     ),
     StepDef(
         id="reconcile_collect",
         title="Reconcile Collect",
         phase="APPLICATION",
         actions=get_step_guidance(20, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "present_report"},
     ),
     StepDef(
         id="present_report",
         title="Present Report",
         phase="APPLICATION",
         actions=get_step_guidance(21, 21)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: None},
     ),
     description="Multi-phase incoherence detection and resolution workflow",
+    validate=False,
 )
 
 
 def main(
-    step_number: int = None,
-    total_steps: int = None,
-):
+    step_number: int = None):
     """Entry point with parameter annotations for testing framework.
 
     Note: Parameters have defaults because actual values come from argparse.
@@ -720,10 +670,9 @@ def main(
     """
     parser = argparse.ArgumentParser(description="Incoherence Detector")
     parser.add_argument("--step-number", type=int, required=True)
-    parser.add_argument("--total-steps", type=int, required=True)
     args = parser.parse_args()
 
-    guidance = get_step_guidance(args.step_number, args.total_steps)
+    guidance = get_step_guidance(args.step_number, WORKFLOW.total_steps)
 
     # Determine agent type and phase
     # Detection sub-agents: 4-7 (exploration), 10-11 (deep-dive)
@@ -748,7 +697,7 @@ def main(
         phase = "APPLICATION"
 
     output = format_incoherence_output(
-        args.step_number, args.total_steps, phase, agent_type, guidance
+        args.step_number, phase, agent_type, guidance
     )
     print(output)
 

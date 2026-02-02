@@ -17,6 +17,12 @@ import argparse
 import sys
 
 from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
+from skills.lib.workflow.ast.nodes import (
+    StepHeaderNode, CurrentActionNode, InvokeAfterNode,
+)
+from skills.lib.workflow.ast.renderer import (
+    render_step_header, render_current_action, render_invoke_after,
+)
 
 
 MODULE_PATH = "skills.deepthink.subagent"
@@ -420,37 +426,32 @@ def main():
         "verification -> contrast -> failure modes -> synthesis)",
     )
     parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--total-steps", type=int, required=True)
     args = parser.parse_args()
 
     if args.step < 1:
         sys.exit("ERROR: --step must be >= 1")
-    if args.total_steps < 8:
-        sys.exit("ERROR: --total-steps must be >= 8")
-    if args.step > args.total_steps:
-        sys.exit("ERROR: --step cannot exceed --total-steps")
+    if args.step > 8:
+        sys.exit(f"ERROR: --step cannot exceed 8")
 
     step_info = STEPS.get(args.step)
     if not step_info:
         sys.exit(f"ERROR: Invalid step {args.step}")
 
     # Build output
-    is_complete = args.step >= args.total_steps
+    is_complete = args.step >= 8
 
     parts = []
 
     # Step header
-    parts.append(render(
-        W.el("step_header", TextNode(f"DEEPTHINK SUB-AGENT - {step_info['title']}"),
-            script="subagent", step=str(args.step), total=str(args.total_steps)
-        ).build(),
-        XMLRenderer()
-    ))
+    parts.append(render_step_header(StepHeaderNode(
+        title=f"DEEPTHINK SUB-AGENT - {step_info['title']}",
+        script="subagent",
+        step=str(args.step)
+    )))
     parts.append("")
 
     # Actions
-    action_nodes = [TextNode(a) for a in step_info["actions"]]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append(render_current_action(CurrentActionNode(step_info["actions"])))
     parts.append("")
 
     # Invoke after
@@ -458,8 +459,8 @@ def main():
         parts.append("COMPLETE - Return structured output to parent workflow.")
     else:
         next_step = args.step + 1
-        cmd_text = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step {next_step} --total-steps {args.total_steps}" />'
-        parts.append(render(W.el("invoke_after", TextNode(cmd_text)).build(), XMLRenderer()))
+        cmd_text = f'python3 -m {MODULE_PATH} --step {next_step}'
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=cmd_text)))
 
     print("\n".join(parts))
 

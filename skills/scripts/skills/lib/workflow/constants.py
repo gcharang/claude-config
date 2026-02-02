@@ -60,29 +60,87 @@ Write detailed content to FILES, return only status + metadata.
 
 
 # =============================================================================
-# QR Constants
+# State File Constants (JSON migration)
 # =============================================================================
 
-# Empirical observation: QR gains diminish after 4-5 retries.
-# Beyond this limit, user confirmation is required to continue.
-QR_ITERATION_LIMIT = 5
+PLAN_FILE = "plan.json"
 
 
-def get_blocking_severities(iteration: int) -> set[str]:
-    """Return severities that block at given iteration.
+# =============================================================================
+# Question Relay Protocol
+# =============================================================================
 
-    Progressive de-escalation: early iterations enforce all severities,
-    later iterations only enforce critical issues.
+SUB_AGENT_QUESTION_FORMAT = """\
+<question_protocol>
+When you need user clarification to proceed:
 
-    Args:
-        iteration: QR loop iteration count (1-indexed)
+BEFORE YIELDING:
+  1. Save ALL current state to plan.json (context, findings, progress)
+  2. State must be sufficient to continue after reinvocation
 
-    Returns:
-        Set of severity strings that should block at this iteration
-    """
-    if iteration <= 3:
-        return {"MUST", "SHOULD", "COULD"}
-    elif iteration == 4:
-        return {"MUST", "SHOULD"}
-    else:  # iteration >= 5
-        return {"MUST"}
+THEN emit this XML as your ENTIRE response:
+
+<needs_user_input>
+  <question header="SHORT_LABEL" multi_select="false">
+    <text>Your question here?</text>
+    <option label="Choice A">Description of what A means</option>
+    <option label="Choice B">Description of what B means</option>
+  </question>
+</needs_user_input>
+
+EXAMPLE (multiple questions):
+<needs_user_input>
+  <question header="Auth">
+    <text>Which authentication method?</text>
+    <option label="OAuth">Industry standard, supports refresh tokens</option>
+    <option label="JWT">Self-contained, no session storage</option>
+  </question>
+  <question header="Storage">
+    <text>Which storage backend for cache?</text>
+    <option label="Redis">Fast, requires external service</option>
+    <option label="SQLite">Simple, file-based, no dependencies</option>
+  </question>
+</needs_user_input>
+
+CONSTRAINTS:
+  - Max 3 <question> elements
+  - Each question: 2-3 <option> elements
+  - header attribute: max 12 characters
+  - multi_select: "true" or "false" (default false)
+  - This XML is your COMPLETE response -- emit nothing else
+
+WHEN TO USE:
+  - Critical design decisions with competing valid approaches
+  - Missing requirements that cannot be reasonably inferred
+  - Trade-offs where user preference determines outcome
+
+DO NOT USE FOR:
+  - Implementation details with obvious best practices
+  - Questions answerable from context already provided
+  - Stylistic choices within established codebase patterns
+
+WHAT HAPPENS NEXT:
+  After emitting this XML, STOP. The orchestrator will:
+  1. Relay the question to the user
+  2. REINVOKE you fresh (NOT resume) with the user's answer
+  3. Pass the STATE_DIR so you can read plan.json
+
+  When reinvoked, you will receive:
+  - <user_response> with answers to your questions
+  - STATE_DIR pointing to your saved state
+  - Instructions to invoke your script with --step 1
+
+  Your script's step 1 should detect this is a continuation (plan.json exists
+  with your saved progress) and continue from where you left off.
+</question_protocol>
+"""
+
+
+QUESTION_RELAY_HANDLER = """\
+<question_relay_handler>
+If sub-agent output contains <needs_user_input>:
+  1. Parse XML and call AskUserQuestion with extracted fields
+  2. Reinvoke sub-agent FRESH (not resume) with <user_response> and same STATE_DIR
+     Sub-agent reads plan.json to restore state; invoke script --step 1
+</question_relay_handler>
+"""

@@ -175,6 +175,94 @@ jq -c 'select(.type=="user") | .message.content' agent-*.jsonl | head -1
 jq -c 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and .name=="Task") | .input' file.jsonl
 ```
 
+## Conversation Branching
+
+Each `.jsonl` file contains the **entire conversation tree** (all branches), not separate files per branch. Branching is tracked via `parentUuid`:
+
+- When user goes back in history and issues a new command, the new message gets the same `parentUuid` as where they branched from
+- Multiple messages sharing the same `parentUuid` = sibling branches (fork point)
+
+### Detecting Branch Points
+
+```bash
+# Find all fork points (messages with multiple children)
+jq -s 'group_by(.parentUuid) | map(select(length > 1)) | .[] | {
+  parentUuid: .[0].parentUuid,
+  branches: length,
+  timestamps: [.[].timestamp]
+}' file.jsonl
+
+# Show siblings at a known fork point
+FORK_POINT="parent-uuid-here"
+jq -c --arg fp "$FORK_POINT" 'select(.parentUuid==$fp) | {uuid, ts: .timestamp, preview: (.message.content | tostring)[:100]}' file.jsonl
+```
+
+### Extracting a Single Branch
+
+To filter for exactly one branch, find a unique identifier in that branch, then walk the ancestor chain back to root.
+
+**Step 1: Find target message uuid**
+
+```bash
+# By unique content
+TARGET=$(jq -r 'select(.message.content | tostring | contains("unique-identifier")) | .uuid' file.jsonl | tail -1)
+
+# By timestamp prefix
+TARGET=$(jq -r 'select(.timestamp | startswith("2026-01-28T11:23")) | .uuid' file.jsonl | head -1)
+```
+
+**Step 2: Extract branch as JSONL stream**
+
+```bash
+# Outputs one message per line (JSONL), oldest first
+extract_branch() {
+  jq -c -s --arg target "$1" '
+    (map({(.uuid): .}) | add) as $lookup |
+    {chain: [], current: $target} |
+    until(.current == null or ($lookup[.current] | not);
+      ($lookup[.current]) as $msg |
+      .chain += [$msg] |
+      .current = $msg.parentUuid
+    ) |
+    .chain | reverse | .[]
+  ' "$2"
+}
+
+# Usage: extract_branch <target-uuid> <file>
+extract_branch "$TARGET" file.jsonl | jq -s 'length'
+extract_branch "$TARGET" file.jsonl | jq 'select(.type=="user")'
+```
+
+**Step 3: Common branch queries**
+
+```bash
+# Message count
+extract_branch "$TARGET" file.jsonl | jq -s 'length'
+
+# User messages only
+extract_branch "$TARGET" file.jsonl | jq 'select(.type=="user")'
+
+# Tool calls
+extract_branch "$TARGET" file.jsonl | jq 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use") | {name}'
+
+# First and last messages (verify correct branch)
+extract_branch "$TARGET" file.jsonl | jq -s '[.[0], .[-1]] | .[] | {type, ts: .timestamp}'
+```
+
+### Workflow: Pinpoint and Explore
+
+```bash
+# 1. Find conversation file
+FILE=$(grep -l "unique-identifier" "$PROJECT_DIR"/*.jsonl)
+
+# 2. Find matching messages (may show multiple branches)
+jq -c 'select(.message.content | tostring | contains("unique-identifier")) | {uuid, ts: .timestamp, parentUuid}' "$FILE"
+
+# 3. Pick target uuid from desired branch, then query
+TARGET="uuid-from-step-2"
+extract_branch "$TARGET" "$FILE" | jq 'select(.type=="user") | .message.content'
+```
+
 ## Correlation
 
 Subagent files (`agent-{hash}.jsonl`) don't link directly to parent Task calls. To correlate:

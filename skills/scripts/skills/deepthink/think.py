@@ -23,16 +23,14 @@ Two modes: Full (all steps) and Quick (skips 6-11).
 
 import argparse
 import sys
-from typing import Annotated
 
-from skills.lib.workflow.core import (
-    Arg,
-    Outcome,
-    StepContext,
-    StepDef,
-    Workflow,
+from skills.lib.workflow.core import Arg, StepDef, Workflow
+from skills.lib.workflow.ast import (
+    W, XMLRenderer, render,
+    RosterDispatchNode, render_roster_dispatch,
+    StepHeaderNode, CurrentActionNode, InvokeAfterNode,
+    render_step_header, render_current_action, render_invoke_after,
 )
-from skills.lib.workflow.ast import W, XMLRenderer, render
 from skills.lib.workflow.ast.nodes import TextNode
 
 
@@ -62,12 +60,7 @@ def format_step_output(
     parts = []
 
     # Step header
-    parts.append(render(
-        W.el("step_header", TextNode(title),
-            script="deepthink", step=str(step), total=str(total)
-        ).build(),
-        XMLRenderer()
-    ))
+    parts.append(render_step_header(StepHeaderNode(title=title, script="deepthink", step=step)))
     parts.append("")
 
     # XML mandate for step 1 (first step)
@@ -87,13 +80,12 @@ DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
         parts.append("")
 
     # Current action
-    action_nodes = [TextNode(a) for a in actions]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append(render_current_action(CurrentActionNode(actions)))
     parts.append("")
 
     # Invoke after or complete
     if next_command:
-        parts.append(render(W.el("invoke_after", TextNode(next_command)).build(), XMLRenderer()))
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_command)))
     elif step >= total:
         # step is 1-indexed, total is count, so step==total means last step
         parts.append("WORKFLOW COMPLETE - Present results to user.")
@@ -200,7 +192,42 @@ STEPS = {
             "",
             "DIFFICULTY ANALYSIS:",
             "[why this is hard]",
+            "",
+            "ASSUMPTIONS:",
+            "- [statement] | TYPE: [BLOCKING/MATERIAL/DEFAULT] | VERIFIED: [yes/no/needs-user]",
             "```",
+            "",
+            "PART E - ASSUMPTIONS:",
+            "  Identify assumptions about problem scope, interpretation, or constraints.",
+            "  For EACH assumption:",
+            "",
+            "  1. STATEMENT: What is being assumed",
+            "  2. TYPE: Classify using this decision tree:",
+            "     - Is analysis MEANINGLESS without resolving this? -> BLOCKING",
+            "     - Would the CONCLUSION change significantly if wrong? -> MATERIAL",
+            "     - Is this a REASONABLE DEFAULT most users would accept? -> DEFAULT",
+            "",
+            "  3. VERIFICATION: Can tools confirm this?",
+            "     If verifiable: Use Read/Glob/Grep NOW. Document result.",
+            "     If not verifiable: Note 'needs user input'",
+            "",
+            "  <assumption_examples>",
+            "  BLOCKING: 'Which codebase?' (cannot proceed without answer)",
+            "  MATERIAL: 'Assuming Python 3.9+' (affects implementation choices)",
+            "  DEFAULT:  'Standard library conventions' (reasonable, override later)",
+            "  </assumption_examples>",
+            "",
+            "  <blocking_action>",
+            "  If ANY assumption is BLOCKING and unverifiable:",
+            "  Use AskUserQuestion IMMEDIATELY with:",
+            "    - question: Clear question about the blocking assumption",
+            "    - header: Short label (max 12 chars)",
+            "    - options: 2-4 choices (likely default first with '(Recommended)')",
+            "  DO NOT proceed to Step 3 until resolved.",
+            "  </blocking_action>",
+            "",
+            "  Accumulate MATERIAL assumptions for checkpoint in Step 5.",
+            "  State DEFAULT assumptions explicitly but proceed.",
         ],
     },
     3: {
@@ -332,7 +359,55 @@ STEPS = {
             "",
             "ANTICIPATED CHALLENGES:",
             "- [challenge]",
+            "",
+            "ASSUMPTION CHECKPOINT:",
+            "Verified: [tool-confirmed assumptions]",
+            "User-confirmed: [AskUserQuestion responses]",
+            "Defaults: [stated assumptions, no explicit confirmation]",
             "```",
+            "",
+            "PART E - ASSUMPTION CHECKPOINT:",
+            "  Before analysis, resolve accumulated assumptions from Steps 1-5.",
+            "",
+            "  VERIFICATION PASS:",
+            "  For each MATERIAL assumption:",
+            "  1. Attempt tool-based verification:",
+            "     - Codebase: Glob/Grep/Read for evidence",
+            "     - Documentation: README, config files, existing implementations",
+            "     - Conversation: Re-scan for user statements that resolve it",
+            "  2. Document: ASSUMPTION | METHOD | RESULT (verified/refuted/inconclusive)",
+            "",
+            "  <verification_example>",
+            "  ASSUMPTION: 'Target is Python 3.9+'",
+            "  METHOD: Read pyproject.toml",
+            "  RESULT: Verified - python = '^3.9'",
+            "  </verification_example>",
+            "",
+            "  UNRESOLVED MATERIAL ASSUMPTIONS:",
+            "  If MATERIAL assumptions remain unverified after tool verification:",
+            "",
+            "  <material_batch_action>",
+            "  Batch into AskUserQuestion (max 4 questions):",
+            "    questions: [",
+            "      {",
+            "        question: 'What is [specific assumption]?',",
+            "        header: '[short label]',",
+            "        options: [",
+            "          {label: '[default] (Recommended)', description: '[why reasonable]'},",
+            "          {label: '[alternative]', description: '[when to choose]'}",
+            "        ],",
+            "        multiSelect: false",
+            "      }",
+            "    ]",
+            "  Wait for response before proceeding.",
+            "  If >4 unresolved: prioritize by impact, carry rest as stated defaults.",
+            "  </material_batch_action>",
+            "",
+            "  CARRYING FORWARD:",
+            "  List all assumptions entering analysis phase:",
+            "  - VERIFIED: [tool-confirmed]",
+            "  - USER-CONFIRMED: [from AskUserQuestion]",
+            "  - DEFAULTS: [stated, no explicit confirmation needed]",
         ],
     },
     6: {
@@ -615,52 +690,58 @@ STEPS = {
 
 
 def get_dispatch_actions() -> list[str]:
-    """Generate dispatch actions for Step 9."""
-    invoke_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {SUBAGENT_MODULE_PATH} --step 1 --total-steps 8" />'
+    """Generate dispatch actions for Step 9.
 
-    # Build parallel dispatch manually
-    dispatch_lines = [
-        '<parallel_dispatch agent="general-purpose">',
-        '  <instruction>',
-        '    Launch ALL sub-agents from FINAL SUB-AGENT DEFINITIONS (Step 8).',
-        '    Use a SINGLE message with multiple Task tool calls.',
-        '  </instruction>',
-        '',
-        '  <model_selection>',
-        '    Use SONNET (default) for all agents.',
-        '    These require nuanced reasoning - do not downgrade to haiku.',
-        '  </model_selection>',
-        '',
-        '  <shared_context>',
-        '    Each sub-agent receives:',
-        '    - CLARIFIED QUESTION from Step 1',
-        '    - DOMAIN and FIRST PRINCIPLES from Step 2',
-        '    - QUESTION TYPE and EVALUATION CRITERIA from Step 3',
-        '    - KEY ANALOGIES from Step 4',
-        '    - Their specific task definition from Step 8',
-        '  </shared_context>',
-        '',
-        '  <template>',
-        '    Explore this question from the assigned perspective.',
-        '',
-        '    CLARIFIED QUESTION: [from Step 1]',
-        '    DOMAIN: [from Step 2]',
-        '    FIRST PRINCIPLES: [from Step 2]',
-        '    QUESTION TYPE: [from Step 3]',
-        '    EVALUATION CRITERIA: [from Step 3]',
-        '    KEY ANALOGIES: [from Step 4]',
-        '',
-        '    YOUR TASK:',
-        '    - Name: $SUBAGENT_NAME',
-        '    - Strategy: $SUBAGENT_STRATEGY',
-        '    - Task: $SUBAGENT_TASK',
-        '    - Sub-Questions: $SUBAGENT_QUESTIONS',
-        '',
-        f'    Start: {invoke_cmd}',
-        '  </template>',
-        '</parallel_dispatch>',
-    ]
-    return dispatch_lines
+    Subagent tasks are designed at runtime based on question analysis; cannot be templated.
+    Uses RosterDispatchNode pattern: shared context + unique prompts per agent.
+    Actual agent definitions come from FINAL SUB-AGENT DEFINITIONS in Step 8 output.
+    """
+    invoke_cmd = f'python3 -m {SUBAGENT_MODULE_PATH} --step 1'
+
+    # Shared context for all subagents (from prior steps)
+    shared_context = """Each sub-agent receives:
+- CLARIFIED QUESTION from Step 1
+- DOMAIN and FIRST PRINCIPLES from Step 2
+- QUESTION TYPE and EVALUATION CRITERIA from Step 3
+- KEY ANALOGIES from Step 4
+- Their specific task definition from Step 8
+
+AGENT PROMPT STRUCTURE (use for each agent's Task tool prompt):
+
+Explore this question from the assigned perspective.
+
+CLARIFIED QUESTION: [from Step 1]
+DOMAIN: [from Step 2]
+FIRST PRINCIPLES: [from Step 2]
+QUESTION TYPE: [from Step 3]
+EVALUATION CRITERIA: [from Step 3]
+KEY ANALOGIES: [from Step 4]
+
+YOUR TASK:
+- Name: [agent name from Step 8]
+- Strategy: [strategy from Step 8]
+- Task: [task description from Step 8]
+- Sub-Questions: [assigned questions from Step 8]"""
+
+    # Placeholder agents - actual definitions from Step 8 output
+    # RosterDispatchNode pattern: each agent has fundamentally unique task
+    agents = (
+        "[Agent 1: Fill from FINAL SUB-AGENT DEFINITIONS in Step 8]",
+        "[Agent 2: Fill from FINAL SUB-AGENT DEFINITIONS in Step 8]",
+        "[Agent N: Fill from FINAL SUB-AGENT DEFINITIONS in Step 8]",
+    )
+
+    node = RosterDispatchNode(
+        agent_type="general-purpose",
+        shared_context=shared_context,
+        agents=agents,
+        command=invoke_cmd,
+        model="sonnet",
+        instruction="Launch ALL sub-agents from FINAL SUB-AGENT DEFINITIONS (Step 8). Use a SINGLE message with multiple Task tool calls.",
+    )
+
+    # render_roster_dispatch returns string; split to list for format_step_output
+    return render_roster_dispatch(node).split("\n")
 
 
 def get_synthesis_actions_full() -> list[str]:
@@ -918,185 +999,35 @@ def get_completion_message(confidence: str) -> list[str]:
     return base_actions
 
 
-# Workflow handlers
-def step_handler_simple(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Generic handler for output-only steps."""
-    return Outcome.OK, {}
-
-
-def step_planning(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for planning step that branches based on mode."""
-    mode = ctx.workflow_params.get("mode", "full")
-    if mode == "quick":
-        return Outcome.SKIP, {"mode": mode}
-    return Outcome.OK, {"mode": mode}
-
-
-def step_full_only(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for steps that should be skipped in quick mode."""
-    mode = ctx.workflow_params.get("mode", "full")
-    if mode == "quick":
-        return Outcome.SKIP, {}
-    return Outcome.OK, {}
-
-
-def step_initial_synthesis(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for initial synthesis step."""
-    return Outcome.OK, {}
-
-
-def step_iterative_refinement(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for iterative refinement step with confidence loop."""
-    iteration = ctx.step_state.get("iteration", 1)
-    confidence = ctx.workflow_params.get("confidence", "exploring")
-
-    if confidence == "certain" or iteration >= MAX_ITERATIONS:
-        return Outcome.OK, {"iteration": iteration, "confidence": confidence}
-    else:
-        return Outcome.ITERATE, {"iteration": iteration + 1, "confidence": confidence}
-
-
-def step_formatting_output(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for final formatting step."""
-    return Outcome.OK, {}
-
-
-# Workflow definition
+# Workflow definition (metadata only, execution via CLI)
 WORKFLOW = Workflow(
     "deepthink",
-    StepDef(
-        id="context_clarification",
-        title="Context Clarification",
-        actions=STEPS[1]["actions"],
-        handler=step_handler_simple,
-        next={Outcome.OK: "abstraction"},
-    ),
-    StepDef(
-        id="abstraction",
-        title="Abstraction",
-        actions=STEPS[2]["actions"],
-        handler=step_handler_simple,
-        next={Outcome.OK: "characterization"},
-    ),
-    StepDef(
-        id="characterization",
-        title="Characterization",
-        actions=STEPS[3]["actions"],
-        handler=step_handler_simple,
-        next={Outcome.OK: "analogical_recall"},
-    ),
-    StepDef(
-        id="analogical_recall",
-        title="Analogical Recall",
-        actions=STEPS[4]["actions"],
-        handler=step_handler_simple,
-        next={Outcome.OK: "planning"},
-    ),
-    StepDef(
-        id="planning",
-        title="Planning",
-        actions=STEPS[5]["actions"],
-        handler=step_planning,
-        next={
-            Outcome.OK: "subagent_design",
-            Outcome.SKIP: "initial_synthesis",
-        },
-    ),
-    StepDef(
-        id="subagent_design",
-        title="Sub-Agent Design",
-        actions=STEPS[6]["actions"],
-        handler=step_full_only,
-        next={
-            Outcome.OK: "design_critique",
-            Outcome.SKIP: "initial_synthesis",
-        },
-    ),
-    StepDef(
-        id="design_critique",
-        title="Design Critique",
-        actions=STEPS[7]["actions"],
-        handler=step_full_only,
-        next={
-            Outcome.OK: "design_revision",
-            Outcome.SKIP: "initial_synthesis",
-        },
-    ),
-    StepDef(
-        id="design_revision",
-        title="Design Revision",
-        actions=STEPS[8]["actions"],
-        handler=step_full_only,
-        next={
-            Outcome.OK: "dispatch",
-            Outcome.SKIP: "initial_synthesis",
-        },
-    ),
-    StepDef(
-        id="dispatch",
-        title="Dispatch",
-        actions=[],
-        handler=step_full_only,
-        next={
-            Outcome.OK: "quality_gate",
-            Outcome.SKIP: "initial_synthesis",
-        },
-    ),
-    StepDef(
-        id="quality_gate",
-        title="Quality Gate",
-        actions=STEPS[10]["actions"],
-        handler=step_full_only,
-        next={
-            Outcome.OK: "aggregation",
-            Outcome.SKIP: "initial_synthesis",
-        },
-    ),
-    StepDef(
-        id="aggregation",
-        title="Aggregation",
-        actions=STEPS[11]["actions"],
-        handler=step_full_only,
-        next={
-            Outcome.OK: "initial_synthesis",
-            Outcome.SKIP: "initial_synthesis",
-        },
-    ),
-    StepDef(
-        id="initial_synthesis",
-        title="Initial Synthesis",
-        actions=[],
-        handler=step_initial_synthesis,
-        next={Outcome.OK: "iterative_refinement"},
-    ),
-    StepDef(
-        id="iterative_refinement",
-        title="Iterative Refinement",
-        actions=[],
-        handler=step_iterative_refinement,
-        next={
-            Outcome.OK: "formatting_output",
-            Outcome.ITERATE: "iterative_refinement",
-        },
-    ),
-    StepDef(
-        id="formatting_output",
-        title="Formatting & Output",
-        actions=[],
-        handler=step_formatting_output,
-        next={Outcome.OK: None},
-    ),
+    StepDef(id="context_clarification", title="Context Clarification", actions=STEPS[1]["actions"]),
+    StepDef(id="abstraction", title="Abstraction", actions=STEPS[2]["actions"]),
+    StepDef(id="characterization", title="Characterization", actions=STEPS[3]["actions"]),
+    StepDef(id="analogical_recall", title="Analogical Recall", actions=STEPS[4]["actions"]),
+    StepDef(id="planning", title="Planning", actions=STEPS[5]["actions"]),
+    StepDef(id="subagent_design", title="Sub-Agent Design", actions=STEPS[6]["actions"]),
+    StepDef(id="design_critique", title="Design Critique", actions=STEPS[7]["actions"]),
+    StepDef(id="design_revision", title="Design Revision", actions=STEPS[8]["actions"]),
+    StepDef(id="dispatch", title="Dispatch", actions=[]),
+    StepDef(id="quality_gate", title="Quality Gate", actions=STEPS[10]["actions"]),
+    StepDef(id="aggregation", title="Aggregation", actions=STEPS[11]["actions"]),
+    StepDef(id="initial_synthesis", title="Initial Synthesis", actions=[]),
+    StepDef(id="iterative_refinement", title="Iterative Refinement", actions=[]),
+    StepDef(id="formatting_output", title="Formatting & Output", actions=[]),
     description="Structured reasoning for open-ended analytical questions",
+    validate=False,  # Validation simplified, no longer checks transitions
 )
 
 
 def get_step_1_output(args, step_info):
     """Handle Step 1: Context Clarification."""
     actions = list(step_info.get("actions", []))
-    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 2 --total-steps {args.total_steps}" />'
+    next_cmd = f"python3 -m {MODULE_PATH} --step 2"
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=next_cmd,
@@ -1107,10 +1038,10 @@ def get_step_1_output(args, step_info):
 def get_step_2_output(args, step_info):
     """Handle Step 2: Abstraction."""
     actions = list(step_info.get("actions", []))
-    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 3 --total-steps {args.total_steps}" />'
+    next_cmd = f"python3 -m {MODULE_PATH} --step 3"
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=next_cmd,
@@ -1120,10 +1051,10 @@ def get_step_2_output(args, step_info):
 def get_step_3_output(args, step_info):
     """Handle Step 3: Characterization."""
     actions = list(step_info.get("actions", []))
-    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 4 --total-steps {args.total_steps}" />'
+    next_cmd = f"python3 -m {MODULE_PATH} --step 4"
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=next_cmd,
@@ -1133,10 +1064,10 @@ def get_step_3_output(args, step_info):
 def get_step_4_output(args, step_info):
     """Handle Step 4: Analogical Recall."""
     actions = list(step_info.get("actions", []))
-    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 5 --total-steps {args.total_steps}" />'
+    next_cmd = f"python3 -m {MODULE_PATH} --step 5"
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=next_cmd,
@@ -1153,12 +1084,12 @@ def get_step_5_output(args, step_info):
         "</mode_branch>",
     ]
 
-    next_cmd_full = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 6 --total-steps {args.total_steps} --mode full" />'
-    next_cmd_quick = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 12 --total-steps {args.total_steps} --mode quick" />'
+    next_cmd_full = f"python3 -m {MODULE_PATH} --step 6 --mode full"
+    next_cmd_quick = f"python3 -m {MODULE_PATH} --step 12 --mode quick"
 
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=f"If FULL: {next_cmd_full}\nIf QUICK: {next_cmd_quick}",
@@ -1168,10 +1099,10 @@ def get_step_5_output(args, step_info):
 def get_step_6_output(args, step_info):
     """Handle Step 6: Sub-Agent Design."""
     actions = list(step_info.get("actions", []))
-    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 7 --total-steps {args.total_steps} --mode {args.mode}" />'
+    next_cmd = f"python3 -m {MODULE_PATH} --step 7 --mode {args.mode}"
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=next_cmd,
@@ -1181,10 +1112,10 @@ def get_step_6_output(args, step_info):
 def get_step_7_output(args, step_info):
     """Handle Step 7: Design Critique."""
     actions = list(step_info.get("actions", []))
-    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 8 --total-steps {args.total_steps} --mode {args.mode}" />'
+    next_cmd = f"python3 -m {MODULE_PATH} --step 8 --mode {args.mode}"
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=next_cmd,
@@ -1194,10 +1125,10 @@ def get_step_7_output(args, step_info):
 def get_step_8_output(args, step_info):
     """Handle Step 8: Design Revision."""
     actions = list(step_info.get("actions", []))
-    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 9 --total-steps {args.total_steps} --mode {args.mode}" />'
+    next_cmd = f"python3 -m {MODULE_PATH} --step 9 --mode {args.mode}"
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=next_cmd,
@@ -1207,10 +1138,10 @@ def get_step_8_output(args, step_info):
 def get_step_9_output(args, step_info):
     """Handle Step 9: Dispatch."""
     actions = get_dispatch_actions()
-    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 10 --total-steps {args.total_steps} --mode {args.mode}" />'
+    next_cmd = f"python3 -m {MODULE_PATH} --step 10 --mode {args.mode}"
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=next_cmd,
@@ -1220,10 +1151,10 @@ def get_step_9_output(args, step_info):
 def get_step_10_output(args, step_info):
     """Handle Step 10: Quality Gate."""
     actions = list(step_info.get("actions", []))
-    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 11 --total-steps {args.total_steps} --mode {args.mode}" />'
+    next_cmd = f"python3 -m {MODULE_PATH} --step 11 --mode {args.mode}"
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=next_cmd,
@@ -1233,10 +1164,10 @@ def get_step_10_output(args, step_info):
 def get_step_11_output(args, step_info):
     """Handle Step 11: Aggregation."""
     actions = list(step_info.get("actions", []))
-    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 12 --total-steps {args.total_steps} --mode {args.mode}" />'
+    next_cmd = f"python3 -m {MODULE_PATH} --step 12 --mode {args.mode}"
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=next_cmd,
@@ -1250,10 +1181,10 @@ def get_step_12_output(args, step_info):
     else:
         actions = get_synthesis_actions_full()
 
-    next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 13 --total-steps {args.total_steps} --confidence <your_confidence> --iteration 1 --mode {args.mode}" />'
+    next_cmd = f"python3 -m {MODULE_PATH} --step 13 --confidence <your_confidence> --iteration 1 --mode {args.mode}"
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=next_cmd,
@@ -1265,15 +1196,15 @@ def get_step_13_output(args, step_info):
     actions = get_refinement_actions(args.iteration)
 
     if args.confidence == "certain" or args.iteration >= MAX_ITERATIONS:
-        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 14 --total-steps {args.total_steps} --confidence {args.confidence} --mode {args.mode}" />'
+        next_cmd = f"python3 -m {MODULE_PATH} --step 14 --confidence {args.confidence} --mode {args.mode}"
         title = f"DEEPTHINK - {step_info['title']} (Iteration {args.iteration}) -> Complete"
     else:
-        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 13 --total-steps {args.total_steps} --confidence <your_confidence> --iteration {args.iteration + 1} --mode {args.mode}" />'
+        next_cmd = f"python3 -m {MODULE_PATH} --step 13 --confidence <your_confidence> --iteration {args.iteration + 1} --mode {args.mode}"
         title = f"DEEPTHINK - {step_info['title']} (Iteration {args.iteration})"
 
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=title,
         actions=actions,
         next_command=next_cmd,
@@ -1285,7 +1216,7 @@ def get_step_14_output(args, step_info):
     actions = get_completion_message(args.confidence)
     return format_step_output(
         step=args.step,
-        total=args.total_steps,
+        total=WORKFLOW.total_steps,
         title=f"DEEPTHINK - {step_info['title']}",
         actions=actions,
         next_command=None,
@@ -1311,12 +1242,7 @@ STEP_HANDLERS = {
 
 
 def main(
-    step: int = None,
-    total_steps: int = None,
-    confidence: str | None = None,
-    iteration: int | None = None,
-    mode: str | None = None,
-):
+    step: int = None):
     """Entry point with parameter annotations for testing framework.
 
     Note: Parameters have defaults because actual values come from argparse.
@@ -1327,7 +1253,6 @@ def main(
         epilog="Steps: 1-14 (Full mode) or 1-5,12-14 (Quick mode)",
     )
     parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--total-steps", type=int, required=True)
     parser.add_argument(
         "--confidence",
         type=str,
@@ -1352,8 +1277,6 @@ def main(
 
     if args.step < 1:
         sys.exit("ERROR: --step must be >= 1")
-    if args.total_steps != 14:
-        sys.exit("ERROR: --total-steps must be 14 (steps 1-14)")
     if args.step > 14:
         sys.exit("ERROR: --step cannot exceed 14")
 

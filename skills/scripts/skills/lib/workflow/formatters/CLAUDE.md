@@ -1,12 +1,11 @@
 # formatters/
 
-Output formatters for workflow step rendering.
+Re-exports from ast/ module for backwards compatibility. Use ast/ directly for new code.
 
 ## Files
 
-| File          | What                                | When to read                                         |
-| ------------- | ----------------------------------- | ---------------------------------------------------- |
-| `__init__.py` | Package exports                     | Checking available formatters                        |
-| `builder.py`  | Command string builders             | Generating invoke commands, modifying command format |
-| `text.py`     | Plain text step output              | Modifying text output format, adding text sections   |
-| `xml.py`      | XML-tagged step output with prompts | Modifying XML structure, adding prompt sections      |
+| File          | What                    | When to read             |
+| ------------- | ----------------------- | ------------------------ |
+| `__init__.py` | Re-exports from ../ast/ | Checking available types |
+
+See `../ast/CLAUDE.md` for actual implementation.

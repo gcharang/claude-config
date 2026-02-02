@@ -17,7 +17,7 @@ Do NOT use for:
 
 - Problems with verifiable answers (math, coding with test cases)
 - Problems requiring external data retrieval
-- Known problem types (use problem-analysis, solution-design)
+- Known problem types (use problem-analysis)
 
 ## Workflow Phases
 

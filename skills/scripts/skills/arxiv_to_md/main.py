@@ -21,96 +21,27 @@ import argparse
 import sys
 
 from skills.lib.workflow.core import (
-    Outcome,
-    StepContext,
     StepDef,
     Workflow,
 )
 from skills.lib.workflow.ast import W, XMLRenderer, render
-from skills.lib.workflow.ast.nodes import TextNode
+from skills.lib.workflow.ast.nodes import (
+    TextNode, StepHeaderNode, CurrentActionNode, InvokeAfterNode,
+)
+from skills.lib.workflow.ast.renderer import (
+    render_step_header, render_current_action, render_invoke_after,
+)
+from skills.lib.workflow.ast import (
+    TemplateDispatchNode, render_template_dispatch,
+)
 
 
 MODULE_PATH = "skills.arxiv_to_md.main"
 SUBAGENT_MODULE = "skills.arxiv_to_md.sub_agent"
 
 
-def _build_parallel_dispatch_mode1():
-    """Build parallel dispatch for MODE 1 (orchestrator constructs filename)."""
-    invoke_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {SUBAGENT_MODULE} --step 1 --arxiv-id $ARXIV_ID" />'
-    return f"""<parallel_dispatch agent="general-purpose">
-  <instruction>
-    Launch one sub-agent per arXiv ID.
-    Use a SINGLE message with multiple Task tool calls.
-  </instruction>
-
-  <model_selection>
-    Use OPUS (default) for all agents.
-    These markdown files become the scientific basis for downstream work.
-    Cost of error amplifies: subpar markdown -> subpar knowledge.
-  </model_selection>
-
-  <template>
-    Convert this arXiv paper to markdown.
-
-    arXiv ID: $ARXIV_ID
-
-    Start: {invoke_cmd}
-
-    <expected_output>
-    Sub-agent responds with ONLY:
-
-    On success:
-    FILE: <path-to-markdown>
-    TITLE: <paper title>
-    DATE: <YYYY-MM-DD>
-
-    On failure:
-    FAIL: <reason>
-    </expected_output>
-  </template>
-</parallel_dispatch>"""
 
 
-def _build_parallel_dispatch_mode2():
-    """Build parallel dispatch for MODE 2 (orchestrator provides destination filename)."""
-    invoke_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {SUBAGENT_MODULE} --step 1 --arxiv-id $ARXIV_ID --dest-file \'$DEST_FILE\'" />'
-    return f"""<parallel_dispatch agent="general-purpose">
-  <instruction>
-    Launch one sub-agent per arXiv ID.
-    Use a SINGLE message with multiple Task tool calls.
-  </instruction>
-
-  <model_selection>
-    Use OPUS (default) for all agents.
-    These markdown files become the scientific basis for downstream work.
-    Cost of error amplifies: subpar markdown -> subpar knowledge.
-  </model_selection>
-
-  <template>
-    Convert this arXiv paper to markdown.
-
-    arXiv ID: $ARXIV_ID
-    Destination: $DEST_FILE
-
-    Start: {invoke_cmd}
-
-    <expected_output>
-    Sub-agent responds with ONLY:
-
-    On success:
-    FILE: <path-to-markdown>
-
-    On failure:
-    FAIL: <reason>
-    </expected_output>
-  </template>
-</parallel_dispatch>"""
-
-
-# Step handler - all steps are output-only
-def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Generic handler for output-only steps."""
-    return Outcome.OK, {}
 
 
 # Step definitions
@@ -146,7 +77,7 @@ STEP_DISCOVER = StepDef(
         "  - May be multiple IDs (comma-separated, space-separated, or multiple URLs)",
         "",
         "MODE 1 DISPATCH:",
-        _build_parallel_dispatch_mode1(),
+        "PLACEHOLDER_MODE1_DISPATCH",
         "",
         "=" * 60,
         "",
@@ -191,10 +122,8 @@ STEP_DISCOVER = StepDef(
         "             -> dest/2025-01-08 Pruning the Unsurprising.md",
         "",
         "MODE 2 DISPATCH:",
-        _build_parallel_dispatch_mode2(),
+        "PLACEHOLDER_MODE2_DISPATCH",
     ],
-    handler=step_handler,
-    next={Outcome.OK: "wait"},
 )
 
 STEP_WAIT = StepDef(
@@ -232,8 +161,6 @@ STEP_WAIT = StepDef(
         "    reason: PDF-only submission",
         "```",
     ],
-    handler=step_handler,
-    next={Outcome.OK: "finalize"},
 )
 
 STEP_FINALIZE = StepDef(
@@ -304,8 +231,6 @@ STEP_FINALIZE = StepDef(
         "  [FAIL] 2024-12-15 Some Paper -> PDF-only submission (no TeX source)",
         "```",
     ],
-    handler=step_handler,
-    next={Outcome.OK: None},
 )
 
 # Workflow definition
@@ -315,21 +240,22 @@ WORKFLOW = Workflow(
     STEP_WAIT,
     STEP_FINALIZE,
     description="Convert arXiv papers to LLM-consumable markdown",
+    validate=False,
 )
 
 
-def format_output(step: int, total: int, step_def: StepDef, is_step_one: bool = False) -> str:
+def format_output(step: int, step_def: StepDef, is_step_one: bool = False) -> str:
     """Format output using AST builder API."""
     parts = []
 
     # Step header
     title = f"ARXIV-TO-MD - {step_def.title}"
-    parts.append(render(
-        W.el("step_header", TextNode(title),
-            script="arxiv_to_md", step=str(step), total=str(total),
-            phase=step_def.phase
-        ).build(), XMLRenderer()
-    ))
+    parts.append(render_step_header(StepHeaderNode(
+        title=title,
+        script="arxiv_to_md",
+        step=str(step),
+        phase=step_def.phase
+    )))
     parts.append("")
 
     # XML format mandate on first step
@@ -338,21 +264,78 @@ def format_output(step: int, total: int, step_def: StepDef, is_step_one: bool = 
 CRITICAL: All script outputs use XML format. You MUST:
 1. Execute the action in <current_action>
 2. When complete, invoke the exact command in <invoke_after>
-3. DO NOT modify commands. DO NOT skip steps.
+3. DO NOT skip steps.
 </xml_format_mandate>""")
         parts.append("")
 
-    # Current action
-    action_nodes = [TextNode(a) for a in step_def.actions]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    # Current action (with dispatch node substitution)
+    actions = []
+    for action in step_def.actions:
+        if action == "PLACEHOLDER_MODE1_DISPATCH":
+            mode1_template = """Convert this arXiv paper to markdown.
+
+arXiv ID: $ARXIV_ID
+
+Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.arxiv_to_md.sub_agent --step 1 --arxiv-id $ARXIV_ID" />
+
+<expected_output>
+Sub-agent responds with ONLY:
+
+On success:
+FILE: <path-to-markdown>
+TITLE: <paper title>
+DATE: <YYYY-MM-DD>
+
+On failure:
+FAIL: <reason>
+</expected_output>"""
+            mode1_node = TemplateDispatchNode(
+                agent_type="general-purpose",
+                template=mode1_template,
+                targets=({"ARXIV_ID": "EXAMPLE"},),
+                command=f'python3 -m {SUBAGENT_MODULE} --step 1 --arxiv-id $ARXIV_ID',
+                model="opus",
+                instruction="Launch one sub-agent per arXiv ID.\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge."
+            )
+            actions.append(render_template_dispatch(mode1_node))
+        elif action == "PLACEHOLDER_MODE2_DISPATCH":
+            mode2_template = """Convert this arXiv paper to markdown.
+
+arXiv ID: $ARXIV_ID
+Destination: $DEST_FILE
+
+Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.arxiv_to_md.sub_agent --step 1 --arxiv-id $ARXIV_ID --dest-file '$DEST_FILE'" />
+
+<expected_output>
+Sub-agent responds with ONLY:
+
+On success:
+FILE: <path-to-markdown>
+
+On failure:
+FAIL: <reason>
+</expected_output>"""
+            mode2_node = TemplateDispatchNode(
+                agent_type="general-purpose",
+                template=mode2_template,
+                targets=({"ARXIV_ID": "EXAMPLE", "DEST_FILE": "EXAMPLE"},),
+                command=f'python3 -m {SUBAGENT_MODULE} --step 1 --arxiv-id $ARXIV_ID --dest-file \'$DEST_FILE\'',
+                model="opus",
+                instruction="Launch one sub-agent per arXiv ID.\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge."
+            )
+            actions.append(render_template_dispatch(mode2_node))
+        else:
+            actions.append(action)
+
+    parts.append(render_current_action(CurrentActionNode(actions)))
     parts.append("")
 
     # Next step or completion
-    next_step_id = step_def.next.get(Outcome.OK)
-    if next_step_id is not None:
+    total_steps = 3
+    if step < total_steps:
         next_step = step + 1
-        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step {next_step} --total-steps {total}" />'
-        parts.append(render(W.el("invoke_after", TextNode(next_cmd)).build(), XMLRenderer()))
+        next_cmd = f'python3 -m {MODULE_PATH} --step {next_step}'
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
     else:
         parts.append("WORKFLOW COMPLETE - Present results to user.")
 
@@ -365,10 +348,9 @@ def main():
         epilog="Steps: discover (1) -> wait (2) -> finalize (3)",
     )
     parser.add_argument("--step", type=int, required=True, help="Current step (1-3)")
-    parser.add_argument("--total-steps", type=int, default=3, help="Total steps (default: 3)")
     args = parser.parse_args()
 
-    total = args.total_steps
+    total = WORKFLOW.total_steps
 
     if args.step < 1 or args.step > total:
         sys.exit(f"ERROR: --step must be 1-{total}, got {args.step}")
@@ -378,7 +360,7 @@ def main():
     step_id = step_ids[args.step - 1]
     step_def = WORKFLOW.steps[step_id]
 
-    output = format_output(args.step, total, step_def, is_step_one=(args.step == 1))
+    output = format_output(args.step, step_def, is_step_one=(args.step == 1))
     print(output)
 
 

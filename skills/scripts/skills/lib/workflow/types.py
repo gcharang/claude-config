@@ -53,6 +53,7 @@ class AgentRole(Enum):
     TECHNICAL_WRITER = "technical-writer"
     EXPLORE = "explore"
     GENERAL_PURPOSE = "general-purpose"
+    ARCHITECT = "architect"
 
 
 class Confidence(Enum):
@@ -63,33 +64,6 @@ class Confidence(Enum):
     MEDIUM = "medium"
     HIGH = "high"
     CERTAIN = "certain"
-
-
-class QRStatus(Enum):
-    """Quality Review result status."""
-
-    PASS = "pass"
-    FAIL = "fail"
-
-    def __bool__(self) -> bool:
-        """Allow if qr_status: checks (PASS is truthy, FAIL is falsy for gating)."""
-        return self == QRStatus.PASS
-
-
-class LoopState(Enum):
-    """Explicit state machine for QR iteration loops.
-
-    QRState tracks loop progression through three phases: INITIAL (first review),
-    RETRY (fixing issues from previous iteration), COMPLETE (passed review).
-
-    Enum makes state transitions explicit (qr.transition(status)) and enables
-    property-based testing of invariants (INITIAL.iteration == 1, RETRY implies
-    previous failure).
-    """
-
-    INITIAL = "initial"
-    RETRY = "retry"
-    COMPLETE = "complete"
 
 
 # =============================================================================
@@ -198,97 +172,8 @@ class Dispatch:
 
     agent: AgentRole
     script: str
-    total_steps: int
     context_vars: dict[str, str] = field(default_factory=dict)
     free_form: bool = False
-
-
-@dataclass
-class QRState:
-    """Quality Review loop state machine.
-
-    Tracks progression through QR gates using explicit state enum. The state
-    machine has three phases: INITIAL (first review attempt), RETRY (fixing
-    issues from previous iteration), and COMPLETE (passed review).
-
-    Attributes:
-        iteration: Current loop count (increments on each retry)
-        state: Current phase in the review cycle
-        status: QR result (PASS/FAIL) from most recent review
-    """
-
-    iteration: int = 1
-    state: LoopState = LoopState.INITIAL
-    status: QRStatus | None = None
-
-    @property
-    def failed(self) -> bool:
-        """Check if state indicates retry.
-
-        Backward compatibility property for call sites checking retry state.
-        Provides compatibility bridge during migration.
-        """
-        return self.state == LoopState.RETRY
-
-    @property
-    def passed(self) -> bool:
-        """Check if QR passed."""
-        return self.status == QRStatus.PASS
-
-    def transition(self, status: QRStatus) -> None:
-        """Transition state based on QR result.
-
-        State machine transitions:
-        - PASS -> COMPLETE (terminal state)
-        - FAIL -> RETRY (increments iteration counter)
-
-        Iteration counter tracks retry depth for severity threshold decisions.
-        """
-        if status == QRStatus.PASS:
-            self.state = LoopState.COMPLETE
-        else:
-            self.state = LoopState.RETRY
-            self.iteration += 1
-
-
-@dataclass
-class GateConfig:
-    """Configuration for a QR gate step.
-
-    self_fix controls routing: True -> agent fixes issues automatically,
-    False -> manual intervention required.
-    """
-
-    qr_name: str
-    work_step: int
-    pass_step: int | None
-    pass_message: str
-    self_fix: bool
-    fix_target: AgentRole | None = None
-
-
-# DEPRECATED: Use StepDef from core.py for new skills
-@dataclass
-class Step:
-    """Step configuration for workflow."""
-
-    title: str
-    actions: list[str]
-    routing: Routing = field(default_factory=LinearRouting)
-    dispatch: Dispatch | None = None
-    gate: GateConfig | None = None
-    phase: str | None = None
-
-
-# DEPRECATED: Use Workflow from core.py for new skills
-@dataclass
-class WorkflowDefinition:
-    """Complete workflow definition."""
-
-    name: str
-    script: str
-    steps: dict[int, Step]
-    description: str = ""
 
 
 # =============================================================================
@@ -317,7 +202,7 @@ StepHandler: TypeAlias = Callable[..., dict | StepGuidance]
 
 Args:
     step: Current step number
-    total_steps: Total steps in workflow
+    module_path: Module path for invocation
     **kwargs: Additional context (qr_iteration, qr_fail, etc.)
 
 Returns:
@@ -349,23 +234,22 @@ class BoundedInt:
         return iter(range(self.lo, self.hi + 1))
 
 
-@dataclass(frozen=True)
-class ChoiceSet:
-    """Discrete choice domain."""
-
-    choices: tuple
-
-    def __iter__(self):
-        """Yield all choices in order."""
-        return iter(self.choices)
+# =============================================================================
+# Question Relay Types
+# =============================================================================
 
 
 @dataclass(frozen=True)
-class Constant:
-    """Single-value domain."""
+class QuestionOption:
+    """Single option for a user input question."""
+    label: str
+    description: str
 
-    value: Any
 
-    def __iter__(self):
-        """Yield single value for uniform Cartesian product interface."""
-        return iter([self.value])
+@dataclass(frozen=True)
+class UserInputResponse:
+    """User's answer passed back to resumed sub-agent."""
+    question_id: str
+    selected: str
+
+

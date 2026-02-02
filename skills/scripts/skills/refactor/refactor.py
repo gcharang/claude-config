@@ -14,6 +14,7 @@ Six-phase workflow:
 import argparse
 import random
 import re
+import shlex
 import sys
 from enum import Enum
 from pathlib import Path
@@ -21,12 +22,15 @@ from typing import Annotated
 
 from skills.lib.workflow.core import (
     Arg,
-    Outcome,
-    StepContext,
     StepDef,
     Workflow,
 )
-from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
+from skills.lib.workflow.ast import (
+    W, XMLRenderer, render, TextNode, FileContentNode,
+    TemplateDispatchNode, render_template_dispatch,
+    StepHeaderNode, CurrentActionNode, InvokeAfterNode,
+    render_step_header, render_current_action, render_invoke_after,
+)
 from skills.lib.workflow.types import FlatCommand
 
 
@@ -197,70 +201,49 @@ def select_targets(n: int = DEFAULT_CATEGORY_COUNT, mode_filter: str = "both") -
 # =============================================================================
 
 
-def build_explore_dispatch(n: int = DEFAULT_CATEGORY_COUNT, mode_filter: str = "both") -> str:
-    """Build parallel dispatch block for explore agents."""
+def build_explore_dispatch(n: int = DEFAULT_CATEGORY_COUNT, mode_filter: str = "both", scope: str | None = None) -> str:
+    """Build parallel dispatch block for explore agents.
+
+    Each category uses the same 5-step explore workflow; only the category reference differs.
+    Uses TemplateDispatchNode for SIMD-style dispatch: single instruction, multiple data.
+    """
     selected = select_targets(n, mode_filter)
-    targets = [
+
+    # Build targets with substitution variables
+    # Template uses: $ref, $name, $mode
+    targets = tuple(
         {
             "ref": f"{t['file']}:{t['start_line']}-{t['end_line']}",
             "name": t["name"],
-            "mode": t["mode"]
+            "mode": t["mode"],
         }
         for t in selected
-    ]
-    invoke_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {EXPLORE_MODULE_PATH} --step 1 --total-steps 5 --category $CATEGORY_REF --mode $MODE" />'
+    )
 
-    lines = [f'<parallel_dispatch agent="Explore" count="{len(targets)}">']
+    # Scope propagation to explore agents
+    scope_arg = f" --scope {shlex.quote(scope)}" if scope else ""
 
-    lines.append("  <instruction>")
-    instruction = f"Launch {len(selected)} general-purpose sub-agents for code smell exploration."
-    lines.append(f"    {instruction}")
-    lines.append("  </instruction>")
-    lines.append("")
-    lines.append("  <execution_constraint type=\"MANDATORY_PARALLEL\">")
-    lines.append(f"    You MUST dispatch ALL {len(selected)} agents in ONE assistant message.")
-    lines.append("    Your message must contain exactly N Task tool calls, issued together.")
-    lines.append("")
-    lines.append("    CORRECT (single message, multiple tools):")
-    lines.append("      [You send ONE message containing Task call 1, Task call 2, ... Task call N]")
-    lines.append("")
-    lines.append("    WRONG (sequential):")
-    lines.append("      [You send message with Task call 1]")
-    lines.append("      [You wait for result]")
-    lines.append("      [You send message with Task call 2]")
-    lines.append("")
-    lines.append("    FORBIDDEN: Waiting for any agent before dispatching the next.")
-    lines.append("    FORBIDDEN: Using 'Explore' subagent_type. Use 'general-purpose'.")
-    lines.append("  </execution_constraint>")
-    lines.append("")
+    # Template prompt with $var placeholders
+    template = """Explore the codebase for this code smell.
 
-    lines.append("  <model_selection>")
-    lines.append("    Use HAIKU (default) for all agents.")
-    lines.append("    Each agent has a narrow, well-defined task - cheap models work well.")
-    lines.append("  </model_selection>")
-    lines.append("")
+CATEGORY: $name
+MODE: $mode
 
-    lines.append("  <targets>")
-    for t in targets:
-        ref = t.get("ref", "")
-        name = t.get("name", "")
-        mode = t.get("mode", "code")
-        lines.append(f'    <target ref="{ref}" mode="{mode}">{name}</target>')
-    lines.append("  </targets>")
-    lines.append("")
+Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m """ + EXPLORE_MODULE_PATH + """ --step 1 --category $ref --mode $mode""" + scope_arg + """" />"""
 
-    lines.append("  <template>")
-    lines.append("    Explore the codebase for this code smell.")
-    lines.append("")
-    lines.append("    CATEGORY: $TARGET_NAME")
-    lines.append("    MODE: $MODE")
-    lines.append("")
-    lines.append(f"    Start: {invoke_cmd}")
-    lines.append("  </template>")
+    # Command template (also has $var placeholders)
+    command = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {EXPLORE_MODULE_PATH} --step 1 --category $ref --mode $mode{scope_arg}" />'
 
-    lines.append("</parallel_dispatch>")
+    node = TemplateDispatchNode(
+        agent_type="general-purpose",
+        template=template,
+        targets=targets,
+        command=command,
+        model="haiku",
+        instruction=f"Launch {len(selected)} general-purpose sub-agents for code smell exploration.",
+    )
 
-    return "\n".join(lines)
+    return render_template_dispatch(node)
 
 
 def format_expected_output(sections: dict[str, str]) -> str:
@@ -283,17 +266,25 @@ def format_expected_output(sections: dict[str, str]) -> str:
 STEPS = {
     1: {
         "title": "Mode Selection",
-        "brief": "Analyze user request to determine design/code/both",
+        "brief": "Analyze user request to determine design/code/both/custom",
     },
     2: {
-        "title": "Dispatch",
-        "brief": "Launch parallel Explore agents (one per randomly selected target)",
+        "title": "Dispatch / Category Selection",
+        "brief": "Non-custom: dispatch explore agents. Custom: LLM selects categories.",
     },
     3: {
+        "title": "Category Verification",
+        "brief": "Custom mode only: verify category selections before dispatch",
+    },
+    4: {
+        "title": "Dispatch / Triage",
+        "brief": "Custom: dispatch verified categories. Non-custom: triage findings.",
+    },
+    5: {
         "title": "Triage",
         "brief": "Structure smell findings with IDs for synthesis",
         "actions": [
-            "REVIEW all smell_report outputs from Step 1.",
+            "REVIEW all smell_report outputs from explore agents.",
             "",
             "STRUCTURE each finding as a smell object with unique ID:",
             "",
@@ -307,7 +298,41 @@ STEPS = {
             '      "location": "file:line-range",',
             '      "description": "issue description from finding",',
             '      "severity": "high|medium|low",',
-            '      "evidence": "quoted code snippet"',
+            # WHY evidence is split into code/line_count fields:
+            #
+            # Code snippets have variable token cost:
+            #   - 2-line snippet: ~30 tokens
+            #   - 5-line snippet: ~75 tokens
+            #
+            # Storing line_count separately enables:
+            #   - Downstream budget estimation without parsing code
+            #   - Filtering decisions based on evidence completeness
+            #   - Verification that quoted code matches claimed length
+            #
+            # The alternative (opaque string field) makes it impossible to assess
+            # evidence completeness without tokenizing the code.
+            #
+            # WHY occurrences is an object with count/verification/locations:
+            #
+            # Separate fields support different use cases:
+            #   - count: Used for severity ranking (high occurrence = high impact)
+            #   - verification: Used for falsifiability (reviewer can reproduce)
+            #   - locations: Used for proportionality (affected files)
+            #
+            # Collapsing these into a string loses structure needed for:
+            #   - Automated verification (cannot extract command)
+            #   - Evidence selection (cannot compare counts numerically)
+            #   - Scope analysis (cannot count affected files)
+            '      "evidence": {',
+            '        "code": "quoted code snippet (2-5 lines, preserve indentation)",',
+            '        "line_count": N',
+            '      },',
+            '      "impact": "WHY fix this - copied from <impact> tag",',
+            '      "occurrences": {',
+            '        "count": N,',
+            '        "verification": "grep command to reproduce count",',
+            '        "locations": ["file:line", "file:line", "..."]',
+            '      }',
             "    }",
             "  ],",
             '  "smell_count": N,',
@@ -315,59 +340,49 @@ STEPS = {
             "}",
             "```",
             "",
+            # WHY evidence validation happens at Triage rather than Cluster:
+            #
+            # Triage is the first JSON-producing step. It has:
+            #   - Full smell_report XML (structured data to validate against)
+            #   - Direct access to evidence fields (no smell ID lookup)
+            #   - Ability to reject before IDs are assigned (no orphan references)
+            #
+            # If validation deferred to Cluster:
+            #   - Agent sees smell-1, smell-2 IDs without original XML
+            #   - Cannot verify evidence completeness (would need to re-parse reports)
+            #   - Rejection produces smell IDs with no corresponding smells (confusing)
+            #
+            # Validating at Triage means rejected findings never get IDs, never propagate.
+            "EVIDENCE VALIDATION:",
+            "  Before including a smell, verify:",
+            "  1. evidence.code is actual quoted code (not description)",
+            "  2. impact explains consequence (not just restates issue)",
+            "  3. occurrences.count matches locations array length",
+            "  4. occurrences.verification is executable command",
+            "",
+            "  REJECT findings that lack concrete evidence.",
+            "  Quality over quantity.",
+            "",
             "PRESERVE the user's original prompt exactly - it will be used for intent extraction.",
             "",
             "Output the JSON, then proceed to clustering.",
         ],
     },
-    4: {
+    6: {
         "title": "Cluster",
         "brief": "Group smells by shared root cause",
     },
-    5: {
+    7: {
         "title": "Contextualize",
         "brief": "Extract user intent and prioritize issues",
     },
-    6: {
+    8: {
         "title": "Synthesize",
         "brief": "Generate actionable work items",
     },
 }
 
 
-# =============================================================================
-# Step Handlers
-# =============================================================================
-
-
-def step_mode_selection(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for mode selection step - output only."""
-    return Outcome.OK, {}
-
-
-def step_dispatch(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for dispatch step - output only."""
-    return Outcome.OK, {}
-
-
-def step_triage(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for triage step - output only."""
-    return Outcome.OK, {}
-
-
-def step_cluster(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for cluster step - output only."""
-    return Outcome.OK, {}
-
-
-def step_contextualize(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for contextualize step - output only."""
-    return Outcome.OK, {}
-
-
-def step_synthesize(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for synthesize step - output only."""
-    return Outcome.OK, {}
 
 
 # =============================================================================
@@ -381,48 +396,47 @@ WORKFLOW = Workflow(
         id="mode_selection",
         title="Mode Selection",
         actions=[],
-        handler=step_mode_selection,
-        next={Outcome.OK: "dispatch"},
     ),
     StepDef(
         id="dispatch",
-        title="Dispatch",
+        title="Dispatch / Category Selection",
         actions=[
             "IDENTIFY the scope from user's request:",
             "  - Could be: file(s), directory, subsystem, entire codebase",
         ],
-        handler=step_dispatch,
-        next={Outcome.OK: "triage"},
+    ),
+    StepDef(
+        id="verification",
+        title="Category Verification",
+        actions=[],
+    ),
+    StepDef(
+        id="dispatch_or_triage",
+        title="Dispatch / Triage",
+        actions=[],
     ),
     StepDef(
         id="triage",
         title="Triage",
-        actions=STEPS[3]["actions"],
-        handler=step_triage,
-        next={Outcome.OK: "cluster"},
+        actions=STEPS[5]["actions"],
     ),
     StepDef(
         id="cluster",
         title="Cluster",
         actions=[],
-        handler=step_cluster,
-        next={Outcome.OK: "contextualize"},
     ),
     StepDef(
         id="contextualize",
         title="Contextualize",
         actions=[],
-        handler=step_contextualize,
-        next={Outcome.OK: "synthesize"},
     ),
     StepDef(
         id="synthesize",
         title="Synthesize",
         actions=[],
-        handler=step_synthesize,
-        next={Outcome.OK: None},
     ),
     description="Category-based code smell detection and synthesis",
+    validate=False,
 )
 
 
@@ -440,6 +454,36 @@ Given the smells from the previous step, identify which ones share root causes a
 <input>
 Use the smells JSON from Step 2 output above.
 </input>
+
+# WHY evidence quality gate is at Cluster step rather than Triage or Synthesize:
+#
+# Cluster is the LAST step that sees individual smell details.
+# After Cluster, smells are hidden inside issue.smell_ids arrays.
+#
+# Quality gate placement options:
+#   - Triage: Can validate format but not quality (too early to assess impact)
+#   - Cluster: Can assess quality AND reject before evidence is lost
+#   - Contextualize: Can assess quality but smells already clustered (too late)
+#   - Synthesize: Only sees issue IDs, cannot access smell evidence
+#
+# At Cluster, the agent has:
+#   - Full smell objects with evidence (not just IDs)
+#   - Cross-smell context for impact assessment
+#   - Ability to reject AND exclude from clustering (clean propagation)
+#
+# This is the last chance to make evidence-based rejection decisions.
+<evidence_quality_gate>
+BEFORE clustering, validate evidence quality for each smell:
+
+REQUIRED (reject smell if missing):
+  - evidence.code: Actual quoted code (not description)
+  - impact: States consequence (Blocks/Degrades/Risks X)
+  - occurrences.count: Numeric count from Grep
+  - occurrences.verification: Executable command
+
+Move smells failing validation to 'rejected_smells' array with reason.
+These will not be clustered or synthesized into work items.
+</evidence_quality_gate>
 
 <adaptive_analysis>
 Check smell_count from the input:
@@ -473,6 +517,55 @@ Walk through the smells systematically:
 <output_format>
 Output JSON:
 ```json
+# WHY representative_evidence selection uses severity then occurrence count:
+#
+# When clustering smell-1, smell-2, smell-3 into issue-1, which evidence to keep?
+#
+# Options evaluated:
+#   - First smell: Arbitrary, depends on JSON order
+#   - Longest code snippet: Favors verbose over impactful
+#   - Random: Non-deterministic, breaks reproducibility
+#   - Highest severity, then count: Deterministic and prioritizes impact
+#
+# Severity-first rule ensures:
+#   - High-severity evidence surfaces even if rare (count=1 but critical)
+#   - Tie-breaking by count prefers widespread issues over isolated cases
+#   - Selection is deterministic (same smells -> same representative)
+#
+# Example:
+#   smell-A: severity=medium, count=47
+#   smell-B: severity=high, count=3
+#   Representative: smell-B (severity trumps count)
+#
+# WHY total_occurrences is sum across constituent smells:
+#
+# Clustering merges N smells into 1 issue. Options for occurrence count:
+#   - Max: 47 occurrences (largest individual smell)
+#   - Avg: 22 occurrences (mean of constituent smells)
+#   - Sum: 98 occurrences (total across all smells)
+#
+# Sum is correct because:
+#   - Clustered smells represent different manifestations of the SAME root cause
+#   - Fixing the root cause affects ALL occurrences of ALL constituent smells
+#   - Work item scope should reflect total impact, not single-smell impact
+#
+# Example:
+#   smell-A: Missing error handling in HTTP layer (23 occurrences)
+#   smell-B: Missing error handling in DB layer (31 occurrences)
+#   -> Cluster: "Missing error handling" (54 occurrences total)
+#
+# WHY from_smell field stores the source smell ID:
+#
+# When evidence is later questioned, need to trace back to original finding.
+# Without from_smell:
+#   - "Where did this code snippet come from?" -> Cannot answer
+#   - "What was the original severity?" -> Lost after selection
+#   - "Which agent found this?" -> Cannot attribute
+#
+# Storing from_smell enables:
+#   - Auditing evidence selection decisions
+#   - Retrieving full smell details if needed
+#   - Attributing findings to specific exploration modes
 {
   "issues": [
     {
@@ -480,6 +573,14 @@ Output JSON:
       "type": "pattern|cross_cutting|standalone",
       "root_cause": "Description of underlying issue",
       "smell_ids": ["smell-1", "smell-2"],
+      "representative_evidence": {
+        "from_smell": "smell-id of highest severity constituent",
+        "location": "file:line-range",
+        "code": "quoted 2-5 lines",
+        "impact": "Blocks/Degrades/Risks statement",
+        "total_occurrences": N,
+        "verification": "grep command"
+      },
       "abstraction_level": "structural|implementation|surface",
       "scope": "file|module|system",
       "confidence": "STRONG|MODERATE",
@@ -489,6 +590,17 @@ Output JSON:
   "analysis_notes": "Brief clustering rationale"
 }
 ```
+
+EVIDENCE SELECTION FOR CLUSTERED ISSUES:
+  When N smells cluster into 1 issue:
+  - representative_evidence: From highest-severity smell
+  - Tie-breaker: Highest occurrence count
+  - total_occurrences: Sum across constituent smells
+
+REJECTION FEEDBACK:
+  Include rejected_smells array in output:
+  'rejected_smells': [{'smell_id': 'smell-X', 'reason': 'missing impact statement'}]
+  This enables Contextualize to surface rejection count in checkpoint message.
 </output_format>
 
 <edge_cases>
@@ -586,6 +698,30 @@ USE: "Based on 'quick fixes': 7 items match (low complexity - single-file mechan
 <output_format>
 Output JSON:
 ```json
+# WHY representative_evidence is preserved in prioritized_issues:
+#
+# Contextualize makes prioritization decisions (primary/deferred/appendix).
+# Without evidence in output:
+#   - Synthesize step cannot explain WHY issue-1 is primary
+#   - Work items lack justification for their priority
+#   - Reviewers cannot verify that prioritization was evidence-based
+#
+# Preservation means:
+#   - Evidence flows to final work items (no reconstruction needed)
+#   - Prioritization rationale can reference concrete code
+#   - Primary issues can show high-impact evidence inline
+#
+# This is passthrough, not transformation -- evidence shape unchanged.
+#
+# WHY evidence is NOT filtered based on priority status:
+#
+# Tempting to strip evidence from deferred/appendix issues to save tokens.
+# But:
+#   - Deferred issues may become primary if dependencies change
+#   - Appendix issues need evidence for "nice-to-have" justification
+#   - Token cost is low (already paid during Cluster)
+#
+# Premature evidence stripping forces Synthesize to operate without justification.
 {
   "intent": {
     "scope": "...",
@@ -599,6 +735,13 @@ Output JSON:
       "id": "issue-1",
       "status": "primary|deferred|appendix",
       "relevance_rationale": "Why this status",
+      "representative_evidence": {
+        "location": "file:line-range",
+        "code": "quoted code",
+        "impact": "consequence statement",
+        "total_occurrences": N,
+        "verification": "grep command"
+      },
       "relationships": [
         {"type": "obsoletes|requires|enables|conflicts_with|amplifies", "subject": "issue-1", "object": "issue-N", "reason": "..."}
       ]
@@ -710,6 +853,82 @@ Each work item needs:
       Examples: extract method with caller updates, move function between modules
     - high: Architectural scope, design decisions required, module boundary changes
       Examples: introduce abstraction layer, restructure data flow, change API contract
+# WHY evidence_summary is inlined in work items rather than referenced:
+#
+# Current output: "Obsoletes: smell-4, smell-5"
+# Problem: Reviewer must cross-reference smell IDs in JSON to see evidence
+#
+# Inline alternative:
+#   - Evidence appears directly in work item markdown
+#   - No JSON lookup required
+#   - Reviewers see justification immediately
+#
+# This is "denormalization" -- deliberately duplicating data for readability.
+#
+# WHY before_after is required for abstractions but not all changes:
+#
+# Change types requiring before/after:
+#   - Abstractions: Extract function, create interface
+#     (Need: current inline code vs. abstracted form)
+#   - Signature changes: Rename parameters, reorder arguments
+#     (Need: current call sites vs. proposed signatures)
+#   - Code movement: Move to different module, restructure
+#     (Need: current location vs. proposed location)
+#
+# Change types NOT requiring before/after:
+#   - Bug fixes: Add null checks, fix off-by-one
+#     (Evidence code snippet already shows bug)
+#   - Additions: Add missing method, add test coverage
+#     (No "before" code - it does not exist)
+#
+# Before/after is mandatory when the FIX is as important as the PROBLEM.
+# For abstractions, the proposed structure IS the contribution.
+#
+# WHY delta field is required alongside before/after:
+#
+# Showing before/after without explanation:
+#   - Forces reviewer to spot-the-difference
+#   - Leaves intent ambiguous (why THIS refactoring?)
+#   - Hides non-obvious improvements
+#
+# Delta field states:
+#   - What structural change is happening
+#   - Why this change improves on before
+#   - What properties are gained/lost
+#
+# Example:
+#   Before: Inline SQL string in controller
+#   After: Repository method wrapping SQL
+#   Delta: Separates data access from business logic, enables testing without DB
+#
+# The delta captures invisible knowledge that diff alone cannot show.
+#
+# WHY verification command is included in every work item:
+#
+# Work items are executed later, often by different engineers.
+# Without verification command:
+#   - "47 occurrences" is an uncheckable assertion
+#   - Cannot detect scope creep (codebase evolved since scan)
+#   - Cannot verify fix completeness (did we catch all 47?)
+#
+# With verification command:
+#   - Engineer runs grep before starting: "Is scope still accurate?"
+#   - After fix, runs grep again: "Did count drop to 0?"
+#   - If count mismatch, can investigate before committing
+#
+# This makes scope falsifiable rather than aspirational.
+- evidence_summary: Inline evidence supporting this work item (REQUIRED)
+  Format:
+    representative_example:
+      location: file:line-range
+      code: 2-5 lines quoted exactly
+    scope:
+      occurrence_count: Total across codebase
+      verification: Command to reproduce
+    before_after: (REQUIRED for abstractions, signature changes, code movement)
+      before: Current code pattern
+      after: Proposed code pattern
+      delta: What changes and why
 </work_item_requirements>
 
 <example_generation>
@@ -759,11 +978,27 @@ FORMAT:
 
 [1-2 sentences: What this accomplishes and why it matters]
 
-**Obsoletes:** [list items made unnecessary by this work, or "None"]
+**Evidence:**
+```
+// Representative example from [file:line-range]
+[2-5 lines of actual code]
+```
+*Why this matters:* [impact statement from evidence]
+*Scope:* [N occurrences across M files] | Verify: `[grep command]`
+
+[If before_after required:]
+**Proposed Change:**
+```
+// Before
+[current pattern]
+
+// After
+[proposed pattern]
+```
+*Delta:* [what changes and why it improves things]
 
 **Approach:**
 1. [Concrete step with file reference]
-2. [Next step]
 ...
 
 **Verification:**
@@ -811,11 +1046,17 @@ Present the report directly to the user. The report should be immediately action
 # =============================================================================
 
 
-def format_step_1_output(total_steps: int, n: int, info: dict, mode_filter: str) -> str:
-    """Format Step 1: Mode selection output."""
+def format_step_1_output(n: int, info: dict, mode_filter: str, scope: str | None = None) -> str:
+    """Format Step 1: Mode selection output.
+
+    Three outputs from this step:
+    1. MODE: design | code | both | custom
+    2. PROBLEM_STATEMENT: (custom only) User's problem description
+    3. SCOPE: (optional) Filesystem constraint
+    """
     parts = []
 
-    parts.append(render(W.el("step_header", TextNode(info["title"]), script="refactor", step="1", total=str(total_steps)).build(), XMLRenderer()))
+    parts.append(render_step_header(StepHeaderNode(title=info["title"], script="refactor", step=1)))
     parts.append("")
 
     xml_mandate_text = """<xml_format_mandate>
@@ -825,16 +1066,25 @@ CRITICAL: All script outputs use XML format. You MUST:
 2. When complete, invoke the exact command in <invoke_after>
 3. The <next> block re-states the command -- execute it
 4. For branching <invoke_after>, choose based on outcome:
-   - <if_pass>: Use when action succeeded / QR returned PASS
-   - <if_fail>: Use when action failed / QR returned ISSUES
+   - <if_custom>: Use when mode is CUSTOM
+   - <if_not_custom>: Use when mode is design/code/both
 
 DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
 </xml_format_mandate>"""
     parts.append(xml_mandate_text)
     parts.append("")
 
+    # Custom mode takes precedence over design/code when problem indicators present
     actions = [
-        "ANALYZE the user's request to determine refactor mode:",
+        "ANALYZE the user's request to determine refactor mode and extract context:",
+        "",
+        "STEP A - MODE DETECTION:",
+        "",
+        "Indicators for CUSTOM mode (problem-focused):",
+        '  - Problem keywords: "simplify", "too much boilerplate", "consolidate"',
+        '  - Problem keywords: "abstractions don\'t work", "hard to understand"',
+        '  - Problem keywords: "reduce duplication", "clean up the mess"',
+        '  - Pattern: User describes WHAT is wrong, not just WHERE to look',
         "",
         "Indicators for DESIGN mode (architecture/intent focus):",
         '  - Keywords: "architecture", "design", "structure", "boundaries", "responsibilities"',
@@ -844,31 +1094,76 @@ DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
         '  - Keywords: "implementation", "code quality", "patterns", "idioms", "readability"',
         '  - Focus: Function structure, naming, duplication, control flow',
         "",
-        "Decision:",
-        "  - If request signals design concerns -> MODE: design",
-        "  - If request signals code concerns -> MODE: code",
-        "  - If unclear or general -> MODE: both",
+        "CONTRASTIVE EXAMPLES:",
+        '  CUSTOM:     "there is too much boilerplate in the auth module"',
+        '              -> Problem: boilerplate. Location: auth module.',
+        '  NOT CUSTOM: "apply refactor skill on the auth module"',
+        '              -> No problem specified. Just a location.',
         "",
-        f"CLI override: --mode {mode_filter} (use this if provided)",
+        "PRECEDENCE RULE:",
+        "  If BOTH custom and design/code indicators present, prefer CUSTOM.",
+        "  Rationale: User stating a problem is more specific than mentioning a category.",
+        '  Example: "simplify the architecture" -> CUSTOM (problem: simplify)',
         "",
-        "OUTPUT your mode selection, then proceed to dispatch.",
+        "STEP B - SCOPE EXTRACTION:",
+        "",
+        "If user mentions a specific path/directory/module, extract it:",
+        '  - "in src/planner" -> scope: src/planner',
+        '  - "the auth module" -> scope: (resolve to actual path if known, else leave as hint)',
+        '  - No path mentioned -> scope: null (entire codebase)',
+        "",
+        "SCOPE PRECEDENCE:",
+        "  If --scope CLI arg is provided, it OVERRIDES any scope detected from user text.",
+        "  CLI arg = explicit intent. User text = descriptive context.",
+        "",
+        "STEP C - PROBLEM STATEMENT (custom mode only):",
+        "",
+        "If mode is CUSTOM, extract the problem statement:",
+        '  - What specific issue is the user describing?',
+        '  - Preserve their exact wording where possible',
+        "",
+        f"CLI override: --mode {mode_filter}" + (" (use this)" if mode_filter not in ("both", "custom") else " (detect if 'both')"),
+        f"CLI scope: {scope or '(none provided)'}" + (" (use this)" if scope else " (detect from request)"),
+        "",
+        "OUTPUT FORMAT:",
+        "<mode_selection>",
+        "  <mode>design|code|both|custom</mode>",
+        "  <scope>path/to/scope or null</scope>",
+        "  <problem_statement>user's problem description (custom only)</problem_statement>",
+        "</mode_selection>",
+        "",
+        "Then invoke the appropriate next step based on mode.",
     ]
 
-    action_nodes = [TextNode(a) for a in actions]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append(render_current_action(CurrentActionNode(actions)))
     parts.append("")
 
-    cmd_text = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 2 --total-steps {total_steps} --n {n} --mode {mode_filter}" />'
-    parts.append(render(W.el("invoke_after", TextNode(cmd_text)).build(), XMLRenderer()))
+    # Conditional branching: custom vs non-custom modes have different step 2 invocations
+    # Shell escape scope to prevent injection
+    scope_escaped = shlex.quote(scope) if scope else ""
+    scope_arg = f" --scope {scope_escaped}" if scope else ""
+
+    invoke_after = f"""<invoke_after>
+  <if_custom>
+    <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 2 --mode custom{scope_arg}" />
+  </if_custom>
+  <if_not_custom>
+    <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 2 --n {n} --mode $MODE{scope_arg}" />
+  </if_not_custom>
+</invoke_after>"""
+    parts.append(invoke_after)
 
     return "\n".join(parts)
 
 
-def format_step_2_output(total_steps: int, n: int, info: dict, mode_filter: str) -> str:
-    """Format Step 2: Parallel dispatch output."""
+def format_step_2_dispatch(n: int, info: dict, mode_filter: str, scope: str | None = None) -> str:
+    """Format Step 2 for non-custom modes: Random sampling + dispatch.
+
+    Skips step 3 (verification) via direct jump to step 4 (which is triage for non-custom).
+    """
     parts = []
 
-    parts.append(render(W.el("step_header", TextNode(info["title"]), script="refactor", step="2", total=str(total_steps)).build(), XMLRenderer()))
+    parts.append(render_step_header(StepHeaderNode(title=info["title"], script="refactor", step=2)))
     parts.append("")
 
     xml_mandate_text = """<xml_format_mandate>
@@ -876,21 +1171,17 @@ CRITICAL: All script outputs use XML format. You MUST:
 
 1. Execute the action in <current_action>
 2. When complete, invoke the exact command in <invoke_after>
-3. The <next> block re-states the command -- execute it
-4. For branching <invoke_after>, choose based on outcome:
-   - <if_pass>: Use when action succeeded / QR returned PASS
-   - <if_fail>: Use when action failed / QR returned ISSUES
 
 DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
 </xml_format_mandate>"""
     parts.append(xml_mandate_text)
     parts.append("")
 
+    scope_display = scope or "entire codebase"
     actions = [
-        "IDENTIFY the scope from user's request:",
-        "  - Could be: file(s), directory, subsystem, entire codebase",
+        f"SCOPE: {scope_display}",
         "",
-        build_explore_dispatch(n, mode_filter),
+        build_explore_dispatch(n, mode_filter, scope),
         "",
         f"WAIT for all {n} agents to complete before proceeding.",
         "",
@@ -900,80 +1191,286 @@ DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
         })
     ]
 
-    action_nodes = [TextNode(a) for a in actions]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append(render_current_action(CurrentActionNode(actions)))
     parts.append("")
 
-    cmd_text = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 3 --total-steps {total_steps}" />'
-    parts.append(render(W.el("invoke_after", TextNode(cmd_text)).build(), XMLRenderer()))
+    # Non-custom: jump to step 4 (triage), skipping step 3 (verification)
+    scope_arg = f" --scope {shlex.quote(scope)}" if scope else ""
+    parts.append(render_invoke_after(InvokeAfterNode(cmd=f"python3 -m {MODULE_PATH} --step 4 --mode {mode_filter}{scope_arg}")))
 
     return "\n".join(parts)
 
 
-def format_step_3_output(total_steps: int, info: dict) -> str:
-    """Format Step 3: Triage output."""
+def format_step_2_custom(info: dict, scope: str | None = None) -> str:
+    """Format Step 2 for custom mode: LLM category selection.
+
+    Embeds full category file content for LLM to select relevant ones
+    based on problem statement from step 1.
+    """
     parts = []
 
-    parts.append(render(W.el("step_header", TextNode(info["title"]), script="refactor", step="3", total=str(total_steps)).build(), XMLRenderer()))
+    parts.append(render_step_header(StepHeaderNode(title="Category Selection", script="refactor", step=2)))
+    parts.append("")
+
+    # Embed all category files for LLM review
+    parts.append("<category_definitions>")
+    parts.append("Review the following code quality categories. Select those relevant to the problem statement from Step 1.")
+    parts.append("")
+
+    for md_file in sorted(CONVENTIONS_DIR.glob("*.md")):
+        content = md_file.read_text()
+        # Path relative to conventions dir for cleaner display
+        rel_path = f"conventions/code-quality/{md_file.name}"
+        node = FileContentNode(rel_path, content)
+        parts.append(XMLRenderer().render_file_content(node))
+        parts.append("")
+
+    parts.append("</category_definitions>")
+    parts.append("")
+
+    actions = [
+        "CATEGORY SELECTION:",
+        "",
+        "Using the <problem_statement> from Step 1, select relevant categories.",
+        "",
+        "FALLBACK: If no <problem_statement> exists in the conversation context,",
+        "select 8-12 categories covering common quality issues (naming, structure,",
+        "duplication, patterns). This enables exploratory analysis without a",
+        "specific problem focus.",
+        "",
+        "For each selected category, provide:",
+        "  - Category reference: file:start_line-end_line (e.g., 01-naming-and-types.md:5-42)",
+        "  - Relevance: One sentence explaining why this category applies to the problem",
+        "",
+        "Selection guidelines:",
+        "  - Select 3-10 categories (fewer for focused problems, more for broad ones)",
+        "  - Prioritize categories that directly address the stated problem",
+        "  - Include adjacent categories that might reveal related issues",
+        "  - Skip categories clearly irrelevant to the problem domain",
+        "",
+        "OUTPUT FORMAT:",
+        "<selected_categories>",
+        '  <category ref="file:start-end" relevance="why this applies">Category Name</category>',
+        "  <!-- repeat for each selected category -->",
+        "</selected_categories>",
+    ]
+
+    parts.append(render_current_action(CurrentActionNode(actions)))
+    parts.append("")
+
+    # Next step: verification (step 3)
+    scope_arg = f" --scope {shlex.quote(scope)}" if scope else ""
+    parts.append(render_invoke_after(InvokeAfterNode(cmd=f"python3 -m {MODULE_PATH} --step 3 --mode custom{scope_arg}")))
+
+    return "\n".join(parts)
+
+
+def format_step_3_verification(info: dict, scope: str | None = None, retry: int = 0) -> str:
+    """Format Step 3: Category verification (custom mode only).
+
+    Catches category selection errors before expensive dispatch.
+    Recovery: If issues found and retry < 1, loop back with revised selection.
+    """
+    parts = []
+
+    parts.append(render_step_header(StepHeaderNode(title="Category Verification", script="refactor", step=3)))
+    parts.append("")
+
+    actions = [
+        "VERIFY your category selection from Step 2.",
+        "",
+        f"This is verification attempt {retry + 1} of 2.",
+        "",
+        "For EACH selected category, answer:",
+        "  1. Does this category's detection patterns apply to this project's language/framework?",
+        "  2. Would findings from this category address the stated problem?",
+        "  3. Is there a more specific category that would be better?",
+        "",
+        "Also check for gaps:",
+        "  - Are there obvious categories missing that would address the problem?",
+        "  - Did superficial keyword matching cause irrelevant selections?",
+        "",
+        "OUTPUT FORMAT:",
+        "<verification_result>",
+        "  <status>PASS | REVISE</status>",
+        "  <verified_categories>",
+        "    <!-- categories that passed verification -->",
+        '    <category ref="file:start-end">Category Name</category>',
+        "  </verified_categories>",
+        "  <removed_categories>",
+        "    <!-- categories removed with reason -->",
+        '    <removed ref="file:start-end" reason="why removed">Category Name</removed>',
+        "  </removed_categories>",
+        "  <added_categories>",
+        "    <!-- categories added that were missing -->",
+        '    <added ref="file:start-end" reason="why added">Category Name</added>',
+        "  </added_categories>",
+        "</verification_result>",
+        "",
+        "If status is REVISE and this is attempt 1, you'll get one more chance.",
+        "If status is PASS or this is attempt 2, proceed to dispatch.",
+        "",
+        "IMPORTANT: If you request REVISE but produce IDENTICAL categories to step 2,",
+        "the system will treat this as PASS with warning. A REVISE without actual",
+        "changes indicates uncertainty that cannot be resolved by retry.",
+    ]
+
+    parts.append(render_current_action(CurrentActionNode(actions)))
+    parts.append("")
+
+    # Conditional branching: retry loopback vs proceed to dispatch
+    scope_arg = f" --scope {shlex.quote(scope)}" if scope else ""
+    if retry < 1:
+        # Still have retry budget
+        invoke_after = f"""<invoke_after>
+  <if_revise>
+    <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 3 --mode custom{scope_arg} --retry 1" />
+  </if_revise>
+  <if_pass>
+    <invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 4 --mode custom{scope_arg}" />
+  </if_pass>
+</invoke_after>"""
+    else:
+        # Retry budget exhausted - proceed regardless
+        invoke_after = render_invoke_after(InvokeAfterNode(cmd=f"python3 -m {MODULE_PATH} --step 4 --mode custom{scope_arg}"))
+
+    parts.append(invoke_after)
+
+    return "\n".join(parts)
+
+
+def format_step_4_dispatch_custom(info: dict, scope: str | None = None) -> str:
+    """Format Step 4 for custom mode: Dispatch with verified categories.
+
+    Uses categories selected and verified in steps 2-3.
+    """
+    parts = []
+
+    parts.append(render_step_header(StepHeaderNode(title="Dispatch", script="refactor", step=4)))
+    parts.append("")
+
+    scope_display = scope or "entire codebase"
+    scope_arg = f" --scope {shlex.quote(scope)}" if scope else ""
+    invoke_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {EXPLORE_MODULE_PATH} --step 1 --category $CATEGORY_REF --mode code{scope_arg}" />'
+
+    actions = [
+        "DISPATCH explore agents for verified categories.",
+        "",
+        "Using the <verified_categories> from Step 3:",
+        "",
+        '<parallel_dispatch agent="Explore" count="N">',
+        "  <instruction>",
+        "    Launch one general-purpose sub-agent per verified category.",
+        "  </instruction>",
+        "",
+        '  <execution_constraint type="MANDATORY_PARALLEL">',
+        "    You MUST dispatch ALL agents in ONE assistant message.",
+        "    FORBIDDEN: Waiting for any agent before dispatching the next.",
+        '    FORBIDDEN: Using "Explore" subagent_type. Use "general-purpose".',
+        "  </execution_constraint>",
+        "",
+        "  <model_selection>",
+        "    Use HAIKU (default) for all agents.",
+        "  </model_selection>",
+        "",
+        "  <template>",
+        "    Explore the codebase for this code smell.",
+        "",
+        "    CATEGORY: $CATEGORY_NAME",
+        "    MODE: code",
+        f"    SCOPE: {scope_display}",
+        "",
+        f"    Start: {invoke_cmd}",
+        "  </template>",
+        "</parallel_dispatch>",
+        "",
+        "WAIT for all agents to complete before proceeding.",
+    ]
+
+    parts.append(render_current_action(CurrentActionNode(actions)))
+    parts.append("")
+
+    # Next step: Triage (step 5 in custom mode)
+    parts.append(render_invoke_after(InvokeAfterNode(cmd=f"python3 -m {MODULE_PATH} --step 5")))
+
+    return "\n".join(parts)
+
+
+def format_step_4_triage(info: dict) -> str:
+    """Format Step 4 for non-custom modes: Triage (dispatch already happened in step 2)."""
+    parts = []
+
+    parts.append(render_step_header(StepHeaderNode(title="Triage", script="refactor", step=4)))
+    parts.append("")
+
+    # Use the triage actions from STEPS[5]
+    actions = list(STEPS[5].get("actions", []))
+    parts.append(render_current_action(CurrentActionNode(actions)))
+    parts.append("")
+
+    # Non-custom: step 4 (triage) -> step 6 (cluster), skipping step 5
+    parts.append(render_invoke_after(InvokeAfterNode(cmd=f"python3 -m {MODULE_PATH} --step 6")))
+
+    return "\n".join(parts)
+
+
+def format_step_5_triage(info: dict) -> str:
+    """Format Step 5: Triage output (custom mode path)."""
+    parts = []
+
+    parts.append(render_step_header(StepHeaderNode(title=info["title"], script="refactor", step=5)))
     parts.append("")
 
     actions = list(info.get("actions", []))
-    action_nodes = [TextNode(a) for a in actions]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append(render_current_action(CurrentActionNode(actions)))
     parts.append("")
 
-    cmd_text = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 4 --total-steps {total_steps}" />'
-    parts.append(render(W.el("invoke_after", TextNode(cmd_text)).build(), XMLRenderer()))
+    parts.append(render_invoke_after(InvokeAfterNode(cmd=f"python3 -m {MODULE_PATH} --step 6")))
 
     return "\n".join(parts)
 
 
-def format_step_4_output(total_steps: int, info: dict) -> str:
-    """Format Step 4: Cluster output."""
+def format_step_6_cluster(info: dict) -> str:
+    """Format Step 6: Cluster output."""
     parts = []
 
-    parts.append(render(W.el("step_header", TextNode(info["title"]), script="refactor", step="4", total=str(total_steps)).build(), XMLRenderer()))
+    parts.append(render_step_header(StepHeaderNode(title=info["title"], script="refactor", step=6)))
     parts.append("")
 
     actions = [format_cluster_prompt()]
-    action_nodes = [TextNode(a) for a in actions]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append(render_current_action(CurrentActionNode(actions)))
     parts.append("")
 
-    cmd_text = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 5 --total-steps {total_steps}" />'
-    parts.append(render(W.el("invoke_after", TextNode(cmd_text)).build(), XMLRenderer()))
+    parts.append(render_invoke_after(InvokeAfterNode(cmd=f"python3 -m {MODULE_PATH} --step 7")))
 
     return "\n".join(parts)
 
 
-def format_step_5_output(total_steps: int, info: dict) -> str:
-    """Format Step 5: Contextualize output."""
+def format_step_7_contextualize(info: dict) -> str:
+    """Format Step 7: Contextualize output."""
     parts = []
 
-    parts.append(render(W.el("step_header", TextNode(info["title"]), script="refactor", step="5", total=str(total_steps)).build(), XMLRenderer()))
+    parts.append(render_step_header(StepHeaderNode(title=info["title"], script="refactor", step=7)))
     parts.append("")
 
     actions = [format_contextualize_prompt()]
-    action_nodes = [TextNode(a) for a in actions]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append(render_current_action(CurrentActionNode(actions)))
     parts.append("")
 
-    cmd_text = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 6 --total-steps {total_steps}" />'
-    parts.append(render(W.el("invoke_after", TextNode(cmd_text)).build(), XMLRenderer()))
+    parts.append(render_invoke_after(InvokeAfterNode(cmd=f"python3 -m {MODULE_PATH} --step 8")))
 
     return "\n".join(parts)
 
 
-def format_step_6_output(total_steps: int, info: dict) -> str:
-    """Format Step 6: Synthesize output (terminal step)."""
+def format_step_8_synthesize(info: dict) -> str:
+    """Format Step 8: Synthesize output (terminal step)."""
     parts = []
 
-    parts.append(render(W.el("step_header", TextNode(info["title"]), script="refactor", step="6", total=str(total_steps)).build(), XMLRenderer()))
+    parts.append(render_step_header(StepHeaderNode(title=info["title"], script="refactor", step=8)))
     parts.append("")
 
     actions = [format_synthesize_prompt()]
-    action_nodes = [TextNode(a) for a in actions]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append(render_current_action(CurrentActionNode(actions)))
     parts.append("")
 
     parts.append("COMPLETE - Present work items to user with recommended sequence.")
@@ -986,32 +1483,76 @@ def format_step_6_output(total_steps: int, info: dict) -> str:
     return "\n".join(parts)
 
 
-STEP_FORMATTERS = {
-    1: format_step_1_output,
-    2: format_step_2_output,
-    3: format_step_3_output,
-    4: format_step_4_output,
-    5: format_step_5_output,
-    6: format_step_6_output,
-}
+def format_output(
+    step: int,
+    n: int = DEFAULT_CATEGORY_COUNT,
+    mode_filter: str = "both",
+    scope: str | None = None,
+    retry: int = 0
+) -> str:
+    """Format output for display. Dispatches based on step and mode.
 
+    Step routing depends on mode:
+    - Non-custom: 1 -> 2 -> [skip 3] -> 4 -> [skip 5] -> 6 -> 7 -> 8
+    - Custom:     1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
-def format_output(step: int, total_steps: int, n: int = DEFAULT_CATEGORY_COUNT, mode_filter: str = "both") -> str:
-    """Format output for display. Dispatches to step-specific formatters."""
-    info = STEPS.get(step, STEPS[6])
-    formatter = STEP_FORMATTERS.get(step, format_step_6_output)
+    Step number semantics differ by mode:
+    - Step 3: Custom only (verification)
+    - Step 4: Custom = dispatch, Non-custom = triage
+    - Step 5: Custom = triage (non-custom skips this, already did triage at step 4)
+    """
+    info = STEPS.get(step, STEPS[8])
 
-    if step in (1, 2):
-        return formatter(total_steps, n, info, mode_filter)
-    else:
-        return formatter(total_steps, info)
+    # Step 1: Mode selection (same for all modes, but needs scope)
+    if step == 1:
+        return format_step_1_output(n, info, mode_filter, scope)
+
+    # Step 2: Mode-dependent
+    # Custom: Category selection from embedded files
+    # Non-custom: Random sampling and immediate dispatch
+    if step == 2:
+        if mode_filter == "custom":
+            return format_step_2_custom(info, scope)
+        else:
+            return format_step_2_dispatch(n, info, mode_filter, scope)
+
+    # Step 3: Verification (custom mode only)
+    # Non-custom mode jumps from step 2 directly to step 4
+    if step == 3:
+        return format_step_3_verification(info, scope, retry)
+
+    # Step 4: Semantically different per mode
+    # Custom: Dispatch with verified categories
+    # Non-custom: Triage (dispatch already happened in step 2)
+    if step == 4:
+        if mode_filter == "custom":
+            return format_step_4_dispatch_custom(info, scope)
+        else:
+            return format_step_4_triage(info)
+
+    # Step 5: Triage (custom mode path only)
+    # Non-custom mode already did triage at step 4, jumps to step 6
+    if step == 5:
+        return format_step_5_triage(info)
+
+    # Steps 6-8: Mode-agnostic
+    if step == 6:
+        return format_step_6_cluster(info)
+    if step == 7:
+        return format_step_7_contextualize(info)
+    if step == 8:
+        return format_step_8_synthesize(info)
+
+    # Fallback
+    return format_step_8_synthesize(info)
 
 
 def main(
     step: int = None,
-    total_steps: int = None,
     n: int = None,
     mode: str = None,
+    scope: str = None,
+    retry: int = None,
 ):
     """Entry point with parameter annotations for testing framework.
 
@@ -1020,24 +1561,38 @@ def main(
     """
     parser = argparse.ArgumentParser(
         description="Refactor Skill - Category-based code smell detection and synthesis",
-        epilog="Phases: mode selection -> dispatch -> triage -> cluster -> contextualize -> synthesize",
+        epilog="Phases: mode selection -> dispatch/select -> [verify] -> triage -> cluster -> contextualize -> synthesize",
     )
     parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--total-steps", type=int, required=True)
+
+    # Number of random samples for non-custom modes
     parser.add_argument("--n", type=int, default=DEFAULT_CATEGORY_COUNT,
-                       help=f"Number of targets to explore (default: {DEFAULT_CATEGORY_COUNT})")
-    parser.add_argument("--mode", type=str, choices=["design", "code", "both"], default="both",
-                       help="Filter mode: design (architecture), code (implementation), or both (default: both)")
+                       help=f"Number of targets for random modes (default: {DEFAULT_CATEGORY_COUNT}, ignored for custom)")
+
+    # Mode determines category selection strategy
+    parser.add_argument("--mode", type=str,
+                       choices=["design", "code", "both", "custom"],
+                       default="both",
+                       help="Category selection mode. custom: LLM selects based on problem statement")
+
+    # Filesystem constraint propagated to all explore agents
+    parser.add_argument("--scope", type=str, default=None,
+                       help="Filesystem scope constraint (e.g., 'src/planner/'). Propagates to explore agents.")
+
+    # Verification loopback counter (custom mode only, internal)
+    parser.add_argument("--retry", type=int, default=0,
+                       help=argparse.SUPPRESS)
+
     args = parser.parse_args()
 
     if args.step < 1:
         sys.exit("ERROR: --step must be >= 1")
-    if args.total_steps < 6:
-        sys.exit("ERROR: --total-steps must be >= 6 (6 phases in workflow)")
-    if args.step > args.total_steps:
-        sys.exit("ERROR: --step cannot exceed --total-steps")
+    if args.step > 8:
+        sys.exit(f"ERROR: --step cannot exceed 8")
+    if args.retry > 1:
+        sys.exit("ERROR: --retry cannot exceed 1 (max one verification retry)")
 
-    print(format_output(args.step, args.total_steps, args.n, args.mode))
+    print(format_output(args.step, args.n, args.mode, args.scope, args.retry))
 
 
 if __name__ == "__main__":

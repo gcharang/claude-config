@@ -24,13 +24,80 @@ from typing import Annotated
 
 from skills.lib.workflow.core import (
     Arg,
-    Outcome,
-    StepContext,
     StepDef,
     Workflow,
 )
-from skills.lib.workflow.ast import W, XMLRenderer, render
-from skills.lib.workflow.ast.nodes import TextNode
+from skills.lib.workflow.ast import W, XMLRenderer, render, FileContentNode
+from skills.lib.workflow.ast.nodes import (
+    TextNode, StepHeaderNode, CurrentActionNode, InvokeAfterNode,
+)
+from skills.lib.workflow.ast.renderer import (
+    render_step_header, render_current_action, render_invoke_after,
+)
+from pathlib import Path
+
+
+# =============================================================================
+# Category Constants and Loader Function
+# =============================================================================
+
+CATEGORY_TO_FILE = {
+    "efficiency": "efficiency.md",
+    "structure": "structure.md",
+    "context/reframing": "context/reframing.md",
+    "context/augmentation": "context/augmentation.md",
+    "reasoning/decomposition": "reasoning/decomposition.md",
+    "reasoning/elicitation": "reasoning/elicitation.md",
+    "correctness/sampling": "correctness/sampling.md",
+    "correctness/verification": "correctness/verification.md",
+    "correctness/refinement": "correctness/refinement.md",
+}
+
+
+def get_references_dir() -> Path:
+    """Return path to prompt-engineer/references/ directory.
+
+    Path calculation:
+      scripts/skills/prompt_engineer/optimize.py  (this file)
+      scripts/skills/prompt_engineer/             parent
+      scripts/skills/                             parent.parent
+      scripts/                                    parent.parent.parent
+      Then traverse to sibling: prompt-engineer/references/
+    """
+    script_dir = Path(__file__).parent
+    return script_dir.parent.parent.parent / "prompt-engineer" / "references"
+
+
+def load_category_files(categories: list[str]) -> list[FileContentNode]:
+    """Load reference files for selected categories.
+
+    Args:
+        categories: List of category names (e.g., ['efficiency', 'reasoning/decomposition'])
+
+    Returns:
+        List of FileContentNode with loaded content
+
+    Exits with error if category unknown or file missing.
+    """
+    refs_dir = get_references_dir()
+    nodes = []
+
+    for cat in categories:
+        if cat not in CATEGORY_TO_FILE:
+            valid = ", ".join(sorted(CATEGORY_TO_FILE.keys()))
+            sys.exit(f"ERROR: Unknown category '{cat}'. Valid: {valid}")
+
+        rel_path = CATEGORY_TO_FILE[cat]
+        full_path = refs_dir / rel_path
+
+        if not full_path.exists():
+            sys.exit(f"ERROR: Reference file not found: {full_path}")
+
+        content = full_path.read_text()
+        display_path = f"references/{rel_path}"
+        nodes.append(FileContentNode(path=display_path, content=content))
+
+    return nodes
 
 
 # =============================================================================
@@ -97,11 +164,12 @@ def anti_pattern_audit_actions(
     base = [
         f"ANTI-PATTERN FINAL AUDIT against {target}:",
         "",
-        "Check each anti-pattern from the reference:",
+        "Check each anti-pattern from the reference (including but not limited to):",
         "  [ ] Hedging Spiral: Does it encourage hesitation?",
         "  [ ] Everything-Is-Critical: Are emphasis markers overused?",
         "  [ ] Implicit Category Trap: Are categories explicit?",
         "  [ ] Negative Instruction Trap: Are directives affirmative?",
+        "  [ ] (other anti-patterns from reference as applicable)",
     ]
     if context in ("SKILL", "SUB-AGENT", "COMPONENT"):
         base.extend([
@@ -115,7 +183,7 @@ def anti_pattern_audit_actions(
 
 def integration_check_actions(checks: list[str]) -> list[str]:
     """Integration checks wrapper."""
-    return ["INTEGRATION CHECKS:"] + [f"  - {c}" for c in checks]
+    return ["INTEGRATION CHECKS (verify at minimum):"] + [f"  - {c}" for c in checks]
 
 
 def ecosystem_relationship_table() -> list[str]:
@@ -125,10 +193,58 @@ def ecosystem_relationship_table() -> list[str]:
         "  | Prompt | File:Lines | Receives From | Sends To | Shared Terms |",
         "  |--------|------------|---------------|----------|--------------|",
         "",
-        "For each prompt, identify:",
+        "For each prompt, identify (at minimum):",
         "  - Input sources (which prompts/systems feed it)",
         "  - Output consumers (which prompts/systems consume its output)",
         "  - Terminology that MUST be consistent across prompts",
+    ]
+
+
+def context_gathering_actions() -> list[str]:
+    """Context gathering for technique selection.
+
+    Produces structured output that category_selection_actions references.
+    Prompts for user confirmation when genuinely uncertain.
+    """
+    return [
+        "",
+        "CONTEXT GATHERING (before category selection):",
+        "",
+        "First, gather context from available sources:",
+        "  - Files already read in this conversation",
+        "  - Prior analysis or problem descriptions",
+        "  - Standard patterns you recognize",
+        "",
+        "FOR MULTIPLE RELATED PROMPTS:",
+        "  <system_goal>",
+        "    What is the HIGH-LEVEL goal of this prompt system?",
+        "    What end-to-end workflow do these prompts enable?",
+        "  </system_goal>",
+        "  Then for EACH prompt, derive its purpose FROM the system goal.",
+        "",
+        "FOR A SINGLE PROMPT:",
+        "  <prompt_purpose>",
+        "    What problem does this prompt solve?",
+        "    What inputs/outputs define its contract?",
+        "    What does success look like?",
+        "  </prompt_purpose>",
+        "",
+        "<observed_issues>",
+        "  Map current/anticipated issues to categories:",
+        "  - Reasoning: [skips steps, wrong decomposition, no visible trace]",
+        "  - Consistency: [different outputs each run]",
+        "  - Accuracy: [wrong facts, hallucinations]",
+        "  - Context: [ignores input, distracted by noise]",
+        "  - Format: [wrong structure, unparseable]",
+        "  State 'None observed' for categories without issues.",
+        "</observed_issues>",
+        "",
+        "WHEN TO ASK FOR CLARIFICATION:",
+        "  - If the high-level goal is unclear from available context",
+        "  - If you're uncertain which issues are actually occurring",
+        "  - If success criteria are ambiguous",
+        "  Use AskUserQuestion when genuinely uncertain -- not for standard patterns.",
+        "  Better to confirm than to optimize the wrong thing.",
     ]
 
 
@@ -181,6 +297,7 @@ def understand_actions_ecosystem() -> list[str]:
         "  Sub-agent: 'Execute step 1. There are 8 steps: 1. Context...'",
         "  WHY: Sub-agent discovers workflow during execution. Overview is noise.",
         "</example>",
+        *context_gathering_actions(),
     ]
 
 
@@ -208,7 +325,7 @@ def verify_understanding_actions() -> list[str]:
 
 
 def understand_actions_simple() -> list[str]:
-    """Lighter semantic understanding for single-prompt/problem scopes."""
+    """Semantic understanding for single-prompt/problem scopes."""
     return [
         "ARTICULATE what this prompt accomplishes:",
         "",
@@ -226,6 +343,7 @@ def understand_actions_simple() -> list[str]:
         "  - What should NOT be passed to recipients? Why?",
         "  If no delegation exists, state: 'No delegation boundaries.'",
         "</boundaries>",
+        *context_gathering_actions(),
     ]
 
 
@@ -274,38 +392,97 @@ def handoff_minimalism_test() -> list[str]:
     ]
 
 
-# =============================================================================
-# Handler Functions
-# =============================================================================
+def category_selection_actions() -> list[str]:
+    """Instructions for LLM to select technique categories.
+
+    This function is called when the LLM needs to choose which reference
+    files to inject. The output format (SELECTED: x,y,z) is designed to
+    be easily copied into the --categories argument.
+
+    Framing inverts the burden: exclusions require justification, not inclusions.
+    Minimum 3 categories prevents narrow selection bias.
+    """
+    return [
+        "SELECT TECHNIQUE CATEGORIES based on your context gathering.",
+        "",
+        "Use your <system_goal> or <prompt_purpose> and <observed_issues>",
+        "to inform selection. The issue-to-category mapping:",
+        "  - Reasoning issues -> reasoning/decomposition, reasoning/elicitation",
+        "  - Consistency issues -> correctness/sampling",
+        "  - Accuracy issues -> correctness/verification, correctness/refinement",
+        "  - Context issues -> context/reframing, context/augmentation",
+        "  - Format issues -> structure",
+        "",
+        "If you have unresolved uncertainty about the goal or issues,",
+        "use AskUserQuestion before proceeding.",
+        "",
+        "Available categories:",
+        "",
+        "  MANDATORY:",
+        "    efficiency -- Output compression (applies to ALL prompts)",
+        "",
+        "  INCLUDE ALL THAT APPLY (minimum 3 total):",
+        "",
+        "    Reasoning quality:",
+        "      reasoning/decomposition -- Multi-step, compositional problems",
+        "      reasoning/elicitation -- Model skips steps, no visible trace",
+        "",
+        "    Output correctness:",
+        "      correctness/sampling -- Inconsistent outputs across runs",
+        "      correctness/verification -- Factual errors, hallucination",
+        "      correctness/refinement -- Benefits from iteration",
+        "",
+        "    Input/context:",
+        "      context/reframing -- Poorly framed, ambiguous instructions",
+        "      context/augmentation -- Missing domain knowledge",
+        "",
+        "    Output format:",
+        "      structure -- Needs specific format (code, JSON, tables)",
+        "",
+        "SELECTION RULES:",
+        "  1. Start with efficiency (mandatory)",
+        "  2. For EACH category, ask: 'Could this help?' not 'Is this the main problem?'",
+        "  3. Minimum 3 categories total (more is fine)",
+        "  4. Justify exclusions, not inclusions",
+        "",
+        "SELF-REFINEMENT:",
+        "  For EACH category you DID NOT select:",
+        "    - State the category",
+        "    - Quote evidence from the prompt that this category cannot help",
+        "  If you cannot quote evidence, include the category.",
+        "",
+        "OUTPUT FORMAT:",
+        "  SELECTED: efficiency,reasoning/decomposition,correctness/verification,...",
+        "  EXCLUDED with evidence:",
+        "    - context/augmentation: '[quoted text]' shows complete domain context",
+        "    - structure: '[quoted text]' shows free-form output is acceptable",
+    ]
 
 
-def step_handler(
-    ctx: StepContext,
-    scope: Annotated[
-        str,
-        Arg(
-            required=True,
-            description="Workflow scope (required for steps 2+)",
-            choices=("single-prompt", "ecosystem", "greenfield", "problem"),
-        ),
-    ],
-) -> tuple[Outcome, dict]:
-    """Generic handler for output-only steps."""
-    return Outcome.OK, {}
+def technique_audit_actions() -> list[str]:
+    """Instructions for systematic technique evaluation.
+
+    This function is called after reference files are injected. The tabular
+    format forces the LLM to evaluate ALL techniques, not just familiar ones.
+    """
+    return [
+        "TECHNIQUE AUDIT TABLE (MANDATORY):",
+        "",
+        "For EVERY technique in EVERY injected reference file, create:",
+        "",
+        "| Technique | Source File | Trigger Condition | Applicable? | Evidence |",
+        "|-----------|-------------|-------------------|-------------|----------|",
+        "",
+        "Rules:",
+        "  - List ALL techniques from ALL injected files (no skipping)",
+        "  - Quote the trigger condition from the reference",
+        "  - If Applicable=YES: quote evidence from target prompt",
+        "  - If Applicable=NO: state why trigger doesn't match",
+        "",
+        "This ensures systematic evaluation, not salience-driven selection.",
+    ]
 
 
-def step_triage(
-    ctx: StepContext,
-    scope: Annotated[
-        str | None,
-        Arg(
-            description="Scope determined in step 1",
-            choices=("single-prompt", "ecosystem", "greenfield", "problem"),
-        ),
-    ] = None,
-) -> tuple[Outcome, dict]:
-    """Handler for triage step with scope parameter."""
-    return Outcome.OK, {}
 
 
 # =============================================================================
@@ -317,7 +494,10 @@ STEP_TRIAGE = StepDef(
     id="triage",
     title="Triage",
     actions=[
-        "EXAMINE the input and request:",
+        "EXAMINE the input, request, AND any relevant prior conversation:",
+        "  - Problem descriptions stated earlier",
+        "  - Analysis or diagnosis already performed",
+        "  - User preferences or constraints mentioned",
         "",
         "  FILES PROVIDED:",
         "    - None: likely GREENFIELD",
@@ -329,7 +509,7 @@ STEP_TRIAGE = StepDef(
         "    - Specific problem ('fix X', 'it does Y wrong'): PROBLEM",
         "    - Design request ('I want X to do Y'): GREENFIELD",
         "",
-        "DETERMINE SCOPE (use boundary tests):",
+        "DETERMINE SCOPE (use boundary tests as guidance):",
         "  SINGLE-PROMPT: One file + 'improve/optimize' request",
         "    Boundary: If 2+ files interact -> ECOSYSTEM",
         "  ECOSYSTEM: Multiple files with shared terminology or data flow",
@@ -338,13 +518,12 @@ STEP_TRIAGE = StepDef(
         "    Boundary: If modifying existing -> SINGLE-PROMPT or PROBLEM",
         "  PROBLEM: Existing prompt + specific failure described",
         "    Boundary: If no specific failure -> SINGLE-PROMPT or ECOSYSTEM",
+        "  (boundaries are heuristics; use judgment for edge cases)",
         "",
         "OUTPUT:",
         "  SCOPE: [single-prompt | ecosystem | greenfield | problem]",
         "  RATIONALE: [why this scope fits]",
     ],
-    handler=step_triage,
-    next={Outcome.OK: "assess"},
     phase="triage",
 )
 
@@ -405,8 +584,6 @@ STEP_REFINE = StepDef(
         "",
         "  If INCONSISTENT: flag for revision before Approve step.",
     ],
-    handler=step_handler,
-    next={Outcome.OK: "approve"},
     phase="verify",
 )
 
@@ -438,8 +615,6 @@ STEP_APPROVE = StepDef(
         "CRITICAL: STOP. Do NOT proceed to Execute step.",
         "Wait for explicit user approval before continuing.",
     ],
-    handler=step_handler,
-    next={Outcome.OK: "execute"},
     phase="approve",
 )
 
@@ -452,6 +627,9 @@ WORKFLOW_SINGLE = Workflow(
         id="assess",
         title="Assess",
         actions=[
+            "PRIOR CONTEXT: Incorporate any relevant analysis, problem descriptions,",
+            "or preferences from earlier in this conversation.",
+            "",
             "READ the prompt file. Classify complexity:",
             "  SIMPLE: <20 lines, single purpose, no conditionals",
             "  COMPLEX: multiple sections, conditionals, tool orchestration",
@@ -461,16 +639,12 @@ WORKFLOW_SINGLE = Workflow(
             "  - Agent type: tool-use, coding, analysis, general?",
             "  - Failure modes: what goes wrong when this fails?",
         ],
-        handler=step_handler,
-        next={Outcome.OK: "understand"},
         phase="assess",
     ),
     StepDef(
         id="understand",
         title="Understand",
         actions=understand_actions_simple(),
-        handler=step_handler,
-        next={Outcome.OK: "plan"},
         phase="understand",
     ),
     StepDef(
@@ -486,8 +660,6 @@ WORKFLOW_SINGLE = Workflow(
             "",
             "Include TECHNIQUE DISPOSITION summary.",
         ],
-        handler=step_handler,
-        next={Outcome.OK: "refine"},
         phase="plan",
     ),
     STEP_REFINE,
@@ -508,11 +680,10 @@ WORKFLOW_SINGLE = Workflow(
             "",
             *change_presentation_actions(),
         ],
-        handler=step_handler,
-        next={Outcome.OK: None},
         phase="execute",
     ),
     description="Optimize a single prompt file",
+    validate=False,
 )
 
 
@@ -524,6 +695,9 @@ WORKFLOW_ECOSYSTEM = Workflow(
         id="assess",
         title="Assess",
         actions=[
+            "PRIOR CONTEXT: Incorporate any relevant analysis, problem descriptions,",
+            "or preferences from earlier in this conversation.",
+            "",
             "READ all prompt-containing files in scope.",
             "",
             "MAP the ecosystem:",
@@ -538,24 +712,18 @@ WORKFLOW_ECOSYSTEM = Workflow(
             "  - What it receives from / passes to other prompts",
             "  - Complexity classification",
         ],
-        handler=step_handler,
-        next={Outcome.OK: "understand"},
         phase="assess",
     ),
     StepDef(
         id="understand",
         title="Understand",
         actions=understand_actions_ecosystem(),
-        handler=step_handler,
-        next={Outcome.OK: "verify_understanding"},
         phase="understand",
     ),
     StepDef(
         id="verify_understanding",
         title="Verify Understanding",
         actions=verify_understanding_actions(),
-        handler=step_handler,
-        next={Outcome.OK: "plan"},
         phase="verify_understanding",
     ),
     StepDef(
@@ -579,8 +747,6 @@ WORKFLOW_ECOSYSTEM = Workflow(
             *change_format_actions("CHANGE"),
             "Note which changes affect single file vs multiple.",
         ],
-        handler=step_handler,
-        next={Outcome.OK: "refine"},
         phase="plan",
     ),
     STEP_REFINE,
@@ -600,11 +766,10 @@ WORKFLOW_ECOSYSTEM = Workflow(
             "",
             *change_presentation_actions(),
         ],
-        handler=step_handler,
-        next={Outcome.OK: None},
         phase="execute",
     ),
     description="Optimize multiple related prompts",
+    validate=False,
 )
 
 
@@ -616,7 +781,10 @@ WORKFLOW_GREENFIELD = Workflow(
         id="assess",
         title="Assess Requirements",
         actions=[
-            "UNDERSTAND requirements:",
+            "PRIOR CONTEXT: Incorporate any relevant analysis, problem descriptions,",
+            "or preferences from earlier in this conversation.",
+            "",
+            "UNDERSTAND requirements (core questions, not exhaustive):",
             "  - What task should the prompt accomplish?",
             "  - What inputs will it receive?",
             "  - What outputs should it produce?",
@@ -641,13 +809,11 @@ WORKFLOW_GREENFIELD = Workflow(
             "  NEVER suggest subagents or HITL unless user explicitly requests.",
             "  State architecture choice with rationale.",
             "",
-            "IDENTIFY edge cases:",
+            "IDENTIFY edge cases (examples to consider):",
             "  - What happens with ambiguous input?",
             "  - What errors are expected?",
             "  - What should NOT happen?",
         ],
-        handler=step_handler,
-        next={Outcome.OK: "understand"},
         phase="assess",
     ),
     StepDef(
@@ -696,8 +862,6 @@ WORKFLOW_GREENFIELD = Workflow(
             "  WHY RIGHT: Bounded task, minimal context, clear output contract.",
             "</example>",
         ],
-        handler=step_handler,
-        next={Outcome.OK: "design"},
         phase="understand",
     ),
     StepDef(
@@ -764,8 +928,6 @@ WORKFLOW_GREENFIELD = Workflow(
             "",
             "WRITE complete prompt draft.",
         ],
-        handler=step_handler,
-        next={Outcome.OK: "refine"},
         phase="plan",
     ),
     STEP_REFINE,
@@ -786,11 +948,10 @@ WORKFLOW_GREENFIELD = Workflow(
             "",
             *change_presentation_actions(),
         ],
-        handler=step_handler,
-        next={Outcome.OK: None},
         phase="execute",
     ),
     description="Design a new prompt from requirements",
+    validate=False,
 )
 
 
@@ -802,6 +963,9 @@ WORKFLOW_PROBLEM = Workflow(
         id="assess",
         title="Diagnose",
         actions=[
+            "PRIOR CONTEXT: Incorporate any relevant analysis, problem descriptions,",
+            "or preferences from earlier in this conversation.",
+            "",
             "UNDERSTAND the problem:",
             "  - What is the observed behavior?",
             "  - What is the expected behavior?",
@@ -809,25 +973,22 @@ WORKFLOW_PROBLEM = Workflow(
             "",
             "READ relevant prompt(s) if they exist.",
             "",
-            "CLASSIFY the problem:",
+            "CLASSIFY the problem (primary categories):",
             "  PROMPTING: Can be addressed by technique application",
             "  CAPABILITY: Model fundamentally cannot do this",
             "  ARCHITECTURE: Needs structural change, not technique",
             "  EXTERNAL: Problem is in surrounding code, not prompt",
+            "  (problem may span multiple categories)",
             "",
             "If NOT a prompting issue: state clearly and STOP.",
             "If prompting issue: identify lines that may contribute.",
         ],
-        handler=step_handler,
-        next={Outcome.OK: "understand"},
         phase="diagnose",
     ),
     StepDef(
         id="understand",
         title="Understand",
         actions=understand_actions_simple(),
-        handler=step_handler,
-        next={Outcome.OK: "plan"},
         phase="understand",
     ),
     StepDef(
@@ -845,8 +1006,6 @@ WORKFLOW_PROBLEM = Workflow(
             *change_format_actions("FIX"),
             "  Expected effect: [how this fixes the problem]",
         ],
-        handler=step_handler,
-        next={Outcome.OK: "refine"},
         phase="plan",
     ),
     STEP_REFINE,
@@ -863,11 +1022,10 @@ WORKFLOW_PROBLEM = Workflow(
             "",
             *change_presentation_actions(),
         ],
-        handler=step_handler,
-        next={Outcome.OK: None},
         phase="execute",
     ),
     description="Fix a specific issue in existing prompt(s)",
+    validate=False,
 )
 
 
@@ -877,8 +1035,6 @@ STEP_TRIAGE_ROOT = StepDef(
     id="triage",
     title="Triage",
     actions=STEP_TRIAGE.actions,
-    handler=step_triage,
-    next={Outcome.OK: None},
     phase="triage",
 )
 
@@ -886,6 +1042,7 @@ WORKFLOW_ROOT = Workflow(
     "prompt-engineer",
     STEP_TRIAGE_ROOT,
     description="Scope-adaptive prompt optimization (triage entry point)",
+    validate=False,
 )
 
 
@@ -899,14 +1056,34 @@ SCOPES = {
 }
 
 
-def format_prompt_engineer_output(step, total, scope, step_def, read_section, next_command, is_step_one=False):
-    """Format output using AST builder API."""
+def format_prompt_engineer_output(
+    step, total, scope, step_def, read_section, next_command,
+    is_step_one=False,
+    file_nodes: list[FileContentNode] | None = None,
+    additional_actions: list[str] | None = None,
+):
+    """Format output using AST builder API.
+
+    Args:
+        step: Current step number
+        total: Total steps in workflow
+        scope: Workflow scope (single-prompt, ecosystem, etc.)
+        step_def: StepDef with actions for this step
+        read_section: Prose instructions for reading references (legacy mode)
+        next_command: Command for next step invocation
+        is_step_one: Whether this is step 1 (triage)
+        file_nodes: FileContentNodes to inject (new mode, replaces read_section)
+        additional_actions: Extra actions to append (category selection or audit)
+    """
     parts = []
     title = f"PROMPT ENGINEER - {step_def.title}"
-    attrs = {"script": "prompt_engineer", "step": str(step), "total": str(total)}
-    if scope:
-        attrs["scope"] = scope
-    parts.append(render(W.el("step_header", TextNode(title), **attrs).build(), XMLRenderer()))
+    step_header_node = StepHeaderNode(
+        title=title,
+        script="prompt_engineer",
+        step=str(step),
+        total=str(total)
+    )
+    parts.append(render_step_header(step_header_node))
     parts.append("")
 
     if scope:
@@ -927,12 +1104,26 @@ CRITICAL: All script outputs use XML format. You MUST:
         parts.append(render(W.el("read_section", *read_nodes).build(), XMLRenderer()))
         parts.append("")
 
-    action_nodes = [TextNode(a) for a in step_def.actions]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    if file_nodes:
+        parts.append("<technique_references>")
+        parts.append("The following reference files have been injected based on your category selection:")
+        parts.append("")
+        renderer = XMLRenderer()
+        for node in file_nodes:
+            parts.append(renderer.render_file_content(node))
+            parts.append("")
+        parts.append("</technique_references>")
+        parts.append("")
+
+    all_actions = list(step_def.actions)
+    if additional_actions:
+        all_actions.extend(additional_actions)
+
+    parts.append(render_current_action(CurrentActionNode(all_actions)))
     parts.append("")
 
     if next_command:
-        parts.append(render(W.el("invoke_after", TextNode(next_command)).build(), XMLRenderer()))
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_command)))
     else:
         parts.append("WORKFLOW COMPLETE - Present results to user.")
 
@@ -954,17 +1145,28 @@ def main(
         epilog="Step 1: triage. Steps 2+: scope-specific workflow.",
     )
     parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--total-steps", type=int, help="Ignored (computed from scope)")
     parser.add_argument(
         "--scope",
         choices=list(SCOPES.keys()),
         default=None,
         help="Required for steps 2+. Run step 1 first to determine scope.",
     )
+    parser.add_argument(
+        "--categories",
+        type=str,
+        default=None,
+        help="Comma-separated technique categories to inject",
+    )
     args = parser.parse_args()
 
     if args.step < 1:
         sys.exit("ERROR: --step must be >= 1")
+
+    file_nodes = None
+    cat_list = None
+    if args.categories:
+        cat_list = [c.strip() for c in args.categories.split(",") if c.strip()]
+        file_nodes = load_category_files(cat_list)
 
     # Step 1 is triage (no scope yet)
     if args.step == 1:
@@ -1009,7 +1211,11 @@ def main(
     #                OUTPUT issues -> reasoning/*.md, correctness/*.md, efficiency.md, structure.md
     read_specs = {
         "single-prompt": (4, [
-            "READ BASED ON DIAGNOSED PROBLEM (from references/):",
+            "READ BASED ON DIAGNOSED PROBLEM:",
+            "",
+            "All references are in the `references/` subdirectory of the prompt-engineer",
+            "skill directory. NOTE: *NOT* the prompt_engineer scripts directory, but the",
+            "prompt-engineer skill directory, which also contains the SKILL.md file.",
             "",
             "ALWAYS read: references/efficiency.md",
             "  -> Output compression techniques apply to all prompts",
@@ -1038,7 +1244,11 @@ def main(
             "NEVER read papers/**/* - use references/ only.",
         ]),
         "ecosystem": (5, [
-            "READ BASED ON DIAGNOSED PROBLEMS (from references/):",
+            "READ BASED ON DIAGNOSED PROBLEMS:",
+            "",
+            "All references are in the `references/` subdirectory of the prompt-engineer",
+            "skill directory. NOTE: *NOT* the prompt_engineer scripts directory, but the",
+            "prompt-engineer skill directory, which also contains the SKILL.md file.",
             "",
             "ALWAYS read: references/efficiency.md",
             "  -> Output compression techniques apply to all prompts",
@@ -1067,7 +1277,11 @@ def main(
             "NEVER read papers/**/* - use references/ only.",
         ]),
         "greenfield": (4, [
-            "READ BASED ON REQUIREMENTS (from references/):",
+            "READ BASED ON REQUIREMENTS:",
+            "",
+            "All references are in the `references/` subdirectory of the prompt-engineer",
+            "skill directory. NOTE: *NOT* the prompt_engineer scripts directory, but the",
+            "prompt-engineer skill directory, which also contains the SKILL.md file.",
             "",
             "ALWAYS read: references/efficiency.md",
             "  -> Output compression techniques apply to all prompts",
@@ -1095,7 +1309,11 @@ def main(
             "NEVER read papers/**/* - use references/ only.",
         ]),
         "problem": (4, [
-            "READ BASED ON DIAGNOSED FAILURE (from references/):",
+            "READ BASED ON DIAGNOSED FAILURE:",
+            "",
+            "All references are in the `references/` subdirectory of the prompt-engineer",
+            "skill directory. NOTE: *NOT* the prompt_engineer scripts directory, but the",
+            "prompt-engineer skill directory, which also contains the SKILL.md file.",
             "",
             "ALWAYS read: references/efficiency.md",
             "  -> Output compression often relevant to problem fixes",
@@ -1128,22 +1346,39 @@ def main(
     }
 
     read_section = None
+    additional_actions = None
+
     if args.scope in read_specs:
         read_step, read_refs = read_specs[args.scope]
+
+        if args.step == read_step - 1 and not cat_list:
+            additional_actions = category_selection_actions()
+
         if args.step == read_step:
-            read_section = read_refs
+            if file_nodes:
+                additional_actions = technique_audit_actions()
+            else:
+                read_section = read_refs
 
     # Next step or completion
     next_command = None
-    if step_def.next.get(Outcome.OK) is not None:
+    if args.step < total:
         next_step = args.step + 1
-        next_command = (
-            f"python3 -m skills.prompt_engineer.optimize "
-            f"--step {next_step} --scope {args.scope}"
-        )
+        base_cmd = f"python3 -m skills.prompt_engineer.optimize --step {next_step} --scope {args.scope}"
+
+        if args.scope in read_specs:
+            read_step, _ = read_specs[args.scope]
+            if args.step == read_step - 1 and not cat_list:
+                base_cmd += " --categories <SELECTED_CATEGORIES>"
+            elif args.categories:
+                base_cmd += f" --categories {args.categories}"
+
+        next_command = base_cmd
 
     output = format_prompt_engineer_output(
-        args.step, total, args.scope, step_def, read_section, next_command
+        args.step, total, args.scope, step_def, read_section, next_command,
+        file_nodes=file_nodes,
+        additional_actions=additional_actions,
     )
     print(output)
 

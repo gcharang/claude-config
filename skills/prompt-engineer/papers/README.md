@@ -232,5 +232,3 @@ The migration consolidated:
 - 13 papers from compression/
 
 All 129 papers were reclassified by their `intervention.type` field into the 5 problem-driven categories above.
-
-See `REORGANIZATION.md` for full migration details and rationale.

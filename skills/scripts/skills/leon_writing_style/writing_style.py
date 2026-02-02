@@ -15,17 +15,22 @@ Grounded in:
 import argparse
 import sys
 from pathlib import Path
-from typing import Annotated
 
 from skills.lib.workflow.core import (
-    Outcome,
-    StepContext,
     StepDef,
     Workflow,
     Arg,
 )
 from skills.lib.workflow.ast import W, XMLRenderer, render
-from skills.lib.workflow.ast.nodes import TextNode
+from skills.lib.workflow.ast.nodes import (
+    TextNode, StepHeaderNode, CurrentActionNode, InvokeAfterNode,
+)
+from skills.lib.workflow.ast.renderer import (
+    render_step_header, render_current_action, render_invoke_after,
+)
+
+
+TOTAL_STEPS = 9  # Number of steps in workflow
 
 
 def get_phase_name(step: int) -> str:
@@ -1022,10 +1027,10 @@ STEP_HANDLERS = {
 }
 
 
-def get_step_guidance(step: int, total_steps: int) -> dict:
+def get_step_guidance(step: int) -> dict:
     """Return step-specific guidance and actions."""
-    is_complete = step >= total_steps
-    next_step = step + 1 if step < total_steps else None
+    is_complete = step >= TOTAL_STEPS
+    next_step = step + 1 if step < TOTAL_STEPS else None
 
     # Dispatch to appropriate handler
     if step in STEP_HANDLERS:
@@ -1042,18 +1047,18 @@ def get_step_guidance(step: int, total_steps: int) -> dict:
         }
 
 
-def format_output(step: int, total_steps: int, guidance: dict, thoughts: str) -> str:
+def format_output(step: int, guidance: dict, thoughts: str) -> str:
     """Format output using AST builder API."""
     parts = []
-    is_complete = step >= total_steps
+    is_complete = step >= WORKFLOW.total_steps
 
     title = f"WRITING STYLE - {guidance['phase']} - {guidance['step_title']}"
-    parts.append(render(
-        W.el("step_header", TextNode(title),
-            script="leon_writing_style", step=str(step), total=str(total_steps),
-            phase=guidance["phase"]
-        ).build(), XMLRenderer()
-    ))
+    parts.append(render_step_header(StepHeaderNode(
+        title=title,
+        script="leon_writing_style",
+        step=str(step),
+        phase=guidance["phase"]
+    )))
     parts.append("")
 
     if step == 1:
@@ -1069,24 +1074,19 @@ CRITICAL: All script outputs use XML format. You MUST:
         parts.append(render(W.el("accumulated_thoughts", TextNode(thoughts)).build(), XMLRenderer()))
         parts.append("")
 
-    action_nodes = [TextNode(a) for a in guidance["actions"]]
-    parts.append(render(W.el("current_action", *action_nodes).build(), XMLRenderer()))
+    parts.append(render_current_action(CurrentActionNode(guidance["actions"])))
     parts.append("")
 
     next_text = guidance.get("next", "")
     if is_complete or "COMPLETE" in next_text.upper():
         parts.append("WORKFLOW COMPLETE - Deliver final content.")
     else:
-        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.leon_writing_style.writing_style --step {step + 1} --total-steps {total_steps} --thoughts \\"<accumulated>\\"" />'
-        parts.append(render(W.el("invoke_after", TextNode(next_cmd)).build(), XMLRenderer()))
+        next_cmd = f'python3 -m skills.leon_writing_style.writing_style --step-number {step + 1} --thoughts \\"<accumulated>\\"'
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
 
     return "\n".join(parts)
 
 
-# Handler functions (output-only steps just return OK)
-def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Generic handler for output-only steps."""
-    return Outcome.OK, {}
 
 
 # Workflow definition with 9 core steps
@@ -1129,82 +1129,62 @@ WORKFLOW = Workflow(
             "This table guides voice selection in later steps.",
             "</classification_output>",
         ],
-        handler=step_handler,
-        next={Outcome.OK: "purpose_audience"},
     ),
     StepDef(
         id="purpose_audience",
         title="Purpose & Audience",
         phase="UNDERSTANDING",
-        actions=get_step_guidance(2, 9)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "drafting"},
+        actions=get_step_guidance(2)["actions"],
     ),
     StepDef(
         id="drafting",
         title="Draft with Style Rules",
         phase="DRAFTING",
-        actions=get_step_guidance(3, 9)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "ai_tells_detection"},
+        actions=get_step_guidance(3)["actions"],
     ),
     StepDef(
         id="ai_tells_detection",
         title="AI Tells Detection",
         phase="VERIFICATION",
-        actions=get_step_guidance(4, 9)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "positive_markers"},
+        actions=get_step_guidance(4)["actions"],
     ),
     StepDef(
         id="positive_markers",
         title="Positive Voice Marker Check",
         phase="VERIFICATION",
-        actions=get_step_guidance(5, 9)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "voice_alignment"},
+        actions=get_step_guidance(5)["actions"],
     ),
     StepDef(
         id="voice_alignment",
         title="Voice-Content Alignment",
         phase="VERIFICATION",
-        actions=get_step_guidance(6, 9)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "consolidation"},
+        actions=get_step_guidance(6)["actions"],
     ),
     StepDef(
         id="consolidation",
         title="Cross-Check Consolidation",
         phase="VERIFICATION",
-        actions=get_step_guidance(7, 9)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "refinement"},
+        actions=get_step_guidance(7)["actions"],
     ),
     StepDef(
         id="refinement",
         title="Self-Refine",
         phase="REFINEMENT",
-        actions=get_step_guidance(8, 9)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "final_check"},
+        actions=get_step_guidance(8)["actions"],
     ),
     StepDef(
         id="final_check",
         title="Final Quality Check",
         phase="REFINEMENT",
-        actions=get_step_guidance(9, 9)["actions"],
-        handler=step_handler,
-        next={Outcome.OK: None},
+        actions=get_step_guidance(9)["actions"],
     ),
     description="Multi-turn style compliance workflow",
+    validate=False,
 )
 
 
 def main(
-    step: int = None,
-    total_steps: int = None,
-    thoughts: str | None = None,
-):
+    step: int = None):
     """Entry point with parameter annotations for testing framework.
 
     Note: Uses --step-number for backward compatibility with original interface.
@@ -1226,12 +1206,6 @@ def main(
         help="Current step number (starts at 1)",
     )
     parser.add_argument(
-        "--total-steps",
-        type=int,
-        required=True,
-        help="Estimated total steps (typically 9, adjust as needed)",
-    )
-    parser.add_argument(
         "--thoughts",
         type=str,
         default="",
@@ -1244,12 +1218,8 @@ def main(
         print("ERROR: step-number must be >= 1", file=sys.stderr)
         sys.exit(1)
 
-    if args.total_steps < 1:
-        print("ERROR: total-steps must be >= 1", file=sys.stderr)
-        sys.exit(1)
-
-    guidance = get_step_guidance(args.step_number, args.total_steps)
-    print(format_output(args.step_number, args.total_steps, guidance, args.thoughts))
+    guidance = get_step_guidance(args.step_number)
+    print(format_output(args.step_number, guidance, args.thoughts))
 
 
 if __name__ == "__main__":

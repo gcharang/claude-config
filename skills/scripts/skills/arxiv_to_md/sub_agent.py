@@ -19,6 +19,12 @@ import argparse
 import sys
 
 from skills.lib.workflow.ast import W, XMLRenderer, render
+from skills.lib.workflow.ast.nodes import (
+    TextNode, StepHeaderNode, CurrentActionNode, InvokeAfterNode,
+)
+from skills.lib.workflow.ast.renderer import (
+    render_step_header, render_current_action, render_invoke_after,
+)
 
 
 MODULE_PATH = "skills.arxiv_to_md.sub_agent"
@@ -291,23 +297,38 @@ def main():
         cmd_parts = [
             "python3 -m", MODULE_PATH,
             f"--step {next_step}",
-            "--total-steps 6",
             f"--arxiv-id {args.arxiv_id}"
         ]
         if args.dest_file:
             cmd_parts.append(f"--dest-file {args.dest_file}")
         cmd_str = " ".join(cmd_parts)
-        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="{cmd_str}" />'
+        next_cmd = cmd_str
     else:
         next_cmd = None  # Terminal step
 
-    output = render(W.text_output(
-        step=args.step,
-        total=6,
-        title=f"ARXIV-TO-MD SUB-AGENT - {phase['title']}",
-        actions=actions,
-        invoke_after=next_cmd
-    ).build(), XMLRenderer())
+    # Build output
+    parts = []
+
+    # Step header
+    title = f"ARXIV-TO-MD SUB-AGENT - {phase['title']}"
+    parts.append(render_step_header(StepHeaderNode(
+        title=title,
+        script="arxiv_to_md_sub_agent",
+        step=str(args.step)
+    )))
+    parts.append("")
+
+    # Current action
+    parts.append(render_current_action(CurrentActionNode(actions)))
+    parts.append("")
+
+    # Next step or completion
+    if next_cmd:
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
+    else:
+        parts.append("SUB-AGENT COMPLETE - Return result to orchestrator.")
+
+    output = "\n".join(parts)
     print(output)
 
 

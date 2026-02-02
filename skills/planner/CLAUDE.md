@@ -7,6 +7,7 @@ Planning and execution skill with quality review gates.
 | File        | What                               | When to read                 |
 | ----------- | ---------------------------------- | ---------------------------- |
 | `SKILL.md`  | Skill activation and invocation    | Using the planner skill      |
+| `INTENT.md` | Authoritative design specification | Understanding system design  |
 | `README.md` | Architecture, workflows, rationale | Understanding planner design |
 
 ## Subdirectories
@@ -14,6 +15,7 @@ Planning and execution skill with quality review gates.
 | Directory    | What                   | When to read                        |
 | ------------ | ---------------------- | ----------------------------------- |
 | `resources/` | Plan format, diff spec | Editing plan structure, diff format |
+| `architect/` | Plan design sub-agent  | Understanding planning workflow     |
 
 Python code: `scripts/skills/planner/` (planner.py, executor.py, explore.py, qr/, tw/, dev/)
 

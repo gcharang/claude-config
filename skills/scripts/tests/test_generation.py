@@ -22,8 +22,16 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from skills.lib.workflow.core import Workflow
 
-from skills.lib.workflow.core import Outcome
 from skills.lib.workflow.types import BoundedInt, ChoiceSet, Confidence, Constant
+
+
+# Hardcoded iterating step indices per workflow
+# These were previously detected via Outcome.ITERATE in step.next
+ITERATING_STEPS = {
+    "deepthink": {13},  # iterative_refinement step
+    "problem-analysis": {3},  # investigate step
+    "codebase-analysis": {1, 2, 3, 4},  # all steps can iterate
+}
 
 
 def synthetic_value(pname: str, pspec: dict | None = None) -> str:
@@ -49,16 +57,8 @@ def synthetic_value(pname: str, pspec: dict | None = None) -> str:
 
 
 def get_iterating_step_indices(workflow: Workflow) -> set[int]:
-    """Return set of step indices (1-based) that have iteration capability.
-
-    A step iterates if it has Outcome.ITERATE in its next dict pointing to itself.
-    """
-    iterating = set()
-    for idx, step_id in enumerate(workflow._step_order, start=1):
-        step = workflow.steps[step_id]
-        if Outcome.ITERATE in step.next and step.next[Outcome.ITERATE] == step_id:
-            iterating.add(idx)
-    return iterating
+    """Return set of step indices (1-based) that have iteration capability."""
+    return ITERATING_STEPS.get(workflow.name, set())
 
 
 def get_mode_gated_steps(workflow: Workflow) -> dict[str, frozenset[int]]:
@@ -76,11 +76,10 @@ def get_mode_gated_steps(workflow: Workflow) -> dict[str, frozenset[int]]:
 def _extract_global_params(workflow: Workflow) -> dict:
     """Extract global parameters applicable to all steps.
 
-    Returns dict with step, total_steps, and optionally mode domains.
+    Returns dict with step and optionally mode domains.
     """
     global_params = {
         "step": BoundedInt(1, workflow.total_steps),
-        "total_steps": Constant(workflow.total_steps),
     }
 
     # Detect mode param (deepthink workflow only)
@@ -134,7 +133,7 @@ def _extract_step_params(workflow: Workflow) -> dict:
             for pspec in workflow._params[step_id]:
                 pname = pspec["name"]
                 # Skip global and conditional params
-                if pname in ("step", "total_steps", "mode", "iteration", "confidence"):
+                if pname in ("step", "mode", "iteration", "confidence"):
                     continue
                 # Required params get synthetic values
                 if pspec["required"]:
@@ -185,7 +184,7 @@ def extract_schema(workflow: Workflow) -> dict:
 def generate_inputs(workflow: Workflow):
     """Generate all valid (step, param) combinations for workflow testing.
 
-    Yields dicts with step, total_steps, and applicable params.
+    Yields dicts with step and applicable params.
     Filters out mode-gated steps and applies conditional params only at applicable steps.
     """
     schema = extract_schema(workflow)
@@ -208,7 +207,6 @@ def generate_inputs(workflow: Workflow):
             # Build base params
             base = {
                 "step": step,
-                "total_steps": workflow.total_steps,
             }
             if mode is not None:
                 base["mode"] = mode

@@ -15,22 +15,36 @@ is identified with supporting evidence. Solution discovery is downstream.
 
 import argparse
 import sys
-from typing import Annotated
 
-from skills.lib.workflow.core import (
-    Outcome,
-    StepContext,
-    StepDef,
-    Workflow,
-    Arg,
+from skills.lib.workflow.core import StepDef, Workflow
+from skills.lib.workflow.ast import W, XMLRenderer, render, TextNode
+from skills.lib.workflow.ast.nodes import (
+    StepHeaderNode, CurrentActionNode, InvokeAfterNode,
 )
-from skills.lib.workflow.ast import W, XMLRenderer, render
+from skills.lib.workflow.ast.renderer import (
+    render_step_header, render_current_action, render_invoke_after,
+)
 
 
 # Maximum iterations for Phase 3 investigation loop
 MAX_ITERATIONS = 5
 
 MODULE_PATH = "skills.problem_analysis.analyze"
+
+
+# XML format mandate for step 1
+XML_FORMAT_MANDATE = """<xml_format_mandate>
+CRITICAL: All script outputs use XML format. You MUST:
+
+1. Execute the action in <current_action>
+2. When complete, invoke the exact command in <invoke_after>
+3. The <next> block re-states the command -- execute it
+4. For branching <invoke_after>, choose based on outcome:
+   - <if_pass>: Use when action succeeded / QR returned PASS
+   - <if_fail>: Use when action failed / QR returned ISSUES
+
+DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
+</xml_format_mandate>"""
 
 
 PHASES = {
@@ -326,84 +340,110 @@ def get_phase_3_completion_message(confidence: str, iteration: int) -> list[str]
         ]
 
 
-# Handler functions
-def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Generic handler for output-only steps."""
-    return Outcome.OK, {}
-
-
-def step_investigate(ctx: StepContext) -> tuple[Outcome, dict]:
-    """Handler for iterative investigation phase.
-
-    Checks confidence level and iteration count to determine whether to
-    continue investigating or proceed to formulation.
-    """
-    iteration = ctx.step_state.get("iteration", 1)
-    confidence = ctx.workflow_params.get("confidence", "exploring")
-
-    # Exit conditions
-    if confidence == "high":
-        return Outcome.OK, {"confidence": confidence, "iteration": iteration}
-    elif iteration >= MAX_ITERATIONS:
-        return Outcome.OK, {"confidence": confidence, "iteration": iteration}
-    else:
-        # Continue iterating
-        return Outcome.ITERATE, {"iteration": iteration + 1, "confidence": confidence}
-
-
-# Workflow definition
+# Workflow definition (metadata only, execution via CLI)
 WORKFLOW = Workflow(
     "problem-analysis",
-    StepDef(
-        id="gate",
-        title="Gate",
-        phase="VALIDATION",
-        actions=PHASES[1]["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "hypothesize"},
-    ),
-    StepDef(
-        id="hypothesize",
-        title="Hypothesize",
-        phase="EXPLORATION",
-        actions=PHASES[2]["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "investigate"},
-    ),
-    StepDef(
-        id="investigate",
-        title="Investigate",
-        phase="EVIDENCE",
-        actions=PHASES[3]["actions"],
-        handler=step_investigate,
-        next={
-            Outcome.OK: "formulate",
-            Outcome.ITERATE: "investigate",
-        },
-    ),
-    StepDef(
-        id="formulate",
-        title="Formulate",
-        phase="SYNTHESIS",
-        actions=PHASES[4]["actions"],
-        handler=step_handler,
-        next={Outcome.OK: "output"},
-    ),
-    StepDef(
-        id="output",
-        title="Output",
-        phase="REPORT",
-        actions=PHASES[5]["actions"],
-        handler=step_handler,
-        next={Outcome.OK: None},
-    ),
+    StepDef(id="gate", title="Gate", actions=PHASES[1]["actions"], phase="VALIDATION"),
+    StepDef(id="hypothesize", title="Hypothesize", actions=PHASES[2]["actions"], phase="EXPLORATION"),
+    StepDef(id="investigate", title="Investigate", actions=PHASES[3]["actions"], phase="EVIDENCE"),
+    StepDef(id="formulate", title="Formulate", actions=PHASES[4]["actions"], phase="SYNTHESIS"),
+    StepDef(id="output", title="Output", actions=PHASES[5]["actions"], phase="REPORT"),
     description="Root cause identification workflow",
+    validate=False,
 )
+
+
+# =============================================================================
+# Output Formatting
+# =============================================================================
+
+
+def format_output(step: int, confidence: str, iteration: int) -> str:
+    """Format output for display using XML building blocks."""
+    phase = PHASES.get(step)
+    if not phase:
+        return f"ERROR: Invalid step {step}"
+
+    parts = []
+
+    # Special handling for Phase 3 (Investigate) with iteration logic
+    if step == 3:
+        # Check exit conditions
+        if confidence == "high" or iteration >= MAX_ITERATIONS:
+            # Exit loop - advance to formulate
+            actions = get_phase_3_completion_message(confidence, iteration)
+            title = f"PROBLEM ANALYSIS - {phase['title']} Complete"
+
+            parts.append(render_step_header(StepHeaderNode(
+                title=title,
+                script="problem-analysis",
+                step=str(step)
+            )))
+            parts.append("")
+
+            parts.append(render_current_action(CurrentActionNode(actions)))
+            parts.append("")
+
+            next_cmd = f'python3 -m {MODULE_PATH} --step 4 '
+            parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
+
+            return "\n".join(parts)
+
+        # Continue investigation - emit iteration prompt
+        title = f"PROBLEM ANALYSIS - {phase['title']} (Iteration {iteration} of {MAX_ITERATIONS})"
+
+        parts.append(render_step_header(StepHeaderNode(
+            title=title,
+            script="problem-analysis",
+            step=str(step)
+        )))
+        parts.append("")
+
+        parts.append(render_current_action(CurrentActionNode(phase["actions"])))
+        parts.append("")
+
+        next_iteration = iteration + 1
+        next_cmd = f'python3 -m {MODULE_PATH} --step 3  --confidence {{exploring|low|medium|high|certain}} --iteration {next_iteration}'
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
+
+        return "\n".join(parts)
+
+    # Standard phases (1, 2, 4, 5)
+    title = f"PROBLEM ANALYSIS - {phase['title']}"
+
+    parts.append(render_step_header(StepHeaderNode(
+        title=title,
+        script="problem-analysis",
+        step=str(step)
+    )))
+    parts.append("")
+
+    # XML mandate on step 1
+    if step == 1:
+        parts.append(XML_FORMAT_MANDATE)
+        parts.append("")
+
+    parts.append(render_current_action(CurrentActionNode(phase["actions"])))
+    parts.append("")
+
+    # Invoke after
+    next_step = step + 1
+    if next_step <= WORKFLOW.total_steps:
+        next_cmd = f'python3 -m {MODULE_PATH} --step {next_step} '
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
+    else:
+        parts.append("WORKFLOW COMPLETE - Present final report to user.")
+
+    return "\n".join(parts)
+
+
+# =============================================================================
+# CLI Entry Point
+# =============================================================================
 
 
 def main(
     step: int = None,
-    total_steps: int = None,
     confidence: str | None = None,
     iteration: int | None = None,
 ):
@@ -417,7 +457,6 @@ def main(
         epilog="Phases: gate (1) -> hypothesize (2) -> investigate (3) -> formulate (4) -> output (5)",
     )
     parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--total-steps", type=int, required=True)
     parser.add_argument(
         "--confidence",
         type=str,
@@ -435,79 +474,10 @@ def main(
 
     if args.step < 1:
         sys.exit("ERROR: --step must be >= 1")
-    if args.total_steps < 5:
-        sys.exit("ERROR: --total-steps must be >= 5")
-    if args.step > args.total_steps:
-        sys.exit("ERROR: --step cannot exceed --total-steps")
+    if args.step > WORKFLOW.total_steps:
+        sys.exit(f"ERROR: --step cannot exceed {WORKFLOW.total_steps}")
 
-    # Get phase info
-    phase = PHASES.get(args.step)
-    if not phase:
-        sys.exit(f"ERROR: Invalid step {args.step}")
-
-    # Special handling for Phase 3 (Investigate) with iteration logic
-    if args.step == 3:
-        # Check exit conditions
-        if args.confidence == "high":
-            # Exit loop due to high confidence
-            actions = get_phase_3_completion_message(args.confidence, args.iteration)
-            next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 4 --total-steps {args.total_steps}" />'
-            output = render(W.text_output(
-                step=args.step,
-                total=args.total_steps,
-                title=f"PROBLEM ANALYSIS - {phase['title']} Complete",
-                actions=actions,
-                invoke_after=next_cmd
-            ).build(), XMLRenderer())
-            print(output)
-            return
-
-        if args.iteration >= MAX_ITERATIONS:
-            # Exit loop due to iteration cap
-            actions = get_phase_3_completion_message(args.confidence, args.iteration)
-            next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 4 --total-steps {args.total_steps}" />'
-            output = render(W.text_output(
-                step=args.step,
-                total=args.total_steps,
-                title=f"PROBLEM ANALYSIS - {phase['title']} Complete",
-                actions=actions,
-                invoke_after=next_cmd
-            ).build(), XMLRenderer())
-            print(output)
-            return
-
-        # Continue investigation - emit iteration prompt
-        next_iteration = args.iteration + 1
-        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step 3 --total-steps {args.total_steps} --confidence <your_confidence> --iteration {next_iteration}" />'
-
-        # Add iteration context to title
-        title = f"PROBLEM ANALYSIS - {phase['title']} (Iteration {args.iteration} of {MAX_ITERATIONS})"
-
-        output = render(W.text_output(
-            step=args.step,
-            total=args.total_steps,
-            title=title,
-            actions=phase["actions"],
-            invoke_after=next_cmd
-        ).build(), XMLRenderer())
-        print(output)
-        return
-
-    # Standard phases (1, 2, 4, 5)
-    next_step = args.step + 1
-    if next_step <= args.total_steps:
-        next_cmd = f'<invoke working-dir=".claude/skills/scripts" cmd="python3 -m {MODULE_PATH} --step {next_step} --total-steps {args.total_steps}" />'
-    else:
-        next_cmd = None
-
-    output = render(W.text_output(
-        step=args.step,
-        total=args.total_steps,
-        title=f"PROBLEM ANALYSIS - {phase['title']}",
-        actions=phase["actions"],
-        invoke_after=next_cmd
-    ).build(), XMLRenderer())
-    print(output)
+    print(format_output(args.step, args.confidence, args.iteration))
 
 
 if __name__ == "__main__":
