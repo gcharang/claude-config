@@ -9,7 +9,7 @@ Plan-docs checks:
 - Documentation completeness (Tiers 3-6)
 - WHY comment decision_ref validity
 - Temporal contamination in ALL string fields
-- Translation faithfulness (plan.json vs plan.md)
+- JSON structural completeness (all documentation fields populated)
 """
 
 from .qr_decompose_base import DecomposeBase, TOTAL_STEPS
@@ -21,12 +21,9 @@ class PlanDocsDecompose(DecomposeBase):
     PHASE = "plan-docs"
 
     def get_artifact_prompt(self) -> str:
-        """Plan-docs reads plan.json and plan.md for translation verification."""
+        """Plan-docs reads plan.json for documentation verification."""
         return """Read plan.json from STATE_DIR:
   cat $STATE_DIR/plan.json | jq '.'
-
-Also read plan.md if it exists:
-  cat $STATE_DIR/plan.md
 
 Focus on:
   - milestones[].documentation{}

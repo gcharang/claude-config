@@ -41,13 +41,10 @@ class PlanDocsVerify(VerifyBase):
         if scope == "*":
             # Macro check
             guidance.extend([
-                "MACRO CHECK - Verify across entire plan.json and plan.md:",
+                "MACRO CHECK - Verify across entire plan.json:",
                 "",
                 f"  Read plan.json:",
                 f"    cat {state_dir}/plan.json | jq '.'",
-                "",
-                f"  Read plan.md (if exists):",
-                f"    cat {state_dir}/plan.md",
                 "",
             ])
         elif scope.startswith("code_change:"):
@@ -97,14 +94,14 @@ class PlanDocsVerify(VerifyBase):
                 "  Comments should stand alone without knowing prior state.",
                 "",
             ])
-        elif "translation" in check.lower() or "faithfulness" in check.lower():
+        elif "structural completeness" in check.lower() or "json completeness" in check.lower():
             guidance.extend([
-                "TRANSLATION FAITHFULNESS CHECK:",
-                "  Compare plan.json to plan.md:",
-                "  - Every decision_log entry appears in MD",
-                "  - Every why_comment appears in MD diff blocks",
-                "  - Every code_intent appears in MD",
-                "  - No content in MD that isn't in JSON",
+                "JSON STRUCTURAL COMPLETENESS CHECK:",
+                "  Verify plan.json documentation fields are populated:",
+                "  - Every milestone has documentation{} with module_comment",
+                "  - Every function has a docstrings[] entry",
+                "  - Every decision_log entry has reasoning field",
+                "  - readme_entries[] have non-empty content",
                 "",
             ])
         elif "decision_ref" in check.lower():

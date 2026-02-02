@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Plan docs execution - first-time documentation workflow.
 
-6-step workflow for technical-writer sub-agent:
+8-step workflow for technical-writer sub-agent:
   1. Task Description (context display, JSON-IR architecture)
   2. Extract Planning Context (decision log, constraints, risks)
   3. Temporal Contamination Review (5 detection categories)
   4. Prioritization and Doc Tiers (HIGH/MEDIUM/LOW, Tiers 3-6)
   5. Comment Injection via CLI (WHY comments, decision_refs)
-  6. Translate and Output (validate, translate to plan.md)
+  6. README Synthesis (invisible knowledge -> READMEs)
+  7. Diagram Rendering (ASCII diagrams from graph specs)
+  8. Final Validation (validate plan.json completeness)
 
 This is the EXECUTE script for first-time documentation.
 For QR fix mode, see plan_docs_qr_fix.py.
@@ -33,7 +35,7 @@ STEPS = {
     5: "Comment Injection via CLI",
     6: "README Synthesis",
     7: "Diagram Rendering",
-    8: "Translate and Output",
+    8: "Final Validation",
 }
 
 
@@ -65,16 +67,16 @@ def get_step_guidance(
             "",
             "TYPE: PLAN_DOCS (JSON-IR)",
             "",
-            "TASK: Enrich plan.json with documentation, then translate to Markdown.",
+            "TASK: Enrich plan.json with documentation.",
             "",
             "JSON-IR ARCHITECTURE:",
             "  plan.json contains code_changes[] populated by Developer.",
-            "  Your job: fill documentation{} and why_comments, then translate.",
+            "  Your job: fill documentation{} and why_comments.",
             "  Use CLI commands - DO NOT edit plan.json directly.",
             "",
-            "TWO-PART WORKFLOW:",
-            "  Part A (Steps 1-6): Enrich plan.json with documentation",
-            "  Part B (Step 7-8): Diagram rendering and translate plan.json to plan.md",
+            "WORKFLOW:",
+            "  Steps 1-6: Enrich plan.json with documentation",
+            "  Steps 7-8: Diagram rendering and final validation",
             "",
             "CLI COMMANDS (single invocation):",
             "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-doc \\",
@@ -87,7 +89,7 @@ def get_step_guidance(
             "    --milestone M-001 --type inline --location 'func:line' --content-file /tmp/why.txt --decision-ref DL-001 --source decision_log",
             "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-readme \\",
             "    --path src/module --content-file /tmp/readme.txt",
-            "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR translate --output $STATE_DIR/plan.md",
+            "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR validate --phase plan-docs",
             "",
             "BATCH MODE (preferred for multiple docs):",
             "",
@@ -347,18 +349,12 @@ def get_step_guidance(
         return {
             "title": STEPS[8],
             "actions": [
-                "PART B: TRANSLATE plan.json TO MARKDOWN",
+                "FINAL VALIDATION",
                 "",
-                "1. VALIDATE plan.json documentation completeness:",
-                "   python3 -m skills.planner.cli.plan validate --phase plan-docs",
+                "VALIDATE plan.json documentation completeness:",
+                f"  python3 -m skills.planner.cli.plan validate --phase plan-docs --state-dir {state_dir}",
                 "",
-                "2. TRANSLATE to Markdown:",
-                f"   python3 -m skills.planner.cli.plan translate --output {state_dir}/plan.md",
-                "",
-                "The translate command generates Markdown following plan-format.md structure.",
-                "This is the FIRST time Markdown is created from the JSON-IR.",
-                "",
-                "VERIFY COVERAGE (before translating):",
+                "VERIFY COVERAGE:",
                 "",
                 "Tiers 3-4 (structure):",
                 "  [ ] Every new file has module_comment in documentation{}",
@@ -375,26 +371,6 @@ def get_step_guidance(
                 "  [ ] No baseline references (Previously, Instead of, Replaces)",
                 "  [ ] No location directives (After X, Before Y, Insert)",
                 "  [ ] No planning artifacts (TODO, Will, Planned, Temporary)",
-                "",
-                "---",
-                "",
-                "OUTPUT FORMAT (MINIMAL):",
-                "",
-                "TOKEN BUDGET: MAX 300 tokens for return message.",
-                "",
-                "If translation complete:",
-                "  'COMPLETE: plan.json translated to plan.md'",
-                "  'Milestones: [N]'",
-                "  'Code changes: [N]'",
-                "  'WHY comments: [N]'",
-                "",
-                "If Planning Context gaps found:",
-                "  'COMPLETE: Translated with [N] gaps.'",
-                "  <planning_context_gap>",
-                "    <milestone>[ID]</milestone>",
-                "    <code_element>[function, threshold, etc.]</code_element>",
-                "    <gap_type>[missing_decision|insufficient_reasoning]</gap_type>",
-                "  </planning_context_gap>",
                 "",
                 "When complete, output: PASS",
             ],
