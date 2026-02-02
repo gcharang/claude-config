@@ -54,11 +54,16 @@ Diagram graph integrity. Semantic issues block; format issues warn.
 
 Auto-fixable, minimal impact.
 
-| Category            | Detection                                |
-| ------------------- | ---------------------------------------- |
-| DEAD_CODE           | Unused functions, impossible branches    |
-| FORMATTER_FIXABLE   | Style issues fixable by formatter/linter |
-| MINOR_INCONSISTENCY | Non-conformance with no documented rule  |
+| Category            | Detection                                                  |
+| ------------------- | ---------------------------------------------------------- |
+| DEAD_CODE           | Unused functions, impossible branches                      |
+| FORMATTER_FIXABLE   | Style issues fixable by formatter/linter                   |
+| MINOR_INCONSISTENCY | Non-conformance with no documented rule                    |
+| TOOLCHAIN_CATCHABLE | Error in planned code that compiler/linter/interpreter     |
+|                     | would flag, where intended correct code is obvious from    |
+|                     | context (typos, missing imports, non-exhaustive match).    |
+|                     | NOT: errors revealing plan-level misunderstanding -- those |
+|                     | are ASSUMPTION_UNVALIDATED (MUST)                          |
 
 ## IK Proximity Rule
 
