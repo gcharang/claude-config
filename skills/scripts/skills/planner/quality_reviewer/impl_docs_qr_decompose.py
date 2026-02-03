@@ -1,28 +1,24 @@
 #!/usr/bin/env python3
 """QR decomposition for impl-docs phase.
 
-INTENT.md requires separate files per phase.
-This file contains ONLY impl-docs-specific item generation.
-Shared logic lives in qr_decompose_base.py.
+Scope: Post-implementation documentation.
+  - CLAUDE.md format (tabular index)
+  - IK proximity audit (docs adjacent to code)
+  - Temporal contamination in comments
+  - README.md creation criteria
+NOT code quality (verified in impl-code phase).
 
-Impl-docs checks:
-- CLAUDE.md format (tabular index)
-- IK proximity audit (docs adjacent to code)
-- Temporal contamination in comments
-- README.md creation criteria
+Severity categories: Same as plan-docs (TW can fix documentation issues).
 """
 
-from .qr_decompose_base import DecomposeBase
+from skills.planner.quality_reviewer.prompts.decompose import dispatch_step
 
 
-class ImplDocsDecompose(DecomposeBase):
-    """QR decomposition for impl-docs phase."""
+PHASE = "impl-docs"
 
-    PHASE = "impl-docs"
 
-    def get_artifact_prompt(self) -> str:
-        """Impl-docs reads plan.json, CLAUDE.md files, and README.md files."""
-        return """Read plan.json from STATE_DIR:
+STEP_1_ABSORB = """\
+Read plan.json from STATE_DIR:
   cat $STATE_DIR/plan.json | jq '.'
 
 Also read documentation files in modified directories:
@@ -30,25 +26,94 @@ Also read documentation files in modified directories:
   - README.md files
   - Comments in source files
 
+SCOPE: Post-implementation documentation quality.
+
 Focus on:
-  - invisible_knowledge section
-  - Modified directory list
-  - CLAUDE.md format compliance"""
+  - invisible_knowledge section (was it transferred?)
+  - Modified directory list (need docs?)
+  - CLAUDE.md format compliance
+  - README.md presence where required
 
-    def get_enumeration_guidance(self) -> str:
-        """Return phase-specific enumeration guidance for Step 3."""
-        return """For impl-docs, enumerate:
+OUT OF SCOPE:
+  - Code quality (verified in impl-code)
+  - Plan structure (verified in plan-design)"""
+
+
+STEP_2_CONCERNS = """\
+Brainstorm concerns specific to POST-IMPL DOCUMENTATION:
+  - CLAUDE.md missing or wrong format (tabular index required)
+  - IK not at best location (should be adjacent to code)
+  - Temporal contamination in comments
+  - README.md missing where required
+  - Comments don't explain WHY
+
+DO NOT brainstorm code quality or plan structure concerns."""
+
+
+STEP_3_ENUMERATION = """\
+For impl-docs, enumerate DOCUMENTATION ARTIFACTS:
+
+DIRECTORIES:
   - Each directory with modified files (directory path)
-  - Each CLAUDE.md file that should exist (path)
-  - Each README.md file that should exist (path)
-  - Each invisible_knowledge item (count, topics)"""
+  - CLAUDE.md exists? Format correct?
+  - README.md exists where required?
+
+INVISIBLE KNOWLEDGE:
+  - Each invisible_knowledge item (count, topics)
+  - Current location vs best location
+
+COMMENTS:
+  - Source files with new comments
+  - Temporal contamination candidates"""
 
 
-def get_step_guidance(step: int, total_steps: int, module_path: str = None, **kwargs) -> dict:
-    """Entry point for workflow execution."""
+STEP_5_GENERATE = """\
+SEVERITY ASSIGNMENT (per conventions/severity.md, impl-docs scope):
+
+  MUST (blocks all iterations) - KNOWLEDGE categories:
+    - IK_TRANSFER_FAILURE: invisible knowledge not at best location
+    - TEMPORAL_CONTAMINATION: change-relative language in comments
+    - BASELINE_REFERENCE: comment references removed code
+
+  SHOULD (iterations 1-4):
+    - CLAUDE.md format violations
+    - README.md missing where scope warrants
+    - WHY-not-WHAT violations
+
+  COULD (iterations 1-3):
+    - Minor formatting inconsistencies
+    - Documentation style variations"""
+
+
+COMPONENT_EXAMPLES = """\
+  - A modified directory
+  - A CLAUDE.md file
+  - A README.md file"""
+
+
+CONCERN_EXAMPLES = """\
+  - IK proximity
+  - Temporal contamination
+  - Format compliance"""
+
+
+PHASE_PROMPTS = {
+    1: STEP_1_ABSORB,
+    2: STEP_2_CONCERNS,
+    3: STEP_3_ENUMERATION,
+    5: STEP_5_GENERATE,
+}
+
+GROUPING_CONFIG = {
+    "component_examples": COMPONENT_EXAMPLES,
+    "concern_examples": CONCERN_EXAMPLES,
+}
+
+
+def get_step_guidance(step: int, module_path: str = None, **kwargs) -> dict:
     module_path = module_path or "skills.planner.quality_reviewer.impl_docs_qr_decompose"
-    decomposer = ImplDocsDecompose()
-    return decomposer.get_step_guidance(step, total_steps, module_path=module_path, **kwargs)
+    state_dir = kwargs.get("state_dir", "")
+    return dispatch_step(step, PHASE, module_path, PHASE_PROMPTS, GROUPING_CONFIG, state_dir)
 
 
 if __name__ == "__main__":

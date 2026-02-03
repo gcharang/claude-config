@@ -11,6 +11,21 @@
   7. Diagram Rendering (ASCII diagrams from graph specs)
   8. Final Validation (validate plan.json completeness)
 
+Scope: Documentation quality only -- capturing planning knowledge in
+documentation fields. This phase does NOT modify code logic.
+
+In scope (per conventions/documentation.md):
+- Invisible knowledge coverage: decisions -> inline_comments/function_blocks
+- Temporal contamination removal from documentation strings
+- WHY-not-WHAT quality in comments
+- Structural completeness of documentation{} fields
+- README synthesis from invisible_knowledge
+
+Out of scope (handled by Developer in plan-code phase):
+- Code correctness, compilation, types
+- Diff content and format
+- Logic changes
+
 This is the EXECUTE script for first-time documentation.
 For QR fix mode, see plan_docs_qr_fix.py.
 Router (plan_docs.py) dispatches to appropriate script.

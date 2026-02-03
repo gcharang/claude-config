@@ -75,7 +75,7 @@ ROLE_PERMISSIONS = {
     "architect": {"init", "set-milestone", "set-intent", "set-decision",
                   "set-diagram", "add-diagram-node", "add-diagram-edge"},
     "developer": {"set-change"},
-    "tw": {"set-doc", "set-readme", "translate", "set-diagram-render"},
+    "tw": {"set-doc", "set-readme", "set-diagram-render"},
     "qr": {"validate"},
 }
 
@@ -854,25 +854,6 @@ class SetDiagramRenderCommand(Command):
 # =============================================================================
 
 
-class TranslateCommand(Command):
-    name = "translate"
-    help = "Translate plan.json to Markdown"
-    role = "tw"
-
-    @classmethod
-    def add_arguments(cls, p: argparse.ArgumentParser) -> None:
-        p.add_argument("--output", required=True, help="Output file path")
-
-    @classmethod
-    def run(cls, args: argparse.Namespace) -> None:
-        state_dir = get_state_dir()
-        plan = load_plan(state_dir)
-
-        md = translate_to_markdown(plan)
-
-        Path(args.output).write_text(md)
-        success(f"Translated to {args.output}")
-
 
 def translate_to_markdown(plan: "Plan") -> str:
     """Generate Markdown from plan.json."""
@@ -1242,7 +1223,6 @@ COMMANDS: list[type[Command]] = [
     SetDocCommand,
     SetReadmeCommand,
     SetDiagramRenderCommand,
-    TranslateCommand,
     ValidateCommand,
     ListMilestonesCommand,
     ListIntentsCommand,

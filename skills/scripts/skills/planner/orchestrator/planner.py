@@ -56,8 +56,10 @@ from skills.lib.workflow.ast.nodes import Document
 MODULE_PATH = "skills.planner.orchestrator.planner"
 
 
-def _translate_plan(state_dir: str) -> None:
+def _translate_plan(state_dir: str) -> str | None:
     """Mechanical translation: plan.json -> plan.md.
+
+    Returns path to plan.md on success, None on failure.
 
     Why non-fatal: plan.json is the source of truth (the IR).
     plan.md is a convenience rendering. If translation fails,
@@ -65,14 +67,17 @@ def _translate_plan(state_dir: str) -> None:
     the plan.json content.
     """
     from pathlib import Path
-    from skills.planner.cli.plan_commands import PlanContext, translate
+    from skills.planner.cli.plan_commands import PlanContext, _translate
 
     try:
+        plan_md = str(Path(state_dir) / "plan.md")
         ctx = PlanContext(state_dir=Path(state_dir))
-        translate(ctx, str(Path(state_dir) / "plan.md"))
+        _translate(ctx, plan_md)
+        return plan_md
     except Exception as e:
         import sys
         print(f"Warning: plan.md translation failed: {e}", file=sys.stderr)
+        return None
 
 _provider = PlannerResourceProvider()
 
@@ -225,7 +230,7 @@ def execute_dispatch_step(title, agent, agent_role, script, mode_total_steps, po
     return handler
 
 
-def qr_decompose_step(title, phase, script, mode_total_steps, model=None):
+def qr_decompose_step(title, phase, script, model=None):
     """Steps 4, 8, 12: QR decomposition dispatch.
 
     Dispatches single QR agent to decompose artifact into verification items.
@@ -451,8 +456,7 @@ STEPS = {
             "5. CURRENT_UNDERSTANDING: how system works; for bugs: symptom + reproduction",
             "6. ASSUMPTIONS: unverified inferences with confidence H/M/L -- or 'none'",
             "7. INVISIBLE_KNOWLEDGE: design rationale, invariants, accepted tradeoffs",
-            "8. USER_QUOTES: verbatim user statements, especially corrections",
-            "9. REFERENCE_DOCS: paths to project docs sub-agents should read (doc/*.md, specs/*) -- or 'none'",
+            "8. REFERENCE_DOCS: paths to project docs sub-agents should read (doc/*.md, specs/*) -- or 'none'",
             "",
             "FORMAT: High signal-to-noise. File refs over content. No ASCII diagrams.",
             "",
@@ -473,7 +477,6 @@ STEPS = {
             '  "current_understanding": ["how system works", "bug: symptom + repro"],',
             '  "assumptions": ["inference (H/M/L confidence)"] or ["none"],',
             '  "invisible_knowledge": ["design rationale", "invariants", "tradeoffs"],',
-            '  "user_quotes": ["verbatim quote with context"],',
             '  "reference_docs": ["doc/spec.md - what it specifies"] or ["none"]',
             "}",
             "",
@@ -485,8 +488,7 @@ STEPS = {
             "[ ] 3. At least one constraint OR explicit 'none confirmed'",
             "[ ] 4. Entry points identified OR 'greenfield'",
             "[ ] 5. Someone unfamiliar would understand why we're building this",
-            "[ ] 6. User corrections/quotes preserved verbatim (if any)",
-            "[ ] 7. Reference documentation paths captured or explicit 'none'",
+            "[ ] 6. Reference documentation paths captured or explicit 'none'",
             "",
             "IF ANY CHECK FAILS: gather missing context via AskUserQuestion or exploration.",
         ],
@@ -507,7 +509,6 @@ STEPS = {
         title="plan-design-qr-decompose",
         phase="plan-design",
         script="quality_reviewer/plan_design_qr_decompose.py",
-        mode_total_steps=13,
         model="opus",
     ),
     5: qr_verify_step(
@@ -537,7 +538,6 @@ STEPS = {
         title="plan-code-qr-decompose",
         phase="plan-code",
         script="quality_reviewer/plan_code_qr_decompose.py",
-        mode_total_steps=13,
         model="opus",
     ),
     9: qr_verify_step(
@@ -568,7 +568,6 @@ STEPS = {
         title="plan-docs-qr-decompose",
         phase="plan-docs",
         script="quality_reviewer/plan_docs_qr_decompose.py",
-        mode_total_steps=13,
         model="opus",
     ),
     13: qr_verify_step(
@@ -738,9 +737,12 @@ def main():
         # Why translate on terminal_pass: plan.json is the IR (modified by
         # QR fix cycles). plan.md is a rendered view. Terminal gate approval
         # signals plan.json is stable -- safe to regenerate the markdown.
-        if result.terminal_pass and args.state_dir:
-            _translate_plan(args.state_dir)
         print(result.output)
+        if result.terminal_pass and args.state_dir:
+            plan_path = _translate_plan(args.state_dir)
+            if plan_path:
+                print(f"\nPlan rendered to: {plan_path}")
+                print("Copy this file to the user's requested output path.")
     else:
         print(result)
 

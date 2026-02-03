@@ -62,7 +62,6 @@ if PYDANTIC_AVAILABLE:
         current_understanding: list[str]
         assumptions: list[str]
         invisible_knowledge: list[str]
-        user_quotes: list[str]
         reference_docs: list[str]
 
 

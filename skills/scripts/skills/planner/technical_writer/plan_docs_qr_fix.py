@@ -6,15 +6,22 @@
   2. Apply targeted fixes to documentation in plan.json
   3. Validate fixes locally
 
+Scope: Documentation quality only -- fixing issues in documentation fields.
+TW can fix:
+- Temporal contamination in documentation strings
+- Missing WHY comments (add inline_comments/function_blocks)
+- Invalid decision_refs (correct or add missing refs)
+- Structural completeness gaps (populate empty documentation{} fields)
+- README content gaps (add to readme_entries[])
+
+TW cannot fix (escalate if QR flags these -- they are out of scope):
+- Code correctness issues (compilation, exports, types)
+- Diff format issues (context lines, syntax)
+- Logic errors in planned code
+
 This is the FIX script for post-QR repair.
 For first-time creation, see plan_docs_execute.py.
 Router (plan_docs.py) dispatches to appropriate script.
-
-Fix scripts separate from execute scripts:
-- Execute: first-time creation (blank slate)
-- Fix: targeted repair (QR failures guide changes)
-- Separation prevents fix logic from polluting execute logic
-- Fix scripts are shorter, focused on QR findings
 """
 
 from skills.lib.workflow.ast import W, XMLRenderer, render
@@ -79,11 +86,19 @@ def get_step_guidance(
                 "  2. Identify what in plan.json documentation needs to change",
                 "  3. Note the fix approach for step 2",
                 "",
-                "COMMON ISSUE TYPES:",
+                "FIXABLE ISSUE TYPES (address these):",
                 "  - Temporal contamination in comments",
-                "  - Missing WHY comments (insufficient coverage)",
-                "  - Invalid decision_refs",
-                "  - JSON structural completeness gaps",
+                "  - Missing WHY comments (add inline_comments/function_blocks)",
+                "  - Invalid decision_refs (correct the reference)",
+                "  - Structural completeness gaps (populate documentation{} fields)",
+                "  - README content gaps (add to readme_entries[])",
+                "",
+                "OUT OF SCOPE (if QR flagged these, mark as PASS with note):",
+                "  - Code correctness (compilation, exports, types) -- plan-code's job",
+                "  - Diff format issues -- plan-code's job",
+                "  - Whether files exist on disk -- this is a plan, not implementation",
+                "  If an item is out of scope, update its status to PASS with finding:",
+                "    'Out of scope for plan-docs phase (code correctness)'",
                 "",
                 "CONTEXT PRESERVATION:",
                 "  - Do NOT remove valid documentation",

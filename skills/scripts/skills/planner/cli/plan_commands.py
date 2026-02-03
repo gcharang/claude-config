@@ -494,8 +494,8 @@ def set_diagram_render(ctx: PlanContext, diagram: str, content_file: str) -> dic
     return {"diagram": diagram, "operation": "updated"}
 
 
-def translate(ctx: PlanContext, output: str) -> dict:
-    """Translate plan.json to Markdown."""
+def _translate(ctx: PlanContext, output: str) -> dict:
+    """Translate plan.json to Markdown. Internal only -- not exposed via CLI."""
     from .plan import translate_to_markdown
 
     plan = ctx.load_plan()

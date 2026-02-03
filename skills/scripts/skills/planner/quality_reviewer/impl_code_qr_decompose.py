@@ -1,51 +1,121 @@
 #!/usr/bin/env python3
 """QR decomposition for impl-code phase.
 
-INTENT.md requires separate files per phase.
-This file contains ONLY impl-code-specific item generation.
-Shared logic lives in qr_decompose_base.py.
+Scope: Implemented code quality.
+  - Acceptance criteria verification (expectations vs observations)
+  - Cross-cutting concerns (shared state, error propagation)
+  - Code quality (all 8 quality documents)
+  - Intent marker validation
+NOT plan structure or documentation (verified in earlier phases).
 
-Impl-code checks:
-- Acceptance criteria verification (factored: expectations vs observations)
-- Cross-cutting concerns (shared state, error propagation)
-- Code quality (all 8 quality documents)
-- Intent marker validation
+Severity categories: Same as plan-code (Dev can fix code issues).
 """
 
-from .qr_decompose_base import DecomposeBase
+from skills.planner.quality_reviewer.prompts.decompose import dispatch_step
 
 
-class ImplCodeDecompose(DecomposeBase):
-    """QR decomposition for impl-code phase."""
+PHASE = "impl-code"
 
-    PHASE = "impl-code"
 
-    def get_artifact_prompt(self) -> str:
-        """Impl-code reads plan.json and modified files from codebase."""
-        return """Read plan.json from STATE_DIR:
+STEP_1_ABSORB = """\
+Read plan.json from STATE_DIR:
   cat $STATE_DIR/plan.json | jq '.'
 
 Also read MODIFIED_FILES from codebase (paths from milestones).
 
+SCOPE: Implemented code quality.
+
 Focus on:
-  - milestones[].acceptance_criteria
-  - Actual implemented code in modified files
-  - Code quality (structure, patterns, documentation)"""
+  - milestones[].acceptance_criteria (expectations)
+  - Actual implemented code in modified files (observations)
+  - Code quality (structure, patterns, documentation)
+  - Intent markers in implemented code
 
-    def get_enumeration_guidance(self) -> str:
-        """Return phase-specific enumeration guidance for Step 3."""
-        return """For impl-code, enumerate:
+OUT OF SCOPE:
+  - Plan structure (already verified in plan-design)
+  - Documentation files (impl-docs phase)"""
+
+
+STEP_2_CONCERNS = """\
+Brainstorm concerns specific to IMPLEMENTED CODE:
+  - Acceptance criteria not met
+  - Cross-cutting concerns broken (error handling, logging)
+  - Code quality violations (god objects, god functions)
+  - Missing or invalid intent markers
+  - Implementation drift from plan
+
+DO NOT brainstorm plan structure or documentation concerns."""
+
+
+STEP_3_ENUMERATION = """\
+For impl-code, enumerate IMPLEMENTATION ARTIFACTS:
+
+ACCEPTANCE CRITERIA:
   - Each milestone with acceptance_criteria (ID, criteria count)
-  - Files modified per milestone
-  - Cross-cutting concerns mentioned (error handling, logging, etc.)
-  - Code quality aspects to verify"""
+  - Each criterion (ID, expectation text)
+
+FILES:
+  - Files modified per milestone (path list)
+  - Actual file content (read from codebase)
+
+CROSS-CUTTING:
+  - Error handling patterns used
+  - Logging patterns used
+  - Shared state access patterns
+
+CODE QUALITY:
+  - Function sizes (line counts)
+  - Nesting depths
+  - Dependency counts"""
 
 
-def get_step_guidance(step: int, total_steps: int, module_path: str = None, **kwargs) -> dict:
-    """Entry point for workflow execution."""
+STEP_5_GENERATE = """\
+SEVERITY ASSIGNMENT (per conventions/severity.md, impl-code scope):
+
+  MUST (blocks all iterations):
+    - Acceptance criterion not met
+    - MARKER_INVALID: intent marker without valid explanation
+
+  SHOULD (iterations 1-4) - STRUCTURE categories:
+    - GOD_OBJECT: >15 methods OR >10 deps
+    - GOD_FUNCTION: >50 lines OR >3 nesting
+    - CONVENTION_VIOLATION: violates documented project convention
+    - INCONSISTENT_ERROR_HANDLING: mixed exceptions/codes
+
+  COULD (iterations 1-3) - COSMETIC:
+    - DEAD_CODE: unused functions, impossible branches
+    - FORMATTER_FIXABLE: style issues"""
+
+
+COMPONENT_EXAMPLES = """\
+  - A modified file
+  - A milestone's implementation
+  - A cross-cutting concern pattern"""
+
+
+CONCERN_EXAMPLES = """\
+  - Acceptance criteria compliance
+  - Error handling consistency
+  - Code structure quality"""
+
+
+PHASE_PROMPTS = {
+    1: STEP_1_ABSORB,
+    2: STEP_2_CONCERNS,
+    3: STEP_3_ENUMERATION,
+    5: STEP_5_GENERATE,
+}
+
+GROUPING_CONFIG = {
+    "component_examples": COMPONENT_EXAMPLES,
+    "concern_examples": CONCERN_EXAMPLES,
+}
+
+
+def get_step_guidance(step: int, module_path: str = None, **kwargs) -> dict:
     module_path = module_path or "skills.planner.quality_reviewer.impl_code_qr_decompose"
-    decomposer = ImplCodeDecompose()
-    return decomposer.get_step_guidance(step, total_steps, module_path=module_path, **kwargs)
+    state_dir = kwargs.get("state_dir", "")
+    return dispatch_step(step, PHASE, module_path, PHASE_PROMPTS, GROUPING_CONFIG, state_dir)
 
 
 if __name__ == "__main__":

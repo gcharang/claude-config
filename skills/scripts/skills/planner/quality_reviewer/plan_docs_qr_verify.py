@@ -4,9 +4,20 @@
 Single-item verification mode for parallel QR dispatch.
 Each verify agent receives --qr-item and validates ONE check.
 
-Modes:
-- --qr-item: Single item verification (for parallel dispatch)
-- Default (legacy): Sequential 6-step full verification (deprecated)
+Scope: Documentation quality only -- verifying that planning knowledge is
+captured in documentation fields. This is NOT code review.
+
+In scope:
+- Invisible knowledge coverage (decisions documented somewhere)
+- Temporal contamination in documentation strings
+- WHY-not-WHAT quality in comments
+- Structural completeness of documentation{} fields
+- decision_ref validity
+
+Out of scope (verified in plan-code phase):
+- Code correctness (compilation, exports, types)
+- Diff format validity
+- Whether planned files exist on disk
 
 For decomposition (generating items), see plan_docs_qr_decompose.py.
 """
@@ -36,10 +47,15 @@ class PlanDocsVerify(VerifyBase):
         scope = item.get("scope", "*")
         check = item.get("check", "")
 
-        guidance = []
+        guidance = [
+            "SCOPE CONSTRAINT: You are verifying DOCUMENTATION QUALITY only.",
+            "  - Verify against plan.json content, NOT filesystem",
+            "  - Check documentation fields, NOT code correctness",
+            "  - Out of scope: compilation, exports, types, diff syntax",
+            "",
+        ]
 
         if scope == "*":
-            # Macro check
             guidance.extend([
                 "MACRO CHECK - Verify across entire plan.json:",
                 "",
@@ -47,29 +63,52 @@ class PlanDocsVerify(VerifyBase):
                 f"    cat {state_dir}/plan.json | jq '.'",
                 "",
             ])
-        elif scope.startswith("code_change:"):
-            cc_id = scope.split(":")[1]
+        elif scope.startswith("decision:"):
+            dl_id = scope.split(":")[1]
             guidance.extend([
-                f"CODE CHANGE CHECK - Focus on {cc_id}:",
+                f"DECISION CHECK - Focus on {dl_id}:",
                 "",
-                f"  Extract code_change:",
-                f"    cat {state_dir}/plan.json | jq '.milestones[].code_changes[] | select(.id == \"{cc_id}\")'",
+                f"  Extract decision:",
+                f"    cat {state_dir}/plan.json | jq '.planning_context.decisions[] | select(.id == \"{dl_id}\")'",
+                "",
+                "  Verify this decision is documented somewhere (inline_comment,",
+                "  function_block, or readme_entry with matching decision_ref).",
                 "",
             ])
         elif scope.startswith("milestone:"):
             ms_id = scope.split(":")[1]
             guidance.extend([
-                f"MILESTONE CHECK - Focus on {ms_id}:",
+                f"MILESTONE DOCUMENTATION CHECK - Focus on {ms_id}:",
                 "",
-                f"  Extract milestone:",
-                f"    cat {state_dir}/plan.json | jq '.milestones[] | select(.id == \"{ms_id}\")'",
+                f"  Extract milestone documentation:",
+                f"    cat {state_dir}/plan.json | jq '.milestones[] | select(.id == \"{ms_id}\") | .documentation'",
+                "",
+                "  Verify documentation{} fields are populated:",
+                "  - module_comment for new files",
+                "  - docstrings[] for functions",
+                "  - function_blocks[] for non-trivial functions",
+                "",
+            ])
+        elif scope.startswith("readme:"):
+            path = scope.split(":", 1)[1]
+            guidance.extend([
+                f"README CHECK - Focus on {path}:",
+                "",
+                f"  Extract readme entry:",
+                f"    cat {state_dir}/plan.json | jq '.readme_entries[] | select(.path == \"{path}\")'",
+                "",
+                "  Verify content captures cross-cutting invisible knowledge.",
                 "",
             ])
         else:
+            # Generic scope -- still constrain to plan.json
             guidance.extend([
                 f"SCOPED CHECK - Scope: {scope}",
                 "",
-                "  Read the relevant section from plan.json.",
+                f"  Read from plan.json (NOT filesystem):",
+                f"    cat {state_dir}/plan.json | jq '.'",
+                "",
+                "  Find the relevant documentation section and verify.",
                 "",
             ])
 
@@ -155,6 +194,20 @@ class PlanDocsVerify(VerifyBase):
                 "  BAD: 'Polling | Webhooks unreliable'",
                 "  GOOD: 'Polling | 30% webhook failure -> need fallback anyway'",
                 "  Look for: premise -> implication -> conclusion",
+                "",
+            ])
+        elif "coverage" in check.lower() or "captured" in check.lower():
+            guidance.extend([
+                "INVISIBLE KNOWLEDGE COVERAGE CHECK:",
+                "  Verify planning knowledge appears in documentation:",
+                "  - Each decision in planning_context.decisions[] should have a",
+                "    corresponding documentation artifact (inline_comment, function_block,",
+                "    or readme_entry) that references it via decision_ref",
+                "  - invisible_knowledge content should appear in readme_entries[]",
+                "    or be localized to specific code via function_blocks/inline_comments",
+                "",
+                "  Search documentation fields for decision_refs:",
+                f"    cat {state_dir}/plan.json | jq '.. | .decision_ref? // empty' | sort -u",
                 "",
             ])
 
