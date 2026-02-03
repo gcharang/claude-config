@@ -266,12 +266,12 @@ Code-level documentation captures knowledge at the point where it is most useful
 The principle: knowledge belongs as close as possible to the code it describes.
 Cross-cutting knowledge that cannot be localized belongs in README.md.
 
-### Tier 1: Inline WHY Comments
+### Tier 1: Inline Comments
 
 Above statements or expressions where the choice is non-obvious.
 
-Document WHY this approach, never WHAT the code does. The reader can see what
-the code does -- they cannot see why it was chosen over alternatives.
+Document *why* this approach, never *what* the code does. The reader can see what
+the code does: they cannot see why it was chosen over alternatives.
 
 Good:
 
@@ -373,7 +373,7 @@ context, architectural rationale, tradeoffs, constraints, rejected alternatives.
 
 **Placement hierarchy** (closest viable location wins):
 
-1. **Inline WHY comment**: When knowledge applies to a specific statement
+1. **Inline comment**: When knowledge applies to a specific statement
 2. **Function-level block**: When knowledge applies to an entire function's
    approach or algorithm
 3. **Module docstring**: When knowledge applies to why this module exists or
