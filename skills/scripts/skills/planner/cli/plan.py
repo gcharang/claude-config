@@ -75,7 +75,8 @@ ROLE_PERMISSIONS = {
     "architect": {"init", "set-milestone", "set-intent", "set-decision",
                   "set-diagram", "add-diagram-node", "add-diagram-edge"},
     "developer": {"set-change"},
-    "tw": {"set-doc", "set-readme", "set-diagram-render"},
+    "tw": {"set-doc", "set-readme", "set-diagram-render",
+           "set-doc-diff", "create-doc-change"},
     "qr": {"validate"},
 }
 
@@ -849,6 +850,87 @@ class SetDiagramRenderCommand(Command):
         success(f"Set ASCII render for {args.diagram}")
 
 
+class SetDocDiffCommand(Command):
+    name = "set-doc-diff"
+    help = "Set documentation diff for a code change"
+    role = "tw"
+
+    @classmethod
+    def add_arguments(cls, p: argparse.ArgumentParser) -> None:
+        p.add_argument("--change", required=True, help="CodeChange ID (CC-M-XXX-YYY)")
+        p.add_argument("--version", type=int, required=True, help="Current version for CAS")
+        p.add_argument("--content-file", required=True, help="Path to unified diff file")
+
+    @classmethod
+    def run(cls, args: argparse.Namespace) -> None:
+        state_dir = get_state_dir()
+        plan = load_plan(state_dir)
+
+        _, cc = plan.get_change(args.change)
+        if not cc:
+            all_changes = [c.id for m in plan.milestones for c in m.code_changes]
+            validation_error("change", "Valid change ID", args.change,
+                           f"Valid: {', '.join(all_changes) or 'none'}")
+
+        try:
+            check_version(cc, args.version, args.change)
+        except VersionMismatchError as e:
+            exit_with_version_error(e)
+            return
+
+        content_path = Path(args.content_file)
+        if not content_path.exists():
+            error_exit(f"Content file not found: {args.content_file}")
+
+        cc.doc_diff = content_path.read_text()
+        bump_version(cc)
+        save_plan(state_dir, plan)
+        print_entity_result(EntityResult(id=cc.id, version=cc.version, operation="updated"))
+
+
+class CreateDocChangeCommand(Command):
+    name = "create-doc-change"
+    help = "Create documentation-only change (README, comments to existing file)"
+    role = "tw"
+
+    @classmethod
+    def add_arguments(cls, p: argparse.ArgumentParser) -> None:
+        p.add_argument("--milestone", required=True, help="Parent milestone ID")
+        p.add_argument("--file", required=True, help="File path (e.g., path/README.md)")
+        p.add_argument("--content-file", required=True, help="Path to unified diff file")
+
+    @classmethod
+    def run(cls, args: argparse.Namespace) -> None:
+        state_dir = get_state_dir()
+        plan = load_plan(state_dir)
+
+        ms = plan.get_milestone(args.milestone)
+        if not ms:
+            ids = [m.id for m in plan.milestones]
+            validation_error("milestone", "Valid milestone ID", args.milestone,
+                           f"Valid: {', '.join(ids) or 'none'}")
+
+        content_path = Path(args.content_file)
+        if not content_path.exists():
+            error_exit(f"Content file not found: {args.content_file}")
+
+        num = len(ms.code_changes) + 1
+        ccid = f"CC-{ms.id}-{num:03d}"
+
+        cc = CodeChange(
+            id=ccid,
+            version=1,
+            intent_ref=None,  # Doc-only, no intent
+            file=args.file,
+            diff="",  # Empty - doc only
+            doc_diff=content_path.read_text(),
+            comments="",
+        )
+        ms.code_changes.append(cc)
+        save_plan(state_dir, plan)
+        print_entity_result(EntityResult(id=ccid, version=1, operation="created"))
+
+
 # =============================================================================
 # Commands: Translate
 # =============================================================================
@@ -1022,9 +1104,28 @@ def translate_to_markdown(plan: "Plan") -> str:
                 ref_str = f" - implements {cc.intent_ref}" if cc.intent_ref else ""
                 lines.append(f"**{cc.id}** ({cc.file}){ref_str}")
                 lines.append("")
-                lines.append("```diff")
-                lines.append(cc.diff)
-                lines.append("```")
+
+                # Code diff (may be empty for doc-only changes)
+                if cc.diff:
+                    lines.append("**Code:**")
+                    lines.append("")
+                    lines.append("```diff")
+                    lines.append(cc.diff)
+                    lines.append("```")
+                    lines.append("")
+
+                # Documentation diff
+                if cc.doc_diff:
+                    lines.append("**Documentation:**")
+                    lines.append("")
+                    lines.append("```diff")
+                    lines.append(cc.doc_diff)
+                    lines.append("```")
+                    lines.append("")
+                elif cc.diff:
+                    lines.append("*[Documentation pending TW]*")
+                    lines.append("")
+
                 if cc.comments:
                     lines.append(f"> **Developer notes**: {cc.comments}")
                 lines.append("")
@@ -1223,6 +1324,8 @@ COMMANDS: list[type[Command]] = [
     SetDocCommand,
     SetReadmeCommand,
     SetDiagramRenderCommand,
+    SetDocDiffCommand,
+    CreateDocChangeCommand,
     ValidateCommand,
     ListMilestonesCommand,
     ListIntentsCommand,

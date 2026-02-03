@@ -153,9 +153,10 @@ if PYDANTIC_AVAILABLE:
         """Concrete code change implementing an intent."""
         id: str  # CC-M-001-001 format
         version: int = 1  # CAS optimistic locking: increment on update
-        intent_ref: str | None = None  # CI-XXX or null for cross-cutting docs
+        intent_ref: str | None = None  # CI-XXX or null for doc-only changes (READMEs)
         file: str
-        diff: str
+        diff: str = ""  # Code changes - Developer fills (empty for doc-only)
+        doc_diff: str = ""  # Documentation overlay - TW fills
         comments: str = ""  # WHY comments explaining the change
 
     class Docstring(BaseModel):
@@ -182,7 +183,12 @@ if PYDANTIC_AVAILABLE:
         source: str | None = None
 
     class Documentation(BaseModel):
-        """Documentation enrichment for a milestone."""
+        """Documentation enrichment for a milestone.
+
+        DEPRECATED: Use CodeChange.doc_diff instead. This metadata approach
+        disconnects documentation from code locations. Kept for backwards
+        compatibility with existing plans.
+        """
         module_comment: str | None = None
         docstrings: list[Docstring] = Field(default_factory=list)
         function_blocks: list[FunctionBlock] = Field(default_factory=list)
@@ -191,8 +197,8 @@ if PYDANTIC_AVAILABLE:
     class ReadmeEntry(BaseModel):
         """Cross-cutting README content for a directory.
 
-        Plan-level, not per-milestone. READMEs capture architecture
-        that spans milestones.
+        DEPRECATED: Use CodeChange with empty diff and doc_diff for README.
+        Kept for backwards compatibility with existing plans.
         """
         path: str  # directory path for README.md
         content: str
@@ -358,6 +364,24 @@ if PYDANTIC_AVAILABLE:
                             f"milestone {ms.id} missing code_changes for: "
                             f"{', '.join(sorted(missing))}"
                         )
+            elif phase == "plan-docs":
+                for ms in self.milestones:
+                    for cc in ms.code_changes:
+                        # Every code_change with diff should have doc_diff
+                        if cc.diff and not cc.doc_diff:
+                            errors.append(
+                                f"{cc.id}: has code diff but no doc_diff"
+                            )
+                        # doc_diff must be valid unified diff format if present
+                        if cc.doc_diff and not cc.doc_diff.strip().startswith(('---', '@@', 'diff')):
+                            errors.append(
+                                f"{cc.id}: doc_diff must be valid unified diff format"
+                            )
+                        # At least one must be non-empty
+                        if not cc.diff and not cc.doc_diff:
+                            errors.append(
+                                f"{cc.id}: must have diff or doc_diff (both empty)"
+                            )
             return errors
 
 

@@ -48,56 +48,61 @@ class PlanDocsVerify(VerifyBase):
         check = item.get("check", "")
 
         guidance = [
-            "SCOPE CONSTRAINT: You are verifying DOCUMENTATION QUALITY only.",
+            "SCOPE CONSTRAINT: Verify doc_diff content ONLY.",
+            "  - Review doc_diff fields, NOT diff fields",
+            "  - diff field is OUT OF SCOPE (verified in plan-code)",
             "  - Verify against plan.json content, NOT filesystem",
-            "  - Check documentation fields, NOT code correctness",
-            "  - Out of scope: compilation, exports, types, diff syntax",
+            "",
+            "EXTRACT doc_diffs:",
+            f"  cat {state_dir}/plan.json | jq '[.milestones[].code_changes[] | {{id, file, doc_diff}}]'",
             "",
         ]
 
         if scope == "*":
             guidance.extend([
-                "MACRO CHECK - Verify across entire plan.json:",
+                "MACRO CHECK - Verify doc_diff across entire plan.json:",
                 "",
-                f"  Read plan.json:",
-                f"    cat {state_dir}/plan.json | jq '.'",
+                f"  Extract all doc_diffs:",
+                f"    cat {state_dir}/plan.json | jq '[.milestones[].code_changes[] | {{id, file, diff: (.diff != \"\"), doc_diff: (.doc_diff != \"\")}}]'",
                 "",
             ])
         elif scope.startswith("decision:"):
             dl_id = scope.split(":")[1]
             guidance.extend([
-                f"DECISION CHECK - Focus on {dl_id}:",
+                f"DECISION COVERAGE CHECK - Focus on {dl_id}:",
                 "",
                 f"  Extract decision:",
                 f"    cat {state_dir}/plan.json | jq '.planning_context.decisions[] | select(.id == \"{dl_id}\")'",
                 "",
-                "  Verify this decision is documented somewhere (inline_comment,",
-                "  function_block, or readme_entry with matching decision_ref).",
+                f"  Verify this decision is referenced in at least one doc_diff:",
+                f"    cat {state_dir}/plan.json | jq '.milestones[].code_changes[].doc_diff' | grep -i '{dl_id}'",
+                "",
+                "  Decision references should appear as: (ref: DL-XXX) or (DL-XXX)",
+                "",
+            ])
+        elif scope.startswith("change:"):
+            cc_id = scope.split(":")[1]
+            guidance.extend([
+                f"CODE_CHANGE DOC_DIFF CHECK - Focus on {cc_id}:",
+                "",
+                f"  Extract code_change:",
+                f"    cat {state_dir}/plan.json | jq '.milestones[].code_changes[] | select(.id == \"{cc_id}\")'",
+                "",
+                "  Verify:",
+                "  - If diff is non-empty, doc_diff should be non-empty",
+                "  - doc_diff should be valid unified diff format",
+                "  - No temporal contamination in doc_diff additions",
                 "",
             ])
         elif scope.startswith("milestone:"):
             ms_id = scope.split(":")[1]
             guidance.extend([
-                f"MILESTONE DOCUMENTATION CHECK - Focus on {ms_id}:",
+                f"MILESTONE DOC_DIFF CHECK - Focus on {ms_id}:",
                 "",
-                f"  Extract milestone documentation:",
-                f"    cat {state_dir}/plan.json | jq '.milestones[] | select(.id == \"{ms_id}\") | .documentation'",
+                f"  Extract milestone code_changes with doc_diff status:",
+                f"    cat {state_dir}/plan.json | jq '.milestones[] | select(.id == \"{ms_id}\") | .code_changes[] | {{id, file, has_diff: (.diff != \"\"), has_doc_diff: (.doc_diff != \"\")}}'",
                 "",
-                "  Verify documentation{} fields are populated:",
-                "  - module_comment for new files",
-                "  - docstrings[] for functions",
-                "  - function_blocks[] for non-trivial functions",
-                "",
-            ])
-        elif scope.startswith("readme:"):
-            path = scope.split(":", 1)[1]
-            guidance.extend([
-                f"README CHECK - Focus on {path}:",
-                "",
-                f"  Extract readme entry:",
-                f"    cat {state_dir}/plan.json | jq '.readme_entries[] | select(.path == \"{path}\")'",
-                "",
-                "  Verify content captures cross-cutting invisible knowledge.",
+                "  Verify each code_change with diff has doc_diff.",
                 "",
             ])
         else:
@@ -105,18 +110,18 @@ class PlanDocsVerify(VerifyBase):
             guidance.extend([
                 f"SCOPED CHECK - Scope: {scope}",
                 "",
-                f"  Read from plan.json (NOT filesystem):",
-                f"    cat {state_dir}/plan.json | jq '.'",
+                f"  Extract doc_diffs:",
+                f"    cat {state_dir}/plan.json | jq '[.milestones[].code_changes[] | {{id, file, doc_diff}}]'",
                 "",
-                "  Find the relevant documentation section and verify.",
+                "  Find the relevant doc_diff and verify.",
                 "",
             ])
 
         # Add check-specific guidance
         if "temporal" in check.lower():
             guidance.extend([
-                "TEMPORAL CONTAMINATION CHECK:",
-                "  Scan for these patterns:",
+                "TEMPORAL CONTAMINATION CHECK in doc_diff:",
+                "  Scan doc_diff additions (lines starting with +) for:",
                 "  - CHANGE_RELATIVE: 'Added', 'Replaced', 'Changed', 'Now uses'",
                 "  - BASELINE_REFERENCE: 'instead of', 'previously', 'replaces'",
                 "  - LOCATION_DIRECTIVE: 'After X', 'Before Y', 'Insert'",
@@ -126,88 +131,72 @@ class PlanDocsVerify(VerifyBase):
             ])
         elif "baseline" in check.lower():
             guidance.extend([
-                "BASELINE REFERENCE CHECK:",
-                "  Look for references to removed/replaced code:",
+                "BASELINE REFERENCE CHECK in doc_diff:",
+                "  Look for references to removed/replaced code in doc_diff additions:",
                 "  - 'Previously', 'Instead of', 'Replaces', 'Used to'",
                 "  - 'Before this change', 'Old approach', 'Former'",
-                "  Comments should stand alone without knowing prior state.",
+                "  Documentation should stand alone without knowing prior state.",
                 "",
             ])
-        elif "structural completeness" in check.lower() or "json completeness" in check.lower():
+        elif "code_without_docs" in check.lower() or "missing doc_diff" in check.lower():
             guidance.extend([
-                "JSON STRUCTURAL COMPLETENESS CHECK:",
-                "  Verify plan.json documentation fields are populated:",
-                "  - Every milestone has documentation{} with module_comment",
-                "  - Every function has a docstrings[] entry",
-                "  - Every decision_log entry has reasoning field",
-                "  - readme_entries[] have non-empty content",
+                "CODE WITHOUT DOCS CHECK:",
+                "  Verify code_changes with non-empty diff have non-empty doc_diff:",
+                f"    cat {state_dir}/plan.json | jq '.milestones[].code_changes[] | select(.diff != \"\" and .doc_diff == \"\") | .id'",
+                "",
+                "  If any IDs returned, those code_changes need doc_diff.",
                 "",
             ])
-        elif "decision_ref" in check.lower():
+        elif "invalid" in check.lower() and "diff" in check.lower():
             guidance.extend([
-                "DECISION REF VERIFICATION:",
-                "  - Each decision_ref (DL-XXX) must exist in planning_context.decisions",
-                "  - Extract decision_refs from code_changes[].comments",
-                "  - Verify each one exists",
+                "INVALID DIFF FORMAT CHECK:",
+                "  doc_diff must be valid unified diff format:",
+                "  - Should start with '---', '@@', or 'diff'",
+                "  - Should have proper hunk headers",
+                "  - Lines should start with +, -, or space (context)",
                 "",
             ])
-        elif "documentation" in check.lower() and "completeness" in check.lower():
+        elif "decision" in check.lower() and ("coverage" in check.lower() or "uncovered" in check.lower()):
             guidance.extend([
-                "DOCUMENTATION COMPLETENESS CHECK:",
-                "  Verify milestone has:",
-                "  - Tier 3: module_comment for new files",
-                "  - Tier 4: docstrings for ALL functions",
-                "  - Tier 2: function_blocks for non-trivial functions",
-                "  - Tier 1: inline_comments in code_changes",
+                "DECISION COVERAGE CHECK:",
+                "  Each decision in planning_context.decisions[] should appear",
+                "  in at least one doc_diff as (ref: DL-XXX) or (DL-XXX).",
+                "",
+                "  List all decisions:",
+                f"    cat {state_dir}/plan.json | jq '.planning_context.decisions[].id'",
+                "",
+                "  Search doc_diffs for references:",
+                f"    cat {state_dir}/plan.json | jq '.milestones[].code_changes[].doc_diff' | grep -o 'DL-[0-9]\\+' | sort -u",
                 "",
             ])
         elif "why" in check.lower() and "what" in check.lower():
             guidance.extend([
-                "WHY-NOT-WHAT VERIFICATION:",
-                "  Comments should explain reasoning, not describe code.",
-                "  BAD: 'Added a new function' (describes action)",
-                "  GOOD: 'Mutex serializes cache access' (explains purpose)",
+                "WHY-NOT-WHAT VERIFICATION in doc_diff:",
+                "  Comments in doc_diff additions should explain reasoning, not describe code.",
+                "  BAD: '// Added a new function' (describes action)",
+                "  GOOD: '// Mutex serializes cache access' (explains purpose)",
                 "",
             ])
-        elif "location directive" in check.lower():
+        elif "docstring" in check.lower():
             guidance.extend([
-                "LOCATION DIRECTIVE CHECK:",
-                "  Look for placement instructions:",
-                "  - 'After X', 'Before Y', 'Insert at', 'At the top'",
-                "  - 'Following the', 'Preceding the', 'Between'",
-                "  These are planning artifacts, not permanent docs.",
+                "MISSING DOCSTRING CHECK:",
+                "  For functions added/modified in diff, verify doc_diff",
+                "  includes docstring additions.",
                 "",
-            ])
-        elif "planning artifact" in check.lower():
-            guidance.extend([
-                "PLANNING ARTIFACT CHECK:",
-                "  Look for incomplete markers:",
-                "  - 'TODO', 'FIXME', 'Will', 'Planned', 'Temporary'",
-                "  - 'To be implemented', 'Not yet', 'Later'",
-                "  Documentation should describe final state.",
-                "",
-            ])
-        elif "reasoning chain" in check.lower() or "multi-step" in check.lower():
-            guidance.extend([
-                "REASONING CHAIN VERIFICATION:",
-                "  Decision log entries should have multi-step chains.",
-                "  BAD: 'Polling | Webhooks unreliable'",
-                "  GOOD: 'Polling | 30% webhook failure -> need fallback anyway'",
-                "  Look for: premise -> implication -> conclusion",
+                "  Look for function definitions in diff, then verify doc_diff",
+                "  has corresponding documentation comments.",
                 "",
             ])
         elif "coverage" in check.lower() or "captured" in check.lower():
             guidance.extend([
-                "INVISIBLE KNOWLEDGE COVERAGE CHECK:",
-                "  Verify planning knowledge appears in documentation:",
+                "DECISION COVERAGE CHECK:",
+                "  Verify planning knowledge appears in doc_diff fields:",
                 "  - Each decision in planning_context.decisions[] should have a",
-                "    corresponding documentation artifact (inline_comment, function_block,",
-                "    or readme_entry) that references it via decision_ref",
-                "  - invisible_knowledge content should appear in readme_entries[]",
-                "    or be localized to specific code via function_blocks/inline_comments",
+                "    corresponding reference in at least one doc_diff",
+                "  - Reference format: (ref: DL-XXX) or (DL-XXX)",
                 "",
-                "  Search documentation fields for decision_refs:",
-                f"    cat {state_dir}/plan.json | jq '.. | .decision_ref? // empty' | sort -u",
+                "  Search doc_diffs for decision refs:",
+                f"    cat {state_dir}/plan.json | jq '.milestones[].code_changes[].doc_diff' | grep -o 'DL-[0-9]\\+' | sort -u",
                 "",
             ])
 

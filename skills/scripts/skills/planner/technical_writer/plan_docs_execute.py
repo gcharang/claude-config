@@ -1,29 +1,27 @@
 #!/usr/bin/env python3
 """Plan docs execution - first-time documentation workflow.
 
-8-step workflow for technical-writer sub-agent:
-  1. Task Description (context display, JSON-IR architecture)
+6-step workflow for technical-writer sub-agent:
+  1. Task Description (context display, doc_diff architecture)
   2. Extract Planning Context (decision log, constraints, risks)
-  3. Temporal Contamination Review (5 detection categories)
-  4. Prioritization and Doc Tiers (HIGH/MEDIUM/LOW, Tiers 3-6)
-  5. Comment Injection via CLI (WHY comments, decision_refs)
-  6. README Synthesis (invisible knowledge -> READMEs)
-  7. Diagram Rendering (ASCII diagrams from graph specs)
-  8. Final Validation (validate plan.json completeness)
+  3. Analyze Code Changes (identify documentation needs per code_change)
+  4. Generate Documentation Diffs (create doc_diff for each code_change)
+  5. Standalone Documentation (READMEs as doc-only code_changes)
+  6. Final Validation (validate plan.json completeness)
 
-Scope: Documentation quality only -- capturing planning knowledge in
-documentation fields. This phase does NOT modify code logic.
+Scope: Documentation quality only -- adding doc_diff overlays to code_changes.
+This phase does NOT modify code logic.
 
-In scope (per conventions/documentation.md):
-- Invisible knowledge coverage: decisions -> inline_comments/function_blocks
-- Temporal contamination removal from documentation strings
-- WHY-not-WHAT quality in comments
-- Structural completeness of documentation{} fields
-- README synthesis from invisible_knowledge
+In scope:
+- doc_diff generation: unified diffs adding documentation to code_change results
+- Invisible knowledge coverage: decisions -> doc_diff comments
+- Temporal contamination removal from doc_diff content
+- WHY-not-WHAT quality in documentation additions
+- README creation as doc-only code_changes (empty diff, populated doc_diff)
 
 Out of scope (handled by Developer in plan-code phase):
 - Code correctness, compilation, types
-- Diff content and format
+- diff field content
 - Logic changes
 
 This is the EXECUTE script for first-time documentation.
@@ -45,12 +43,10 @@ from skills.planner.shared.temporal_detection import format_as_prose, format_act
 STEPS = {
     1: "Task Description",
     2: "Extract Planning Context",
-    3: "Temporal Contamination Review",
-    4: "Prioritization and Documentation Tiers",
-    5: "Comment Injection via CLI",
-    6: "README Synthesis",
-    7: "Diagram Rendering",
-    8: "Final Validation",
+    3: "Analyze Code Changes",
+    4: "Generate Documentation Diffs",
+    5: "Standalone Documentation",
+    6: "Final Validation",
 }
 
 
@@ -80,44 +76,40 @@ def get_step_guidance(
         actions.extend([
             banner,
             "",
-            "TYPE: PLAN_DOCS (JSON-IR)",
+            "TYPE: PLAN_DOCS (JSON-IR with doc_diff overlay)",
             "",
-            "TASK: Enrich plan.json with documentation.",
+            "TASK: Add documentation diffs to code_changes.",
             "",
-            "JSON-IR ARCHITECTURE:",
-            "  plan.json contains code_changes[] populated by Developer.",
-            "  Your job: fill documentation{} and why_comments.",
+            "DOC_DIFF ARCHITECTURE:",
+            "  Developer populates code_changes[].diff with code.",
+            "  Your job: populate code_changes[].doc_diff with documentation diffs.",
+            "  doc_diff is a unified diff that adds documentation to the resulting file state.",
             "  Use CLI commands - DO NOT edit plan.json directly.",
             "",
             "WORKFLOW:",
-            "  Steps 1-6: Enrich plan.json with documentation",
-            "  Steps 7-8: Diagram rendering and final validation",
+            "  Steps 1-2: Extract planning context",
+            "  Steps 3-4: Generate doc_diff for each code_change",
+            "  Steps 5-6: Standalone documentation and validation",
             "",
-            "CLI COMMANDS (single invocation):",
-            "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-doc \\",
-            "    --milestone M-001 --type module --content-file /tmp/mod.txt",
-            "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-doc \\",
-            "    --milestone M-001 --type docstring --function func --content-file /tmp/doc.txt",
-            "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-doc \\",
-            "    --milestone M-001 --type function_block --function func --content-file /tmp/fb.txt --decision-ref DL-001 --source invisible_knowledge",
-            "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-doc \\",
-            "    --milestone M-001 --type inline --location 'func:line' --content-file /tmp/why.txt --decision-ref DL-001 --source decision_log",
-            "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-readme \\",
-            "    --path src/module --content-file /tmp/readme.txt",
-            "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR validate --phase plan-docs",
+            "CLI COMMANDS:",
             "",
-            "BATCH MODE (preferred for multiple docs):",
+            "  # Set doc_diff for existing code_change:",
+            "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-doc-diff \\",
+            "    --change CC-M-001-001 --version 1 --content-file /tmp/doc.diff",
             "",
+            "  # Create documentation-only change (README, etc.):",
+            "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR create-doc-change \\",
+            "    --milestone M-001 --file path/README.md --content-file /tmp/readme.diff",
+            "",
+            "BATCH MODE:",
             "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR batch '[",
-            "    {\"method\": \"set-doc\", \"params\": {\"milestone\": \"M-001\", \"type\": \"module\", \"content_file\": \"/tmp/mod.txt\"}, \"id\": 1},",
-            "    {\"method\": \"set-doc\", \"params\": {\"milestone\": \"M-001\", \"type\": \"docstring\", \"function\": \"check\", \"content_file\": \"/tmp/doc.txt\"}, \"id\": 2},",
-            "    {\"method\": \"set-doc\", \"params\": {\"milestone\": \"M-001\", \"type\": \"function_block\", \"function\": \"process\", \"content_file\": \"/tmp/fb.txt\", \"decision_ref\": \"DL-001\"}, \"id\": 3},",
-            "    {\"method\": \"set-doc\", \"params\": {\"milestone\": \"M-001\", \"type\": \"inline\", \"location\": \"func:42\", \"content_file\": \"/tmp/why.txt\", \"decision_ref\": \"DL-001\"}, \"id\": 4}",
+            "    {\"method\": \"set-doc-diff\", \"params\": {\"change\": \"CC-M-001-001\", \"version\": 1, \"content_file\": \"/tmp/d1.diff\"}, \"id\": 1},",
+            "    {\"method\": \"create-doc-change\", \"params\": {\"milestone\": \"M-001\", \"file\": \"README.md\", \"content_file\": \"/tmp/r.diff\"}, \"id\": 2}",
             "  ]'",
             "",
             "Read plan.json now. Identify:",
             "  - planning_context.decisions entries",
-            "  - milestones with code_changes",
+            "  - milestones with code_changes (each needs doc_diff)",
             "  - invisible_knowledge section",
         ])
 
@@ -169,30 +161,28 @@ def get_step_guidance(
 
     elif step == 3:
         state_dir_arg = f" --state-dir {state_dir}" if state_dir else ""
-        temporal_resource = get_convention("temporal.md")
-        resource_block = render(
-            W.el("resource", TextNode(temporal_resource), name="temporal-contamination", purpose="plan-scrub").build(),
-            XMLRenderer()
-        )
-
         return {
             "title": STEPS[3],
             "actions": [
-                "AUTHORITATIVE REFERENCE FOR TEMPORAL CONTAMINATION:",
+                "ANALYZE each code_change to determine documentation needs:",
                 "",
-                resource_block,
+                "For each code_change in plan.json:",
+                "  1. READ the diff field to understand WHAT code is changing",
+                "  2. IDENTIFY documentation needs:",
+                "     - Module comment (new files)",
+                "     - Function docstrings (all functions in diff)",
+                "     - Function blocks (Tier 2: WHY for complex functions)",
+                "     - Inline comments (Tier 1: WHY for non-obvious lines)",
                 "",
-                "SCAN all existing comments in Code Changes sections.",
+                "  3. CROSS-REFERENCE with planning_context.decisions[]",
+                "     - Each decision should appear in at least one doc_diff",
+                "     - Reference format: (ref: DL-XXX) or (DL-XXX)",
                 "",
-                format_as_prose(),
+                "  4. LIST documentation needed per code_change:",
+                "     CC-M-001-001: module comment, 2 docstrings, 1 inline (DL-002)",
+                "     CC-M-002-001: 3 docstrings, 1 function block (DL-010)",
                 "",
-                "ACTIONS:",
-                format_actions(),
-                "",
-                "CODE PRESENCE CHECK:",
-                "  For each implementation milestone (modifies source files):",
-                "  - Does it have Code Changes with unified diffs?",
-                "  - If NO: Stop and report escalation (see step 6)",
+                "This analysis drives Step 4.",
             ],
             "next": f"python3 -m {MODULE_PATH} --step 4{state_dir_arg}",
         }
@@ -202,34 +192,40 @@ def get_step_guidance(
         return {
             "title": STEPS[4],
             "actions": [
-                "PRIORITIZE by uncertainty (scrub HIGH before MEDIUM, skip LOW):",
+                "GENERATE doc_diff for each code_change:",
                 "",
-                "| Priority | Code Pattern                 | WHY Question           |",
-                "| -------- | ---------------------------- | ---------------------- |",
-                "| HIGH     | Multiple valid approaches    | Why this approach?     |",
-                "| HIGH     | Thresholds, timeouts, limits | Why these values?      |",
-                "| HIGH     | Error handling paths         | Recovery strategy?     |",
-                "| HIGH     | External system interactions | What assumptions?      |",
-                "| MEDIUM   | Non-standard pattern usage   | Why deviate from norm? |",
-                "| MEDIUM   | Performance-critical paths   | Why this optimization? |",
-                "| LOW      | Boilerplate/established      | Skip unless unusual    |",
-                "| LOW      | Simple CRUD operations       | Skip unless unusual    |",
+                "doc_diff is a unified diff that ONLY adds documentation.",
+                "It applies AFTER the code diff, to the resulting file state.",
                 "",
-                "CHECK MILESTONE FLAGS (if present):",
-                "  - `needs-rationale`: Every non-obvious element needs WHY comment",
-                "  - `complex-algorithm`: Add Tier 5 algorithm block even if simple",
+                "EXAMPLE - Adding docstring to function in diff:",
+                "```diff",
+                "--- a/internal/rules/engine.go",
+                "+++ b/internal/rules/engine.go",
+                "@@ -13,6 +13,10 @@ func NewEngine() *Engine {",
+                " }",
+                " ",
+                "+// CompileRules validates and compiles rules into evaluation-ready form.",
+                "+// Iterates over rules calling Compile for each, as Compile takes",
+                "+// singular *types.Rule. (ref: DL-010)",
+                "+//",
+                " func (e *Engine) CompileRules(rules []types.Rule) ([]*CompiledRule, error) {",
+                "```",
                 "",
-                "DOCUMENTATION TIERS (verify in Code Changes):",
+                "WRITE doc_diff to temp file and apply:",
+                "  cat > /tmp/doc.diff << 'EOF'",
+                "  --- a/path/to/file.go",
+                "  +++ b/path/to/file.go",
+                "  @@ -NN,M +NN,M @@",
+                "  +// Documentation here",
+                "   existing_line",
+                "  EOF",
                 "",
-                "| Tier | Location           | Purpose                         |",
-                "| ---- | ------------------ | ------------------------------- |",
-                "| 3    | Top of new files   | Module-level: what + why exists |",
-                "| 4    | Above functions    | Docstrings: ALL functions       |",
-                "| 5    | Complex algorithms | Strategy, invariants, edge cases|",
-                "| 6    | Within code lines  | Specific WHY (never WHAT)       |",
+                "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-doc-diff \\",
+                "    --change CC-M-001-001 --version 1 --content-file /tmp/doc.diff",
                 "",
-                "CRITICAL: Document ALL functions (public AND private).",
-                "Helper docstrings: [what it does] + [when to call it]",
+                "TEMPORAL CONTAMINATION CHECK before writing:",
+                "  - BAD: 'Added to support...', 'Now uses...', 'Changed from...'",
+                "  - GOOD: Timeless present tense describing what IS",
             ],
             "next": f"python3 -m {MODULE_PATH} --step 5{state_dir_arg}",
         }
@@ -239,153 +235,63 @@ def get_step_guidance(
         return {
             "title": STEPS[5],
             "actions": [
-                "INJECT WHY comments for HIGH priority code using CLI:",
+                "CREATE documentation-only changes (READMEs, etc.):",
                 "",
-                "For each code_change needing WHY comments:",
-                "  1. Find Decision Log entry (DL-XXX) that explains the choice",
-                "  2. Write comment to temp file",
-                "  3. Add via set-doc with function_block or inline type:",
-                "     python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-doc \\",
-                "       --milestone M-001 --type function_block --function func \\",
-                "       --content-file /tmp/fb.txt --decision-ref DL-001 --source invisible_knowledge",
-                "     python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-doc \\",
-                "       --milestone M-001 --type inline --location 'func:line' \\",
-                "       --content-file /tmp/why.txt --decision-ref DL-001 --source decision_log",
+                "READMEs are code_changes with empty diff and populated doc_diff.",
                 "",
-                "TRANSFORM Decision Log -> Code Comment:",
-                "  Decision Log: 'Polling | 30% webhook failure -> need fallback'",
-                "  Code Comment: // Polling: 30% webhook delivery failures observed",
+                "EXAMPLE - Creating new README:",
+                "```diff",
+                "--- /dev/null",
+                "+++ b/internal/rules/README.md",
+                "@@ -0,0 +1,15 @@",
+                "+# internal/rules",
+                "+",
+                "+Rule compilation and evaluation engine.",
+                "+",
+                "+## Architecture",
+                "+",
+                "+Engine delegates to compile.Compile and evaluate.Evaluate.",
+                "+Provides dependency injection boundary for service layer.",
+                "+",
+                "+## Invariants",
+                "+",
+                "+- CompileRules iterates, calling Compile for each rule",
+                "+- No caching at engine level (caller handles per-request caching)",
+                "```",
                 "",
-                "Add documentation to milestones:",
-                "  # Module comment (write to temp file first)",
-                "  echo 'Rate limiting module using sliding window...' > /tmp/module.txt",
-                "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-doc \\",
-                "    --milestone M-001 --type module --content-file /tmp/module.txt",
+                "CREATE via CLI:",
+                "  cat > /tmp/readme.diff << 'EOF'",
+                "  --- /dev/null",
+                "  +++ b/internal/rules/README.md",
+                "  @@ -0,0 +1,N @@",
+                "  +# Content here...",
+                "  EOF",
                 "",
-                "  # Function docstring",
-                "  echo 'Check if request is within rate limit.' > /tmp/docstring.txt",
-                "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-doc \\",
-                "    --milestone M-001 --type docstring --function check_rate_limit --content-file /tmp/docstring.txt",
+                "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR create-doc-change \\",
+                "    --milestone M-002 --file internal/rules/README.md \\",
+                "    --content-file /tmp/readme.diff",
                 "",
-                "PLANNING CONTEXT GAP PROTOCOL:",
-                "  If code needs WHY but Decision Log lacks rationale:",
-                "  1. Do NOT block -- proceed without comment",
-                "  2. Record gap for final output (see step 6)",
-                "  3. Continue with remaining work",
+                "CONTENT TEST: 'Could a developer learn this by reading source files?'",
+                "  - If YES: skip (redundant)",
+                "  - If NO: include (invisible knowledge)",
             ],
             "next": f"python3 -m {MODULE_PATH} --step 6{state_dir_arg}",
         }
 
     elif step == 6:
-        state_dir_arg = f" --state-dir {state_dir}" if state_dir else ""
         return {
             "title": STEPS[6],
             "actions": [
-                "README SYNTHESIS FROM INVISIBLE KNOWLEDGE",
-                "",
-                "Read invisible_knowledge from plan.json:",
-                "  cat $STATE_DIR/plan.json | jq '.invisible_knowledge'",
-                "",
-                "IDENTIFY directories needing READMEs:",
-                "  - Directories containing multiple related files",
-                "  - Directories with cross-cutting architecture concepts",
-                "  - Module roots with non-obvious organization",
-                "",
-                "SYNTHESIZE README content from invisible_knowledge:",
-                "  - System architecture details",
-                "  - Invariants spanning multiple files",
-                "  - Tradeoffs affecting directory scope",
-                "",
-                "CONTENT TEST (apply before writing):",
-                "  Ask: 'Could a developer learn this by reading source files?'",
-                "  - If YES: delete content (redundant with code)",
-                "  - If NO: keep content (invisible knowledge)",
-                "",
-                "ADD entries via set-readme:",
-                "  echo 'Cross-cutting architecture content...' > /tmp/readme.txt",
-                "  python3 -m skills.planner.cli.plan --state-dir $STATE_DIR set-readme \\",
-                "    --path src/module --content-file /tmp/readme.txt",
-                "",
-                "SKIP if invisible_knowledge section is empty or contains no directory-level concepts.",
-            ],
-            "next": f"python3 -m {MODULE_PATH} --step 7{state_dir_arg}",
-        }
-
-    elif step == 7:
-        state_dir_arg = f" --state-dir {state_dir}" if state_dir else ""
-        return {
-            "title": STEPS[7],
-            "actions": [
-                "RENDER DIAGRAMS TO ASCII",
-                "",
-                "Read plan.json diagram_graphs[]. For each diagram with ascii_render=null:",
-                "",
-                "1. ANALYZE graph structure:",
-                "   - Count nodes (target: 3-7, prevents visual overload)",
-                "   - Identify edge direction majority (vertical vs horizontal layout)",
-                "   - Note any cycles or hub nodes (affects spacing requirements)",
-                "",
-                "2. SELECT layout:",
-                "   - architecture: vertical stack or horizontal flow",
-                "   - dataflow: left-to-right pipeline",
-                "   - state: grid or radial based on transition count",
-                "   - sequence: vertical timeline",
-                "",
-                "3. RENDER ASCII:",
-                "   - Max width 80 chars (terminal compatibility)",
-                "   - Box syntax: +--+, |, - (universal ASCII)",
-                "   - Arrow syntax: v, ^, <, >, -->, <-- (directional clarity)",
-                "   - Label edges inline or below arrow (readability over density)",
-                "",
-                "4. WRITE render:",
-                "   echo '<ascii content>' > /tmp/diagram.txt",
-                f"   python3 -m skills.planner.cli.plan --state-dir {state_dir} \\",
-                "     set-diagram-render --diagram DIAG-001 --content-file /tmp/diagram.txt",
-                "",
-                "EXAMPLE (architecture type):",
-                "```",
-                "+------------------+",
-                "| Client           |",
-                "+------------------+",
-                "        |",
-                "        | gRPC",
-                "        v",
-                "+------------------+",
-                "| Server           |",
-                "+------------------+",
-                "```",
-                "",
-                "SKIP if diagram_graphs is empty.",
-            ],
-            "next": f"python3 -m {MODULE_PATH} --step 8{state_dir_arg}",
-        }
-
-    elif step == 8:
-        return {
-            "title": STEPS[8],
-            "actions": [
                 "FINAL VALIDATION",
                 "",
-                "VALIDATE plan.json documentation completeness:",
+                "Run validation:",
                 f"  python3 -m skills.planner.cli.plan validate --phase plan-docs --state-dir {state_dir}",
                 "",
-                "VERIFY COVERAGE:",
-                "",
-                "Tiers 3-4 (structure):",
-                "  [ ] Every new file has module_comment in documentation{}",
-                "  [ ] ALL functions have docstrings[] entries",
-                "  [ ] Helper docstrings: [what it does] + [when to call it]",
-                "",
-                "Tiers 2 + 5-6 (understanding):",
-                "  [ ] Every non-trivial function has function_blocks[] entry",
-                "  [ ] Every non-obvious line has inline_comment",
-                "  [ ] No comment states WHAT the code does",
-                "",
-                "Temporal contamination (in ALL string fields):",
-                "  [ ] No change-relative (Added, Replaced, Changed, Now uses)",
-                "  [ ] No baseline references (Previously, Instead of, Replaces)",
-                "  [ ] No location directives (After X, Before Y, Insert)",
-                "  [ ] No planning artifacts (TODO, Will, Planned, Temporary)",
+                "VERIFY each code_change:",
+                "  [ ] Has doc_diff if it has diff (code changes need documentation)",
+                "  [ ] doc_diff is valid unified diff format",
+                "  [ ] No temporal contamination in doc_diff additions",
+                "  [ ] Decision references (DL-XXX) present where applicable",
                 "",
                 "When complete, output: PASS",
             ],

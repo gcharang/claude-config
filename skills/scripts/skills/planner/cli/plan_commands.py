@@ -494,6 +494,57 @@ def set_diagram_render(ctx: PlanContext, diagram: str, content_file: str) -> dic
     return {"diagram": diagram, "operation": "updated"}
 
 
+def set_doc_diff(ctx: PlanContext, change: str, version: int,
+                 content_file: str) -> dict:
+    """Set documentation diff for an existing code change."""
+    plan = ctx.load_plan()
+
+    _, cc = plan.get_change(change)
+    if not cc:
+        all_changes = [c.id for m in plan.milestones for c in m.code_changes]
+        raise ValueError(f"Change {change} not found. Valid: {all_changes}")
+
+    _check_version(cc, version, change)
+
+    content_path = Path(content_file)
+    if not content_path.exists():
+        raise FileNotFoundError(f"Content file not found: {content_file}")
+
+    cc.doc_diff = content_path.read_text()
+    _bump_version(cc)
+    ctx.save_plan(plan)
+
+    return {"id": cc.id, "version": cc.version, "operation": "updated"}
+
+
+def create_doc_change(ctx: PlanContext, milestone: str, file: str,
+                      content_file: str) -> dict:
+    """Create a documentation-only change."""
+    schema = _get_schema()
+    plan = ctx.load_plan()
+
+    ms = plan.get_milestone(milestone)
+    if not ms:
+        ids = [m.id for m in plan.milestones]
+        raise ValueError(f"Milestone {milestone} not found. Valid: {ids}")
+
+    content_path = Path(content_file)
+    if not content_path.exists():
+        raise FileNotFoundError(f"Content file not found: {content_file}")
+
+    num = len(ms.code_changes) + 1
+    ccid = f"CC-{ms.id}-{num:03d}"
+
+    cc = schema['CodeChange'](
+        id=ccid, version=1, intent_ref=None,
+        file=file, diff="", doc_diff=content_path.read_text(), comments="",
+    )
+    ms.code_changes.append(cc)
+    ctx.save_plan(plan)
+
+    return {"id": ccid, "version": 1, "operation": "created"}
+
+
 def _translate(ctx: PlanContext, output: str) -> dict:
     """Translate plan.json to Markdown. Internal only -- not exposed via CLI."""
     from .plan import translate_to_markdown

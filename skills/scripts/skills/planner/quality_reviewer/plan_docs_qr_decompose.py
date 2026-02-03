@@ -31,96 +31,92 @@ STEP_1_ABSORB = """\
 Read plan.json from STATE_DIR:
   cat $STATE_DIR/plan.json | jq '.'
 
-SCOPE: Documentation quality only. You are verifying that planning knowledge
-is captured in documentation fields -- NOT verifying code correctness.
+SCOPE: Documentation quality only. You verify doc_diff fields.
 
-SOURCES (planning knowledge that must be documented):
-  - planning_context.decisions[] -- architectural choices with reasoning
-  - planning_context.rejected_alternatives[] -- what was considered and why not
-  - invisible_knowledge{} -- system context, invariants, tradeoffs
+WHAT YOU REVIEW:
+  - milestones[].code_changes[].doc_diff -- documentation overlay diffs
+  - Temporal contamination in doc_diff content
+  - WHY-not-WHAT quality in added comments
+  - Decision coverage (DL-XXX references)
 
-DESTINATIONS (where knowledge appears in the plan):
-  - milestones[].documentation.module_comment -- Tier 4: why module exists
-  - milestones[].documentation.docstrings[] -- Tier 3: function summaries
-  - milestones[].documentation.function_blocks[] -- Tier 2: algorithm explanation
-  - milestones[].documentation.inline_comments[] -- Tier 1: WHY for specific lines
-  - readme_entries[] -- Tier 5: cross-cutting invisible knowledge
+WHAT YOU DO NOT REVIEW:
+  - milestones[].code_changes[].diff -- code logic (plan-code's job)
+  - Code correctness, compilation, types
+  - Whether code implementation is correct
 
-OUT OF SCOPE (already verified in plan-code phase):
-  - Code correctness in diffs (compilation, exports, types, logic)
-  - Diff format validity (context lines, unified diff syntax)
-  - Intent-to-change linkage
-  - Whether planned files exist on disk (this is a PLAN, not implementation)"""
+EXTRACT doc_diffs for review:
+  cat $STATE_DIR/plan.json | jq '[.milestones[].code_changes[] | select(.doc_diff != "") | {id, file, doc_diff}]'
+
+OUT OF SCOPE:
+  - diff field content (plan-code phase)
+  - Code correctness"""
 
 
 STEP_2_CONCERNS = """\
-Brainstorm concerns specific to DOCUMENTATION QUALITY:
-  - Temporal contamination (change-relative language in comments)
+Brainstorm concerns specific to DOC_DIFF QUALITY:
+  - Code changes missing doc_diff (diff present but doc_diff empty)
+  - Temporal contamination in doc_diff content
   - Missing WHY-not-WHAT (comments describe code, not explain reasoning)
-  - Incomplete coverage (decisions not documented anywhere)
-  - Invalid decision_refs (refs point to nonexistent decisions)
-  - Structural gaps (empty documentation{} fields)
+  - Incomplete decision coverage (DL-XXX not referenced in any doc_diff)
+  - Invalid diff format (doc_diff not valid unified diff)
 
-DO NOT brainstorm code correctness concerns (out of scope for this phase)."""
+DO NOT brainstorm code correctness concerns (out of scope for this phase).
+DO NOT review diff field content (plan-code's job)."""
 
 
 STEP_3_ENUMERATION = """\
-For plan-docs, enumerate DOCUMENTATION ARTIFACTS only:
+For plan-docs, enumerate DOC_DIFF content only:
 
-SOURCES (planning knowledge to verify coverage):
-  - Each planning_context.decisions[] entry (ID, has reasoning?)
-  - Each planning_context.rejected_alternatives[] entry
-  - invisible_knowledge content (system, invariants[], tradeoffs[])
+ARTIFACTS TO VERIFY:
+  - Each code_change with non-empty doc_diff:
+    * Diff format validity (unified diff syntax)
+    * Temporal contamination (change-relative language)
+    * WHY-not-WHAT (comments explain reasoning)
+    * Decision references (DL-XXX present)
 
-DESTINATIONS (documentation fields to verify population):
-  - Each milestone's documentation{} section:
-    * module_comment present?
-    * docstrings[] count
-    * function_blocks[] count
-    * inline_comments[] count
-  - readme_entries[] (path, has content?)
+  - Each code_change with diff but NO doc_diff:
+    * Flag as MUST: documentation required
 
-QUALITY DIMENSIONS:
-  - Temporal contamination in documentation strings
-  - WHY-not-WHAT in inline_comments and function_blocks
-  - decision_ref validity (refs point to existing decisions)
+COVERAGE CHECK:
+  - List all DL-XXX IDs from planning_context.decisions
+  - Verify each appears in at least one doc_diff
+  - Missing coverage: MUST severity
 
 DO NOT enumerate:
-  - code_changes for code correctness (plan-code's job)
-  - diff syntax or context lines (plan-code's job)
-  - whether files exist on disk (this is a plan, not implementation)"""
+  - diff field content (plan-code's job)
+  - Code correctness"""
 
 
 STEP_5_GENERATE = """\
-SEVERITY ASSIGNMENT (per conventions/severity.md, plan-docs scope):
+SEVERITY ASSIGNMENT for plan-docs (doc_diff focused):
 
-  MUST (blocks all iterations) - KNOWLEDGE categories only:
-    - DECISION_LOG_MISSING: decision without documentation anywhere
-    - IK_TRANSFER_FAILURE: invisible knowledge not at best location
-    - TEMPORAL_CONTAMINATION: change-relative language in comments
-    - BASELINE_REFERENCE: comment references removed code
+  MUST (blocks all iterations):
+    - CODE_WITHOUT_DOCS: code_change has diff but no doc_diff
+    - DECISION_UNCOVERED: DL-XXX not in any doc_diff
+    - INVALID_DIFF_FORMAT: doc_diff not valid unified diff
+    - TEMPORAL_CONTAMINATION: change-relative language in doc_diff
 
   SHOULD (iterations 1-4):
-    - Structural completeness gaps in documentation{}
-    - WHY-not-WHAT violations in function_blocks
+    - WHY_NOT_WHAT: doc_diff comment describes code, not reasoning
+    - MISSING_DOCSTRING: function in diff lacks docstring in doc_diff
 
   COULD (iterations 1-3):
-    - Minor formatting inconsistencies
+    - FORMATTING: minor diff formatting issues
 
-DO NOT use STRUCTURE categories (god objects, convention violations) --
-those are plan-code's responsibility. TW cannot fix code issues."""
+DO NOT generate items about:
+  - diff field content (plan-code's job)
+  - Code logic correctness"""
 
 
 COMPONENT_EXAMPLES = """\
-  - A milestone's documentation{} block
-  - A readme_entry
-  - A decision log entry"""
+  - A code_change's doc_diff field
+  - A decision log entry (for coverage)"""
 
 
 CONCERN_EXAMPLES = """\
-  - Temporal contamination
-  - WHY-not-WHAT clarity
-  - Coverage completeness"""
+  - Missing doc_diff for code_change with diff
+  - Temporal contamination in doc_diff
+  - Decision coverage gaps"""
 
 
 # =============================================================================
