@@ -13,6 +13,8 @@ from skills.lib.workflow.prompts.subagent import (
     template_dispatch,
     roster_dispatch,
 )
+# format_step provides step assembly: body content + continuation directive
+from skills.lib.workflow.prompts.step import format_step
 
 __all__ = [
     # Building blocks
@@ -23,4 +25,6 @@ __all__ = [
     "subagent_dispatch",
     "template_dispatch",
     "roster_dispatch",
+    # Step assembly
+    "format_step",
 ]

@@ -16,68 +16,16 @@ import argparse
 import sys
 
 from skills.lib.workflow.core import StepDef, Workflow
-from skills.lib.workflow.ast import (
-    W, XMLRenderer, render, TextNode,
-    RosterDispatchNode, render_roster_dispatch,
-)
-from skills.lib.workflow.ast.nodes import (
-    StepHeaderNode, CurrentActionNode, InvokeAfterNode,
-)
-from skills.lib.workflow.ast.renderer import (
-    render_step_header, render_current_action, render_invoke_after,
-)
+# Plain-text template functions replace AST-based rendering
+from skills.lib.workflow.prompts import format_step, roster_dispatch
 
 
 # Module path for -m invocation
 MODULE_PATH = "skills.codebase_analysis.analyze_workflow"
 
 
-# XML format mandate for step 1
-XML_FORMAT_MANDATE = """<xml_format_mandate>
-CRITICAL: All script outputs use XML format. You MUST:
-
-1. Execute the action in <current_action>
-2. When complete, invoke the exact command in <invoke_after>
-3. The <next> block re-states the command -- execute it
-4. For branching <invoke_after>, choose based on outcome
-
-DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
-</xml_format_mandate>"""
-
-
 # Maximum iterations for DEEPEN phase
 MAX_DEEPEN_ITERATIONS = 4
-
-
-def build_explore_dispatch_guidance() -> str:
-    """Generate Explore agent dispatch guidance using RosterDispatchNode pattern.
-
-    Exploration goals are user-driven; each agent has distinct focus based on codebase structure.
-    Actual agent targets determined at runtime by the LLM based on user's goals.
-    """
-    # Shared context from prior steps (SCOPE phase output)
-    shared_context = """Analysis goals from SCOPE step:
-- User intent and what they want to understand
-- Identified focus areas (architecture, components, flows, etc.)
-- Defined objectives (1-3 specific goals)"""
-
-    # Placeholder agents - actual exploration focuses determined at runtime
-    agents = (
-        "[Exploration focus 1: e.g., 'Explore authentication flow']",
-        "[Exploration focus 2: e.g., 'Explore database schema']",
-        "[Exploration focus N: based on scope and codebase structure]",
-    )
-
-    node = RosterDispatchNode(
-        agent_type="Explore",
-        shared_context=shared_context,
-        agents=agents,
-        command="Use Task tool with subagent_type='Explore'",
-        model="haiku",
-        instruction="Dispatch Explore agents targeting defined goals. Use Task tool with Explore subagent_type.",
-    )
-
-    return render_roster_dispatch(node)
 
 
 # Phase action definitions
@@ -106,11 +54,29 @@ SCOPE_ACTIONS = [
 
 def get_survey_exploring_actions() -> list[str]:
     """Generate SURVEY exploring actions with dispatch guidance."""
-    dispatch_xml = build_explore_dispatch_guidance()
+    # roster_dispatch() returns formatted plain-text template that
+    # demonstrates Task tool invocation pattern with placeholder agents.
+    # LLM substitutes actual exploration targets based on SCOPE analysis.
+    dispatch_text = roster_dispatch(
+        agent_type="Explore",
+        agents=[
+            "[Exploration focus 1: e.g., 'Explore authentication flow']",
+            "[Exploration focus 2: e.g., 'Explore database schema']",
+            "[Exploration focus N: based on scope and codebase structure]",
+        ],
+        command="Use Task tool with subagent_type='Explore'",
+        shared_context="""\
+Analysis goals from SCOPE step:
+- User intent and what they want to understand
+- Identified focus areas (architecture, components, flows, etc.)
+- Defined objectives (1-3 specific goals)""",
+        model="haiku",
+        instruction="Dispatch Explore agents targeting defined goals.",
+    )
     return [
         "DISPATCH Explore agent(s) targeting defined goals:",
         "",
-        dispatch_xml,
+        dispatch_text,
         "",
         "DISPATCH GUIDANCE:",
         "",
@@ -215,11 +181,30 @@ DEEPEN_EXPLORING_ACTIONS = [
 
 def get_deepen_low_actions() -> list[str]:
     """Generate DEEPEN low-confidence actions with dispatch guidance."""
-    dispatch_xml = build_explore_dispatch_guidance()
+    # Identical dispatch parameters to get_survey_exploring_actions() because
+    # both phases use the same Explore subagent pattern. The difference is in
+    # the surrounding guidance text, which directs targeted exploration vs
+    # broad survey.
+    dispatch_text = roster_dispatch(
+        agent_type="Explore",
+        agents=[
+            "[Exploration focus 1: e.g., 'Explore authentication flow']",
+            "[Exploration focus 2: e.g., 'Explore database schema']",
+            "[Exploration focus N: based on scope and codebase structure]",
+        ],
+        command="Use Task tool with subagent_type='Explore'",
+        shared_context="""\
+Analysis goals from SCOPE step:
+- User intent and what they want to understand
+- Identified focus areas (architecture, components, flows, etc.)
+- Defined objectives (1-3 specific goals)""",
+        model="haiku",
+        instruction="Dispatch Explore agents targeting defined goals.",
+    )
     return [
         "DISPATCH targeted Explore agent(s):",
         "",
-        dispatch_xml,
+        dispatch_text,
         "",
         "Focus on specific targets identified:",
         "  - Provide clear focus area",
@@ -356,8 +341,7 @@ SYNTHESIZE_CERTAIN_ACTIONS = [
     "",
     "## Context",
     "[Purpose, constraints, trade-offs, evolution]",
-    "",
-    "WORKFLOW COMPLETE - Present summary to user.",
+    # format_step() adds "WORKFLOW COMPLETE" when next_cmd is empty
 ]
 
 
@@ -379,8 +363,7 @@ WORKFLOW = Workflow(
 
 
 def format_output(step: int, confidence: str, iteration: int) -> str:
-    """Format output for display using XML building blocks."""
-    # Map step to phase and get appropriate actions
+    """Format output using plain-text format_step."""
     step_map = {
         1: ("SCOPE", get_scope_actions(confidence)),
         2: ("SURVEY", get_survey_actions(confidence)),
@@ -389,35 +372,17 @@ def format_output(step: int, confidence: str, iteration: int) -> str:
     }
 
     phase, (title, actions, next_phase) = step_map[step]
-    full_title = f"CODEBASE ANALYSIS - {title}"
 
-    parts = []
+    # Skill name + title identifies workflow context for the LLM.
+    # Horizontal rule visually separates header from action content.
+    # actions is a list[str] that gets joined with newlines.
+    body = f"CODEBASE ANALYSIS - {title}\n{'=' * 40}\n\n" + "\n".join(actions)
 
-    # Step header
-    parts.append(render_step_header(StepHeaderNode(
-        title=full_title,
-        script="codebase-analysis",
-        step=str(step)
-    )))
-    parts.append("")
-
-    # XML mandate on step 1
-    if step == 1 and confidence == "exploring":
-        parts.append(XML_FORMAT_MANDATE)
-        parts.append("")
-
-    # Current action
-    parts.append(render_current_action(CurrentActionNode(actions)))
-    parts.append("")
-
-    # Invoke after - build the next command based on state
     next_cmd = build_next_command(step, WORKFLOW.total_steps, confidence, iteration, next_phase)
-    if next_cmd:
-        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
-    else:
-        parts.append("WORKFLOW COMPLETE - Present summary to user.")
 
-    return "\n".join(parts)
+    # format_step() accepts empty string to signal workflow completion.
+    # next_cmd is either a command string or None (converted to empty string).
+    return format_step(body, next_cmd or "")
 
 
 def build_next_command(step: int, total_steps: int, confidence: str, iteration: int, next_phase: str | None) -> str | None:
