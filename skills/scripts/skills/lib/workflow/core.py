@@ -5,7 +5,7 @@ validation. The execution engine (Workflow.run()) was removed because skills
 use CLI-based step invocation via format_output() functions.
 
 What remains:
-- StepDef: Step metadata (id, title, actions, phase)
+- StepDef: Step metadata (id, title, actions)
 - Workflow: Collection of steps with validation
 - Arg: Parameter metadata for CLI arguments
 """
@@ -36,7 +36,6 @@ class StepDef:
     id: str
     title: str
     actions: list[str]
-    phase: str | None = None
 
 
 class Workflow:

@@ -67,8 +67,6 @@ class XMLRenderer:
             attrs["category"] = node.category
         if node.mode:
             attrs["mode"] = node.mode
-        if node.phase:
-            attrs["phase"] = node.phase
         if node.total is not None:
             attrs["total"] = str(node.total)
 

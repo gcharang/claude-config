@@ -191,7 +191,6 @@ class StepGuidance:
     title: str
     actions: list[str]
     next_hint: str = ""
-    phase: str = ""
     # Additional fields can be added without breaking existing handlers
 
 

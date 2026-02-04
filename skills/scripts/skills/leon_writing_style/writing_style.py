@@ -1057,7 +1057,6 @@ def format_output(step: int, guidance: dict, thoughts: str) -> str:
         title=title,
         script="leon_writing_style",
         step=str(step),
-        phase=guidance["phase"]
     )))
     parts.append("")
 
@@ -1095,7 +1094,6 @@ WORKFLOW = Workflow(
     StepDef(
         id="classification",
         title="Content Classification",
-        phase="UNDERSTANDING",
         actions=[
             "Before writing, classify your content. Voice rules depend on this.",
             "",
@@ -1133,49 +1131,41 @@ WORKFLOW = Workflow(
     StepDef(
         id="purpose_audience",
         title="Purpose & Audience",
-        phase="UNDERSTANDING",
         actions=get_step_guidance(2)["actions"],
     ),
     StepDef(
         id="drafting",
         title="Draft with Style Rules",
-        phase="DRAFTING",
         actions=get_step_guidance(3)["actions"],
     ),
     StepDef(
         id="ai_tells_detection",
         title="AI Tells Detection",
-        phase="VERIFICATION",
         actions=get_step_guidance(4)["actions"],
     ),
     StepDef(
         id="positive_markers",
         title="Positive Voice Marker Check",
-        phase="VERIFICATION",
         actions=get_step_guidance(5)["actions"],
     ),
     StepDef(
         id="voice_alignment",
         title="Voice-Content Alignment",
-        phase="VERIFICATION",
         actions=get_step_guidance(6)["actions"],
     ),
     StepDef(
         id="consolidation",
         title="Cross-Check Consolidation",
-        phase="VERIFICATION",
         actions=get_step_guidance(7)["actions"],
     ),
     StepDef(
         id="refinement",
         title="Self-Refine",
-        phase="REFINEMENT",
         actions=get_step_guidance(8)["actions"],
     ),
     StepDef(
         id="final_check",
         title="Final Quality Check",
-        phase="REFINEMENT",
         actions=get_step_guidance(9)["actions"],
     ),
     description="Multi-turn style compliance workflow",

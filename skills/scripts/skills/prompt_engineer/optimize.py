@@ -524,7 +524,6 @@ STEP_TRIAGE = StepDef(
         "  SCOPE: [single-prompt | ecosystem | greenfield | problem]",
         "  RATIONALE: [why this scope fits]",
     ],
-    phase="triage",
 )
 
 STEP_REFINE = StepDef(
@@ -584,7 +583,6 @@ STEP_REFINE = StepDef(
         "",
         "  If INCONSISTENT: flag for revision before Approve step.",
     ],
-    phase="verify",
 )
 
 STEP_APPROVE = StepDef(
@@ -615,7 +613,6 @@ STEP_APPROVE = StepDef(
         "CRITICAL: STOP. Do NOT proceed to Execute step.",
         "Wait for explicit user approval before continuing.",
     ],
-    phase="approve",
 )
 
 
@@ -639,13 +636,11 @@ WORKFLOW_SINGLE = Workflow(
             "  - Agent type: tool-use, coding, analysis, general?",
             "  - Failure modes: what goes wrong when this fails?",
         ],
-        phase="assess",
     ),
     StepDef(
         id="understand",
         title="Understand",
         actions=understand_actions_simple(),
-        phase="understand",
     ),
     StepDef(
         id="plan",
@@ -660,7 +655,6 @@ WORKFLOW_SINGLE = Workflow(
             "",
             "Include TECHNIQUE DISPOSITION summary.",
         ],
-        phase="plan",
     ),
     STEP_REFINE,
     STEP_APPROVE,
@@ -680,7 +674,6 @@ WORKFLOW_SINGLE = Workflow(
             "",
             *change_presentation_actions(),
         ],
-        phase="execute",
     ),
     description="Optimize a single prompt file",
     validate=False,
@@ -712,19 +705,16 @@ WORKFLOW_ECOSYSTEM = Workflow(
             "  - What it receives from / passes to other prompts",
             "  - Complexity classification",
         ],
-        phase="assess",
     ),
     StepDef(
         id="understand",
         title="Understand",
         actions=understand_actions_ecosystem(),
-        phase="understand",
     ),
     StepDef(
         id="verify_understanding",
         title="Verify Understanding",
         actions=verify_understanding_actions(),
-        phase="verify_understanding",
     ),
     StepDef(
         id="plan",
@@ -747,7 +737,6 @@ WORKFLOW_ECOSYSTEM = Workflow(
             *change_format_actions("CHANGE"),
             "Note which changes affect single file vs multiple.",
         ],
-        phase="plan",
     ),
     STEP_REFINE,
     STEP_APPROVE,
@@ -766,7 +755,6 @@ WORKFLOW_ECOSYSTEM = Workflow(
             "",
             *change_presentation_actions(),
         ],
-        phase="execute",
     ),
     description="Optimize multiple related prompts",
     validate=False,
@@ -814,7 +802,6 @@ WORKFLOW_GREENFIELD = Workflow(
             "  - What errors are expected?",
             "  - What should NOT happen?",
         ],
-        phase="assess",
     ),
     StepDef(
         id="understand",
@@ -862,7 +849,6 @@ WORKFLOW_GREENFIELD = Workflow(
             "  WHY RIGHT: Bounded task, minimal context, clear output contract.",
             "</example>",
         ],
-        phase="understand",
     ),
     StepDef(
         id="design",
@@ -928,7 +914,6 @@ WORKFLOW_GREENFIELD = Workflow(
             "",
             "WRITE complete prompt draft.",
         ],
-        phase="plan",
     ),
     STEP_REFINE,
     STEP_APPROVE,
@@ -948,7 +933,6 @@ WORKFLOW_GREENFIELD = Workflow(
             "",
             *change_presentation_actions(),
         ],
-        phase="execute",
     ),
     description="Design a new prompt from requirements",
     validate=False,
@@ -983,13 +967,11 @@ WORKFLOW_PROBLEM = Workflow(
             "If NOT a prompting issue: state clearly and STOP.",
             "If prompting issue: identify lines that may contribute.",
         ],
-        phase="diagnose",
     ),
     StepDef(
         id="understand",
         title="Understand",
         actions=understand_actions_simple(),
-        phase="understand",
     ),
     StepDef(
         id="plan",
@@ -1006,7 +988,6 @@ WORKFLOW_PROBLEM = Workflow(
             *change_format_actions("FIX"),
             "  Expected effect: [how this fixes the problem]",
         ],
-        phase="plan",
     ),
     STEP_REFINE,
     STEP_APPROVE,
@@ -1022,7 +1003,6 @@ WORKFLOW_PROBLEM = Workflow(
             "",
             *change_presentation_actions(),
         ],
-        phase="execute",
     ),
     description="Fix a specific issue in existing prompt(s)",
     validate=False,
@@ -1035,7 +1015,6 @@ STEP_TRIAGE_ROOT = StepDef(
     id="triage",
     title="Triage",
     actions=STEP_TRIAGE.actions,
-    phase="triage",
 )
 
 WORKFLOW_ROOT = Workflow(

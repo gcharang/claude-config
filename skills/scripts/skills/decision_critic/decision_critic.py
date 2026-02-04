@@ -184,43 +184,36 @@ WORKFLOW = Workflow(
     StepDef(
         id="extract_structure",
         title="Extract Structure",
-        phase="DECOMPOSITION",
         actions=STEPS[1]["actions"],
     ),
     StepDef(
         id="classify_verifiability",
         title="Classify Verifiability",
-        phase="DECOMPOSITION",
         actions=STEPS[2]["actions"],
     ),
     StepDef(
         id="generate_questions",
         title="Generate Verification Questions",
-        phase="VERIFICATION",
         actions=STEPS[3]["actions"],
     ),
     StepDef(
         id="factored_verification",
         title="Factored Verification",
-        phase="VERIFICATION",
         actions=STEPS[4]["actions"],
     ),
     StepDef(
         id="contrarian_perspective",
         title="Contrarian Perspective",
-        phase="CHALLENGE",
         actions=STEPS[5]["actions"],
     ),
     StepDef(
         id="alternative_framing",
         title="Alternative Framing",
-        phase="CHALLENGE",
         actions=STEPS[6]["actions"],
     ),
     StepDef(
         id="synthesis",
         title="Synthesis and Verdict",
-        phase="SYNTHESIS",
         actions=STEPS[7]["actions"],
     ),
     description="Structured decision criticism workflow",

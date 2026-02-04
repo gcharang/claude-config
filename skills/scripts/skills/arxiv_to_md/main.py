@@ -48,7 +48,6 @@ SUBAGENT_MODULE = "skills.arxiv_to_md.sub_agent"
 STEP_DISCOVER = StepDef(
     id="discover",
     title="Discover and Dispatch",
-    phase="DISPATCH",
     actions=[
         "MODE DETECTION:",
         "Determine which mode based on user input:",
@@ -129,7 +128,6 @@ STEP_DISCOVER = StepDef(
 STEP_WAIT = StepDef(
     id="wait",
     title="Wait for Completion",
-    phase="COLLECT",
     actions=[
         "WAIT for all sub-agents to complete.",
         "",
@@ -166,7 +164,6 @@ STEP_WAIT = StepDef(
 STEP_FINALIZE = StepDef(
     id="finalize",
     title="Finalize",
-    phase="OUTPUT",
     actions=[
         "For each SUCCESSFUL conversion:",
         "",
@@ -254,7 +251,6 @@ def format_output(step: int, step_def: StepDef, is_step_one: bool = False) -> st
         title=title,
         script="arxiv_to_md",
         step=str(step),
-        phase=step_def.phase
     )))
     parts.append("")
 

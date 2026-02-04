@@ -167,8 +167,6 @@ def format_incoherence_output(step, phase, agent_type, guidance):
         title=title,
         script="incoherence",
         step=str(step),
-        phase=phase,
-        agent_type=agent_type
     )))
     parts.append("")
 
@@ -533,127 +531,106 @@ WORKFLOW = Workflow(
     StepDef(
         id="survey",
         title="Codebase Survey",
-        phase="DETECTION",
         actions=get_step_guidance(1, 21)["actions"],
     ),
     StepDef(
         id="dimension_selection",
         title="Dimension Selection",
-        phase="DETECTION",
         actions=get_step_guidance(2, 21)["actions"],
     ),
     StepDef(
         id="exploration_dispatch",
         title="Exploration Dispatch",
-        phase="DETECTION",
         actions=get_step_guidance(3, 21)["actions"],
     ),
     StepDef(
         id="broad_sweep",
         title="Broad Sweep [SUB-AGENT]",
-        phase="DETECTION",
         actions=get_step_guidance(4, 21)["actions"],
     ),
     StepDef(
         id="coverage_check",
         title="Coverage Check [SUB-AGENT]",
-        phase="DETECTION",
         actions=get_step_guidance(5, 21)["actions"],
     ),
     StepDef(
         id="gap_fill",
         title="Gap-Fill Exploration [SUB-AGENT]",
-        phase="DETECTION",
         actions=get_step_guidance(6, 21)["actions"],
     ),
     StepDef(
         id="format_exploration",
         title="Format Exploration Findings [SUB-AGENT]",
-        phase="DETECTION",
         actions=get_step_guidance(7, 21)["actions"],
     ),
     StepDef(
         id="synthesize_candidates",
         title="Synthesize Candidates",
-        phase="DETECTION",
         actions=get_step_guidance(8, 21)["actions"],
     ),
     StepDef(
         id="deep_dive_dispatch",
         title="Deep-Dive Dispatch",
-        phase="DETECTION",
         actions=get_step_guidance(9, 21)["actions"],
     ),
     StepDef(
         id="deep_dive_exploration",
         title="Deep-Dive Exploration [SUB-AGENT]",
-        phase="DETECTION",
         actions=get_step_guidance(10, 21)["actions"],
     ),
     StepDef(
         id="format_results",
         title="Format Results [SUB-AGENT]",
-        phase="DETECTION",
         actions=get_step_guidance(11, 21)["actions"],
     ),
     StepDef(
         id="verdict_analysis",
         title="Verdict Analysis",
-        phase="DETECTION",
         actions=get_step_guidance(12, 21)["actions"],
     ),
     StepDef(
         id="prepare_resolution_batches",
         title="Prepare Resolution Batches",
-        phase="RESOLUTION",
         actions=get_step_guidance(13, 21)["actions"],
     ),
     StepDef(
         id="present_batch",
         title="Present Resolution Batch",
-        phase="RESOLUTION",
         actions=get_step_guidance(14, 21)["actions"],
     ),
     StepDef(
         id="resolution_loop",
         title="Resolution Loop Controller",
-        phase="RESOLUTION",
         actions=get_step_guidance(15, 21)["actions"],
     ),
     StepDef(
         id="plan_dispatch",
         title="Plan Dispatch",
-        phase="APPLICATION",
         actions=get_step_guidance(16, 21)["actions"],
     ),
     StepDef(
         id="reconcile_dispatch",
         title="Reconcile Dispatch",
-        phase="APPLICATION",
         actions=get_step_guidance(17, 21)["actions"],
     ),
     StepDef(
         id="reconcile_apply",
         title="Reconcile Apply [SUB-AGENT]",
-        phase="APPLICATION",
         actions=get_step_guidance(18, 21)["actions"],
     ),
     StepDef(
         id="reconcile_format",
         title="Reconcile Format [SUB-AGENT]",
-        phase="APPLICATION",
         actions=get_step_guidance(19, 21)["actions"],
     ),
     StepDef(
         id="reconcile_collect",
         title="Reconcile Collect",
-        phase="APPLICATION",
         actions=get_step_guidance(20, 21)["actions"],
     ),
     StepDef(
         id="present_report",
         title="Present Report",
-        phase="APPLICATION",
         actions=get_step_guidance(21, 21)["actions"],
     ),
     description="Multi-phase incoherence detection and resolution workflow",

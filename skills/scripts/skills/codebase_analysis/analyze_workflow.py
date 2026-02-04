@@ -2,435 +2,286 @@
 """
 Codebase Analysis Skill - Understanding-focused comprehension workflow.
 
-Four-phase workflow with confidence-driven iteration:
-  1. SCOPE      - Define understanding goals
-  2. SURVEY     - Initial exploration
-  3. DEEPEN     - Targeted deep-dives (1-4 iterations)
-  4. SYNTHESIZE - Structured summary output
+Four-phase workflow:
+  1. SCOPE      - Define understanding goals (single pass)
+  2. SURVEY     - Initial exploration via Explore agents (single pass)
+  3. DEEPEN     - Targeted deep-dives with confidence iteration (1-4 iterations)
+  4. SYNTHESIZE - Structured summary output (single pass)
 
-Confidence progression: exploring -> low -> medium -> high -> certain
-Each step can loop internally until confidence = certain.
+Only DEEPEN iterates based on confidence. Other steps execute once and advance.
 """
 
 import argparse
 import sys
 
 from skills.lib.workflow.core import StepDef, Workflow
-# Plain-text template functions replace AST-based rendering
 from skills.lib.workflow.prompts import format_step, roster_dispatch
 
 
-# Module path for -m invocation
+# ============================================================================
+# SHARED PROMPTS
+# ============================================================================
+
+DISPATCH_CONTEXT = """\
+Analysis goals from SCOPE step:
+- User intent and what they want to understand
+- Identified focus areas (architecture, components, flows, etc.)
+- Defined objectives (1-3 specific goals)"""
+
+DISPATCH_AGENTS = [
+    "[Exploration focus 1: e.g., 'Explore authentication flow']",
+    "[Exploration focus 2: e.g., 'Explore database schema']",
+    "[Exploration focus N: based on scope and codebase structure]",
+]
+
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
 MODULE_PATH = "skills.codebase_analysis.analyze_workflow"
-
-
-# Maximum iterations for DEEPEN phase
 MAX_DEEPEN_ITERATIONS = 4
 
 
-# Phase action definitions
-SCOPE_ACTIONS = [
-    "PARSE user intent:",
-    "  - What codebase(s) are we analyzing?",
-    "  - What is the user trying to understand?",
-    "  - Are there specific areas of interest mentioned?",
-    "",
-    "IDENTIFY focus areas:",
-    "  - Architecture/structure understanding",
-    "  - Specific component/feature deep-dive",
-    "  - Technology stack assessment",
-    "  - Integration patterns",
-    "  - Data flows",
-    "",
-    "DEFINE goals (1-3 specific objectives):",
-    "  - 'Understand how [system X] processes [Y]'",
-    "  - 'Map dependencies between [A] and [B]'",
-    "  - 'Document data flow from [input] to [output]'",
-    "",
-    "DO NOT seek user confirmation. Goals are internal guidance.",
-    "",
-    "ADVANCE: When goals defined, re-invoke with higher confidence.",
-]
+# ============================================================================
+# MESSAGE TEMPLATES
+# ============================================================================
 
-def get_survey_exploring_actions() -> list[str]:
-    """Generate SURVEY exploring actions with dispatch guidance."""
-    # roster_dispatch() returns formatted plain-text template that
-    # demonstrates Task tool invocation pattern with placeholder agents.
-    # LLM substitutes actual exploration targets based on SCOPE analysis.
+# --- STEP 1: SCOPE -----------------------------------------------------------
+
+SCOPE_INSTRUCTIONS = """\
+PARSE user intent:
+  - What codebase(s) are we analyzing?
+  - What is the user trying to understand?
+  - Are there specific areas of interest mentioned?
+
+IDENTIFY focus areas:
+  - Architecture/structure understanding
+  - Specific component/feature deep-dive
+  - Technology stack assessment
+  - Integration patterns
+  - Data flows
+
+DEFINE goals (1-3 specific objectives):
+  - 'Understand how [system X] processes [Y]'
+  - 'Map dependencies between [A] and [B]'
+  - 'Document data flow from [input] to [output]'
+
+DO NOT seek user confirmation. Goals are internal guidance.
+
+ADVANCE: When goals defined, proceed to SURVEY."""
+
+# --- STEP 2: SURVEY ----------------------------------------------------------
+
+SURVEY_INSTRUCTIONS = """\
+DISPATCH Explore agent(s) to map the codebase landscape.
+
+{dispatch}
+
+DISPATCH GUIDANCE:
+
+Single codebase, focused scope:
+  - One Explore agent with specific focus
+
+Large/broad scope:
+  - Multiple parallel Explore agents by boundary
+  - Example: frontend agent + backend agent + data agent
+
+Multiple repositories:
+  - One Explore agent per repository
+
+WAIT for Explore results.
+
+PROCESS findings:
+
+STRUCTURE:
+  - Directory organization
+  - File patterns
+  - Module boundaries
+
+PATTERNS:
+  - Architectural style (layered, microservices, monolithic)
+  - Code organization patterns
+  - Naming conventions
+
+FLOWS:
+  - Entry points
+  - Request/data flow paths
+  - Integration patterns
+
+DECISIONS:
+  - Technology choices
+  - Framework usage
+  - Dependencies
+
+ADVANCE: When exploration complete, proceed to DEEPEN."""
+
+# --- STEP 3: DEEPEN ----------------------------------------------------------
+
+DEEPEN_INSTRUCTIONS = """\
+DEEPEN understanding through direct exploration.
+
+DO NOT dispatch agents. Use Read, Glob, Grep tools directly.
+
+IDENTIFY areas needing deep understanding:
+
+Prioritize by:
+  - COMPLEXITY: Non-obvious behavior, intricate logic
+  - NOVELTY: Unfamiliar patterns, unique approaches
+  - CENTRALITY: Core to user's goals
+
+SELECT 1-3 targets for this iteration:
+  - Specific component/module
+  - Particular data flow
+  - Integration mechanism
+  - Implementation pattern
+
+EXPLORE each target:
+  - Read key files directly
+  - Trace execution paths
+  - Understand data transformations
+  - Map dependencies
+
+EXTRACT understanding:
+  - How does this component work?
+  - What are the key mechanisms?
+  - How does it integrate with other parts?
+
+ASSESS confidence:
+  - CERTAIN: Goals fully understood, ready for synthesis
+  - HIGH: Strong understanding, minor gaps acceptable
+  - MEDIUM: Reasonable understanding, some questions remain
+  - LOW: Significant gaps, need more exploration
+  - EXPLORING: Just starting, identifying targets
+
+ADVANCE:
+  - confidence == certain: Proceed to SYNTHESIZE
+  - confidence != certain AND iteration < {max_iter}: Continue DEEPEN
+  - iteration >= {max_iter}: Force proceed to SYNTHESIZE"""
+
+# --- STEP 4: SYNTHESIZE ------------------------------------------------------
+
+SYNTHESIZE_INSTRUCTIONS = """\
+OUTPUT structured summary:
+
+# Codebase Understanding Summary
+
+## Structure
+[Directory organization, module boundaries, component relationships]
+
+## Patterns
+[Architectural patterns, design patterns, code organization]
+
+## Flows
+[Request flows, data flows, integration patterns]
+
+## Decisions
+[Technology choices, framework selections, architectural decisions]
+
+## Context
+[Purpose, constraints, trade-offs, evolution]
+
+Ensure:
+  - Summary addresses user's original intent
+  - All sections present with concrete findings
+  - Framing is understanding-focused (not auditing)
+  - Facts and observations (not judgments)"""
+
+
+# ============================================================================
+# MESSAGE BUILDERS
+# ============================================================================
+
+
+def build_survey_body() -> str:
+    """Build SURVEY instructions with Explore agent dispatch."""
     dispatch_text = roster_dispatch(
         agent_type="Explore",
-        agents=[
-            "[Exploration focus 1: e.g., 'Explore authentication flow']",
-            "[Exploration focus 2: e.g., 'Explore database schema']",
-            "[Exploration focus N: based on scope and codebase structure]",
-        ],
+        agents=DISPATCH_AGENTS,
         command="Use Task tool with subagent_type='Explore'",
-        shared_context="""\
-Analysis goals from SCOPE step:
-- User intent and what they want to understand
-- Identified focus areas (architecture, components, flows, etc.)
-- Defined objectives (1-3 specific goals)""",
+        shared_context=DISPATCH_CONTEXT,
         model="haiku",
         instruction="Dispatch Explore agents targeting defined goals.",
     )
-    return [
-        "DISPATCH Explore agent(s) targeting defined goals:",
-        "",
-        dispatch_text,
-        "",
-        "DISPATCH GUIDANCE:",
-        "",
-        "Single codebase, focused scope:",
-        "  - One Explore agent with specific focus",
-        "",
-        "Large/broad scope:",
-        "  - Multiple parallel Explore agents by boundary",
-        "  - Example: frontend agent + backend agent + data agent",
-        "",
-        "Multiple repositories:",
-        "  - One Explore agent per repository",
-        "",
-        "WAIT for Explore results before re-invoking this step.",
-        "",
-        "ADVANCE: After results received, re-invoke with --confidence low.",
-    ]
+    return SURVEY_INSTRUCTIONS.format(dispatch=dispatch_text)
 
 
-SURVEY_EXPLORING_ACTIONS = get_survey_exploring_actions()
-
-SURVEY_LOW_ACTIONS = [
-    "EXTRACT findings from Explore output:",
-    "",
-    "STRUCTURE:",
-    "  - Directory organization",
-    "  - File patterns",
-    "  - Module boundaries",
-    "",
-    "PATTERNS:",
-    "  - Architectural style (layered, microservices, monolithic)",
-    "  - Code organization patterns",
-    "  - Naming conventions",
-    "",
-    "FLOWS:",
-    "  - Entry points",
-    "  - Request/data flow paths",
-    "  - Integration patterns",
-    "",
-    "DECISIONS:",
-    "  - Technology choices",
-    "  - Framework usage",
-    "  - Dependencies",
-    "",
-    "IDENTIFY GAPS:",
-    "  - Areas not covered by exploration",
-    "  - Questions that remain unanswered",
-    "",
-    "ADVANCE:",
-    "  - Significant gaps: Re-invoke with --confidence low, dispatch more agents",
-    "  - Minor gaps: Re-invoke with --confidence medium",
-]
-
-SURVEY_MEDIUM_ACTIONS = [
-    "ASSESS coverage against goals:",
-    "  - Which goals have initial understanding?",
-    "  - Which goals need more exploration?",
-    "",
-    "Balance breadth vs depth:",
-    "  - SURVEY focuses on breadth (map the landscape)",
-    "  - DEEPEN focuses on depth (understand specifics)",
-    "",
-    "Prefer advancing to DEEPEN over extending SURVEY.",
-    "",
-    "ADVANCE:",
-    "  - Good coverage: Re-invoke with --confidence high",
-    "  - One specific gap: Dispatch agent, re-invoke with --confidence medium",
-    "  - Multiple gaps: Re-invoke with --confidence low",
-]
-
-SURVEY_HIGH_ACTIONS = [
-    "VERIFY initial map complete:",
-    "  - All major components identified?",
-    "  - Overall structure understood?",
-    "  - Entry points and flows mapped?",
-    "",
-    "REMAINING questions are normal - DEEPEN addresses these.",
-    "",
-    "ADVANCE: Re-invoke with --confidence certain to proceed to DEEPEN.",
-]
-
-DEEPEN_EXPLORING_ACTIONS = [
-    "IDENTIFY areas needing deep understanding:",
-    "",
-    "Prioritize by:",
-    "  - COMPLEXITY: Non-obvious behavior, intricate logic",
-    "  - NOVELTY: Unfamiliar patterns, unique approaches",
-    "  - CENTRALITY: Core to user's goals",
-    "",
-    "SELECT 1-3 targets for this iteration:",
-    "  - Specific component/module",
-    "  - Particular data flow",
-    "  - Integration mechanism",
-    "  - Implementation pattern",
-    "",
-    "For each target:",
-    "  - What specifically do we need to understand?",
-    "  - What questions remain unanswered?",
-    "",
-    "ADVANCE: Re-invoke with --confidence low.",
-]
-
-def get_deepen_low_actions() -> list[str]:
-    """Generate DEEPEN low-confidence actions with dispatch guidance."""
-    # Identical dispatch parameters to get_survey_exploring_actions() because
-    # both phases use the same Explore subagent pattern. The difference is in
-    # the surrounding guidance text, which directs targeted exploration vs
-    # broad survey.
-    dispatch_text = roster_dispatch(
-        agent_type="Explore",
-        agents=[
-            "[Exploration focus 1: e.g., 'Explore authentication flow']",
-            "[Exploration focus 2: e.g., 'Explore database schema']",
-            "[Exploration focus N: based on scope and codebase structure]",
-        ],
-        command="Use Task tool with subagent_type='Explore'",
-        shared_context="""\
-Analysis goals from SCOPE step:
-- User intent and what they want to understand
-- Identified focus areas (architecture, components, flows, etc.)
-- Defined objectives (1-3 specific goals)""",
-        model="haiku",
-        instruction="Dispatch Explore agents targeting defined goals.",
-    )
-    return [
-        "DISPATCH targeted Explore agent(s):",
-        "",
-        dispatch_text,
-        "",
-        "Focus on specific targets identified:",
-        "  - Provide clear focus area",
-        "  - Include specific questions to answer",
-        "  - Reference files/components from SURVEY",
-        "",
-        "WAIT for results before re-invoking this step.",
-        "",
-        "ADVANCE: After results, re-invoke with --confidence medium.",
-    ]
+def build_deepen_body(iteration: int) -> str:
+    """Build DEEPEN instructions with iteration context."""
+    return DEEPEN_INSTRUCTIONS.format(max_iter=MAX_DEEPEN_ITERATIONS)
 
 
-DEEPEN_LOW_ACTIONS = get_deepen_low_actions()
-
-DEEPEN_MEDIUM_ACTIONS = [
-    "PROCESS deep-dive findings:",
-    "",
-    "EXTRACT understanding:",
-    "  - How does this component work?",
-    "  - What are the key mechanisms?",
-    "  - How does it integrate with other parts?",
-    "",
-    "ASSESS depth achieved:",
-    "  - Questions answered?",
-    "  - Understanding sufficient for goals?",
-    "  - New questions emerged?",
-    "",
-    "ADVANCE:",
-    "  - Understanding sufficient: Re-invoke with --confidence high",
-    "  - Need more on SAME target: Re-invoke with --confidence low",
-    "  - New target identified: Re-invoke with --confidence exploring, increment --iteration",
-]
-
-DEEPEN_HIGH_ACTIONS = [
-    "ASSESS overall understanding:",
-    "",
-    "Check against goals:",
-    "  - Can we explain the key aspects?",
-    "  - Are the important flows clear?",
-    "  - Do we understand the critical decisions?",
-    "",
-    "At maximum iterations: Must advance to SYNTHESIZE.",
-    "",
-    "ADVANCE:",
-    "  - Understanding complete: Re-invoke with --confidence certain",
-    "  - More depth needed: Re-invoke with --confidence exploring, increment --iteration",
-]
-
-SYNTHESIZE_EXPLORING_ACTIONS = [
-    "BEGIN assembling findings into structured summary.",
-    "",
-    "PREPARE sections:",
-    "",
-    "STRUCTURE:",
-    "  - Directory organization",
-    "  - Module boundaries",
-    "  - Component relationships",
-    "",
-    "PATTERNS:",
-    "  - Architectural patterns",
-    "  - Design patterns",
-    "  - Code organization patterns",
-    "",
-    "FLOWS:",
-    "  - Request flows",
-    "  - Data flows",
-    "  - Integration flows",
-    "",
-    "DECISIONS:",
-    "  - Technology choices and rationale",
-    "  - Framework selections",
-    "  - Architectural decisions",
-    "",
-    "CONTEXT:",
-    "  - Purpose and intent",
-    "  - Constraints and trade-offs",
-    "  - Evolution and history (if evident)",
-    "",
-    "ADVANCE: Re-invoke with --confidence low.",
-]
-
-SYNTHESIZE_LOW_MEDIUM_ACTIONS = [
-    "REFINE summary sections:",
-    "",
-    "ENSURE completeness:",
-    "  - All goals addressed?",
-    "  - Key findings included?",
-    "  - Important context provided?",
-    "",
-    "CHECK clarity:",
-    "  - Is the structure clear?",
-    "  - Are patterns well-explained?",
-    "  - Are flows understandable?",
-    "",
-    "VERIFY framing:",
-    "  - Facts and observations (not judgments)",
-    "  - Understanding-focused (not problem-finding)",
-    "  - Structured and organized",
-    "",
-    "Do not over-iterate. Aim for good enough, not perfect.",
-    "",
-    "ADVANCE:",
-    "  - Ready for output: Re-invoke with --confidence high",
-    "  - Needs refinement: Continue refining at current confidence",
-]
-
-SYNTHESIZE_HIGH_ACTIONS = [
-    "FINAL verification:",
-    "  - Summary addresses user's original intent?",
-    "  - Structure/Patterns/Flows/Decisions/Context all present?",
-    "  - Framing is understanding-focused (not auditing)?",
-    "",
-    "ADVANCE: Re-invoke with --confidence certain to output final summary.",
-]
-
-SYNTHESIZE_CERTAIN_ACTIONS = [
-    "OUTPUT structured summary:",
-    "",
-    "FORMAT:",
-    "",
-    "# Codebase Understanding Summary",
-    "",
-    "## Structure",
-    "[Directory organization, module boundaries, component relationships]",
-    "",
-    "## Patterns",
-    "[Architectural patterns, design patterns, code organization]",
-    "",
-    "## Flows",
-    "[Request flows, data flows, integration patterns]",
-    "",
-    "## Decisions",
-    "[Technology choices, framework selections, architectural decisions]",
-    "",
-    "## Context",
-    "[Purpose, constraints, trade-offs, evolution]",
-    # format_step() adds "WORKFLOW COMPLETE" when next_cmd is empty
-]
-
-
-# Workflow definition (metadata only, execution via CLI)
-WORKFLOW = Workflow(
-    "codebase-analysis",
-    StepDef(id="scope", title="SCOPE - Define understanding goals", actions=SCOPE_ACTIONS, phase="SCOPE"),
-    StepDef(id="survey", title="SURVEY - Initial exploration", actions=SURVEY_EXPLORING_ACTIONS, phase="SURVEY"),
-    StepDef(id="deepen", title="DEEPEN - Targeted deep-dives", actions=DEEPEN_EXPLORING_ACTIONS, phase="DEEPEN"),
-    StepDef(id="synthesize", title="SYNTHESIZE - Structured summary output", actions=SYNTHESIZE_EXPLORING_ACTIONS, phase="SYNTHESIZE"),
-    description="Understanding-focused codebase comprehension workflow with confidence-driven iteration",
-    validate=False,
-)
-
-
-# =============================================================================
-# Output Formatting
-# =============================================================================
-
-
-def format_output(step: int, confidence: str, iteration: int) -> str:
-    """Format output using plain-text format_step."""
-    step_map = {
-        1: ("SCOPE", get_scope_actions(confidence)),
-        2: ("SURVEY", get_survey_actions(confidence)),
-        3: ("DEEPEN", get_deepen_actions(confidence, iteration)),
-        4: ("SYNTHESIZE", get_synthesize_actions(confidence)),
-    }
-
-    phase, (title, actions, next_phase) = step_map[step]
-
-    # Skill name + title identifies workflow context for the LLM.
-    # Horizontal rule visually separates header from action content.
-    # actions is a list[str] that gets joined with newlines.
-    body = f"CODEBASE ANALYSIS - {title}\n{'=' * 40}\n\n" + "\n".join(actions)
-
-    next_cmd = build_next_command(step, WORKFLOW.total_steps, confidence, iteration, next_phase)
-
-    # format_step() accepts empty string to signal workflow completion.
-    # next_cmd is either a command string or None (converted to empty string).
-    return format_step(body, next_cmd or "")
-
-
-def build_next_command(step: int, total_steps: int, confidence: str, iteration: int, next_phase: str | None) -> str | None:
+def build_next_command(step: int, confidence: str, iteration: int) -> str | None:
     """Build the invoke command for the next step."""
     base_cmd = f'python3 -m {MODULE_PATH}'
 
-    if step == 1:  # SCOPE
-        if confidence == "certain":
-            # Advance to SURVEY
-            return f'{base_cmd} --step 2 --confidence exploring'
-        else:
-            # Re-invoke SCOPE with placeholder for confidence
-            return f'{base_cmd} --step 1 --confidence {{exploring|low|medium|high|certain}}'
+    if step == 1:  # SCOPE -> SURVEY
+        return f'{base_cmd} --step 2'
 
-    elif step == 2:  # SURVEY
-        if confidence == "certain":
-            # Advance to DEEPEN
-            return f'{base_cmd} --step 3 --confidence exploring --iteration 1'
-        else:
-            # Re-invoke SURVEY with placeholder for confidence
-            return f'{base_cmd} --step 2 --confidence {{exploring|low|medium|high|certain}}'
+    elif step == 2:  # SURVEY -> DEEPEN
+        return f'{base_cmd} --step 3 --iteration 1 --confidence exploring'
 
     elif step == 3:  # DEEPEN
-        if confidence == "certain" or iteration > MAX_DEEPEN_ITERATIONS:
-            # Advance to SYNTHESIZE
-            return f'{base_cmd} --step 4 --confidence exploring'
-        elif confidence == "exploring" and iteration > 1:
-            # New iteration cycle
-            return f'{base_cmd} --step 3 --confidence {{exploring|low|medium|high|certain}} --iteration {iteration}'
+        if confidence == "certain" or iteration >= MAX_DEEPEN_ITERATIONS:
+            return f'{base_cmd} --step 4'
         else:
-            # Continue current iteration
-            next_iter = iteration if confidence != "exploring" else iteration
-            return f'{base_cmd} --step 3 --confidence {{exploring|low|medium|high|certain}} --iteration {next_iter}'
+            return f'{base_cmd} --step 3 --iteration {iteration + 1} --confidence {{exploring|low|medium|high|certain}}'
 
-    elif step == 4:  # SYNTHESIZE
-        if confidence == "certain":
-            # Workflow complete
-            return None
-        else:
-            # Re-invoke SYNTHESIZE with placeholder for confidence
-            return f'{base_cmd} --step 4 --confidence {{exploring|low|medium|high|certain}}'
+    elif step == 4:  # SYNTHESIZE -> complete
+        return None
 
     return None
 
 
-# =============================================================================
-# CLI Entry Point
-# =============================================================================
+def format_output(step: int, confidence: str, iteration: int) -> str:
+    """Format output for the given step."""
+    base_cmd = f'python3 -m {MODULE_PATH}'
+
+    if step == 1:
+        body = f"CODEBASE ANALYSIS - Define understanding goals\n{'=' * 50}\n\n{SCOPE_INSTRUCTIONS}"
+        next_cmd = build_next_command(step, confidence, iteration)
+
+    elif step == 2:
+        body = f"CODEBASE ANALYSIS - Initial exploration\n{'=' * 50}\n\n{build_survey_body()}"
+        next_cmd = build_next_command(step, confidence, iteration)
+
+    elif step == 3:
+        if confidence == "certain":
+            title = "Understanding complete"
+            instructions = "Deep understanding achieved.\n\nPROCEED to SYNTHESIZE step."
+        elif iteration >= MAX_DEEPEN_ITERATIONS:
+            title = f"Max iterations reached ({iteration}/{MAX_DEEPEN_ITERATIONS})"
+            instructions = "Maximum DEEPEN iterations reached.\n\nFORCE transition to SYNTHESIZE."
+        else:
+            title = f"Targeted deep-dive (iteration {iteration}/{MAX_DEEPEN_ITERATIONS})"
+            instructions = build_deepen_body(iteration)
+
+        body = f"CODEBASE ANALYSIS - {title}\n{'=' * 50}\n\n{instructions}"
+        next_cmd = build_next_command(step, confidence, iteration)
+
+    elif step == 4:
+        body = f"CODEBASE ANALYSIS - Output summary\n{'=' * 50}\n\n{SYNTHESIZE_INSTRUCTIONS}"
+        next_cmd = None
+
+    else:
+        return f"ERROR: Invalid step {step}"
+
+    return format_step(body, next_cmd or "")
+
+
+# ============================================================================
+# WORKFLOW
+# ============================================================================
+
+WORKFLOW = Workflow(
+    "codebase-analysis",
+    StepDef(id="scope", title="SCOPE - Define understanding goals", actions=[SCOPE_INSTRUCTIONS]),
+    StepDef(id="survey", title="SURVEY - Initial exploration", actions=[SURVEY_INSTRUCTIONS]),
+    StepDef(id="deepen", title="DEEPEN - Targeted deep-dives", actions=[DEEPEN_INSTRUCTIONS]),
+    StepDef(id="synthesize", title="SYNTHESIZE - Structured summary output", actions=[SYNTHESIZE_INSTRUCTIONS]),
+    description="Understanding-focused codebase comprehension workflow",
+    validate=False,
+)
 
 
 def main():
@@ -444,7 +295,7 @@ def main():
         type=str,
         choices=["exploring", "low", "medium", "high", "certain"],
         default="exploring",
-        help="Current confidence level",
+        help="Current confidence level (DEEPEN step only)",
     )
     parser.add_argument(
         "--iteration",
@@ -462,61 +313,6 @@ def main():
         sys.exit("ERROR: --iteration must be >= 1")
 
     print(format_output(args.step, args.confidence, args.iteration))
-
-
-def get_scope_actions(confidence: str) -> tuple[str, list[str], str | None]:
-    """Get SCOPE actions based on confidence."""
-    if confidence == "certain":
-        return ("Goals defined", ["Goals have been defined.", "", "PROCEED to SURVEY step."], "SURVEY")
-    else:
-        return ("Define understanding goals", SCOPE_ACTIONS, None)
-
-
-def get_survey_actions(confidence: str) -> tuple[str, list[str], str | None]:
-    """Get SURVEY actions based on confidence."""
-    if confidence == "certain":
-        return ("Complete", ["Initial exploration complete.", "", "PROCEED to DEEPEN step."], "DEEPEN")
-    elif confidence == "high":
-        return ("Final check", SURVEY_HIGH_ACTIONS, None)
-    elif confidence == "medium":
-        return ("Coverage assessment", SURVEY_MEDIUM_ACTIONS, None)
-    elif confidence == "low":
-        return ("Process results", SURVEY_LOW_ACTIONS, None)
-    else:  # exploring
-        return ("Initial exploration", SURVEY_EXPLORING_ACTIONS, None)
-
-
-def get_deepen_actions(confidence: str, iteration: int) -> tuple[str, list[str], str | None]:
-    """Get DEEPEN actions based on confidence and iteration."""
-    if iteration > MAX_DEEPEN_ITERATIONS:
-        return (
-            f"Max iterations reached (iteration {iteration}/{MAX_DEEPEN_ITERATIONS})",
-            ["Maximum DEEPEN iterations reached.", "", "FORCE transition to SYNTHESIZE."],
-            "SYNTHESIZE",
-        )
-
-    if confidence == "certain":
-        return ("Complete", ["Deep understanding achieved.", "", "PROCEED to SYNTHESIZE step."], "SYNTHESIZE")
-    elif confidence == "high":
-        return (f"Iteration complete (iteration {iteration}/{MAX_DEEPEN_ITERATIONS})", DEEPEN_HIGH_ACTIONS, None)
-    elif confidence == "medium":
-        return (f"Process results (iteration {iteration}/{MAX_DEEPEN_ITERATIONS})", DEEPEN_MEDIUM_ACTIONS, None)
-    elif confidence == "low":
-        return (f"Dispatch deep-dive (iteration {iteration}/{MAX_DEEPEN_ITERATIONS})", DEEPEN_LOW_ACTIONS, None)
-    else:  # exploring
-        return (f"Identify depth targets (iteration {iteration}/{MAX_DEEPEN_ITERATIONS})", DEEPEN_EXPLORING_ACTIONS, None)
-
-
-def get_synthesize_actions(confidence: str) -> tuple[str, list[str], str | None]:
-    """Get SYNTHESIZE actions based on confidence."""
-    if confidence == "certain":
-        return ("Output summary", SYNTHESIZE_CERTAIN_ACTIONS, None)
-    elif confidence == "high":
-        return ("Final check", SYNTHESIZE_HIGH_ACTIONS, None)
-    elif confidence in ("low", "medium"):
-        return (f"Refine summary ({confidence} confidence)", SYNTHESIZE_LOW_MEDIUM_ACTIONS, None)
-    else:  # exploring
-        return ("Begin assembly", SYNTHESIZE_EXPLORING_ACTIONS, None)
 
 
 if __name__ == "__main__":

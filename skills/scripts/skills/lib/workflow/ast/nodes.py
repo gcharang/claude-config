@@ -85,7 +85,6 @@ class StepHeaderNode:
     step: int
     category: str | None = None
     mode: str | None = None
-    phase: str | None = None
     total: int | None = None
 
 

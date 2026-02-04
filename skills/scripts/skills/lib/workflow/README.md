@@ -239,7 +239,6 @@ WORKFLOW = Workflow(
     StepDef(
         id="extract_structure",
         title="Extract Structure",
-        phase="DECOMPOSITION",
         actions=[...],
         handler=step_handler,
         next={Outcome.OK: "classify_verifiability"},
@@ -247,7 +246,6 @@ WORKFLOW = Workflow(
     StepDef(
         id="classify_verifiability",
         title="Classify Verifiability",
-        phase="DECOMPOSITION",
         actions=[...],
         handler=step_handler,
         next={Outcome.OK: "generate_questions"},
