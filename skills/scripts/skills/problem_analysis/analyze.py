@@ -343,11 +343,11 @@ def get_phase_3_completion_message(confidence: str, iteration: int) -> list[str]
 # Workflow definition (metadata only, execution via CLI)
 WORKFLOW = Workflow(
     "problem-analysis",
-    StepDef(id="gate", title="Gate", actions=PHASES[1]["actions"], phase="VALIDATION"),
-    StepDef(id="hypothesize", title="Hypothesize", actions=PHASES[2]["actions"], phase="EXPLORATION"),
-    StepDef(id="investigate", title="Investigate", actions=PHASES[3]["actions"], phase="EVIDENCE"),
-    StepDef(id="formulate", title="Formulate", actions=PHASES[4]["actions"], phase="SYNTHESIS"),
-    StepDef(id="output", title="Output", actions=PHASES[5]["actions"], phase="REPORT"),
+    StepDef(id="gate", title="Gate", actions=PHASES[1]["actions"]),
+    StepDef(id="hypothesize", title="Hypothesize", actions=PHASES[2]["actions"]),
+    StepDef(id="investigate", title="Investigate", actions=PHASES[3]["actions"]),
+    StepDef(id="formulate", title="Formulate", actions=PHASES[4]["actions"]),
+    StepDef(id="output", title="Output", actions=PHASES[5]["actions"]),
     description="Root cause identification workflow",
     validate=False,
 )
