@@ -2,11 +2,27 @@
 
 Script-based agent workflows with shared orchestration framework.
 
+## MANDATORY: Read Before Modifying
+
+**STOP. Before editing ANY Python file in `skills/scripts/`, you MUST read `README.md`.**
+
+The README defines:
+
+- File section ordering (SHARED PROMPTS -> CONFIGURATION -> MESSAGE TEMPLATES -> MESSAGE BUILDERS -> WORKFLOW)
+- Step-delimited prompt organization within MESSAGE TEMPLATES
+- Naming conventions for prompt constants (`[PHASE]_[TYPE]`)
+- Patterns for dispatch prompts (static templates vs builder functions)
+- Anti-patterns to avoid (action factories, forward references)
+
+Failure to follow these patterns creates technical debt and inconsistency across skills. The patterns exist because they solve real problems with prompt readability and maintenance.
+
+**Read `README.md` now if you haven't already.**
+
 ## Files
 
-| File        | What                                 | When to read                                  |
-| ----------- | ------------------------------------ | --------------------------------------------- |
-| `README.md` | Skills architecture, design, catalog | Understanding skills system design, migration |
+| File        | What                                                      | When to read                    |
+| ----------- | --------------------------------------------------------- | ------------------------------- |
+| `README.md` | File organization, prompt patterns, naming, anti-patterns | BEFORE modifying any skill code |
 
 ## Subdirectories
 

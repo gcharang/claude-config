@@ -1,556 +1,446 @@
-# Skills System
+# Skills Architecture
 
-## Overview
+Script-based agent workflows with shared orchestration framework.
 
-Script-based agent workflows with shared orchestration framework. Skills implement multi-step workflows (planning, refactoring, analysis) through Python scripts that output structured XML commands. Each skill is invoked via script, not free-form agent exploration.
+## File Organization: The "Book" Pattern
 
-## Architecture
+Skill files read top-to-bottom like a book. Dependencies are defined before use. The ordering principle: **a reader should never need to scroll up to understand what they're reading.**
 
-```
-skills/
-  __init__.py              # Package marker
-  _bootstrap.py            # sys.path setup pattern documentation
+### Section Order
 
-  lib/                     # Shared framework (550+ lines extracted)
-    workflow/              # Orchestration primitives
-      types.py             # AgentRole, Routing, Dispatch, Step, QRState
-      formatters/          # XML and text output
-        xml.py             # 26 XML formatters for structured output
-        text.py            # Plain text formatters for simple skills
-      cli.py               # Argument parsing utilities
-
-  planner/                 # Planning and execution workflows
-    scripts/
-      planner.py           # 13-step planning workflow
-      executor.py          # 9-step execution workflow
-      qr/*.py              # Quality review sub-workflows
-      tw/*.py              # Technical writer sub-workflows
-      dev/*.py             # Developer sub-workflows
-      shared/              # Compatibility layer (temporary)
-    resources/             # Authoritative specifications
-
-  refactor/                # Refactoring analysis
-  problem-analysis/        # Problem decomposition
-  decision-critic/         # Decision stress-testing
-  deepthink/               # Structured reasoning for open questions
-  codebase-analysis/       # Repository exploration
-  prompt-engineer/         # Prompt optimization
-  incoherence/             # Consistency detection
-  doc-sync/                # Documentation synchronization
-  leon-writing-style/      # Style-matched content generation
-```
-
-## Data Flow
-
-```
-User request
-  |
-  v
-Skill activation (.skill descriptor)
-  |
-  v
-Script invocation (python3 scripts/*.py --step N)
-  |
-  v
-Workflow orchestration (lib/workflow)
-  |
-  +-> Step logic (read context, compute actions)
-  +-> Format output (XML with <DO>, <NEXT>, routing)
-  +-> Print to stdout
-  |
-  v
-Agent reads XML output
-  |
-  +-> Executes <DO> actions
-  +-> Routes via <NEXT> (linear/branch/terminal)
-  |
-  v
-Next step invocation (python3 scripts/*.py --step N+1 ...)
-```
-
-Quality Review (QR) loops use three-pillar pattern:
-
-```
-Work Step (--qr-fail=false)
-  |
-  v
-Format XML with actions, routing
-  |
-  v
-QR Step (review work)
-  |
-  v
-Gate Step (--qr-status=pass|fail)
-  |
-  +-- PASS --> Next step or COMPLETE
-  |
-  +-- FAIL --> Work Step (--qr-fail=true, --qr-iteration=N+1)
-```
-
-## Architectural Evolution: From @skill to Workflow
-
-### Legacy Pattern (@skill decorator)
-
-Original approach:
+Files use a fixed section sequence. Group by type, not by step. Within each type-group, order by workflow step. Omit sections with no content.
 
 ```python
-STEPS = {
-    1: {"title": "...", "actions": [...]},
-    2: {"title": "...", "actions": [...]},
-}
+# ============================================================================
+# SHARED PROMPTS
+# ============================================================================
+# Prompts used by 2+ workflow steps. If large, extract to prompts/shared.py
 
-@skill(name="my-skill", total_steps=5)
-def main(step: int = None, total_steps: int = None):
-    step_info = STEPS[step]
-    # Print actions, handle transitions in code...
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+# Constants, temperatures, thresholds
+
+# ============================================================================
+# SYSTEM PROMPTS
+# ============================================================================
+
+# ============================================================================
+# MESSAGE TEMPLATES
+# ============================================================================
+# Step-delimited subsections (see below)
+
+# ============================================================================
+# PARSING FUNCTIONS
+# ============================================================================
+
+# ============================================================================
+# MESSAGE BUILDERS
+# ============================================================================
+# Functions that compose templates into complete messages
+
+# ============================================================================
+# [DOMAIN] LOGIC
+# ============================================================================
+# Domain-specific (utility) functions
+
+# ============================================================================
+# WORKFLOW
+# ============================================================================
+# Entry points: run_discovery(), run_ideation(), etc.
 ```
 
-Problems:
+Rationale: functions often reference prompts from multiple steps. Grouping by type avoids forward references within function sections.
 
-- Step definitions separate from registration
-- Transitions buried in main() logic (not introspectable)
-- Manifest manually maintained (easy to drift from code)
-- Hard to validate workflow structure (dead-end steps, orphaned nodes)
+### Step-Delimited MESSAGE TEMPLATES
 
-### New Pattern (Workflow class)
-
-Current approach:
+Within MESSAGE TEMPLATES, use step dividers to organize chronologically:
 
 ```python
-from skills.lib.workflow.core import Workflow, StepDef, Outcome, register_workflow
+# ============================================================================
+# MESSAGE TEMPLATES
+# ============================================================================
 
-def step_handler(ctx: StepContext) -> tuple[Outcome, dict]:
-    # Step logic...
-    return Outcome.OK, {}
+# --- STEP 1: SCOPE -----------------------------------------------------------
 
-WORKFLOW = Workflow(
-    "my-skill",
-    StepDef(id="step1", title="...", actions=[...], handler=step_handler,
-            next={Outcome.OK: "step2"}),
-    StepDef(id="step2", title="...", actions=[...],
-            next={Outcome.OK: None}),  # terminal
-)
+SCOPE_INSTRUCTIONS = """..."""
 
-register_workflow(WORKFLOW)
+# --- STEP 2: SURVEY ----------------------------------------------------------
+
+SURVEY_DISPATCH_CONTEXT = """\
+Analysis goals from SCOPE step:
+- User intent and what they want to understand
+- Identified focus areas"""
+
+SURVEY_DISPATCH_AGENTS = [
+    "[Exploration focus 1: e.g., 'Explore authentication flow']",
+    "[Exploration focus 2: e.g., 'Explore database schema']",
+]
+
+SURVEY_DISPATCH_GUIDANCE = """\
+DISPATCH GUIDANCE:
+...
+ADVANCE: After results received, re-invoke with --confidence low."""
+
+SURVEY_LOW_INSTRUCTIONS = """..."""
+SURVEY_MEDIUM_INSTRUCTIONS = """..."""
+
+# --- STEP 3: DEEPEN ----------------------------------------------------------
+
+DEEPEN_DISPATCH_CONTEXT = SURVEY_DISPATCH_CONTEXT  # reuse if identical
+DEEPEN_LOW_INSTRUCTIONS = """..."""
+
+# --- STEP 4: SYNTHESIZE ------------------------------------------------------
+
+SYNTHESIZE_EXPLORING_INSTRUCTIONS = """..."""
 ```
 
-Benefits:
+Step divider format: `# --- STEP N: PHASE_NAME ` followed by dashes to column 76.
 
-- **Single source of truth**: Steps + transitions + metadata in one structure
-- **Transitions as data**: Workflow graph is data, not code logic
-- **Validation at registration**: Catches dead-ends, orphans, invalid targets early
-- **Introspectable**: Tools can visualize, analyze, validate workflow structure
+Within a step section, order constants by execution flow. Dispatch-related constants (context, agents, guidance) come before instruction constants.
 
-### Migration Status
+### Dispatch Prompts: Templates vs Builders
 
-**Completed (4/10 skills)**:
+Dispatch prompts combine static templates with dynamic composition. Split them:
 
-- decision-critic (7 steps, linear)
-- leon-writing-style (linear)
-- problem-analysis (5 steps, iterative with confidence)
-- codebase-analysis (4 steps, confidence-driven iteration)
-
-**Remaining**:
-
-- deepthink (14 steps, mode branching)
-- refactor (5 steps, QR gates)
-- planner (complex, QR gates + multi-mode)
-- incoherence (21 steps, multi-phase)
-- doc-sync (not implemented)
-
-See `MIGRATION_STATUS.md` for detailed migration roadmap.
-
-### Common Patterns
-
-**Linear workflow**:
+**Static parts -> MESSAGE TEMPLATES** (constants):
 
 ```python
-StepDef(id="step1", next={Outcome.OK: "step2"})
+# --- STEP 2: SURVEY ----------------------------------------------------------
+
+SURVEY_DISPATCH_CONTEXT = """\
+Analysis goals from SCOPE step:
+- User intent and what they want to understand
+- Identified focus areas (architecture, components, flows, etc.)"""
+
+SURVEY_DISPATCH_AGENTS = [
+    "[Exploration focus 1: e.g., 'Explore authentication flow']",
+    "[Exploration focus 2: e.g., 'Explore database schema']",
+]
+
+SURVEY_DISPATCH_GUIDANCE = """\
+DISPATCH GUIDANCE:
+
+Single codebase, focused scope:
+  - One Explore agent with specific focus
+
+Large/broad scope:
+  - Multiple parallel Explore agents by boundary
+
+WAIT for Explore results before re-invoking this step.
+
+ADVANCE: After results received, re-invoke with --confidence low."""
 ```
 
-**Confidence-driven iteration**:
+**Composition -> MESSAGE BUILDERS** (functions that call `roster_dispatch()` etc.):
 
 ```python
-def step_investigate(ctx):
-    if ctx.workflow_params["confidence"] == "high":
-        return Outcome.OK, {}
-    return Outcome.ITERATE, {"iteration": ctx.step_state.get("iteration", 1) + 1}
-
-StepDef(id="investigate", next={Outcome.OK: "formulate", Outcome.ITERATE: "investigate"})
-```
-
-**Mode branching**:
-
-```python
-def step_planning(ctx):
-    return Outcome.SKIP if ctx.workflow_params["mode"] == "quick" else Outcome.OK
-
-StepDef(id="planning", next={Outcome.OK: "subagent_design", Outcome.SKIP: "synthesis"})
-```
-
-**QR gates**:
-
-```python
-StepDef(id="qr_gate", handler=Dispatch(agent=AgentRole.QUALITY_REVIEWER, ...),
-        next={Outcome.OK: "proceed", Outcome.FAIL: "revise"})
-```
-
-See `lib/workflow/README.md` for detailed pattern documentation.
-
-## Why This Structure
-
-**Script-based activation over free-form**: Free-form workflows drift. Agent explores first, skips steps, invents better approaches. Scripts enforce consistent behavior through structured XML output. Skills activate via `.skill` descriptor; agent invokes script immediately.
-
-**lib/workflow/ shared framework**: Extracted 550+ lines of duplication from planner, refactor, problem-analysis, decision-critic. Framework provides types (AgentRole, Routing, Dispatch, Step, QRState), formatters (26 XML + text), and CLI utilities. New skills compose existing primitives instead of reimplementing orchestration.
-
-**Workflow-based architecture (new)**: Data-driven workflow definitions enable validation and introspection. Transitions are data (Outcome -> step_id mappings), not code logic. Single source of truth prevents drift.
-
-**Compatibility layer during migration**: Legacy @skill decorator still works. New Workflow pattern preferred for new skills.
-
-**Bootstrap pattern over PYTHONPATH**: Skills use inline sys.path setup to add .claude/ for `from skills.*` imports. No external environment configuration. Pattern simplified from old 6-line repetitive `.parent.parent...` to 4-line `.parents[N]` approach documented in \_bootstrap.py.
-
-**scripts/ subdirectory convention**: All skills place workflow scripts in `scripts/` subdirectory. Complex skills (planner) organize by agent role (qr/, tw/, dev/). Simple skills (problem-analysis) have single script. Convention makes skills discoverable.
-
-**SKILL.md activation metadata**: Each skill has SKILL.md with YAML frontmatter (name, description) for skill system. Description includes trigger conditions and immediate-invoke instruction. Agent reads SKILL.md to understand when and how to activate skill.
-
-**Resources as authoritative sources**: planner/resources/ contains planner-specific templates (plan-format.md, explore-output-format.md). Universal conventions live in .claude/conventions/ (structural.md, temporal.md, severity.md, intent-markers.md, documentation.md, diff-format.md). Scripts inject conventions at runtime via get_convention(). No manual sync for most resources. Resources embedded in agent prompts require manual sync.
-
-## Design Decisions
-
-**AgentRole enum over string literals**: String literals ("develper") allow typos. Enum provides compile-time validation, IDE autocomplete, exhaustive pattern matching. Matches actual agent system (quality-reviewer, technical-writer, developer).
-
-**Routing union type (Linear | Branch | Terminal)**: Makes invalid states unrepresentable. Can't have both if_pass and terminal. Pattern matching on routing type is explicit. Matches actual usage (mutually exclusive routing modes).
-
-**Stateless formatters over template classes**: All formatters are pure functions (input -> XML string). No object state. Deterministic output. Easy to test. Composable - actions list mixes XML blocks and plain strings.
-
-**Two-layer composition**: Guidance layer (get_step_guidance() returns dict with title/actions/next) + rendering layer (format_step_output() assembles XML). Actions list contains plain strings and XML blocks. All formatters return strings so mixing works seamlessly.
-
-**QRState three-pillar pattern**: iteration (loop count), failed (entry state flag), status (prior result). Both failed and status needed: failed indicates entering step to fix issues, status is QR result from previous step. All QR workflows use consistent CLI flags (--qr-iteration, --qr-fail, --qr-status).
-
-**Skill-specific types NOT in framework**: planner-specific types (FlatCommand, BranchCommand, NextCommand, GuidanceResult) live in planner/scripts/shared/domain.py. These are guidance layer types, not framework primitives. xml.py imports them via importlib to avoid circular dependency.
-
-**Depth-based .parents[N] calculation**: Bootstrap pattern uses .parents[N] where N depends on script depth relative to .claude/ root. scripts/_.py uses .parents[3], scripts/_/\*.py uses .parents[4]. Documented in \_bootstrap.py for reference.
-
-## Invisible Knowledge
-
-Constraints discovered through debugging that aren't obvious from code structure:
-
-1. **No system reminder injection**: Claude Code cannot inject system reminders or messages after sub-agent returns. Solution B patterns (inject reminder after Task tool returns) are categorically non-feasible. All guidance must come from script output or sub-agent output itself.
-
-2. **Turn boundary isolation**: Guidance in prior turn (script output) is not re-read after sub-agent returns. Agent acts on fresh sub-agent output without referencing earlier instructions. Example: `<post_qr_routing>` block in step 6 output is forgotten after QR sub-agent returns with findings.
-
-3. **Sub-agent output is the intervention point**: To influence orchestrator behavior after sub-agent returns, the sub-agent's own output must include the guidance. This is why `format_qr_file_output()` includes an `<orchestrator_action>` block reminding the orchestrator to invoke the gate step before fixing.
-
-## Invariants
-
-1. **Script activation required**: Skills MUST activate via script invocation. Agent does NOT explore before invoking. Script IS the workflow.
-
-2. **Structured XML output**: Workflow scripts output XML with <DO> (actions), <NEXT> (continuation command), <INVOKE_AFTER> (routing). Agent reads XML and executes as specified.
-
-3. **Step immutability**: Once script outputs XML for step N, agent executes exactly that step. No interpretation. No improvement. Follow output.
-
-4. **QR loop completeness**: Every QR checkpoint has three pillars: STATE BANNER (format_qr_banner), STOP CONDITION (format_gate_step), RE-VERIFY MODE (--qr-iteration + flags). Missing any pillar allows agent to skip verification.
-
-5. **Bootstrap pattern uniformity**: All scripts use identical 4-line sys.path setup. Only difference is .parents[N] value based on depth. Pattern documented in \_bootstrap.py.
-
-6. **Import compatibility during migration**: During migration, `from shared import format_step_output` works identically to `from skills.lib.workflow.formatters import format_step_output`. Compatibility layer removed after migration complete.
-
-## Tradeoffs
-
-1. **Script rigidity vs flexibility**: Scripts enforce consistency but reduce adaptability. Agent cannot adjust workflow mid-execution. Accepted because consistency prevents drift and ensures quality gates run.
-
-2. **XML verbosity vs precision**: XML output is verbose compared to natural language. Accepted because structured output eliminates ambiguity. Agent executes exactly what script specifies.
-
-3. **Duplication during migration**: Compatibility layer (planner/scripts/shared/) duplicates lib/workflow exports temporarily. Removed after all skills migrate. Migration burden worth long-term reduction in duplication.
-
-4. **More files vs single script**: lib/workflow has 7+ files vs monolithic script. Accepted because separation (types, formatters/xml, formatters/text, cli) prevents 700+ line file and enables selective imports.
-
-5. **Learning curve for new skills**: New skills must learn lib/workflow API (types, formatters, CLI utilities). Offset by reduced boilerplate - no need to reimplement orchestration, XML formatting, QR loop logic.
-
-## Skills Catalog
-
-| Skill              | Steps    | Purpose                                 | Quality Gates |
-| ------------------ | -------- | --------------------------------------- | ------------- |
-| planner            | 13 + 9   | Plan creation + execution               | 3 QR loops    |
-| refactor           | 7        | Refactoring analysis across dimensions  | None          |
-| problem-analysis   | 4        | Structured problem decomposition        | None          |
-| decision-critic    | Variable | Decision stress-testing                 | None          |
-| deepthink          | 14       | Structured reasoning for open questions | None          |
-| codebase-analysis  | 4        | Systematic repository exploration       | None          |
-| prompt-engineer    | Variable | Prompt optimization                     | None          |
-| incoherence        | Variable | Consistency detection                   | None          |
-| doc-sync           | Variable | Cross-repo documentation sync           | None          |
-| leon-writing-style | Variable | Style-matched content generation        | None          |
-
-**Quality gates**: Only planner uses QR loops. Other skills are analysis/synthesis workflows without iterative refinement.
-
-## Bootstrap Pattern
-
-All workflow scripts use this pattern to enable `from skills.*` imports:
-
-```python
-import sys
-from pathlib import Path
-
-# Add .claude/ to path for skills.* imports
-_claude_dir = Path(__file__).resolve().parents[N]  # N depends on depth
-if str(_claude_dir) not in sys.path:
-    sys.path.insert(0, str(_claude_dir))
-
-from skills.lib.workflow.formatters import format_step_output
-from skills.lib.workflow.types import Step, LinearRouting
-```
-
-**Depth guide**:
-
-- `skills/*/scripts/*.py`: `.parents[3]` (script -> scripts -> skill -> skills -> .claude)
-- `skills/*/scripts/*/*.py`: `.parents[4]` (script -> subdir -> scripts -> skill -> skills -> .claude)
-
-**Why this pattern**:
-
-- No PYTHONPATH dependency - works in any invocation context
-- Simplified from old 6-line pattern using repetitive `.parent.parent...`
-- Adds .claude/ only once (idempotent check)
-- Absolute path resolution prevents relative path issues
-
-**Migration from old pattern**:
-
-Before (6 lines, repetitive):
-
-```python
-import sys
-from pathlib import Path
-
-script_dir = Path(__file__).resolve().parent
-project_root = script_dir.parent.parent.parent  # Repetitive
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-```
-
-After (4 lines, .parents[N]):
-
-```python
-import sys
-from pathlib import Path
-
-_claude_dir = Path(__file__).resolve().parents[3]
-if str(_claude_dir) not in sys.path:
-    sys.path.insert(0, str(_claude_dir))
-```
-
-## Usage Examples
-
-### Creating a new simple skill
-
-```python
-import sys
-from pathlib import Path
-
-# Add .claude/ to path for skills.* imports
-_claude_dir = Path(__file__).resolve().parents[3]
-if str(_claude_dir) not in sys.path:
-    sys.path.insert(0, str(_claude_dir))
-
-from skills.lib.workflow.formatters.text import format_text_output
-
-def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--step", type=int, required=True)
-    args = parser.parse_args()
-
-    if args.step == 1:
-        print(format_text_output(
-            step=1,
-            title="Analyze Problem",
-            actions=["Read codebase", "Identify issues"],
-            brief="Initial analysis",
-            next_title="Propose Solution",
-        ))
-    elif args.step == 2:
-        print(format_text_output(
-            step=2,
-            title="Propose Solution",
-            actions=["Design fix", "Document approach"],
-            brief="Solution design",
-            next_title=None,  # Terminal step
-        ))
-
-if __name__ == "__main__":
-    main()
-```
-
-### Creating a skill with QR loops
-
-```python
-import sys
-from pathlib import Path
-
-# Add .claude/ to path for skills.* imports
-_claude_dir = Path(__file__).resolve().parents[3]
-if str(_claude_dir) not in sys.path:
-    sys.path.insert(0, str(_claude_dir))
-
-from skills.lib.workflow.formatters import format_step_output, format_gate_step
-from skills.lib.workflow.types import (
-    Step, QRState, GateConfig, AgentRole,
-    LinearRouting, BranchRouting
-)
-
-STEPS = {
-    1: Step(
-        title="Implementation",
-        actions=["Write code", "Run tests"],
-        routing=LinearRouting(),
-    ),
-    2: Step(
-        title="QR: Review Implementation",
-        actions=["Check code quality", "Verify tests"],
-        routing=BranchRouting(if_pass=4, if_fail=3),
-    ),
-    # Step 3 is gate (no entry in STEPS dict)
-}
-
-def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--qr-iteration", type=int, default=1)
-    parser.add_argument("--qr-fail", action="store_true")
-    parser.add_argument("--qr-status", type=str, choices=["pass", "fail"])
-    args = parser.parse_args()
-
-    qr = QRState(
-        iteration=args.qr_iteration,
-        failed=args.qr_fail,
-        status=args.qr_status,
+# ============================================================================
+# MESSAGE BUILDERS
+# ============================================================================
+
+def build_survey_exploring_body() -> str:
+    """Build SURVEY exploring instructions with dispatch."""
+    dispatch_text = roster_dispatch(
+        agent_type="Explore",
+        agents=SURVEY_DISPATCH_AGENTS,
+        command="Use Task tool with subagent_type='Explore'",
+        shared_context=SURVEY_DISPATCH_CONTEXT,
+        model="haiku",
     )
-
-    if args.step == 3:  # Gate step
-        gate = GateConfig(
-            qr_name="Implementation Review",
-            work_step=1,
-            pass_step=4,
-            pass_message="Implementation verified",
-            self_fix=True,
-            fix_target=AgentRole.DEVELOPER,
-        )
-        print(format_gate_step(
-            script="script",
-            step=3,
-            title="Gate: Route Based on QR",
-            qr=qr,
-            gate=gate,
-        ))
-    else:
-        # Regular step
-        step_config = STEPS[args.step]
-        # ... format_step_output ...
-
-if __name__ == "__main__":
-    main()
+    return f"DISPATCH Explore agent(s):\n\n{dispatch_text}\n\n{SURVEY_DISPATCH_GUIDANCE}"
 ```
 
-### Migrating from planner/scripts/shared to lib/workflow
+This separation ensures:
 
-Before (imports from shared/):
+1. Prompt text is visible at the constant definition (no tracing into functions)
+2. Builders reference only constants defined above (chronological ordering)
+3. Changes to dispatch parameters don't require modifying prompt text
 
-```python
-from shared import (
-    QRState,
-    GateConfig,
-    format_step_output,
-    format_gate_step,
-)
+### Naming Convention
+
+```
+[PHASE]_[TYPE]
 ```
 
-After (direct lib.workflow imports):
+PHASE is the workflow phase: `SCOPE`, `SURVEY`, `DEEPEN`, `SYNTHESIZE`, `DISCOVERY`, `IDEATION`.
+TYPE is its role: `INSTRUCTIONS`, `DISPATCH_CONTEXT`, `DISPATCH_AGENTS`, `DISPATCH_GUIDANCE`, `FORMAT`, `FEEDBACK`.
+
+Confidence variants use suffixes: `_LOW`, `_MEDIUM`, `_HIGH`, `_EXPLORING`, `_CERTAIN`.
+
+Examples:
 
 ```python
-import sys
-from pathlib import Path
-
-# Add .claude/ to path for skills.* imports
-_claude_dir = Path(__file__).resolve().parents[3]
-if str(_claude_dir) not in sys.path:
-    sys.path.insert(0, str(_claude_dir))
-
-from skills.lib.workflow.types import QRState, GateConfig
-from skills.lib.workflow.formatters import format_step_output, format_gate_step
+EVALUATION_CRITERIA              # shared (used by 2+ steps)
+SCOPE_INSTRUCTIONS               # step 1
+SURVEY_DISPATCH_CONTEXT          # step 2, dispatch context
+SURVEY_DISPATCH_AGENTS           # step 2, dispatch agent list
+SURVEY_LOW_INSTRUCTIONS          # step 2, low confidence variant
+DEEPEN_HIGH_INSTRUCTIONS         # step 3, high confidence variant
+SYNTHESIZE_FORMAT                # step 4, output format
 ```
 
-## Common Patterns
+### Placement Rule
 
-### Composing XML blocks in actions
+> A prompt belongs in the earliest section where it is used.
+
+- Used in Steps 2, 4, 6? -> SHARED PROMPTS section
+- Used only in Step 3? -> Step 3 position in MESSAGE TEMPLATES
+- Used in Steps 3 and 4 only? -> Step 3 position (consecutive use doesn't require SHARED)
+
+### Visual Formatting
+
+Section headers (76 equals signs):
 
 ```python
-from skills.lib.workflow.formatters import (
-    format_state_banner,
-    format_forbidden,
-    format_expected_output,
-)
+# ============================================================================
+# SECTION NAME
+# ============================================================================
+```
 
-actions = [
-    format_state_banner("checkpoint_name", iteration=2, mode="re-verify"),
-    "",
-    "TASK: Fix identified issues",
-    "",
-    format_forbidden([
-        "Do not modify unrelated files",
-        "Do not change API contracts",
-    ]),
-    "",
-    format_expected_output([
-        "All QR issues resolved",
-        "Tests passing",
-    ]),
+Step dividers within MESSAGE TEMPLATES (76 chars total):
+
+```python
+# --- STEP N: PHASE_NAME ------------------------------------------------------
+```
+
+Blank line before and after section headers. No blank line required around step dividers.
+
+## How Skills Build Step Bodies
+
+No "action factories". No inversion of control. Just strings.
+
+### Pattern 1: Static Steps (deepthink)
+
+```python
+STEPS = {
+    1: {
+        "title": "Context Clarification",
+        "body": """\
+You are an expert analytical reasoner...
+...""",
+    },
+    2: {
+        "title": "Abstraction",
+        "body": """\
+Before diving into specifics, step back...
+...""",
+    },
+}
+
+def get_step_output(step: int) -> str:
+    info = STEPS[step]
+    body = f"{info['title']}\n{'=' * len(info['title'])}\n\n{info['body']}"
+    next_cmd = f"python3 -m skills.deepthink.think --step {step + 1}" if step < 14 else ""
+    return format_step(body, next_cmd)
+```
+
+### Pattern 2: Parameterized Steps (codebase-analysis)
+
+Templates and builders are separated. Templates are constants defined in MESSAGE TEMPLATES (step-delimited). Builders compose templates into complete messages.
+
+```python
+# ============================================================================
+# MESSAGE TEMPLATES
+# ============================================================================
+
+# --- STEP 2: SURVEY ----------------------------------------------------------
+
+SURVEY_DISPATCH_CONTEXT = """\
+Analysis goals from SCOPE step:
+- User intent and what they want to understand"""
+
+SURVEY_DISPATCH_AGENTS = [
+    "[Exploration focus 1: e.g., 'Explore authentication flow']",
+    "[Exploration focus 2: e.g., 'Explore database schema']",
 ]
+
+SURVEY_DISPATCH_GUIDANCE = """\
+DISPATCH GUIDANCE:
+...
+ADVANCE: After results received, re-invoke with --confidence low."""
+
+SURVEY_LOW_INSTRUCTIONS = """\
+EXTRACT findings from Explore output:
+..."""
+
+# ============================================================================
+# MESSAGE BUILDERS
+# ============================================================================
+
+def build_survey_exploring_body() -> str:
+    dispatch_text = roster_dispatch(
+        agent_type="Explore",
+        agents=SURVEY_DISPATCH_AGENTS,
+        command="Use Task tool with subagent_type='Explore'",
+        shared_context=SURVEY_DISPATCH_CONTEXT,
+        model="haiku",
+    )
+    return f"DISPATCH Explore agent(s):\n\n{dispatch_text}\n\n{SURVEY_DISPATCH_GUIDANCE}"
+
+def get_survey_body(confidence: str) -> str:
+    if confidence == "exploring":
+        return build_survey_exploring_body()
+    elif confidence == "low":
+        return f"SURVEY - Low Confidence\n\n{SURVEY_LOW_INSTRUCTIONS}"
+    # ...
+
+def format_output(step: int, confidence: str) -> str:
+    bodies = {1: get_scope_body, 2: get_survey_body, ...}
+    body = bodies[step](confidence)
+    next_cmd = build_next_command(step, confidence)
+    return format_step(body, next_cmd)
 ```
 
-### Sub-agent dispatch
+### Pattern 3: Dispatch Steps (planner orchestrator)
 
 ```python
-from skills.lib.workflow.formatters import format_subagent_dispatch
-from skills.lib.workflow.types import AgentRole
+from skills.lib.workflow.prompts import format_step, subagent_dispatch
+from skills.planner.prompts.constants import ORCHESTRATOR_CONSTRAINT
 
-actions = [
-    "Parallel exploration across dimensions:",
-    "",
-    format_subagent_dispatch(
-        agent=AgentRole.EXPLORE.value,
-        script_path="/path/to/explore.py",
-        step=1,
-        total_steps=2,
-        context_vars={"dimension": "naming"},
-        free_form=False,  # Script mode - agent follows exact steps
-    ),
-]
+def format_dispatch_step(agent_type: str, invoke_cmd: str, state_dir: str) -> str:
+    dispatch = subagent_dispatch(agent_type=agent_type, command=invoke_cmd)
+
+    body = f"""\
+{ORCHESTRATOR_CONSTRAINT}
+
+{dispatch}"""
+
+    next_step_cmd = f"python3 -m skills.planner.orchestrator.planner --step N --state-dir {state_dir}"
+    return format_step(body, next_step_cmd)
 ```
 
-### Fresh review mode (CoVe pattern)
+### Pattern 4: File Injection (prompt-engineer)
 
 ```python
-from skills.lib.workflow.formatters import format_qr_banner
+from skills.lib.workflow.prompts import format_step, format_file_content
 
-# Iteration 1: initial review
-banner = format_qr_banner(qr=QRState(iteration=1), qr_name="Plan Review")
-# Output: "PLAN REVIEW: Review the work for issues."
+def format_technique_step(categories: list[str]) -> str:
+    file_blocks = []
+    for cat in categories:
+        path = CATEGORY_TO_FILE[cat]
+        content = (REFS_DIR / path).read_text()
+        file_blocks.append(format_file_content(f"references/{path}", content))
 
-# Iteration 2+: re-verify with fresh eyes (prevents confirmation bias)
-banner = format_qr_banner(
-    qr=QRState(iteration=2, failed=True, status="fail"),
-    qr_name="Plan Review",
-    fresh_review=True,
-)
-# Output: "PLAN REVIEW (Iteration 2, fresh review): Previous review found issues."
+    body = f"""\
+TECHNIQUE REFERENCES
+The following files have been loaded based on your category selection:
+
+{chr(10).join(file_blocks)}
+
+TASK: Apply techniques from these references to the target prompt.
+..."""
+
+    return format_step(body, "python3 -m skills.prompt_engineer.optimize --step 5")
 ```
 
-## Research Grounding
+### Anti-Pattern: Action Factories
 
-Workflow framework implements patterns from research literature:
+```python
+# BAD - unnecessary indirection
+def technique_review_actions(for_ecosystem=False):
+    base = ["For each technique...", "1. QUOTE the trigger", ...]
+    if for_ecosystem:
+        base.append("Note techniques across prompts")
+    return base
+```
 
-**RE2 (Retrieval-Augmented Generation)**: format_resource() embeds reference materials inline so agent retrieves relevant context without external queries.
+Replace with:
 
-**CoVe (Chain-of-Verification)**: format_qr_banner() with fresh_review=True prevents confirmation bias by prompting QR agent to ignore prior findings. format_factored_verification_rationale() separates verification into independent sub-questions.
+```python
+# GOOD - text at call site
+TECHNIQUE_REVIEW = """\
+For each technique in the Technique Selection Guide:
+1. QUOTE the trigger condition from the table
+2. QUOTE text from the target prompt that matches
+3. Verdict: APPLICABLE or NOT APPLICABLE"""
 
-**Citations in docstrings**: Formatters document research grounding for future maintainers.
+TECHNIQUE_REVIEW_ECOSYSTEM = TECHNIQUE_REVIEW + """
+Note techniques that apply to multiple prompts."""
+
+# Usage: just reference the constant
+body = f"...\n{TECHNIQUE_REVIEW_ECOSYSTEM}\n..."
+```
+
+Functions that return prompt fragments are only justified when there's complex conditional logic (multiple if/else branches). Even then, they live in the skill, not the shared lib.
+
+## Shared Library
+
+Location: `skills/lib/workflow/prompts/`
+
+Only abstractions used by 3+ skills with identical semantics:
+
+```
+prompts/
+    __init__.py         # re-exports
+    subagent.py         # dispatch templates
+    step.py             # format_step()
+    file_content.py     # format_file_content()
+```
+
+### subagent.py
+
+Three dispatch patterns for spawning sub-agents via the Task tool:
+
+- `subagent_dispatch(agent_type, command, prompt="", model=None)` -- single sequential dispatch
+- `template_dispatch(agent_type, template, targets, command, ...)` -- parallel SIMD (same template, N targets with $var substitution)
+- `roster_dispatch(agent_type, agents, command, shared_context="", ...)` -- parallel MIMD (shared context + unique tasks)
+
+Building blocks (also exported):
+
+- `task_tool_instruction(agent_type, model)` -- how to use Task tool
+- `sub_agent_invoke(cmd)` -- command the spawned agent runs
+- `parallel_constraint(count)` -- MANDATORY_PARALLEL enforcement
+
+### step.py
+
+```python
+def format_step(body: str, next_cmd: str = "") -> str:
+    """Assemble a complete workflow step.
+
+    Args:
+        body: The prompt content (free-form text)
+        next_cmd: Command to run next (empty string for final step)
+
+    Returns:
+        Complete step output as plain text
+    """
+```
+
+### file_content.py
+
+```python
+def format_file_content(path: str, content: str) -> str:
+    """Embed file content in a prompt.
+
+    Uses 4-backtick fence to handle content containing triple-backticks.
+    """
+```
+
+## Two Invoke Concepts
+
+The codebase has two distinct "invoke" situations:
+
+**Sub-agent invoke** (`sub_agent_invoke()` in subagent.py): Appears INSIDE a dispatch prompt. Tells the SPAWNED agent what command to run after it's created.
+
+**Parent invoke_after** (in `format_step()`): Appears AFTER the body as the step's terminal directive. Tells the CURRENT agent what to run next.
+
+A dispatch step has BOTH:
+
+- The body contains a dispatch prompt with the sub-agent's invoke command
+- The step ends with the parent's invoke_after for what happens after the sub-agent returns
+
+## Core Abstraction: The Step
+
+Every workflow step has the same fundamental structure:
+
+```
+[body]
+
+[invoke_after]
+```
+
+That's it. Two parts:
+
+1. **body**: The actual prompt content. Free-form text.
+2. **invoke_after**: The command the LLM should run next. Optional (empty for final steps).
