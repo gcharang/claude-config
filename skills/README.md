@@ -45,9 +45,19 @@ Files use a fixed section sequence. Group by type, not by step. Within each type
 # Domain-specific (utility) functions
 
 # ============================================================================
-# WORKFLOW
+# STEP DEFINITIONS
 # ============================================================================
-# Entry points: run_discovery(), run_ideation(), etc.
+# STATIC_STEPS and DYNAMIC_STEPS dicts (table-driven dispatch)
+
+# ============================================================================
+# OUTPUT FORMATTING
+# ============================================================================
+# format_output() entry point
+
+# ============================================================================
+# ENTRY POINT
+# ============================================================================
+# main() function
 ```
 
 Rationale: functions often reference prompts from multiple steps. Grouping by type avoids forward references within function sections.
@@ -210,29 +220,32 @@ Blank line before and after section headers. No blank line required around step 
 
 No "action factories". No inversion of control. Just strings.
 
-### Pattern 1: Static Steps (deepthink)
+### Pattern 1: Static Steps (deepthink subagent)
+
+All-static workflows use separate `STEP_TITLES` and `STEP_INSTRUCTIONS` dicts:
 
 ```python
-STEPS = {
-    1: {
-        "title": "Context Clarification",
-        "body": """\
-You are an expert analytical reasoner...
-...""",
-    },
-    2: {
-        "title": "Abstraction",
-        "body": """\
-Before diving into specifics, step back...
-...""",
-    },
+STEP_TITLES = {
+    1: "Context Grounding",
+    2: "Analogical Generation",
+    3: "Planning",
+    # ...
 }
 
-def get_step_output(step: int) -> str:
-    info = STEPS[step]
-    body = f"{info['title']}\n{'=' * len(info['title'])}\n\n{info['body']}"
-    next_cmd = f"python3 -m skills.deepthink.think --step {step + 1}" if step < 14 else ""
-    return format_step(body, next_cmd)
+STEP_INSTRUCTIONS = {
+    1: CONTEXT_GROUNDING_INSTRUCTIONS,
+    2: ANALOGICAL_GENERATION_INSTRUCTIONS,
+    3: PLANNING_INSTRUCTIONS,
+    # ...
+}
+
+def format_output(step: int) -> str:
+    if step not in STEP_TITLES:
+        return f"ERROR: Invalid step {step}"
+    title = STEP_TITLES[step]
+    instructions = STEP_INSTRUCTIONS[step]
+    next_cmd = build_next_command(step)
+    return format_step(instructions, next_cmd or "", title=f"WORKFLOW - {title}")
 ```
 
 ### Pattern 2: Parameterized Steps (codebase-analysis)
@@ -475,12 +488,13 @@ Building blocks (also exported):
 ### step.py
 
 ```python
-def format_step(body: str, next_cmd: str = "") -> str:
+def format_step(body: str, next_cmd: str = "", title: str = "") -> str:
     """Assemble a complete workflow step.
 
     Args:
         body: The prompt content (free-form text)
         next_cmd: Command to run next (empty string for final step)
+        title: Optional title rendered as "TITLE\\n======\\n\\n" header
 
     Returns:
         Complete step output as plain text

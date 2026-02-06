@@ -2,7 +2,7 @@
 """
 Codebase Analysis Skill - Understanding-focused comprehension workflow.
 
-Four-phase workflow:
+Four-step workflow:
   1. SCOPE      - Define understanding goals (single pass)
   2. SURVEY     - Initial exploration via Explore agents (single pass)
   3. DEEPEN     - Targeted deep-dives with confidence iteration (1-4 iterations)
@@ -14,8 +14,7 @@ Only DEEPEN iterates based on confidence. Other steps execute once and advance.
 import argparse
 import sys
 
-from skills.lib.workflow.core import StepDef, Workflow
-from skills.lib.workflow.prompts import format_step, template_dispatch
+from skills.lib.workflow.prompts import format_step, roster_dispatch
 
 
 # ============================================================================
@@ -33,9 +32,10 @@ Analysis goals from SCOPE step:
 # CONFIGURATION
 # ============================================================================
 
-MODULE_PATH = "skills.codebase_analysis.analyze_workflow"
-EXPLORE_MODULE_PATH = "skills.codebase_analysis.explore"
+MODULE_PATH = "skills.codebase_analysis.analyze"
+SUBAGENT_MODULE_PATH = "skills.codebase_analysis.subagent"
 MAX_DEEPEN_ITERATIONS = 4
+TOTAL_STEPS = 4
 
 
 # ============================================================================
@@ -68,11 +68,14 @@ ADVANCE: When goals defined, proceed to SURVEY."""
 
 # --- STEP 2: SURVEY ----------------------------------------------------------
 
-SURVEY_INSTRUCTIONS = """\
-DISPATCH Explore agent(s) to map the codebase landscape.
+SURVEY_DISPATCH_AGENTS = [
+    "[Focus area 1: e.g., 'authentication and session management']",
+    "[Focus area 2: e.g., 'database access patterns']",
+    "[Focus area 3: e.g., 'API request routing']",
+    "[Focus area N: based on scope and codebase structure]",
+]
 
-{dispatch}
-
+SURVEY_DISPATCH_GUIDANCE = """\
 DISPATCH GUIDANCE:
 
 Single codebase, focused scope:
@@ -85,6 +88,12 @@ Large/broad scope:
 Multiple repositories:
   - One Explore agent per repository
 
+Generate focus areas based on:
+  1. User's stated understanding goals (from SCOPE)
+  2. Codebase structure (from initial observation)
+  3. Coverage of different system aspects"""
+
+SURVEY_PROCESSING_INSTRUCTIONS = """\
 WAIT for Explore results.
 
 PROCESS findings:
@@ -189,58 +198,29 @@ Ensure:
 
 
 def build_survey_body() -> str:
-    """Build SURVEY instructions with template for Explore agent dispatch.
+    """Build SURVEY instructions with roster_dispatch().
 
-    Orchestrator receives template (not rendered dispatch). At runtime, orchestrator:
+    Orchestrator receives dispatch template. At runtime, orchestrator:
     1. Analyzes codebase structure (SCOPE)
     2. Generates 2-5 focus areas
-    3. Expands template for each focus area
-    4. Dispatches agents in parallel with actual script invocation
+    3. Dispatches agents in parallel with actual script invocation
     """
-    dispatch_template = f"""\
-DISPATCH EXPLORE AGENTS
-=======================
+    invoke_cmd = f'python3 -m {SUBAGENT_MODULE_PATH} --step 1'
 
-Based on your SCOPE analysis, determine 2-5 focus areas to explore.
+    dispatch_text = roster_dispatch(
+        agent_type="general-purpose",
+        agents=SURVEY_DISPATCH_AGENTS,
+        command=invoke_cmd,
+        shared_context=DISPATCH_CONTEXT,
+        model="haiku",
+        instruction="Determine 2-5 focus areas from SCOPE analysis. "
+                    "Each agent's unique task is its focus area description. "
+                    "The focus area goes in the agent's prompt text, NOT as a CLI arg. "
+                    "The subagent script refers to 'your focus area' -- "
+                    "the agent knows it from prompt context.",
+    )
 
-For EACH focus area, use Task tool with:
-  - subagent_type: general-purpose
-  - model: haiku
-  - prompt: Include the focus area and invoke command below
-
-PROMPT TEMPLATE (expand for each focus area):
-```
-Explore '$FOCUS' in the codebase. Use understanding goals from shared context.
-
-{DISPATCH_CONTEXT}
-
-FIRST ACTION REQUIRED: Run this command via Bash tool before any other response.
-Do NOT skip. Do NOT produce analysis first. Execute this command IMMEDIATELY.
-
-Working directory: .claude/skills/scripts
-Command: python3 -m {EXPLORE_MODULE_PATH} --step 1
-```
-
-Note: The focus area ('$FOCUS') is in the prompt text above, NOT passed as a CLI arg.
-The subagent script emits guidance that refers to "your focus area" -- the agent
-knows what it is from its launching prompt context.
-
-PARALLEL EXECUTION (MANDATORY):
-  You MUST dispatch ALL agents in ONE assistant message.
-  FORBIDDEN: Waiting for any agent before dispatching the next.
-
-EXAMPLE FOCUS AREAS:
-  - "authentication and session management"
-  - "database access patterns"
-  - "API request routing"
-  - "error handling"
-
-Generate focus areas based on:
-  1. User's stated understanding goals (from SCOPE)
-  2. Codebase structure (from initial observation)
-  3. Coverage of different system aspects"""
-
-    return SURVEY_INSTRUCTIONS.format(dispatch=dispatch_template)
+    return f"{dispatch_text}\n\n{SURVEY_DISPATCH_GUIDANCE}\n\n{SURVEY_PROCESSING_INSTRUCTIONS}"
 
 
 def build_deepen_body(iteration: int) -> str:
@@ -248,83 +228,82 @@ def build_deepen_body(iteration: int) -> str:
     return DEEPEN_INSTRUCTIONS.format(max_iter=MAX_DEEPEN_ITERATIONS)
 
 
+# Pre-computed survey body (all inputs are module-level constants)
+_SURVEY_BODY = build_survey_body()
+
+
+def _format_step_3(confidence: str, iteration: int) -> tuple[str, str]:
+    """Dynamic formatter for step 3 (Deepen) -- handles iteration/exit logic."""
+    if confidence == "certain":
+        return ("Deepen Complete", "Deep understanding achieved.\n\nPROCEED to SYNTHESIZE step.")
+    if iteration >= MAX_DEEPEN_ITERATIONS:
+        return (
+            "Deepen Complete",
+            f"Maximum DEEPEN iterations reached ({iteration}/{MAX_DEEPEN_ITERATIONS}).\n\n"
+            "FORCE transition to SYNTHESIZE.",
+        )
+    return (f"Deepen (Iteration {iteration} of {MAX_DEEPEN_ITERATIONS})", build_deepen_body(iteration))
+
+
 def build_next_command(step: int, confidence: str, iteration: int) -> str | None:
     """Build the invoke command for the next step."""
     base_cmd = f'python3 -m {MODULE_PATH}'
 
-    if step == 1:  # SCOPE -> SURVEY
+    if step == 1:
         return f'{base_cmd} --step 2'
-
-    elif step == 2:  # SURVEY -> DEEPEN
+    if step == 2:
         return f'{base_cmd} --step 3 --iteration 1 --confidence exploring'
-
-    elif step == 3:  # DEEPEN
+    if step == 3:
         if confidence == "certain" or iteration >= MAX_DEEPEN_ITERATIONS:
             return f'{base_cmd} --step 4'
-        else:
-            return f'{base_cmd} --step 3 --iteration {iteration + 1} --confidence {{exploring|low|medium|high|certain}}'
-
-    elif step == 4:  # SYNTHESIZE -> complete
+        return f'{base_cmd} --step 3 --iteration {iteration + 1} --confidence {{exploring|low|medium|high|certain}}'
+    if step == 4:
         return None
-
     return None
+
+
+# ============================================================================
+# STEP DEFINITIONS
+# ============================================================================
+
+STATIC_STEPS = {
+    1: ("Scope", SCOPE_INSTRUCTIONS),
+    2: ("Survey", _SURVEY_BODY),
+    4: ("Synthesize", SYNTHESIZE_INSTRUCTIONS),
+}
+
+DYNAMIC_STEPS = {
+    3: _format_step_3,
+}
+
+
+# ============================================================================
+# OUTPUT FORMATTING
+# ============================================================================
 
 
 def format_output(step: int, confidence: str, iteration: int) -> str:
     """Format output for the given step."""
-    base_cmd = f'python3 -m {MODULE_PATH}'
-
-    if step == 1:
-        body = f"CODEBASE ANALYSIS - Define understanding goals\n{'=' * 50}\n\n{SCOPE_INSTRUCTIONS}"
-        next_cmd = build_next_command(step, confidence, iteration)
-
-    elif step == 2:
-        body = f"CODEBASE ANALYSIS - Initial exploration\n{'=' * 50}\n\n{build_survey_body()}"
-        next_cmd = build_next_command(step, confidence, iteration)
-
-    elif step == 3:
-        if confidence == "certain":
-            title = "Understanding complete"
-            instructions = "Deep understanding achieved.\n\nPROCEED to SYNTHESIZE step."
-        elif iteration >= MAX_DEEPEN_ITERATIONS:
-            title = f"Max iterations reached ({iteration}/{MAX_DEEPEN_ITERATIONS})"
-            instructions = "Maximum DEEPEN iterations reached.\n\nFORCE transition to SYNTHESIZE."
-        else:
-            title = f"Targeted deep-dive (iteration {iteration}/{MAX_DEEPEN_ITERATIONS})"
-            instructions = build_deepen_body(iteration)
-
-        body = f"CODEBASE ANALYSIS - {title}\n{'=' * 50}\n\n{instructions}"
-        next_cmd = build_next_command(step, confidence, iteration)
-
-    elif step == 4:
-        body = f"CODEBASE ANALYSIS - Output summary\n{'=' * 50}\n\n{SYNTHESIZE_INSTRUCTIONS}"
-        next_cmd = None
-
+    if step in STATIC_STEPS:
+        title, instructions = STATIC_STEPS[step]
+    elif step in DYNAMIC_STEPS:
+        title, instructions = DYNAMIC_STEPS[step](confidence, iteration)
     else:
         return f"ERROR: Invalid step {step}"
 
-    return format_step(body, next_cmd or "")
+    next_cmd = build_next_command(step, confidence, iteration)
+    return format_step(instructions, next_cmd or "", title=f"CODEBASE ANALYSIS - {title}")
 
 
 # ============================================================================
-# WORKFLOW
+# ENTRY POINT
 # ============================================================================
-
-WORKFLOW = Workflow(
-    "codebase-analysis",
-    StepDef(id="scope", title="SCOPE - Define understanding goals", actions=[SCOPE_INSTRUCTIONS]),
-    StepDef(id="survey", title="SURVEY - Initial exploration", actions=[SURVEY_INSTRUCTIONS]),
-    StepDef(id="deepen", title="DEEPEN - Targeted deep-dives", actions=[DEEPEN_INSTRUCTIONS]),
-    StepDef(id="synthesize", title="SYNTHESIZE - Structured summary output", actions=[SYNTHESIZE_INSTRUCTIONS]),
-    description="Understanding-focused codebase comprehension workflow",
-    validate=False,
-)
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Codebase Analysis - Understanding-focused comprehension workflow",
-        epilog="Phases: SCOPE (1) -> SURVEY (2) -> DEEPEN (3) -> SYNTHESIZE (4)",
+        epilog="Steps: SCOPE (1) -> SURVEY (2) -> DEEPEN (3) -> SYNTHESIZE (4)",
     )
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument(
@@ -342,10 +321,8 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.step < 1:
-        sys.exit("ERROR: --step must be >= 1")
-    if args.step > WORKFLOW.total_steps:
-        sys.exit(f"ERROR: --step cannot exceed {WORKFLOW.total_steps}")
+    if args.step < 1 or args.step > TOTAL_STEPS:
+        sys.exit(f"ERROR: --step must be 1-{TOTAL_STEPS}")
     if args.iteration < 1:
         sys.exit("ERROR: --iteration must be >= 1")
 

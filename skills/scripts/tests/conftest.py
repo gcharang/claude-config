@@ -21,7 +21,7 @@ SKILL_MODULES = [
     "skills.decision_critic.decision_critic",
     "skills.leon_writing_style.writing_style",
     "skills.problem_analysis.analyze",
-    "skills.codebase_analysis.analyze_workflow",
+    "skills.codebase_analysis.analyze",
     "skills.deepthink.think",
     "skills.incoherence.incoherence",
     "skills.refactor.refactor",

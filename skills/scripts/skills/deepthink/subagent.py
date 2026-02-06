@@ -24,6 +24,7 @@ from skills.lib.workflow.prompts import format_step
 # ============================================================================
 
 MODULE_PATH = "skills.deepthink.subagent"
+TOTAL_STEPS = 8
 
 
 # ============================================================================
@@ -404,12 +405,17 @@ Your output will be collected for aggregation and synthesis."""
 # MESSAGE BUILDERS
 # ============================================================================
 
+
 def build_next_command(step: int) -> str | None:
     """Build invoke command for next step."""
-    if step >= 8:
+    if step >= TOTAL_STEPS:
         return None
     return f"python3 -m {MODULE_PATH} --step {step + 1}"
 
+
+# ============================================================================
+# STEP DEFINITIONS
+# ============================================================================
 
 STEP_TITLES = {
     1: "Context Grounding",
@@ -434,15 +440,25 @@ STEP_INSTRUCTIONS = {
 }
 
 
+# ============================================================================
+# OUTPUT FORMATTING
+# ============================================================================
+
+
 def format_output(step: int) -> str:
     """Format output for given step."""
     if step not in STEP_TITLES:
-        raise ValueError(f"Invalid step: {step}")
+        return f"ERROR: Invalid step {step}"
 
     title = STEP_TITLES[step]
     instructions = STEP_INSTRUCTIONS[step]
     next_cmd = build_next_command(step)
     return format_step(instructions, next_cmd or "", title=f"DEEPTHINK SUB-AGENT - {title}")
+
+
+# ============================================================================
+# ENTRY POINT
+# ============================================================================
 
 
 def main():
@@ -454,8 +470,8 @@ def main():
     parser.add_argument("--step", type=int, required=True)
     args = parser.parse_args()
 
-    if args.step < 1 or args.step > 8:
-        sys.exit("ERROR: --step must be 1-8")
+    if args.step < 1 or args.step > TOTAL_STEPS:
+        sys.exit(f"ERROR: --step must be 1-{TOTAL_STEPS}")
 
     print(format_output(args.step))
 
