@@ -15,7 +15,7 @@ import argparse
 import sys
 
 from skills.lib.workflow.core import StepDef, Workflow
-from skills.lib.workflow.prompts import format_step, roster_dispatch
+from skills.lib.workflow.prompts import format_step, template_dispatch
 
 
 # ============================================================================
@@ -28,18 +28,13 @@ Analysis goals from SCOPE step:
 - Identified focus areas (architecture, components, flows, etc.)
 - Defined objectives (1-3 specific goals)"""
 
-DISPATCH_AGENTS = [
-    "[Exploration focus 1: e.g., 'Explore authentication flow']",
-    "[Exploration focus 2: e.g., 'Explore database schema']",
-    "[Exploration focus N: based on scope and codebase structure]",
-]
-
 
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
 
 MODULE_PATH = "skills.codebase_analysis.analyze_workflow"
+EXPLORE_MODULE_PATH = "skills.codebase_analysis.explore"
 MAX_DEEPEN_ITERATIONS = 4
 
 
@@ -194,16 +189,58 @@ Ensure:
 
 
 def build_survey_body() -> str:
-    """Build SURVEY instructions with Explore agent dispatch."""
-    dispatch_text = roster_dispatch(
-        agent_type="Explore",
-        agents=DISPATCH_AGENTS,
-        command="Use Task tool with subagent_type='Explore'",
-        shared_context=DISPATCH_CONTEXT,
-        model="haiku",
-        instruction="Dispatch Explore agents targeting defined goals.",
-    )
-    return SURVEY_INSTRUCTIONS.format(dispatch=dispatch_text)
+    """Build SURVEY instructions with template for Explore agent dispatch.
+
+    Orchestrator receives template (not rendered dispatch). At runtime, orchestrator:
+    1. Analyzes codebase structure (SCOPE)
+    2. Generates 2-5 focus areas
+    3. Expands template for each focus area
+    4. Dispatches agents in parallel with actual script invocation
+    """
+    dispatch_template = f"""\
+DISPATCH EXPLORE AGENTS
+=======================
+
+Based on your SCOPE analysis, determine 2-5 focus areas to explore.
+
+For EACH focus area, use Task tool with:
+  - subagent_type: general-purpose
+  - model: haiku
+  - prompt: Include the focus area and invoke command below
+
+PROMPT TEMPLATE (expand for each focus area):
+```
+Explore '$FOCUS' in the codebase. Use understanding goals from shared context.
+
+{DISPATCH_CONTEXT}
+
+FIRST ACTION REQUIRED: Run this command via Bash tool before any other response.
+Do NOT skip. Do NOT produce analysis first. Execute this command IMMEDIATELY.
+
+Working directory: .claude/skills/scripts
+Command: python3 -m {EXPLORE_MODULE_PATH} --step 1
+```
+
+Note: The focus area ('$FOCUS') is in the prompt text above, NOT passed as a CLI arg.
+The subagent script emits guidance that refers to "your focus area" -- the agent
+knows what it is from its launching prompt context.
+
+PARALLEL EXECUTION (MANDATORY):
+  You MUST dispatch ALL agents in ONE assistant message.
+  FORBIDDEN: Waiting for any agent before dispatching the next.
+
+EXAMPLE FOCUS AREAS:
+  - "authentication and session management"
+  - "database access patterns"
+  - "API request routing"
+  - "error handling"
+
+Generate focus areas based on:
+  1. User's stated understanding goals (from SCOPE)
+  2. Codebase structure (from initial observation)
+  3. Coverage of different system aspects"""
+
+    return SURVEY_INSTRUCTIONS.format(dispatch=dispatch_template)
 
 
 def build_deepen_body(iteration: int) -> str:

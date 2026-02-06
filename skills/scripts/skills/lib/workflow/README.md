@@ -365,6 +365,86 @@ StepDef(
 )
 ```
 
+### Pattern 5: Hybrid Static/Dynamic Steps (deepthink)
+
+Workflows with mostly static steps and few parameterized steps benefit from a hybrid approach:
+
+```python
+# ============================================================================
+# MESSAGE BUILDERS
+# ============================================================================
+
+def build_dispatch_body() -> str:
+    """Builder functions that dynamic formatters may call."""
+    # ... implementation
+    return dispatch_text
+
+
+# ============================================================================
+# STEP DEFINITIONS
+# ============================================================================
+
+# Static steps: (title, instructions) tuples
+STATIC_STEPS = {
+    1: ("Context Clarification", CONTEXT_CLARIFICATION_INSTRUCTIONS),
+    2: ("Abstraction", ABSTRACTION_INSTRUCTIONS),
+    # ... more static steps
+}
+
+
+# Dynamic formatter functions - defined BEFORE DYNAMIC_STEPS dict
+def _format_step_9(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
+    """Dynamic step that calls a builder function."""
+    return ("Dispatch", build_dispatch_body())
+
+
+def _format_step_13(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
+    """Dynamic step with parameterized title and body."""
+    suffix = " -> Complete" if confidence == "certain" else ""
+    title = f"Iterative Refinement (Iteration {iteration}){suffix}"
+    body = INSTRUCTIONS.format(iteration=iteration, max_iter=MAX_ITERATIONS)
+    return (title, body)
+
+
+# Dynamic steps dict - references functions defined above
+DYNAMIC_STEPS = {
+    9: _format_step_9,
+    13: _format_step_13,
+}
+
+
+# ============================================================================
+# OUTPUT FORMATTING
+# ============================================================================
+
+def format_output(step: int, mode: str, confidence: str, iteration: int) -> str:
+    """Callable dispatch: static lookup or dynamic function call."""
+    if step in STATIC_STEPS:
+        title, instructions = STATIC_STEPS[step]
+    elif step in DYNAMIC_STEPS:
+        title, instructions = DYNAMIC_STEPS[step](mode, confidence, iteration)
+    else:
+        return f"ERROR: Invalid step {step}"
+
+    next_cmd = build_next_command(step, mode, confidence, iteration)
+    return format_step(instructions, next_cmd or "", title=f"WORKFLOW - {title}")
+```
+
+**Ordering constraint (book pattern)**: Dynamic formatter functions that call MESSAGE BUILDERS must appear AFTER MESSAGE BUILDERS. The DYNAMIC_STEPS dictionary must appear AFTER all `_format_step_*` functions it references.
+
+Use this pattern when:
+
+- Many steps share the same structure (title + constant body)
+- Few steps need parameters for title or body construction
+- Parameters are uniform across all dynamic steps
+
+Benefits:
+
+- Compact representation for static steps (one line per step)
+- Clear, readable functions for dynamic steps
+- Single dispatch point in `format_output()`
+- Follows "book pattern" (all references resolve to definitions above)
+
 ## Question Relay Protocol
 
 Sub-agents can request user clarification via the main agent. The protocol is

@@ -12,14 +12,18 @@ from pathlib import Path
 from string import Template
 
 
-# Resolve skills/scripts directory from this file's location
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
 # subagent.py -> prompts -> workflow -> lib -> skills -> scripts
 SKILLS_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
 
 
-# =============================================================================
-# BUILDING BLOCKS
-# =============================================================================
+# ============================================================================
+# SHARED PROMPTS
+# ============================================================================
+# Building block templates used by multiple dispatch patterns
 
 TASK_TOOL_INSTRUCTION = """\
 ACTION: Use the Task tool to spawn this agent.
@@ -29,25 +33,17 @@ Task tool parameters:
   - model: {model_param}
   - prompt: Include the task and invoke command below"""
 
-
-def task_tool_instruction(agent_type: str, model: str | None) -> str:
-    """Tell main agent how to spawn sub-agent via Task tool."""
-    model_param = model if model else "omit (use default)"
-    return TASK_TOOL_INSTRUCTION.format(agent_type=agent_type, model_param=model_param)
-
-
 SUB_AGENT_INVOKE = """\
-INCLUDE IN AGENT'S PROMPT - Invoke Command:
-    The agent must run this command immediately after receiving the task.
+MANDATORY INVOKE BLOCK - Copy VERBATIM into the agent's prompt:
+================================================================================
+FIRST ACTION REQUIRED: Run this command via Bash tool before any other response.
+Do NOT skip. Do NOT produce analysis first. Execute this command IMMEDIATELY.
 
-    Working directory: {working_dir}
-    Command: {cmd}"""
-
-
-def sub_agent_invoke(cmd: str) -> str:
-    """Tell sub-agent what command to run after spawning."""
-    return SUB_AGENT_INVOKE.format(working_dir=SKILLS_DIR, cmd=cmd)
-
+Working directory: {working_dir}
+Command: {cmd}
+================================================================================
+CRITICAL: Copy the block above EXACTLY. Do not paraphrase or summarize.
+The subagent needs "FIRST ACTION REQUIRED" to know it must run the command."""
 
 PARALLEL_CONSTRAINT = """\
 PARALLEL EXECUTION (MANDATORY):
@@ -63,14 +59,11 @@ PARALLEL EXECUTION (MANDATORY):
     FORBIDDEN: Waiting for any agent before dispatching the next."""
 
 
-def parallel_constraint(count: int) -> str:
-    """Enforce MANDATORY_PARALLEL execution for multiple agents."""
-    return PARALLEL_CONSTRAINT.format(count=count)
+# ============================================================================
+# MESSAGE TEMPLATES
+# ============================================================================
 
-
-# =============================================================================
-# TEMPLATE 1: SUBAGENT DISPATCH (Single Agent)
-# =============================================================================
+# --- SUBAGENT DISPATCH (Single Agent) ---------------------------------------
 
 SUBAGENT_TEMPLATE = """\
 DISPATCH SUB-AGENT
@@ -85,6 +78,88 @@ TASK FOR THE SUB-AGENT:
 
 After the sub-agent returns, continue with the next workflow step."""
 
+# --- TEMPLATE DISPATCH (Parallel, Variable Substitution) --------------------
+
+TEMPLATE_DISPATCH_TEMPLATE = """\
+DISPATCH {count} PARALLEL AGENTS
+================================
+
+{parallel_block}
+
+For EACH agent below, use Task tool with:
+  - subagent_type: {agent_type}
+  - model: {model_display}
+  - prompt: Task description + MANDATORY INVOKE BLOCK (copy exactly as shown)
+
+PROMPT CONSTRUCTION RULES:
+  - The MANDATORY INVOKE BLOCK must appear VERBATIM in each prompt
+  - DO NOT reduce it to just "Working directory: X / Command: Y"
+  - The subagent needs "FIRST ACTION REQUIRED" to execute the command
+
+{instruction_section}AGENTS:
+{agents_section}
+
+After ALL {count} agents return, continue with the next workflow step."""
+
+TEMPLATE_AGENT_ENTRY = """\
+--- Agent {index} ---
+Task: {prompt}
+
+{invoke_block}"""
+
+# --- ROSTER DISPATCH (Parallel, Unique Tasks) -------------------------------
+
+ROSTER_DISPATCH_TEMPLATE = """\
+DISPATCH {count} PARALLEL AGENTS
+================================
+
+{parallel_block}
+
+For EACH agent below, use Task tool with:
+  - subagent_type: {agent_type}
+  - model: {model_display}
+  - prompt: Shared context + agent's unique task + MANDATORY INVOKE BLOCK (copy exactly)
+
+PROMPT CONSTRUCTION RULES:
+  - The MANDATORY INVOKE BLOCK must appear VERBATIM in each prompt
+  - DO NOT reduce it to just "Working directory: X / Command: Y"
+  - The subagent needs "FIRST ACTION REQUIRED" to execute the command
+
+{instruction_section}{shared_context_section}AGENTS:
+{agents_section}
+
+After ALL {count} agents return, continue with the next workflow step."""
+
+ROSTER_AGENT_ENTRY = """\
+--- Agent {index} ---
+Unique Task: {task}
+
+{invoke_block}"""
+
+
+# ============================================================================
+# MESSAGE BUILDERS
+# ============================================================================
+
+# --- Building block functions -----------------------------------------------
+
+def task_tool_instruction(agent_type: str, model: str | None) -> str:
+    """Tell main agent how to spawn sub-agent via Task tool."""
+    model_param = model if model else "omit (use default)"
+    return TASK_TOOL_INSTRUCTION.format(agent_type=agent_type, model_param=model_param)
+
+
+def sub_agent_invoke(cmd: str) -> str:
+    """Tell sub-agent what command to run after spawning."""
+    return SUB_AGENT_INVOKE.format(working_dir=SKILLS_DIR, cmd=cmd)
+
+
+def parallel_constraint(count: int) -> str:
+    """Enforce MANDATORY_PARALLEL execution for multiple agents."""
+    return PARALLEL_CONSTRAINT.format(count=count)
+
+
+# --- Dispatch pattern functions ---------------------------------------------
 
 def subagent_dispatch(
     agent_type: str,
@@ -110,34 +185,6 @@ def subagent_dispatch(
         task_section=task_section,
         invoke_block=sub_agent_invoke(command),
     )
-
-
-# =============================================================================
-# TEMPLATE 2: TEMPLATE DISPATCH (Parallel, Variable Substitution)
-# =============================================================================
-
-TEMPLATE_DISPATCH_TEMPLATE = """\
-DISPATCH {count} PARALLEL AGENTS
-================================
-
-{parallel_block}
-
-For EACH agent below, use Task tool with:
-  - subagent_type: {agent_type}
-  - model: {model_display}
-  - prompt: The agent's specific task + invoke command
-
-{instruction_section}AGENTS:
-{agents_section}
-
-After ALL {count} agents return, continue with the next workflow step."""
-
-
-TEMPLATE_AGENT_ENTRY = """\
---- Agent {index} ---
-Task: {prompt}
-
-{invoke_block}"""
 
 
 def template_dispatch(
@@ -194,34 +241,6 @@ def template_dispatch(
         instruction_section=instruction_section,
         agents_section="\n\n".join(agents_lines),
     )
-
-
-# =============================================================================
-# TEMPLATE 3: ROSTER DISPATCH (Parallel, Unique Tasks)
-# =============================================================================
-
-ROSTER_DISPATCH_TEMPLATE = """\
-DISPATCH {count} PARALLEL AGENTS
-================================
-
-{parallel_block}
-
-For EACH agent below, use Task tool with:
-  - subagent_type: {agent_type}
-  - model: {model_display}
-  - prompt: Shared context + agent's unique task + invoke command
-
-{instruction_section}{shared_context_section}AGENTS:
-{agents_section}
-
-After ALL {count} agents return, continue with the next workflow step."""
-
-
-ROSTER_AGENT_ENTRY = """\
---- Agent {index} ---
-Unique Task: {task}
-
-{invoke_block}"""
 
 
 def roster_dispatch(
