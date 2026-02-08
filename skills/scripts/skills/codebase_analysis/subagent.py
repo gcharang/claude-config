@@ -158,18 +158,11 @@ def build_next_command(step: int) -> str | None:
 # STEP DEFINITIONS
 # ============================================================================
 
-STEP_TITLES = {
-    1: "Orient",
-    2: "Map",
-    3: "Extract",
-    4: "Report",
-}
-
-STEP_INSTRUCTIONS = {
-    1: ORIENT_INSTRUCTIONS,
-    2: MAP_INSTRUCTIONS,
-    3: EXTRACT_INSTRUCTIONS,
-    4: REPORT_INSTRUCTIONS,
+STATIC_STEPS = {
+    1: ("Orient", ORIENT_INSTRUCTIONS),
+    2: ("Map", MAP_INSTRUCTIONS),
+    3: ("Extract", EXTRACT_INSTRUCTIONS),
+    4: ("Report", REPORT_INSTRUCTIONS),
 }
 
 
@@ -180,11 +173,10 @@ STEP_INSTRUCTIONS = {
 
 def format_output(step: int) -> str:
     """Format output for given step."""
-    if step not in STEP_TITLES:
+    if step not in STATIC_STEPS:
         return f"ERROR: Invalid step {step}"
 
-    title = STEP_TITLES[step]
-    instructions = STEP_INSTRUCTIONS[step]
+    title, instructions = STATIC_STEPS[step]
     next_cmd = build_next_command(step)
     return format_step(instructions, next_cmd or "", title=f"CODEBASE EXPLORE - {title}")
 

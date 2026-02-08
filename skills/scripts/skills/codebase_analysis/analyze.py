@@ -18,18 +18,6 @@ from skills.lib.workflow.prompts import format_step, roster_dispatch
 
 
 # ============================================================================
-# SHARED PROMPTS
-# ============================================================================
-
-DISPATCH_CONTEXT = (
-    "Analysis goals from SCOPE step:\n"
-    "- User intent and what they want to understand\n"
-    "- Identified focus areas (architecture, components, flows, etc.)\n"
-    "- Defined objectives (1-3 specific goals)"
-)
-
-
-# ============================================================================
 # CONFIGURATION
 # ============================================================================
 
@@ -69,6 +57,13 @@ SCOPE_INSTRUCTIONS = (
 )
 
 # --- STEP 2: SURVEY ----------------------------------------------------------
+
+DISPATCH_CONTEXT = (
+    "Analysis goals from SCOPE step:\n"
+    "- User intent and what they want to understand\n"
+    "- Identified focus areas (architecture, components, flows, etc.)\n"
+    "- Defined objectives (1-3 specific goals)"
+)
 
 SURVEY_DISPATCH_AGENTS = [
     "[Focus area 1: e.g., 'authentication and session management']",
@@ -238,19 +233,6 @@ def build_deepen_body(iteration: int) -> str:
 _SURVEY_BODY = build_survey_body()
 
 
-def _format_step_3(confidence: str, iteration: int) -> tuple[str, str]:
-    """Dynamic formatter for step 3 (Deepen) -- handles iteration/exit logic."""
-    if confidence == "certain":
-        return ("Deepen Complete", "Deep understanding achieved.\n\nPROCEED to SYNTHESIZE step.")
-    if iteration >= MAX_DEEPEN_ITERATIONS:
-        return (
-            "Deepen Complete",
-            f"Maximum DEEPEN iterations reached ({iteration}/{MAX_DEEPEN_ITERATIONS}).\n\n"
-            "FORCE transition to SYNTHESIZE.",
-        )
-    return (f"Deepen (Iteration {iteration} of {MAX_DEEPEN_ITERATIONS})", build_deepen_body(iteration))
-
-
 def build_next_command(step: int, confidence: str, iteration: int) -> str | None:
     """Build the invoke command for the next step."""
     base_cmd = f'python3 -m {MODULE_PATH}'
@@ -277,6 +259,20 @@ STATIC_STEPS = {
     2: ("Survey", _SURVEY_BODY),
     4: ("Synthesize", SYNTHESIZE_INSTRUCTIONS),
 }
+
+
+def _format_step_3(confidence: str, iteration: int) -> tuple[str, str]:
+    """Dynamic formatter for step 3 (Deepen) -- handles iteration/exit logic."""
+    if confidence == "certain":
+        return ("Deepen Complete", "Deep understanding achieved.\n\nPROCEED to SYNTHESIZE step.")
+    if iteration >= MAX_DEEPEN_ITERATIONS:
+        return (
+            "Deepen Complete",
+            f"Maximum DEEPEN iterations reached ({iteration}/{MAX_DEEPEN_ITERATIONS}).\n\n"
+            "FORCE transition to SYNTHESIZE.",
+        )
+    return (f"Deepen (Iteration {iteration} of {MAX_DEEPEN_ITERATIONS})", build_deepen_body(iteration))
+
 
 DYNAMIC_STEPS = {
     3: _format_step_3,

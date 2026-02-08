@@ -425,26 +425,15 @@ def build_next_command(step: int) -> str | None:
 # STEP DEFINITIONS
 # ============================================================================
 
-STEP_TITLES = {
-    1: "Context Grounding",
-    2: "Analogical Generation",
-    3: "Planning",
-    4: "Analysis",
-    5: "Self-Verification",
-    6: "Perspective Contrast",
-    7: "Failure Modes",
-    8: "Output Synthesis",
-}
-
-STEP_INSTRUCTIONS = {
-    1: CONTEXT_GROUNDING_INSTRUCTIONS,
-    2: ANALOGICAL_GENERATION_INSTRUCTIONS,
-    3: PLANNING_INSTRUCTIONS,
-    4: ANALYSIS_INSTRUCTIONS,
-    5: SELF_VERIFICATION_INSTRUCTIONS,
-    6: PERSPECTIVE_CONTRAST_INSTRUCTIONS,
-    7: FAILURE_MODES_INSTRUCTIONS,
-    8: OUTPUT_SYNTHESIS_INSTRUCTIONS,
+STATIC_STEPS = {
+    1: ("Context Grounding", CONTEXT_GROUNDING_INSTRUCTIONS),
+    2: ("Analogical Generation", ANALOGICAL_GENERATION_INSTRUCTIONS),
+    3: ("Planning", PLANNING_INSTRUCTIONS),
+    4: ("Analysis", ANALYSIS_INSTRUCTIONS),
+    5: ("Self-Verification", SELF_VERIFICATION_INSTRUCTIONS),
+    6: ("Perspective Contrast", PERSPECTIVE_CONTRAST_INSTRUCTIONS),
+    7: ("Failure Modes", FAILURE_MODES_INSTRUCTIONS),
+    8: ("Output Synthesis", OUTPUT_SYNTHESIS_INSTRUCTIONS),
 }
 
 
@@ -455,11 +444,10 @@ STEP_INSTRUCTIONS = {
 
 def format_output(step: int) -> str:
     """Format output for given step."""
-    if step not in STEP_TITLES:
+    if step not in STATIC_STEPS:
         return f"ERROR: Invalid step {step}"
 
-    title = STEP_TITLES[step]
-    instructions = STEP_INSTRUCTIONS[step]
+    title, instructions = STATIC_STEPS[step]
     next_cmd = build_next_command(step)
     return format_step(instructions, next_cmd or "", title=f"DEEPTHINK SUB-AGENT - {title}")
 

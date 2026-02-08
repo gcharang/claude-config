@@ -529,7 +529,7 @@ prompts/
     __init__.py         # re-exports
     subagent.py         # dispatch templates
     step.py             # format_step()
-    file_content.py     # format_file_content()
+    file.py             # format_file_content()
 ```
 
 ### subagent.py

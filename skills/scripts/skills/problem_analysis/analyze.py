@@ -305,24 +305,6 @@ OUTPUT_INSTRUCTIONS = (
 # ============================================================================
 
 
-def _format_step_3(confidence: str, iteration: int) -> tuple[str, str]:
-    """Dynamic formatter for step 3 (Investigate) -- handles iteration/exit logic."""
-    if confidence in ("high", "certain"):
-        return (
-            "Investigate Complete",
-            "Investigation reached HIGH confidence. Proceeding to root cause formulation.\n\n"
-            "Review accumulated findings from iterations above, then proceed.",
-        )
-    if iteration >= MAX_ITERATIONS:
-        return (
-            "Investigate Complete",
-            f"Investigation reached iteration cap ({MAX_ITERATIONS}). "
-            f"Proceeding with current findings. Final confidence: {confidence}\n\n"
-            "Review accumulated findings from iterations above, then proceed.",
-        )
-    return (f"Investigate (Iteration {iteration} of {MAX_ITERATIONS})", INVESTIGATE_INSTRUCTIONS)
-
-
 def build_next_command(step: int, confidence: str, iteration: int) -> str | None:
     """Build invoke command for next step."""
     base = f'python3 -m {MODULE_PATH}'
@@ -349,6 +331,25 @@ STATIC_STEPS = {
     4: ("Formulate", FORMULATE_INSTRUCTIONS),
     5: ("Output", OUTPUT_INSTRUCTIONS),
 }
+
+
+def _format_step_3(confidence: str, iteration: int) -> tuple[str, str]:
+    """Dynamic formatter for step 3 (Investigate) -- handles iteration/exit logic."""
+    if confidence in ("high", "certain"):
+        return (
+            "Investigate Complete",
+            "Investigation reached HIGH confidence. Proceeding to root cause formulation.\n\n"
+            "Review accumulated findings from iterations above, then proceed.",
+        )
+    if iteration >= MAX_ITERATIONS:
+        return (
+            "Investigate Complete",
+            f"Investigation reached iteration cap ({MAX_ITERATIONS}). "
+            f"Proceeding with current findings. Final confidence: {confidence}\n\n"
+            "Review accumulated findings from iterations above, then proceed.",
+        )
+    return (f"Investigate (Iteration {iteration} of {MAX_ITERATIONS})", INVESTIGATE_INSTRUCTIONS)
+
 
 DYNAMIC_STEPS = {
     3: _format_step_3,

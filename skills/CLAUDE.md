@@ -8,7 +8,7 @@ Script-based agent workflows with shared orchestration framework.
 
 The README defines:
 
-- File section ordering (SHARED PROMPTS -> CONFIGURATION -> MESSAGE TEMPLATES -> MESSAGE BUILDERS -> WORKFLOW)
+- File section ordering (SHARED PROMPTS -> CONFIGURATION -> MESSAGE TEMPLATES -> MESSAGE BUILDERS -> STEP DEFINITIONS -> OUTPUT FORMATTING -> ENTRY POINT)
 - Step-delimited prompt organization within MESSAGE TEMPLATES
 - Naming conventions for prompt constants (`[PHASE]_[TYPE]`)
 - Patterns for dispatch prompts (static templates vs builder functions)

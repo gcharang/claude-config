@@ -25,9 +25,9 @@ from pathlib import Path
 from skills.lib.workflow.prompts import format_step, format_file_content
 
 
-# =============================================================================
+# ============================================================================
 # SHARED PROMPTS
-# =============================================================================
+# ============================================================================
 
 TRIAGE_INSTRUCTIONS = (
     "EXAMINE the input, request, AND any relevant prior conversation:\n"
@@ -347,9 +347,9 @@ TECHNIQUE_AUDIT_INSTRUCTIONS = (
 )
 
 
-# =============================================================================
+# ============================================================================
 # CONFIGURATION
-# =============================================================================
+# ============================================================================
 
 MODULE_PATH = "skills.prompt_engineer.optimize"
 
@@ -493,34 +493,9 @@ READ_GUIDE_VARIANTS = {
 }
 
 
-def build_read_guide(scope: str) -> str:
-    """Build scope-specific read guide from shared template + variant parts."""
-    v = READ_GUIDE_VARIANTS[scope]
-    return (
-        v["heading"] + "\n"
-        "\n"
-        "All references are in the `references/` subdirectory of the prompt-engineer\n"
-        "skill directory. NOTE: *NOT* the prompt_engineer scripts directory, but the\n"
-        "prompt-engineer skill directory, which also contains the SKILL.md file.\n"
-        "\n"
-        "ALWAYS read: references/efficiency.md\n"
-        "  -> " + v["efficiency_note"] + "\n"
-        "\n"
-        + v["selection_intro"] + "\n"
-        + v["categories"] + "\n"
-        "\n"
-        + v["footer"] + "\n"
-        "\n"
-        "NEVER read papers/**/* - use references/ only."
-    )
-
-
-READ_GUIDES = {s: build_read_guide(s) for s in SCOPES}
-
-
-# =============================================================================
+# ============================================================================
 # MESSAGE TEMPLATES
-# =============================================================================
+# ============================================================================
 
 # --- STEP 2: ASSESS ----------------------------------------------------------
 
@@ -907,54 +882,34 @@ EXECUTE_ECOSYSTEM_INSTRUCTIONS = (
 )
 
 
-# =============================================================================
-# STEP DEFINITIONS
-# =============================================================================
-
-SCOPE_STEPS = {
-    "single-prompt": {
-        1: ("Triage", TRIAGE_INSTRUCTIONS),
-        2: ("Assess", ASSESS_SINGLE_INSTRUCTIONS),
-        3: ("Understand", UNDERSTAND_SIMPLE_INSTRUCTIONS),
-        4: ("Plan", PLAN_SINGLE_INSTRUCTIONS),
-        5: ("Refine", REFINE_INSTRUCTIONS),
-        6: ("Approve", APPROVE_INSTRUCTIONS),
-        7: ("Execute", EXECUTE_SINGLE_INSTRUCTIONS),
-    },
-    "ecosystem": {
-        1: ("Triage", TRIAGE_INSTRUCTIONS),
-        2: ("Assess", ASSESS_ECOSYSTEM_INSTRUCTIONS),
-        3: ("Understand", UNDERSTAND_ECOSYSTEM_INSTRUCTIONS),
-        4: ("Verify Understanding", VERIFY_UNDERSTANDING_INSTRUCTIONS),
-        5: ("Plan", PLAN_ECOSYSTEM_INSTRUCTIONS),
-        6: ("Refine", REFINE_INSTRUCTIONS),
-        7: ("Approve", APPROVE_INSTRUCTIONS),
-        8: ("Execute", EXECUTE_ECOSYSTEM_INSTRUCTIONS),
-    },
-    "greenfield": {
-        1: ("Triage", TRIAGE_INSTRUCTIONS),
-        2: ("Assess Requirements", ASSESS_GREENFIELD_INSTRUCTIONS),
-        3: ("Understand", UNDERSTAND_GREENFIELD_INSTRUCTIONS),
-        4: ("Design", DESIGN_GREENFIELD_INSTRUCTIONS),
-        5: ("Refine", REFINE_INSTRUCTIONS),
-        6: ("Approve", APPROVE_INSTRUCTIONS),
-        7: ("Create", CREATE_GREENFIELD_INSTRUCTIONS),
-    },
-    "problem": {
-        1: ("Triage", TRIAGE_INSTRUCTIONS),
-        2: ("Diagnose", DIAGNOSE_PROBLEM_INSTRUCTIONS),
-        3: ("Understand", UNDERSTAND_SIMPLE_INSTRUCTIONS),
-        4: ("Target Fix", TARGET_FIX_PROBLEM_INSTRUCTIONS),
-        5: ("Refine", REFINE_INSTRUCTIONS),
-        6: ("Approve", APPROVE_INSTRUCTIONS),
-        7: ("Apply Fix", APPLY_FIX_PROBLEM_INSTRUCTIONS),
-    },
-}
+# ============================================================================
+# MESSAGE BUILDERS
+# ============================================================================
 
 
-# =============================================================================
-# OUTPUT FORMATTING
-# =============================================================================
+def build_read_guide(scope: str) -> str:
+    """Build scope-specific read guide from shared template + variant parts."""
+    v = READ_GUIDE_VARIANTS[scope]
+    return (
+        v["heading"] + "\n"
+        "\n"
+        "All references are in the `references/` subdirectory of the prompt-engineer\n"
+        "skill directory. NOTE: *NOT* the prompt_engineer scripts directory, but the\n"
+        "prompt-engineer skill directory, which also contains the SKILL.md file.\n"
+        "\n"
+        "ALWAYS read: references/efficiency.md\n"
+        "  -> " + v["efficiency_note"] + "\n"
+        "\n"
+        + v["selection_intro"] + "\n"
+        + v["categories"] + "\n"
+        "\n"
+        + v["footer"] + "\n"
+        "\n"
+        "NEVER read papers/**/* - use references/ only."
+    )
+
+
+READ_GUIDES = {s: build_read_guide(s) for s in SCOPES}
 
 
 def get_references_dir() -> Path:
@@ -1012,6 +967,56 @@ def build_next_command(step: int, scope: str | None, categories: list[str] | Non
     return cmd
 
 
+# ============================================================================
+# STEP DEFINITIONS
+# ============================================================================
+
+SCOPE_STEPS = {
+    "single-prompt": {
+        1: ("Triage", TRIAGE_INSTRUCTIONS),
+        2: ("Assess", ASSESS_SINGLE_INSTRUCTIONS),
+        3: ("Understand", UNDERSTAND_SIMPLE_INSTRUCTIONS),
+        4: ("Plan", PLAN_SINGLE_INSTRUCTIONS),
+        5: ("Refine", REFINE_INSTRUCTIONS),
+        6: ("Approve", APPROVE_INSTRUCTIONS),
+        7: ("Execute", EXECUTE_SINGLE_INSTRUCTIONS),
+    },
+    "ecosystem": {
+        1: ("Triage", TRIAGE_INSTRUCTIONS),
+        2: ("Assess", ASSESS_ECOSYSTEM_INSTRUCTIONS),
+        3: ("Understand", UNDERSTAND_ECOSYSTEM_INSTRUCTIONS),
+        4: ("Verify Understanding", VERIFY_UNDERSTANDING_INSTRUCTIONS),
+        5: ("Plan", PLAN_ECOSYSTEM_INSTRUCTIONS),
+        6: ("Refine", REFINE_INSTRUCTIONS),
+        7: ("Approve", APPROVE_INSTRUCTIONS),
+        8: ("Execute", EXECUTE_ECOSYSTEM_INSTRUCTIONS),
+    },
+    "greenfield": {
+        1: ("Triage", TRIAGE_INSTRUCTIONS),
+        2: ("Assess Requirements", ASSESS_GREENFIELD_INSTRUCTIONS),
+        3: ("Understand", UNDERSTAND_GREENFIELD_INSTRUCTIONS),
+        4: ("Design", DESIGN_GREENFIELD_INSTRUCTIONS),
+        5: ("Refine", REFINE_INSTRUCTIONS),
+        6: ("Approve", APPROVE_INSTRUCTIONS),
+        7: ("Create", CREATE_GREENFIELD_INSTRUCTIONS),
+    },
+    "problem": {
+        1: ("Triage", TRIAGE_INSTRUCTIONS),
+        2: ("Diagnose", DIAGNOSE_PROBLEM_INSTRUCTIONS),
+        3: ("Understand", UNDERSTAND_SIMPLE_INSTRUCTIONS),
+        4: ("Target Fix", TARGET_FIX_PROBLEM_INSTRUCTIONS),
+        5: ("Refine", REFINE_INSTRUCTIONS),
+        6: ("Approve", APPROVE_INSTRUCTIONS),
+        7: ("Apply Fix", APPLY_FIX_PROBLEM_INSTRUCTIONS),
+    },
+}
+
+
+# ============================================================================
+# OUTPUT FORMATTING
+# ============================================================================
+
+
 def format_output(step: int, scope: str | None, categories: list[str] | None) -> str:
     """Format complete step output for the given step and scope.
 
@@ -1059,9 +1064,9 @@ def format_output(step: int, scope: str | None, categories: list[str] | None) ->
     return format_step(body, next_cmd or "", title=f"PROMPT ENGINEER - {title}")
 
 
-# =============================================================================
+# ============================================================================
 # ENTRY POINT
-# =============================================================================
+# ============================================================================
 
 
 def main():
