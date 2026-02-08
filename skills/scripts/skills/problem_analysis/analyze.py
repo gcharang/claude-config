@@ -34,265 +34,270 @@ TOTAL_STEPS = 5
 
 # --- STEP 1: GATE -----------------------------------------------------------
 
-GATE_INSTRUCTIONS = """\
-CHECK FOR MULTIPLE PROBLEMS:
-  Scan input for signs of multiple distinct issues:
-  - Multiple symptoms described ('X AND Y')
-  - Problems in unrelated components
-  - Symptoms with independent causes
-
-  If multiple problems -> STOP. Use AskUserQuestion to ask user
-  to isolate ONE problem. Do not proceed until single problem.
-
-CHECK FOR SUFFICIENT INFORMATION:
-  A problem statement must include:
-  - What component or behavior is affected
-  - What the expected behavior is
-  - What the actual observed behavior is
-
-  If missing or vague -> Use AskUserQuestion to clarify.
-
-RESTATE THE PROBLEM:
-  Reframe in observable terms:
-  'When [conditions], [component] exhibits [observed behavior]
-   instead of [expected behavior]'
-
-SEPARATE KNOWN FROM ASSUMED:
-  KNOWN: From user report or visible context
-  ASSUMED: Things investigation must verify
-
-OUTPUT FORMAT:
-```
-VALIDATION: [PASS / BLOCKED: reason]
-
-REFINED PROBLEM STATEMENT:
-When [conditions], [component] exhibits [observed behavior]
-instead of [expected behavior]
-
-KNOWN FACTS:
-- [fact 1]
-- [fact 2]
-
-ASSUMPTIONS TO VERIFY:
-- [assumption 1]
-- [assumption 2]
-```"""
+GATE_INSTRUCTIONS = (
+    "CHECK FOR MULTIPLE PROBLEMS:\n"
+    "  Scan input for signs of multiple distinct issues:\n"
+    "  - Multiple symptoms described ('X AND Y')\n"
+    "  - Problems in unrelated components\n"
+    "  - Symptoms with independent causes\n"
+    "\n"
+    "  If multiple problems -> STOP. Use AskUserQuestion to ask user\n"
+    "  to isolate ONE problem. Do not proceed until single problem.\n"
+    "\n"
+    "CHECK FOR SUFFICIENT INFORMATION:\n"
+    "  A problem statement must include:\n"
+    "  - What component or behavior is affected\n"
+    "  - What the expected behavior is\n"
+    "  - What the actual observed behavior is\n"
+    "\n"
+    "  If missing or vague -> Use AskUserQuestion to clarify.\n"
+    "\n"
+    "RESTATE THE PROBLEM:\n"
+    "  Reframe in observable terms:\n"
+    "  'When [conditions], [component] exhibits [observed behavior]\n"
+    "   instead of [expected behavior]'\n"
+    "\n"
+    "SEPARATE KNOWN FROM ASSUMED:\n"
+    "  KNOWN: From user report or visible context\n"
+    "  ASSUMED: Things investigation must verify\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "VALIDATION: [PASS / BLOCKED: reason]\n"
+    "\n"
+    "REFINED PROBLEM STATEMENT:\n"
+    "When [conditions], [component] exhibits [observed behavior]\n"
+    "instead of [expected behavior]\n"
+    "\n"
+    "KNOWN FACTS:\n"
+    "- [fact 1]\n"
+    "- [fact 2]\n"
+    "\n"
+    "ASSUMPTIONS TO VERIFY:\n"
+    "- [assumption 1]\n"
+    "- [assumption 2]\n"
+    "```"
+)
 
 # --- STEP 2: HYPOTHESIZE ----------------------------------------------------
 
-HYPOTHESIZE_INSTRUCTIONS = """\
-GENERATE 2-4 DISTINCT HYPOTHESES:
-  Each hypothesis must:
-  - Differ on mechanism or location (not just phrasing)
-  - Be framed as a CONDITION THAT EXISTS, not an absence
-  - Predict something examinable (where to look, what to find)
-
-FRAMING RULES (critical):
-  WRONG: 'The validation is missing'
-  RIGHT: 'User input reaches the database query without sanitization'
-
-  WRONG: 'There's no error handling'
-  RIGHT: 'Exceptions in the payment callback propagate uncaught,
-          terminating the request without rollback'
-
-RANK BY PLAUSIBILITY:
-  Order hypotheses by likelihood given available context.
-  This guides investigation order but doesn't preclude alternatives.
-
-OUTPUT FORMAT:
-```
-HYPOTHESES:
-
-H1 (highest priority): [name]
-    Mechanism: [how this would cause the symptom]
-    Testable by: [what to examine, what you'd expect to find]
-
-H2: [name]
-    Mechanism: [how this would cause the symptom]
-    Testable by: [what to examine, what you'd expect to find]
-
-[H3, H4 if generated]
-
-INVESTIGATION PLAN:
-Will examine H1 first because [reason], then H2 if H1 doesn't hold.
-```"""
+HYPOTHESIZE_INSTRUCTIONS = (
+    "GENERATE 2-4 DISTINCT HYPOTHESES:\n"
+    "  Each hypothesis must:\n"
+    "  - Differ on mechanism or location (not just phrasing)\n"
+    "  - Be framed as a CONDITION THAT EXISTS, not an absence\n"
+    "  - Predict something examinable (where to look, what to find)\n"
+    "\n"
+    "FRAMING RULES (critical):\n"
+    "  WRONG: 'The validation is missing'\n"
+    "  RIGHT: 'User input reaches the database query without sanitization'\n"
+    "\n"
+    "  WRONG: 'There's no error handling'\n"
+    "  RIGHT: 'Exceptions in the payment callback propagate uncaught,\n"
+    "          terminating the request without rollback'\n"
+    "\n"
+    "RANK BY PLAUSIBILITY:\n"
+    "  Order hypotheses by likelihood given available context.\n"
+    "  This guides investigation order but doesn't preclude alternatives.\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "HYPOTHESES:\n"
+    "\n"
+    "H1 (highest priority): [name]\n"
+    "    Mechanism: [how this would cause the symptom]\n"
+    "    Testable by: [what to examine, what you'd expect to find]\n"
+    "\n"
+    "H2: [name]\n"
+    "    Mechanism: [how this would cause the symptom]\n"
+    "    Testable by: [what to examine, what you'd expect to find]\n"
+    "\n"
+    "[H3, H4 if generated]\n"
+    "\n"
+    "INVESTIGATION PLAN:\n"
+    "Will examine H1 first because [reason], then H2 if H1 doesn't hold.\n"
+    "```"
+)
 
 # --- STEP 3: INVESTIGATE ----------------------------------------------------
 
-INVESTIGATE_INSTRUCTIONS = """\
-SELECT what to examine:
-  - Highest-priority OPEN hypothesis, OR
-  - Deepen a SUPPORTED hypothesis (ask 'why does this exist?'), OR
-  - Examine an unexplored aspect of the problem
-
-EXAMINE specific code, configuration, or documentation.
-  Note exact files and line numbers. This creates an audit trail.
-
-ASSESS findings:
-  Does evidence SUPPORT, CONTRADICT, or NEITHER?
-  Be specific: 'Line 47 of auth.py contains X which would cause Y'
-  Not: 'This looks problematic'
-
-UPDATE hypothesis status:
-  - SUPPORTED: Evidence confirms this hypothesis
-  - CONTRADICTED: Evidence rules this out
-  - OPEN: Not yet examined or inconclusive
-
-ANSWER READINESS QUESTIONS:
-
-Q1 EVIDENCE: Can you cite specific code/config/docs supporting root cause?
-   [YES / PARTIAL / NO]
-
-Q2 ALTERNATIVES: Did you examine evidence for at least one alternative?
-   [YES / PARTIAL / NO]
-
-Q3 EXPLANATION: Does root cause fully explain the symptom?
-   [YES / PARTIAL / NO]
-
-Q4 FRAMING: Is root cause a positive condition (not absence)?
-   [YES / NO]
-
-COMPUTE CONFIDENCE:
-  - 4 points = HIGH (ready to proceed)
-  - 3-3.5 = MEDIUM
-  - 2-2.5 = LOW
-  - <2 = INSUFFICIENT (keep investigating)
-
-OUTPUT FORMAT:
-```
-ITERATION FINDINGS:
-
-Examined: [which hypothesis or aspect]
-Evidence sought: [what you looked for]
-Evidence found: [what you found, with file:line references]
-Assessment: [SUPPORTS / CONTRADICTS / INCONCLUSIVE] because [reason]
-
-HYPOTHESIS STATUS:
-- H1: [SUPPORTED / CONTRADICTED / OPEN] - [brief reason]
-- H2: [SUPPORTED / CONTRADICTED / OPEN] - [brief reason]
-
-READINESS CHECK:
-- Q1 Evidence: [YES/PARTIAL/NO]
-- Q2 Alternatives: [YES/PARTIAL/NO]
-- Q3 Explanation: [YES/PARTIAL/NO]
-- Q4 Framing: [YES/NO]
-
-CONFIDENCE: [exploring/low/medium/high/certain]
-```"""
+INVESTIGATE_INSTRUCTIONS = (
+    "SELECT what to examine:\n"
+    "  - Highest-priority OPEN hypothesis, OR\n"
+    "  - Deepen a SUPPORTED hypothesis (ask 'why does this exist?'), OR\n"
+    "  - Examine an unexplored aspect of the problem\n"
+    "\n"
+    "EXAMINE specific code, configuration, or documentation.\n"
+    "  Note exact files and line numbers. This creates an audit trail.\n"
+    "\n"
+    "ASSESS findings:\n"
+    "  Does evidence SUPPORT, CONTRADICT, or NEITHER?\n"
+    "  Be specific: 'Line 47 of auth.py contains X which would cause Y'\n"
+    "  Not: 'This looks problematic'\n"
+    "\n"
+    "UPDATE hypothesis status:\n"
+    "  - SUPPORTED: Evidence confirms this hypothesis\n"
+    "  - CONTRADICTED: Evidence rules this out\n"
+    "  - OPEN: Not yet examined or inconclusive\n"
+    "\n"
+    "ANSWER READINESS QUESTIONS:\n"
+    "\n"
+    "Q1 EVIDENCE: Can you cite specific code/config/docs supporting root cause?\n"
+    "   [YES / PARTIAL / NO]\n"
+    "\n"
+    "Q2 ALTERNATIVES: Did you examine evidence for at least one alternative?\n"
+    "   [YES / PARTIAL / NO]\n"
+    "\n"
+    "Q3 EXPLANATION: Does root cause fully explain the symptom?\n"
+    "   [YES / PARTIAL / NO]\n"
+    "\n"
+    "Q4 FRAMING: Is root cause a positive condition (not absence)?\n"
+    "   [YES / NO]\n"
+    "\n"
+    "COMPUTE CONFIDENCE:\n"
+    "  - 4 points = HIGH (ready to proceed)\n"
+    "  - 3-3.5 = MEDIUM\n"
+    "  - 2-2.5 = LOW\n"
+    "  - <2 = INSUFFICIENT (keep investigating)\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "ITERATION FINDINGS:\n"
+    "\n"
+    "Examined: [which hypothesis or aspect]\n"
+    "Evidence sought: [what you looked for]\n"
+    "Evidence found: [what you found, with file:line references]\n"
+    "Assessment: [SUPPORTS / CONTRADICTS / INCONCLUSIVE] because [reason]\n"
+    "\n"
+    "HYPOTHESIS STATUS:\n"
+    "- H1: [SUPPORTED / CONTRADICTED / OPEN] - [brief reason]\n"
+    "- H2: [SUPPORTED / CONTRADICTED / OPEN] - [brief reason]\n"
+    "\n"
+    "READINESS CHECK:\n"
+    "- Q1 Evidence: [YES/PARTIAL/NO]\n"
+    "- Q2 Alternatives: [YES/PARTIAL/NO]\n"
+    "- Q3 Explanation: [YES/PARTIAL/NO]\n"
+    "- Q4 Framing: [YES/NO]\n"
+    "\n"
+    "CONFIDENCE: [exploring/low/medium/high/certain]\n"
+    "```"
+)
 
 # --- STEP 4: FORMULATE ------------------------------------------------------
 
-FORMULATE_INSTRUCTIONS = """\
-STATE THE ROOT CAUSE:
-  Template: 'The system exhibits [symptom] because [condition exists]'
-
-  The condition must be:
-  - Specific enough to locate (points to code/config)
-  - General enough to allow multiple remediation approaches
-
-TRACE THE CAUSAL CHAIN:
-  [root cause] -> [intermediate] -> [intermediate] -> [symptom]
-  Each link should follow logically. Note any gaps as uncertainties.
-
-VALIDATE FRAMING (critical):
-
-  CHECK 1 - Positive framing:
-  Does root cause contain 'lack of', 'missing', 'no X', 'doesn't have'?
-  If YES -> REFRAME before proceeding.
-
-  WRONG: 'The system lacks input validation'
-  RIGHT: 'User input flows directly to SQL query without sanitization'
-
-  CHECK 2 - Solution independence:
-  Does root cause implicitly prescribe exactly one solution?
-  If YES -> REFRAME to be more general.
-
-  WRONG: 'The retry count is set to 0' (prescribes: set it higher)
-  RIGHT: 'Failed API calls terminate immediately without retry,
-          causing transient failures to surface as errors'
-
-DOCUMENT UNCERTAINTIES:
-  What wasn't verified? What would require runtime info to confirm?
-
-OUTPUT FORMAT:
-```
-ROOT CAUSE:
-[validated statement - must pass both framing checks]
-
-CAUSAL CHAIN:
-[root cause]
-  -> [intermediate 1]
-  -> [intermediate 2]
-  -> [observed symptom]
-
-FRAMING VALIDATION:
-- Positive framing (no absences): [PASS/FAIL - if fail, show reframed]
-- Solution independence: [PASS/FAIL - if fail, show reframed]
-
-REMAINING UNCERTAINTIES:
-- [what wasn't verified]
-- [what assumptions remain]
-```"""
+FORMULATE_INSTRUCTIONS = (
+    "STATE THE ROOT CAUSE:\n"
+    "  Template: 'The system exhibits [symptom] because [condition exists]'\n"
+    "\n"
+    "  The condition must be:\n"
+    "  - Specific enough to locate (points to code/config)\n"
+    "  - General enough to allow multiple remediation approaches\n"
+    "\n"
+    "TRACE THE CAUSAL CHAIN:\n"
+    "  [root cause] -> [intermediate] -> [intermediate] -> [symptom]\n"
+    "  Each link should follow logically. Note any gaps as uncertainties.\n"
+    "\n"
+    "VALIDATE FRAMING (critical):\n"
+    "\n"
+    "  CHECK 1 - Positive framing:\n"
+    "  Does root cause contain 'lack of', 'missing', 'no X', 'doesn't have'?\n"
+    "  If YES -> REFRAME before proceeding.\n"
+    "\n"
+    "  WRONG: 'The system lacks input validation'\n"
+    "  RIGHT: 'User input flows directly to SQL query without sanitization'\n"
+    "\n"
+    "  CHECK 2 - Solution independence:\n"
+    "  Does root cause implicitly prescribe exactly one solution?\n"
+    "  If YES -> REFRAME to be more general.\n"
+    "\n"
+    "  WRONG: 'The retry count is set to 0' (prescribes: set it higher)\n"
+    "  RIGHT: 'Failed API calls terminate immediately without retry,\n"
+    "          causing transient failures to surface as errors'\n"
+    "\n"
+    "DOCUMENT UNCERTAINTIES:\n"
+    "  What wasn't verified? What would require runtime info to confirm?\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "ROOT CAUSE:\n"
+    "[validated statement - must pass both framing checks]\n"
+    "\n"
+    "CAUSAL CHAIN:\n"
+    "[root cause]\n"
+    "  -> [intermediate 1]\n"
+    "  -> [intermediate 2]\n"
+    "  -> [observed symptom]\n"
+    "\n"
+    "FRAMING VALIDATION:\n"
+    "- Positive framing (no absences): [PASS/FAIL - if fail, show reframed]\n"
+    "- Solution independence: [PASS/FAIL - if fail, show reframed]\n"
+    "\n"
+    "REMAINING UNCERTAINTIES:\n"
+    "- [what wasn't verified]\n"
+    "- [what assumptions remain]\n"
+    "```"
+)
 
 # --- STEP 5: OUTPUT ----------------------------------------------------------
 
-OUTPUT_INSTRUCTIONS = """\
-Compile final analysis report using all findings from previous steps.
-
-OUTPUT FORMAT:
-```
-================================================================================
-                         PROBLEM ANALYSIS REPORT
-================================================================================
-
-ORIGINAL PROBLEM:
-[verbatim from user]
-
-REFINED PROBLEM:
-[observable-framed version from Step 1]
-
---------------------------------------------------------------------------------
-
-ROOT CAUSE:
-[validated statement from Step 4]
-
-CAUSAL CHAIN:
-[root cause]
-  -> [intermediate cause 1]
-  -> [intermediate cause 2]
-  -> [observed symptom]
-
---------------------------------------------------------------------------------
-
-SUPPORTING EVIDENCE:
-- [file:line] -- [what it shows]
-- [file:line] -- [what it shows]
-
---------------------------------------------------------------------------------
-
-CONFIDENCE: [HIGH / MEDIUM / LOW / INSUFFICIENT]
-
-  Evidence (specific citations exist):      [YES / PARTIAL / NO]
-  Alternatives (others considered):         [YES / PARTIAL / NO]
-  Explanation (fully accounts for symptom): [YES / PARTIAL / NO]
-  Framing (positive, solution-independent): [YES / NO]
-
---------------------------------------------------------------------------------
-
-REMAINING UNCERTAINTIES:
-- [what wasn't verified]
-- [what assumptions remain]
-
---------------------------------------------------------------------------------
-
-INVESTIGATION LOG:
-[Include key findings from each Step 3 iteration]
-
-================================================================================
-```
-
-This completes the problem analysis. The root cause and supporting
-evidence can now be used as input for solution discovery."""
+OUTPUT_INSTRUCTIONS = (
+    "Compile final analysis report using all findings from previous steps.\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "================================================================================\n"
+    "                         PROBLEM ANALYSIS REPORT\n"
+    "================================================================================\n"
+    "\n"
+    "ORIGINAL PROBLEM:\n"
+    "[verbatim from user]\n"
+    "\n"
+    "REFINED PROBLEM:\n"
+    "[observable-framed version from Step 1]\n"
+    "\n"
+    "--------------------------------------------------------------------------------\n"
+    "\n"
+    "ROOT CAUSE:\n"
+    "[validated statement from Step 4]\n"
+    "\n"
+    "CAUSAL CHAIN:\n"
+    "[root cause]\n"
+    "  -> [intermediate cause 1]\n"
+    "  -> [intermediate cause 2]\n"
+    "  -> [observed symptom]\n"
+    "\n"
+    "--------------------------------------------------------------------------------\n"
+    "\n"
+    "SUPPORTING EVIDENCE:\n"
+    "- [file:line] -- [what it shows]\n"
+    "- [file:line] -- [what it shows]\n"
+    "\n"
+    "--------------------------------------------------------------------------------\n"
+    "\n"
+    "CONFIDENCE: [HIGH / MEDIUM / LOW / INSUFFICIENT]\n"
+    "\n"
+    "  Evidence (specific citations exist):      [YES / PARTIAL / NO]\n"
+    "  Alternatives (others considered):         [YES / PARTIAL / NO]\n"
+    "  Explanation (fully accounts for symptom): [YES / PARTIAL / NO]\n"
+    "  Framing (positive, solution-independent): [YES / NO]\n"
+    "\n"
+    "--------------------------------------------------------------------------------\n"
+    "\n"
+    "REMAINING UNCERTAINTIES:\n"
+    "- [what wasn't verified]\n"
+    "- [what assumptions remain]\n"
+    "\n"
+    "--------------------------------------------------------------------------------\n"
+    "\n"
+    "INVESTIGATION LOG:\n"
+    "[Include key findings from each Step 3 iteration]\n"
+    "\n"
+    "================================================================================\n"
+    "```\n"
+    "\n"
+    "This completes the problem analysis. The root cause and supporting\n"
+    "evidence can now be used as input for solution discovery."
+)
 
 
 # ============================================================================

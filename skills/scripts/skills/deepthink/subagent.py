@@ -33,372 +33,380 @@ TOTAL_STEPS = 8
 
 # --- STEP 1: CONTEXT_GROUNDING -----------------------------------------------
 
-CONTEXT_GROUNDING_INSTRUCTIONS = """\
-Before beginning analysis, ground yourself in the shared context.
-
-PART A - RE-READ SHARED CONTEXT:
-  Read the shared context again. Restate each element:
-  - CLARIFIED QUESTION: [restate in your own words]
-  - DOMAIN: [from shared context]
-  - FIRST PRINCIPLES: [list from shared context]
-  - QUESTION TYPE: [from shared context]
-  - EVALUATION CRITERIA: [from shared context]
-  - KEY ANALOGIES: [from shared context]
-
-PART B - STEP BACK (perspective-specific):
-  From YOUR assigned perspective, which 2-3 first principles
-  are MOST relevant? Why do these matter more than others
-  for your analytical lens?
-
-PART C - TASK UNDERSTANDING:
-  Review your task definition:
-  - Name: [from dispatch]
-  - Strategy: [from dispatch]
-  - Task: [from dispatch]
-  - Sub-Questions: [from dispatch]
-  - Unique Value: [from dispatch]
-
-  Restate your task in your own words.
-  What unique contribution will you provide that others won't?
-
-OUTPUT FORMAT:
-```
-RESTATED CONTEXT:
-- Question: [your restatement]
-- Domain: [domain]
-- Key principles for MY perspective: [2-3 most relevant]
-
-MY TASK:
-[restatement in own words]
-
-MY UNIQUE CONTRIBUTION:
-[what I will provide that others likely won't]
-```"""
+CONTEXT_GROUNDING_INSTRUCTIONS = (
+    "Before beginning analysis, ground yourself in the shared context.\n"
+    "\n"
+    "PART A - RE-READ SHARED CONTEXT:\n"
+    "  Read the shared context again. Restate each element:\n"
+    "  - CLARIFIED QUESTION: [restate in your own words]\n"
+    "  - DOMAIN: [from shared context]\n"
+    "  - FIRST PRINCIPLES: [list from shared context]\n"
+    "  - QUESTION TYPE: [from shared context]\n"
+    "  - EVALUATION CRITERIA: [from shared context]\n"
+    "  - KEY ANALOGIES: [from shared context]\n"
+    "\n"
+    "PART B - STEP BACK (perspective-specific):\n"
+    "  From YOUR assigned perspective, which 2-3 first principles\n"
+    "  are MOST relevant? Why do these matter more than others\n"
+    "  for your analytical lens?\n"
+    "\n"
+    "PART C - TASK UNDERSTANDING:\n"
+    "  Review your task definition:\n"
+    "  - Name: [from dispatch]\n"
+    "  - Strategy: [from dispatch]\n"
+    "  - Task: [from dispatch]\n"
+    "  - Sub-Questions: [from dispatch]\n"
+    "  - Unique Value: [from dispatch]\n"
+    "\n"
+    "  Restate your task in your own words.\n"
+    "  What unique contribution will you provide that others won't?\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "RESTATED CONTEXT:\n"
+    "- Question: [your restatement]\n"
+    "- Domain: [domain]\n"
+    "- Key principles for MY perspective: [2-3 most relevant]\n"
+    "\n"
+    "MY TASK:\n"
+    "[restatement in own words]\n"
+    "\n"
+    "MY UNIQUE CONTRIBUTION:\n"
+    "[what I will provide that others likely won't]\n"
+    "```"
+)
 
 # --- STEP 2: ANALOGICAL_GENERATION -------------------------------------------
 
-ANALOGICAL_GENERATION_INSTRUCTIONS = """\
-Before analyzing, recall relevant precedents from YOUR analytical lens.
-
-Generate 2-3 examples of similar problems approached from your
-perspective. These should be:
-  - Relevant to the current question
-  - Distinct from each other
-  - Drawn from your assigned domain/perspective
-
-For each example:
-  - Describe the problem briefly
-  - Explain how it was approached from your perspective
-  - State what insight transfers to the current question
-
-If the shared context already contains highly relevant analogies,
-you may reference those and add 1-2 perspective-specific ones.
-
-OUTPUT FORMAT:
-```
-SELF-GENERATED ANALOGIES:
-
-1. [Problem]: [brief description]
-   Approach: [how your perspective handled it]
-   Transfer: [what applies to current question]
-
-2. [Problem]: [brief description]
-   Approach: [how addressed]
-   Transfer: [applicable insight]
-```"""
+ANALOGICAL_GENERATION_INSTRUCTIONS = (
+    "Before analyzing, recall relevant precedents from YOUR analytical lens.\n"
+    "\n"
+    "Generate 2-3 examples of similar problems approached from your\n"
+    "perspective. These should be:\n"
+    "  - Relevant to the current question\n"
+    "  - Distinct from each other\n"
+    "  - Drawn from your assigned domain/perspective\n"
+    "\n"
+    "For each example:\n"
+    "  - Describe the problem briefly\n"
+    "  - Explain how it was approached from your perspective\n"
+    "  - State what insight transfers to the current question\n"
+    "\n"
+    "If the shared context already contains highly relevant analogies,\n"
+    "you may reference those and add 1-2 perspective-specific ones.\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "SELF-GENERATED ANALOGIES:\n"
+    "\n"
+    "1. [Problem]: [brief description]\n"
+    "   Approach: [how your perspective handled it]\n"
+    "   Transfer: [what applies to current question]\n"
+    "\n"
+    "2. [Problem]: [brief description]\n"
+    "   Approach: [how addressed]\n"
+    "   Transfer: [applicable insight]\n"
+    "```"
+)
 
 # --- STEP 3: PLANNING --------------------------------------------------------
 
-PLANNING_INSTRUCTIONS = """\
-Before analyzing, devise a plan for approaching this from your
-perspective.
-
-Let's first understand the problem and devise a plan to solve it.
-Then we will carry out the plan step by step.
-
-PART A - APPROACH OUTLINE:
-  What specific aspects will you examine?
-  In what order should they be addressed?
-  What intermediate conclusions do you need to reach?
-
-PART B - EVIDENCE SOURCES:
-  What evidence will you draw on?
-  - First principles from Step 1
-  - Analogies from Step 2
-  - Domain knowledge
-  - Assigned sub-questions
-
-PART C - SUCCESS CRITERIA:
-  What would a complete analysis from your perspective include?
-  How will you know when you've done enough?
-
-OUTPUT FORMAT:
-```
-ANALYSIS PLAN:
-1. [First aspect to examine]
-2. [Second aspect]
-3. [Third aspect]
-...
-
-EVIDENCE I WILL USE:
-- [source 1]
-- [source 2]
-
-SUCCESS CRITERIA:
-- [criterion 1]
-- [criterion 2]
-```"""
+PLANNING_INSTRUCTIONS = (
+    "Before analyzing, devise a plan for approaching this from your\n"
+    "perspective.\n"
+    "\n"
+    "Let's first understand the problem and devise a plan to solve it.\n"
+    "Then we will carry out the plan step by step.\n"
+    "\n"
+    "PART A - APPROACH OUTLINE:\n"
+    "  What specific aspects will you examine?\n"
+    "  In what order should they be addressed?\n"
+    "  What intermediate conclusions do you need to reach?\n"
+    "\n"
+    "PART B - EVIDENCE SOURCES:\n"
+    "  What evidence will you draw on?\n"
+    "  - First principles from Step 1\n"
+    "  - Analogies from Step 2\n"
+    "  - Domain knowledge\n"
+    "  - Assigned sub-questions\n"
+    "\n"
+    "PART C - SUCCESS CRITERIA:\n"
+    "  What would a complete analysis from your perspective include?\n"
+    "  How will you know when you've done enough?\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "ANALYSIS PLAN:\n"
+    "1. [First aspect to examine]\n"
+    "2. [Second aspect]\n"
+    "3. [Third aspect]\n"
+    "...\n"
+    "\n"
+    "EVIDENCE I WILL USE:\n"
+    "- [source 1]\n"
+    "- [source 2]\n"
+    "\n"
+    "SUCCESS CRITERIA:\n"
+    "- [criterion 1]\n"
+    "- [criterion 2]\n"
+    "```"
+)
 
 # --- STEP 4: ANALYSIS --------------------------------------------------------
 
-ANALYSIS_INSTRUCTIONS = """\
-Execute your analysis plan from Step 3.
-Work through each aspect step by step.
-
-EXPLORATION OPTION:
-  If your analysis requires concrete evidence not in the shared context:
-  - Use Read/Glob/Grep to examine specific files or patterns
-  - Keep exploration targeted -- only what your perspective needs
-  - Cite evidence from exploration with file:line references
-  If shared context is sufficient, proceed without exploration.
-
-REQUIREMENTS:
-  - Follow your plan systematically
-  - Ground each claim in evidence (cite source)
-  - Mark confidence on each major claim: HIGH / MEDIUM / LOW
-  - Address your assigned sub-questions explicitly
-
-CONFIDENCE MARKERS:
-  - HIGH: Strong reasoning, multiple sources, well-supported
-  - MEDIUM: Reasonable but could be contested, single source
-  - LOW: Speculative, limited evidence, tentative
-
-EVIDENCE GROUNDING:
-  For each major claim, cite source:
-  - (FP): First principle from shared context
-  - (AN): Analogy from Step 2
-  - (DK): Domain knowledge
-  - (UN): Ungrounded - flag explicitly
-
-OUTPUT FORMAT:
-```
-ANALYSIS:
-
-[Aspect 1 from plan]
-[Your reasoning] (source) [CONFIDENCE]
-
-[Aspect 2 from plan]
-[Your reasoning] (source) [CONFIDENCE]
-
-...
-
-PROPOSALS/POSITIONS:
-
-1. [Proposal] [HIGH/MEDIUM/LOW]
-   Reasoning: [why]
-   Evidence: [sources]
-
-2. [Proposal] [CONFIDENCE]
-   Reasoning: [why]
-   Evidence: [sources]
-
-SUB-QUESTION RESPONSES:
-- [Q1]: [response] [CONFIDENCE]
-- [Q2]: [response] [CONFIDENCE]
-```"""
+ANALYSIS_INSTRUCTIONS = (
+    "Execute your analysis plan from Step 3.\n"
+    "Work through each aspect step by step.\n"
+    "\n"
+    "EXPLORATION OPTION:\n"
+    "  If your analysis requires concrete evidence not in the shared context:\n"
+    "  - Use Read/Glob/Grep to examine specific files or patterns\n"
+    "  - Keep exploration targeted -- only what your perspective needs\n"
+    "  - Cite evidence from exploration with file:line references\n"
+    "  If shared context is sufficient, proceed without exploration.\n"
+    "\n"
+    "REQUIREMENTS:\n"
+    "  - Follow your plan systematically\n"
+    "  - Ground each claim in evidence (cite source)\n"
+    "  - Mark confidence on each major claim: HIGH / MEDIUM / LOW\n"
+    "  - Address your assigned sub-questions explicitly\n"
+    "\n"
+    "CONFIDENCE MARKERS:\n"
+    "  - HIGH: Strong reasoning, multiple sources, well-supported\n"
+    "  - MEDIUM: Reasonable but could be contested, single source\n"
+    "  - LOW: Speculative, limited evidence, tentative\n"
+    "\n"
+    "EVIDENCE GROUNDING:\n"
+    "  For each major claim, cite source:\n"
+    "  - (FP): First principle from shared context\n"
+    "  - (AN): Analogy from Step 2\n"
+    "  - (DK): Domain knowledge\n"
+    "  - (UN): Ungrounded - flag explicitly\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "ANALYSIS:\n"
+    "\n"
+    "[Aspect 1 from plan]\n"
+    "[Your reasoning] (source) [CONFIDENCE]\n"
+    "\n"
+    "[Aspect 2 from plan]\n"
+    "[Your reasoning] (source) [CONFIDENCE]\n"
+    "\n"
+    "...\n"
+    "\n"
+    "PROPOSALS/POSITIONS:\n"
+    "\n"
+    "1. [Proposal] [HIGH/MEDIUM/LOW]\n"
+    "   Reasoning: [why]\n"
+    "   Evidence: [sources]\n"
+    "\n"
+    "2. [Proposal] [CONFIDENCE]\n"
+    "   Reasoning: [why]\n"
+    "   Evidence: [sources]\n"
+    "\n"
+    "SUB-QUESTION RESPONSES:\n"
+    "- [Q1]: [response] [CONFIDENCE]\n"
+    "- [Q2]: [response] [CONFIDENCE]\n"
+    "```"
+)
 
 # --- STEP 5: SELF_VERIFICATION -----------------------------------------------
 
-SELF_VERIFICATION_INSTRUCTIONS = """\
-Verify your analysis through independent questioning.
-
-PART A - VERIFICATION QUESTIONS:
-  Generate 3-5 questions that would test your key claims.
-
-  Use OPEN questions (What is...? Where does...? How would...?)
-  NOT yes/no questions.
-  Yes/no questions bias toward agreement regardless of correctness.
-
-  Focus on:
-  - Claims marked MEDIUM or LOW confidence
-  - Claims critical to your main conclusions
-  - Assumptions that could be wrong
-
-PART B - INDEPENDENT ANSWERS:
-  For each question, answer based ONLY on:
-  - First principles from shared context
-  - Your analogies from Step 2
-  - Domain knowledge
-
-  CRITICAL: Do NOT look at your Step 4 analysis while answering.
-  Answer based on evidence, not what your analysis claims.
-
-PART C - DISCREPANCY CHECK:
-  Compare verification answers against your Step 4 analysis.
-  Where do they differ? List each discrepancy.
-  For significant discrepancies, note how to resolve.
-
-OUTPUT FORMAT:
-```
-VERIFICATION QUESTIONS:
-1. [open question about key claim]
-2. [open question]
-3. [open question]
-
-INDEPENDENT ANSWERS (without consulting analysis):
-1. [answer]
-2. [answer]
-3. [answer]
-
-DISCREPANCIES:
-- [claim from analysis] vs [verification answer]: [resolution]
-- Or: 'No significant discrepancies found'
-
-ANALYSIS UPDATES (if any):
-- [what to revise based on verification]
-```"""
+SELF_VERIFICATION_INSTRUCTIONS = (
+    "Verify your analysis through independent questioning.\n"
+    "\n"
+    "PART A - VERIFICATION QUESTIONS:\n"
+    "  Generate 3-5 questions that would test your key claims.\n"
+    "\n"
+    "  Use OPEN questions (What is...? Where does...? How would...?)\n"
+    "  NOT yes/no questions.\n"
+    "  Yes/no questions bias toward agreement regardless of correctness.\n"
+    "\n"
+    "  Focus on:\n"
+    "  - Claims marked MEDIUM or LOW confidence\n"
+    "  - Claims critical to your main conclusions\n"
+    "  - Assumptions that could be wrong\n"
+    "\n"
+    "PART B - INDEPENDENT ANSWERS:\n"
+    "  For each question, answer based ONLY on:\n"
+    "  - First principles from shared context\n"
+    "  - Your analogies from Step 2\n"
+    "  - Domain knowledge\n"
+    "\n"
+    "  CRITICAL: Do NOT look at your Step 4 analysis while answering.\n"
+    "  Answer based on evidence, not what your analysis claims.\n"
+    "\n"
+    "PART C - DISCREPANCY CHECK:\n"
+    "  Compare verification answers against your Step 4 analysis.\n"
+    "  Where do they differ? List each discrepancy.\n"
+    "  For significant discrepancies, note how to resolve.\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "VERIFICATION QUESTIONS:\n"
+    "1. [open question about key claim]\n"
+    "2. [open question]\n"
+    "3. [open question]\n"
+    "\n"
+    "INDEPENDENT ANSWERS (without consulting analysis):\n"
+    "1. [answer]\n"
+    "2. [answer]\n"
+    "3. [answer]\n"
+    "\n"
+    "DISCREPANCIES:\n"
+    "- [claim from analysis] vs [verification answer]: [resolution]\n"
+    "- Or: 'No significant discrepancies found'\n"
+    "\n"
+    "ANALYSIS UPDATES (if any):\n"
+    "- [what to revise based on verification]\n"
+    "```"
+)
 
 # --- STEP 6: PERSPECTIVE_CONTRAST --------------------------------------------
 
-PERSPECTIVE_CONTRAST_INSTRUCTIONS = """\
-Before finalizing, consider the strongest opposing perspective.
-
-PART A - OPPOSING POSITION:
-  What is the strongest argument AGAINST your main conclusions?
-  Steel-man this position - make it as compelling as possible.
-  Who would hold this view and why?
-
-PART B - CONFLICT ANALYSIS:
-  Where specifically does the opposing view conflict with yours?
-  What evidence does the opposition have that you lack?
-  What evidence do you have that they would dismiss?
-
-PART C - WHAT WOULD CHANGE YOUR MIND:
-  What specific evidence or argument would cause you to revise?
-  What assumptions are you making that could be wrong?
-
-This step strengthens your analysis by pre-emptively addressing
-the strongest counterarguments. If you cannot articulate a strong
-opposing view, your confidence should increase.
-
-OUTPUT FORMAT:
-```
-STRONGEST COUNTER-POSITION:
-[Steel-manned opposing view - make it compelling]
-
-WHO HOLDS THIS VIEW:
-[type of person/perspective that would argue this]
-
-KEY CONFLICTS:
-- My position: [X] vs Opposition: [Y]
-- My position: [A] vs Opposition: [B]
-
-WHAT WOULD CHANGE MY CONCLUSION:
-- [specific evidence that would cause revision]
-- [assumption that if wrong would change conclusion]
-```"""
+PERSPECTIVE_CONTRAST_INSTRUCTIONS = (
+    "Before finalizing, consider the strongest opposing perspective.\n"
+    "\n"
+    "PART A - OPPOSING POSITION:\n"
+    "  What is the strongest argument AGAINST your main conclusions?\n"
+    "  Steel-man this position - make it as compelling as possible.\n"
+    "  Who would hold this view and why?\n"
+    "\n"
+    "PART B - CONFLICT ANALYSIS:\n"
+    "  Where specifically does the opposing view conflict with yours?\n"
+    "  What evidence does the opposition have that you lack?\n"
+    "  What evidence do you have that they would dismiss?\n"
+    "\n"
+    "PART C - WHAT WOULD CHANGE YOUR MIND:\n"
+    "  What specific evidence or argument would cause you to revise?\n"
+    "  What assumptions are you making that could be wrong?\n"
+    "\n"
+    "This step strengthens your analysis by pre-emptively addressing\n"
+    "the strongest counterarguments. If you cannot articulate a strong\n"
+    "opposing view, your confidence should increase.\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "STRONGEST COUNTER-POSITION:\n"
+    "[Steel-manned opposing view - make it compelling]\n"
+    "\n"
+    "WHO HOLDS THIS VIEW:\n"
+    "[type of person/perspective that would argue this]\n"
+    "\n"
+    "KEY CONFLICTS:\n"
+    "- My position: [X] vs Opposition: [Y]\n"
+    "- My position: [A] vs Opposition: [B]\n"
+    "\n"
+    "WHAT WOULD CHANGE MY CONCLUSION:\n"
+    "- [specific evidence that would cause revision]\n"
+    "- [assumption that if wrong would change conclusion]\n"
+    "```"
+)
 
 # --- STEP 7: FAILURE_MODES ---------------------------------------------------
 
-FAILURE_MODES_INSTRUCTIONS = """\
-For each proposal from your analysis, provide actionable failure modes.
-
-Each failure mode MUST include all three elements:
-  1. ELEMENT: The specific proposal or claim
-  2. PROBLEM: What could go wrong or be invalid
-  3. ACTION: What would mitigate this risk or test this assumption
-
-Feedback missing any element is too vague to be useful.
-
-GOOD: 'ELEMENT: Claim X. PROBLEM: Assumes Y which may not hold.
-       ACTION: Verify Y by checking Z.'
-BAD:  'This proposal has risks.' (no specific element/problem/action)
-
-This step is CRITICAL.
-Analysis without actionable failure modes is incomplete.
-The quality gate will filter outputs without meaningful failure modes.
-
-OUTPUT FORMAT:
-```
-FAILURE MODES:
-
-For Proposal 1 ([name]):
-- ELEMENT: [specific claim]
-  PROBLEM: [what could go wrong]
-  ACTION: [mitigation or test]
-
-- ELEMENT: [another aspect]
-  PROBLEM: [risk]
-  ACTION: [mitigation]
-
-For Proposal 2 ([name]):
-- ELEMENT: [claim]
-  PROBLEM: [risk]
-  ACTION: [mitigation]
-
-[etc.]
-```"""
+FAILURE_MODES_INSTRUCTIONS = (
+    "For each proposal from your analysis, provide actionable failure modes.\n"
+    "\n"
+    "Each failure mode MUST include all three elements:\n"
+    "  1. ELEMENT: The specific proposal or claim\n"
+    "  2. PROBLEM: What could go wrong or be invalid\n"
+    "  3. ACTION: What would mitigate this risk or test this assumption\n"
+    "\n"
+    "Feedback missing any element is too vague to be useful.\n"
+    "\n"
+    "GOOD: 'ELEMENT: Claim X. PROBLEM: Assumes Y which may not hold.\n"
+    "       ACTION: Verify Y by checking Z.'\n"
+    "BAD:  'This proposal has risks.' (no specific element/problem/action)\n"
+    "\n"
+    "This step is CRITICAL.\n"
+    "Analysis without actionable failure modes is incomplete.\n"
+    "The quality gate will filter outputs without meaningful failure modes.\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "FAILURE MODES:\n"
+    "\n"
+    "For Proposal 1 ([name]):\n"
+    "- ELEMENT: [specific claim]\n"
+    "  PROBLEM: [what could go wrong]\n"
+    "  ACTION: [mitigation or test]\n"
+    "\n"
+    "- ELEMENT: [another aspect]\n"
+    "  PROBLEM: [risk]\n"
+    "  ACTION: [mitigation]\n"
+    "\n"
+    "For Proposal 2 ([name]):\n"
+    "- ELEMENT: [claim]\n"
+    "  PROBLEM: [risk]\n"
+    "  ACTION: [mitigation]\n"
+    "\n"
+    "[etc.]\n"
+    "```"
+)
 
 # --- STEP 8: OUTPUT_SYNTHESIS ------------------------------------------------
 
-OUTPUT_SYNTHESIS_INSTRUCTIONS = """\
-Synthesize your analysis into structured output for aggregation.
-
-The parent workflow will extract specific sections from your output.
-Use the EXACT format below for clean parsing.
-
-OUTPUT FORMAT:
-```
-## Core Findings
-
-Confidence: [HIGH|MEDIUM|LOW]
-
-[Your main conclusions from this perspective - 2-3 sentences]
-
-## Proposals
-
-1. [Proposal] [HIGH/MEDIUM/LOW]
-   Evidence: [key supporting reasoning]
-
-2. [Proposal] [CONFIDENCE]
-   Evidence: [key supporting reasoning]
-
-## Sub-Question Responses
-
-Q: [assigned sub-question 1]
-A: [your response]
-
-Q: [assigned sub-question 2]
-A: [your response]
-
-## Evidence Chains
-
-[Key reasoning chains that led to your conclusions]
-[Include intermediate insights even if conclusions changed]
-[These are valuable for synthesis even if final conclusion differs]
-
-## Failure Modes
-
-Proposal 1:
-- ELEMENT: [x] | PROBLEM: [y] | ACTION: [z]
-
-Proposal 2:
-- ELEMENT: [x] | PROBLEM: [y] | ACTION: [z]
-
-## Perspective Gaps
-
-[What your perspective likely misses or undervalues]
-[What other sub-agents should cover]
-[Where to weight your analysis less]
-
-## Opposing View
-
-[Steel-manned counter-position from Step 6]
-[What would change your conclusion]
-```
-
-This completes your sub-agent analysis.
-Your output will be collected for aggregation and synthesis."""
+OUTPUT_SYNTHESIS_INSTRUCTIONS = (
+    "Synthesize your analysis into structured output for aggregation.\n"
+    "\n"
+    "The parent workflow will extract specific sections from your output.\n"
+    "Use the EXACT format below for clean parsing.\n"
+    "\n"
+    "OUTPUT FORMAT:\n"
+    "```\n"
+    "## Core Findings\n"
+    "\n"
+    "Confidence: [HIGH|MEDIUM|LOW]\n"
+    "\n"
+    "[Your main conclusions from this perspective - 2-3 sentences]\n"
+    "\n"
+    "## Proposals\n"
+    "\n"
+    "1. [Proposal] [HIGH/MEDIUM/LOW]\n"
+    "   Evidence: [key supporting reasoning]\n"
+    "\n"
+    "2. [Proposal] [CONFIDENCE]\n"
+    "   Evidence: [key supporting reasoning]\n"
+    "\n"
+    "## Sub-Question Responses\n"
+    "\n"
+    "Q: [assigned sub-question 1]\n"
+    "A: [your response]\n"
+    "\n"
+    "Q: [assigned sub-question 2]\n"
+    "A: [your response]\n"
+    "\n"
+    "## Evidence Chains\n"
+    "\n"
+    "[Key reasoning chains that led to your conclusions]\n"
+    "[Include intermediate insights even if conclusions changed]\n"
+    "[These are valuable for synthesis even if final conclusion differs]\n"
+    "\n"
+    "## Failure Modes\n"
+    "\n"
+    "Proposal 1:\n"
+    "- ELEMENT: [x] | PROBLEM: [y] | ACTION: [z]\n"
+    "\n"
+    "Proposal 2:\n"
+    "- ELEMENT: [x] | PROBLEM: [y] | ACTION: [z]\n"
+    "\n"
+    "## Perspective Gaps\n"
+    "\n"
+    "[What your perspective likely misses or undervalues]\n"
+    "[What other sub-agents should cover]\n"
+    "[Where to weight your analysis less]\n"
+    "\n"
+    "## Opposing View\n"
+    "\n"
+    "[Steel-manned counter-position from Step 6]\n"
+    "[What would change your conclusion]\n"
+    "```\n"
+    "\n"
+    "This completes your sub-agent analysis.\n"
+    "Your output will be collected for aggregation and synthesis."
+)
 
 
 # ============================================================================

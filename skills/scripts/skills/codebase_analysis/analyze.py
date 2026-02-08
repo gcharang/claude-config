@@ -21,11 +21,12 @@ from skills.lib.workflow.prompts import format_step, roster_dispatch
 # SHARED PROMPTS
 # ============================================================================
 
-DISPATCH_CONTEXT = """\
-Analysis goals from SCOPE step:
-- User intent and what they want to understand
-- Identified focus areas (architecture, components, flows, etc.)
-- Defined objectives (1-3 specific goals)"""
+DISPATCH_CONTEXT = (
+    "Analysis goals from SCOPE step:\n"
+    "- User intent and what they want to understand\n"
+    "- Identified focus areas (architecture, components, flows, etc.)\n"
+    "- Defined objectives (1-3 specific goals)"
+)
 
 
 # ============================================================================
@@ -44,27 +45,28 @@ TOTAL_STEPS = 4
 
 # --- STEP 1: SCOPE -----------------------------------------------------------
 
-SCOPE_INSTRUCTIONS = """\
-PARSE user intent:
-  - What codebase(s) are we analyzing?
-  - What is the user trying to understand?
-  - Are there specific areas of interest mentioned?
-
-IDENTIFY focus areas:
-  - Architecture/structure understanding
-  - Specific component/feature deep-dive
-  - Technology stack assessment
-  - Integration patterns
-  - Data flows
-
-DEFINE goals (1-3 specific objectives):
-  - 'Understand how [system X] processes [Y]'
-  - 'Map dependencies between [A] and [B]'
-  - 'Document data flow from [input] to [output]'
-
-DO NOT seek user confirmation. Goals are internal guidance.
-
-ADVANCE: When goals defined, proceed to SURVEY."""
+SCOPE_INSTRUCTIONS = (
+    "PARSE user intent:\n"
+    "  - What codebase(s) are we analyzing?\n"
+    "  - What is the user trying to understand?\n"
+    "  - Are there specific areas of interest mentioned?\n"
+    "\n"
+    "IDENTIFY focus areas:\n"
+    "  - Architecture/structure understanding\n"
+    "  - Specific component/feature deep-dive\n"
+    "  - Technology stack assessment\n"
+    "  - Integration patterns\n"
+    "  - Data flows\n"
+    "\n"
+    "DEFINE goals (1-3 specific objectives):\n"
+    "  - 'Understand how [system X] processes [Y]'\n"
+    "  - 'Map dependencies between [A] and [B]'\n"
+    "  - 'Document data flow from [input] to [output]'\n"
+    "\n"
+    "DO NOT seek user confirmation. Goals are internal guidance.\n"
+    "\n"
+    "ADVANCE: When goals defined, proceed to SURVEY."
+)
 
 # --- STEP 2: SURVEY ----------------------------------------------------------
 
@@ -75,121 +77,125 @@ SURVEY_DISPATCH_AGENTS = [
     "[Focus area N: based on scope and codebase structure]",
 ]
 
-SURVEY_DISPATCH_GUIDANCE = """\
-DISPATCH GUIDANCE:
+SURVEY_DISPATCH_GUIDANCE = (
+    "DISPATCH GUIDANCE:\n"
+    "\n"
+    "Single codebase, focused scope:\n"
+    "  - One Explore agent with specific focus\n"
+    "\n"
+    "Large/broad scope:\n"
+    "  - Multiple parallel Explore agents by boundary\n"
+    "  - Example: frontend agent + backend agent + data agent\n"
+    "\n"
+    "Multiple repositories:\n"
+    "  - One Explore agent per repository\n"
+    "\n"
+    "Generate focus areas based on:\n"
+    "  1. User's stated understanding goals (from SCOPE)\n"
+    "  2. Codebase structure (from initial observation)\n"
+    "  3. Coverage of different system aspects"
+)
 
-Single codebase, focused scope:
-  - One Explore agent with specific focus
-
-Large/broad scope:
-  - Multiple parallel Explore agents by boundary
-  - Example: frontend agent + backend agent + data agent
-
-Multiple repositories:
-  - One Explore agent per repository
-
-Generate focus areas based on:
-  1. User's stated understanding goals (from SCOPE)
-  2. Codebase structure (from initial observation)
-  3. Coverage of different system aspects"""
-
-SURVEY_PROCESSING_INSTRUCTIONS = """\
-WAIT for Explore results.
-
-PROCESS findings:
-
-STRUCTURE:
-  - Directory organization
-  - File patterns
-  - Module boundaries
-
-PATTERNS:
-  - Architectural style (layered, microservices, monolithic)
-  - Code organization patterns
-  - Naming conventions
-
-FLOWS:
-  - Entry points
-  - Request/data flow paths
-  - Integration patterns
-
-DECISIONS:
-  - Technology choices
-  - Framework usage
-  - Dependencies
-
-ADVANCE: When exploration complete, proceed to DEEPEN."""
+SURVEY_PROCESSING_INSTRUCTIONS = (
+    "WAIT for Explore results.\n"
+    "\n"
+    "PROCESS findings:\n"
+    "\n"
+    "STRUCTURE:\n"
+    "  - Directory organization\n"
+    "  - File patterns\n"
+    "  - Module boundaries\n"
+    "\n"
+    "PATTERNS:\n"
+    "  - Architectural style (layered, microservices, monolithic)\n"
+    "  - Code organization patterns\n"
+    "  - Naming conventions\n"
+    "\n"
+    "FLOWS:\n"
+    "  - Entry points\n"
+    "  - Request/data flow paths\n"
+    "  - Integration patterns\n"
+    "\n"
+    "DECISIONS:\n"
+    "  - Technology choices\n"
+    "  - Framework usage\n"
+    "  - Dependencies\n"
+    "\n"
+    "ADVANCE: When exploration complete, proceed to DEEPEN."
+)
 
 # --- STEP 3: DEEPEN ----------------------------------------------------------
 
-DEEPEN_INSTRUCTIONS = """\
-DEEPEN understanding through direct exploration.
-
-DO NOT dispatch agents. Use Read, Glob, Grep tools directly.
-
-IDENTIFY areas needing deep understanding:
-
-Prioritize by:
-  - COMPLEXITY: Non-obvious behavior, intricate logic
-  - NOVELTY: Unfamiliar patterns, unique approaches
-  - CENTRALITY: Core to user's goals
-
-SELECT 1-3 targets for this iteration:
-  - Specific component/module
-  - Particular data flow
-  - Integration mechanism
-  - Implementation pattern
-
-EXPLORE each target:
-  - Read key files directly
-  - Trace execution paths
-  - Understand data transformations
-  - Map dependencies
-
-EXTRACT understanding:
-  - How does this component work?
-  - What are the key mechanisms?
-  - How does it integrate with other parts?
-
-ASSESS confidence:
-  - CERTAIN: Goals fully understood, ready for synthesis
-  - HIGH: Strong understanding, minor gaps acceptable
-  - MEDIUM: Reasonable understanding, some questions remain
-  - LOW: Significant gaps, need more exploration
-  - EXPLORING: Just starting, identifying targets
-
-ADVANCE:
-  - confidence == certain: Proceed to SYNTHESIZE
-  - confidence != certain AND iteration < {max_iter}: Continue DEEPEN
-  - iteration >= {max_iter}: Force proceed to SYNTHESIZE"""
+DEEPEN_INSTRUCTIONS = (
+    "DEEPEN understanding through direct exploration.\n"
+    "\n"
+    "DO NOT dispatch agents. Use Read, Glob, Grep tools directly.\n"
+    "\n"
+    "IDENTIFY areas needing deep understanding:\n"
+    "\n"
+    "Prioritize by:\n"
+    "  - COMPLEXITY: Non-obvious behavior, intricate logic\n"
+    "  - NOVELTY: Unfamiliar patterns, unique approaches\n"
+    "  - CENTRALITY: Core to user's goals\n"
+    "\n"
+    "SELECT 1-3 targets for this iteration:\n"
+    "  - Specific component/module\n"
+    "  - Particular data flow\n"
+    "  - Integration mechanism\n"
+    "  - Implementation pattern\n"
+    "\n"
+    "EXPLORE each target:\n"
+    "  - Read key files directly\n"
+    "  - Trace execution paths\n"
+    "  - Understand data transformations\n"
+    "  - Map dependencies\n"
+    "\n"
+    "EXTRACT understanding:\n"
+    "  - How does this component work?\n"
+    "  - What are the key mechanisms?\n"
+    "  - How does it integrate with other parts?\n"
+    "\n"
+    "ASSESS confidence:\n"
+    "  - CERTAIN: Goals fully understood, ready for synthesis\n"
+    "  - HIGH: Strong understanding, minor gaps acceptable\n"
+    "  - MEDIUM: Reasonable understanding, some questions remain\n"
+    "  - LOW: Significant gaps, need more exploration\n"
+    "  - EXPLORING: Just starting, identifying targets\n"
+    "\n"
+    "ADVANCE:\n"
+    "  - confidence == certain: Proceed to SYNTHESIZE\n"
+    "  - confidence != certain AND iteration < {max_iter}: Continue DEEPEN\n"
+    "  - iteration >= {max_iter}: Force proceed to SYNTHESIZE"
+)
 
 # --- STEP 4: SYNTHESIZE ------------------------------------------------------
 
-SYNTHESIZE_INSTRUCTIONS = """\
-OUTPUT structured summary:
-
-# Codebase Understanding Summary
-
-## Structure
-[Directory organization, module boundaries, component relationships]
-
-## Patterns
-[Architectural patterns, design patterns, code organization]
-
-## Flows
-[Request flows, data flows, integration patterns]
-
-## Decisions
-[Technology choices, framework selections, architectural decisions]
-
-## Context
-[Purpose, constraints, trade-offs, evolution]
-
-Ensure:
-  - Summary addresses user's original intent
-  - All sections present with concrete findings
-  - Framing is understanding-focused (not auditing)
-  - Facts and observations (not judgments)"""
+SYNTHESIZE_INSTRUCTIONS = (
+    "OUTPUT structured summary:\n"
+    "\n"
+    "# Codebase Understanding Summary\n"
+    "\n"
+    "## Structure\n"
+    "[Directory organization, module boundaries, component relationships]\n"
+    "\n"
+    "## Patterns\n"
+    "[Architectural patterns, design patterns, code organization]\n"
+    "\n"
+    "## Flows\n"
+    "[Request flows, data flows, integration patterns]\n"
+    "\n"
+    "## Decisions\n"
+    "[Technology choices, framework selections, architectural decisions]\n"
+    "\n"
+    "## Context\n"
+    "[Purpose, constraints, trade-offs, evolution]\n"
+    "\n"
+    "Ensure:\n"
+    "  - Summary addresses user's original intent\n"
+    "  - All sections present with concrete findings\n"
+    "  - Framing is understanding-focused (not auditing)\n"
+    "  - Facts and observations (not judgments)"
+)
 
 
 # ============================================================================

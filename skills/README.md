@@ -216,6 +216,49 @@ Step dividers within MESSAGE TEMPLATES (76 chars total):
 
 Blank line before and after section headers. No blank line required around step dividers.
 
+### String Format Convention
+
+Multi-line strings use parenthesized concatenation, not triple-quoted strings:
+
+```python
+# GOOD - each line visible at its indentation level
+SCOPE_INSTRUCTIONS = (
+    "PARSE user intent:\n"
+    "  - What codebase(s) are we analyzing?\n"
+    "  - What is the user trying to understand?\n"
+    "\n"
+    "DEFINE goals (1-3 specific objectives):\n"
+    "  - 'Understand how [system X] processes [Y]'\n"
+    "  - 'Map dependencies between [A] and [B]'"
+)
+
+# GOOD - composing with variables
+EXECUTE_INSTRUCTIONS = (
+    "Apply each approved change.\n"
+    "\n"
+    "INTEGRATION CHECKS:\n"
+    "  - Cross-section references correct?\n"
+    "  - Terminology consistent?\n"
+    "\n"
+    + ANTI_PATTERN_AUDIT + "\n"
+    "\n"
+    + CHANGE_PRESENTATION
+)
+
+# BAD - triple-quoted strings force column 0 for content
+SCOPE_INSTRUCTIONS = """\
+PARSE user intent:
+  - What codebase(s) are we analyzing?
+  - What is the user trying to understand?"""
+```
+
+Rules:
+
+- Every line gets its own string literal with explicit `\n`
+- Blank lines become `"\n"` on their own line
+- Last line has no trailing `\n`
+- Variable composition uses `+ VARIABLE + "\n"` (or no `"\n"` if last)
+
 ## How Skills Build Step Bodies
 
 No "action factories". No inversion of control. Just strings.
@@ -259,23 +302,26 @@ Templates and builders are separated. Templates are constants defined in MESSAGE
 
 # --- STEP 2: SURVEY ----------------------------------------------------------
 
-SURVEY_DISPATCH_CONTEXT = """\
-Analysis goals from SCOPE step:
-- User intent and what they want to understand"""
+SURVEY_DISPATCH_CONTEXT = (
+    "Analysis goals from SCOPE step:\n"
+    "- User intent and what they want to understand"
+)
 
 SURVEY_DISPATCH_AGENTS = [
     "[Exploration focus 1: e.g., 'Explore authentication flow']",
     "[Exploration focus 2: e.g., 'Explore database schema']",
 ]
 
-SURVEY_DISPATCH_GUIDANCE = """\
-DISPATCH GUIDANCE:
-...
-ADVANCE: After results received, re-invoke with --confidence low."""
+SURVEY_DISPATCH_GUIDANCE = (
+    "DISPATCH GUIDANCE:\n"
+    "...\n"
+    "ADVANCE: After results received, re-invoke with --confidence low."
+)
 
-SURVEY_LOW_INSTRUCTIONS = """\
-EXTRACT findings from Explore output:
-..."""
+SURVEY_LOW_INSTRUCTIONS = (
+    "EXTRACT findings from Explore output:\n"
+    "..."
+)
 
 # ============================================================================
 # MESSAGE BUILDERS
@@ -289,13 +335,19 @@ def build_survey_exploring_body() -> str:
         shared_context=SURVEY_DISPATCH_CONTEXT,
         model="haiku",
     )
-    return f"DISPATCH Explore agent(s):\n\n{dispatch_text}\n\n{SURVEY_DISPATCH_GUIDANCE}"
+    return (
+        "DISPATCH Explore agent(s):\n"
+        "\n"
+        + dispatch_text + "\n"
+        "\n"
+        + SURVEY_DISPATCH_GUIDANCE
+    )
 
 def get_survey_body(confidence: str) -> str:
     if confidence == "exploring":
         return build_survey_exploring_body()
     elif confidence == "low":
-        return f"SURVEY - Low Confidence\n\n{SURVEY_LOW_INSTRUCTIONS}"
+        return "SURVEY - Low Confidence\n\n" + SURVEY_LOW_INSTRUCTIONS
     # ...
 
 def format_output(step: int, confidence: str) -> str:
@@ -314,12 +366,13 @@ from skills.planner.prompts.constants import ORCHESTRATOR_CONSTRAINT
 def format_dispatch_step(agent_type: str, invoke_cmd: str, state_dir: str) -> str:
     dispatch = subagent_dispatch(agent_type=agent_type, command=invoke_cmd)
 
-    body = f"""\
-{ORCHESTRATOR_CONSTRAINT}
+    body = (
+        ORCHESTRATOR_CONSTRAINT + "\n"
+        "\n"
+        + dispatch
+    )
 
-{dispatch}"""
-
-    next_step_cmd = f"python3 -m skills.planner.orchestrator.planner --step N --state-dir {state_dir}"
+    next_step_cmd = "python3 -m skills.planner.orchestrator.planner --step N --state-dir " + state_dir
     return format_step(body, next_step_cmd)
 ```
 
@@ -335,14 +388,15 @@ def format_technique_step(categories: list[str]) -> str:
         content = (REFS_DIR / path).read_text()
         file_blocks.append(format_file_content(f"references/{path}", content))
 
-    body = f"""\
-TECHNIQUE REFERENCES
-The following files have been loaded based on your category selection:
-
-{chr(10).join(file_blocks)}
-
-TASK: Apply techniques from these references to the target prompt.
-..."""
+    body = (
+        "TECHNIQUE REFERENCES\n"
+        "The following files have been loaded based on your category selection:\n"
+        "\n"
+        + "\n".join(file_blocks) + "\n"
+        "\n"
+        "TASK: Apply techniques from these references to the target prompt.\n"
+        "..."
+    )
 
     return format_step(body, "python3 -m skills.prompt_engineer.optimize --step 5")
 ```
@@ -442,17 +496,24 @@ Replace with:
 
 ```python
 # GOOD - text at call site
-TECHNIQUE_REVIEW = """\
-For each technique in the Technique Selection Guide:
-1. QUOTE the trigger condition from the table
-2. QUOTE text from the target prompt that matches
-3. Verdict: APPLICABLE or NOT APPLICABLE"""
+TECHNIQUE_REVIEW = (
+    "For each technique in the Technique Selection Guide:\n"
+    "1. QUOTE the trigger condition from the table\n"
+    "2. QUOTE text from the target prompt that matches\n"
+    "3. Verdict: APPLICABLE or NOT APPLICABLE"
+)
 
-TECHNIQUE_REVIEW_ECOSYSTEM = TECHNIQUE_REVIEW + """
-Note techniques that apply to multiple prompts."""
+TECHNIQUE_REVIEW_ECOSYSTEM = (
+    TECHNIQUE_REVIEW + "\n"
+    "Note techniques that apply to multiple prompts."
+)
 
-# Usage: just reference the constant
-body = f"...\n{TECHNIQUE_REVIEW_ECOSYSTEM}\n..."
+# Usage: compose with +
+body = (
+    "...\n"
+    + TECHNIQUE_REVIEW_ECOSYSTEM + "\n"
+    "..."
+)
 ```
 
 Functions that return prompt fragments are only justified when there's complex conditional logic (multiple if/else branches). Even then, they live in the skill, not the shared lib.
