@@ -38,7 +38,7 @@ from skills.planner.shared.gates import build_gate_output, GateResult
 from skills.planner.shared.qr.cli import add_qr_args
 from skills.planner.shared.qr.utils import qr_file_exists, increment_qr_iteration
 from skills.planner.shared.resources import get_mode_script_path, PlannerResourceProvider
-from skills.planner.shared.builders import THINKING_EFFICIENCY
+from skills.planner.shared.builders import THINKING_EFFICIENCY, format_forbidden
 from skills.planner.shared.constraints import (
     ORCHESTRATOR_CONSTRAINT_EXTENDED,
     format_state_banner,
@@ -363,16 +363,28 @@ Start: python3 -m {verify_script} --step 1 --state-dir {state_dir} $qr_item_flag
         )
 
         action_children = [
+            ORCHESTRATOR_CONSTRAINT_EXTENDED,
+            "",
+            f"=== PHASE 1: DISPATCH (delegate to sub-agents) ===",
+            "",
             f"VERIFY: {len(items)} items",
             "",
             dispatch_text,
             "",
-            f"Dispatch ALL {len(items)} agents in parallel. Wait for ALL results.",
-            "  - ALL pass -> --qr-status pass",
-            "  - ANY fail -> --qr-status fail",
+            f"=== PHASE 2: AGGREGATE (your action after all agents return) ===",
             "",
-            "These are the blocking items for this iteration.",
-            "Every dispatched item must be verified. No exceptions.",
+            f"After ALL {len(groups)} agents return, tally results mechanically:",
+            f"  ALL agents returned PASS  ->  invoke next step with --qr-status pass",
+            f"  ANY agent returned FAIL   ->  invoke next step with --qr-status fail",
+            "",
+            format_forbidden(
+                "Interpreting results beyond PASS/FAIL tallying",
+                "Claiming 'diminishing returns' or 'comprehensive enough'",
+                "Reading plan.json or any state files",
+                "Writing, rendering, or summarizing the plan",
+                "Skipping the next step command",
+                "Proceeding to a later step without QR PASS",
+            ),
         ]
 
         next_step = step + 1

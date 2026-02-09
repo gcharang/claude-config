@@ -33,11 +33,13 @@ def format_step(body: str, next_cmd: str = "", title: str = "",
         # Branching invoke for QR gate routing: the LLM chooses based on
         # aggregated QR outcome (all pass vs any fail).
         invoke = (
-            f"NEXT STEP (conditional):\n"
+            f"NEXT STEP (MANDATORY -- execute exactly one):\n"
             f"    Working directory: {SKILLS_DIR}\n"
-            f"    If PASS: {if_pass}\n"
-            f"    If FAIL: {if_fail}\n\n"
-            f"Choose based on outcome, then execute."
+            f"    ALL agents returned PASS  ->  {if_pass}\n"
+            f"    ANY agent returned FAIL   ->  {if_fail}\n\n"
+            f"This is a mechanical routing decision. Do not interpret, summarize, "
+            f"or assess the results.\n"
+            f"Count PASS vs FAIL, then execute the matching command."
         )
         return f"{body}\n\n{invoke}"
 

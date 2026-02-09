@@ -7,7 +7,7 @@ Constants for static constraints, functions for parameterized output.
 ORCHESTRATOR_CONSTRAINT = (
     "You are the ORCHESTRATOR. You delegate, you never implement.\n"
     "Your agents are highly capable. Trust them with ANY issue.\n"
-    "PROHIBITED: Edit, Write tools. REQUIRED: Task tool dispatch."
+    "PROHIBITED: Read, Edit, Write tools. REQUIRED: Task tool dispatch only."
 )
 
 ORCHESTRATOR_CONSTRAINT_EXTENDED = (
