@@ -31,26 +31,18 @@ from skills.lib.workflow.constants import (
     SUB_AGENT_QUESTION_FORMAT,
     QUESTION_RELAY_HANDLER,
 )
-from skills.lib.workflow.ast import (
-    W, XMLRenderer, render, TextNode,
-)
-from skills.lib.workflow.prompts import subagent_dispatch
+from skills.lib.workflow.prompts import subagent_dispatch, template_dispatch
+from skills.lib.workflow.prompts.step import format_step
 from skills.planner.shared.qr.types import QRState, QRStatus, LoopState
 from skills.planner.shared.gates import build_gate_output, GateResult
 from skills.planner.shared.qr.cli import add_qr_args
 from skills.planner.shared.qr.utils import qr_file_exists, increment_qr_iteration
 from skills.planner.shared.resources import get_mode_script_path, PlannerResourceProvider
-from skills.planner.shared.builders import (
-    build_xml_format_mandate,
-    build_output_efficiency,
-    build_task_prompt_guidance,
-)
+from skills.planner.shared.builders import THINKING_EFFICIENCY
 from skills.planner.shared.constraints import (
-    build_orchestrator_constraint,
-    build_step_header,
-    build_state_banner,
+    ORCHESTRATOR_CONSTRAINT_EXTENDED,
+    format_state_banner,
 )
-from skills.lib.workflow.ast.nodes import Document
 
 
 MODULE_PATH = "skills.planner.orchestrator.planner"
@@ -94,13 +86,13 @@ def _build_fix_mode_output(title, agent, agent_role, script, mode_total_steps, q
 
     action_children = []
 
-    action_children.append(build_state_banner("PLAN-FIX", qr.iteration, "fix"))
-    action_children.append(TextNode(""))
-    action_children.append(TextNode("FIX MODE: QR found issues."))
-    action_children.append(TextNode(""))
+    action_children.append(format_state_banner("PLAN-FIX", qr.iteration, "fix"))
+    action_children.append("")
+    action_children.append("FIX MODE: QR found issues.")
+    action_children.append("")
 
-    action_children.append(build_orchestrator_constraint(extended=True))
-    action_children.append(TextNode(""))
+    action_children.append(ORCHESTRATOR_CONSTRAINT_EXTENDED)
+    action_children.append("")
 
     mode_script = get_mode_script_path(script)
     invoke_cmd = f"python3 -m {mode_script} --step 1 --state-dir {state_dir}"
@@ -109,10 +101,10 @@ def _build_fix_mode_output(title, agent, agent_role, script, mode_total_steps, q
         agent_type=agent,
         command=invoke_cmd,
     )
-    action_children.append(TextNode(dispatch_prompt))
-    action_children.append(TextNode(""))
-    action_children.append(TextNode(f"{agent.title()} reads QR report and fixes issues."))
-    action_children.append(TextNode("After fixes complete, re-run QR for fresh verification."))
+    action_children.append(dispatch_prompt)
+    action_children.append("")
+    action_children.append(f"{agent.title()} reads QR report and fixes issues.")
+    action_children.append("After fixes complete, re-run QR for fresh verification.")
 
     next_step = ctx["step"] + 1
     next_cmd = f"python3 -m {MODULE_PATH} --step {next_step} --state-dir {state_dir}"
@@ -201,8 +193,8 @@ def execute_dispatch_step(title, agent, agent_role, script, mode_total_steps, po
 
         action_children = []
 
-        action_children.append(build_orchestrator_constraint(extended=True))
-        action_children.append(TextNode(""))
+        action_children.append(ORCHESTRATOR_CONSTRAINT_EXTENDED)
+        action_children.append("")
 
         mode_script = get_mode_script_path(script)
         invoke_cmd = f"python3 -m {mode_script} --step 1 --state-dir {state_dir}"
@@ -211,11 +203,11 @@ def execute_dispatch_step(title, agent, agent_role, script, mode_total_steps, po
             agent_type=agent,
             command=invoke_cmd,
         )
-        action_children.append(TextNode(dispatch_prompt))
-        action_children.append(TextNode(""))
+        action_children.append(dispatch_prompt)
+        action_children.append("")
 
         if post_dispatch:
-            action_children.extend([TextNode(a) for a in post_dispatch])
+            action_children.extend(post_dispatch)
 
         next_step = step + 1
         next_cmd = f"python3 -m {MODULE_PATH} --step {next_step} --state-dir {state_dir}"
@@ -249,8 +241,8 @@ def qr_decompose_step(title, phase, script, model=None):
             return {
                 "title": f"{title} - Skipped (items already defined)",
                 "actions": [
-                    TextNode(f"QR items for {phase} already defined."),
-                    TextNode("Proceeding to verification of existing items."),
+                    f"QR items for {phase} already defined.",
+                    "Proceeding to verification of existing items.",
                 ],
                 "next": f"python3 -m {MODULE_PATH} --step {verify_step} --state-dir {state_dir}",
             }
@@ -258,11 +250,11 @@ def qr_decompose_step(title, phase, script, model=None):
         action_children = []
 
         qr_name = f"QR-{phase.upper()}-DECOMPOSE"
-        action_children.append(build_state_banner(qr_name, qr.iteration, "decompose"))
-        action_children.append(TextNode(""))
+        action_children.append(format_state_banner(qr_name, qr.iteration, "decompose"))
+        action_children.append("")
 
-        action_children.append(build_orchestrator_constraint(extended=True))
-        action_children.append(TextNode(""))
+        action_children.append(ORCHESTRATOR_CONSTRAINT_EXTENDED)
+        action_children.append("")
 
         mode_script = get_mode_script_path(script)
         invoke_cmd = f"python3 -m {mode_script} --step 1 --state-dir {state_dir}"
@@ -272,11 +264,11 @@ def qr_decompose_step(title, phase, script, model=None):
             command=invoke_cmd,
             model=model,
         )
-        action_children.append(TextNode(dispatch_prompt))
-        action_children.append(TextNode(""))
+        action_children.append(dispatch_prompt)
+        action_children.append("")
 
-        action_children.append(TextNode("Expected output: qr-{phase}.json written to STATE_DIR"))
-        action_children.append(TextNode("Orchestrator generates verification dispatch from this file."))
+        action_children.append("Expected output: qr-{phase}.json written to STATE_DIR")
+        action_children.append("Orchestrator generates verification dispatch from this file.")
 
         next_step = step + 1
         next_cmd = f"python3 -m {MODULE_PATH} --step {next_step} --state-dir {state_dir}"
@@ -301,7 +293,7 @@ def qr_verify_step(title, phase):
 
     Reads qr-{phase}.json and generates expanded dispatch.
     Decompose agent outputs item data. Orchestrator transforms this data
-    into TemplateDispatchNode format. LLM sees ready-to-execute agent
+    into template_dispatch format. LLM sees ready-to-execute agent
     blocks, not substitution instructions.
 
     Uses repeated --qr-item flags (argparse action="append") instead of
@@ -310,7 +302,6 @@ def qr_verify_step(title, phase):
     def handler(ctx):
         from skills.planner.shared.qr.utils import load_qr_state, query_items, by_status, by_blocking_severity
         from skills.planner.shared.qr.phases import get_phase_config
-        from skills.lib.workflow.ast import TemplateDispatchNode, render_template_dispatch
 
         state_dir = ctx["state_dir"]
         step = ctx["step"]
@@ -324,15 +315,13 @@ def qr_verify_step(title, phase):
             increment_qr_iteration(state_dir, phase)
 
         # Dispatch only items at blocking severity for current iteration.
-        # Below-threshold items (e.g., COULD on iteration 3) remain FAIL
-        # in state but skip re-verification (reduces LLM token usage).
         iteration = qr_state.get("iteration", 1)
         items = query_items(qr_state, by_status("TODO", "FAIL"), by_blocking_severity(iteration))
         if not items:
             next_step = step + 1
             return {
                 "title": title,
-                "actions": [TextNode("All items already verified. Proceeding with pass.")],
+                "actions": ["All items already verified. Proceeding with pass."],
                 "if_pass": f"python3 -m {MODULE_PATH} --step {next_step} --state-dir {state_dir} --qr-status pass",
                 "if_fail": f"python3 -m {MODULE_PATH} --step {next_step} --state-dir {state_dir} --qr-status pass",
             }
@@ -341,27 +330,23 @@ def qr_verify_step(title, phase):
         verify_script = config["verify_script"]
 
         # Group items by group_id for batch verification.
-        # Ungrouped items become singletons (group_id = item id). Singletons are
-        # valid outcome when items don't share semantic relationships. See plan
-        # sections 3.12 (affinity grouping allows singletons) and 3.13 (validation
-        # accepts singletons as genuinely independent).
         groups = {}
         for item in items:
             gid = item.get("group_id") or item["id"]
             groups.setdefault(gid, []).append(item)
 
-        targets = tuple(
+        targets = [
             {
                 "group_id": gid,
-                "item_ids": ",".join(i["id"] for i in group_items),  # Display only
-                "qr_item_flags": _format_qr_item_flags([i["id"] for i in group_items]),  # Command args
+                "item_ids": ",".join(i["id"] for i in group_items),
+                "qr_item_flags": _format_qr_item_flags([i["id"] for i in group_items]),
                 "item_count": str(len(group_items)),
                 "checks_summary": "; ".join(i.get("check", "")[:40] for i in group_items[:3]),
             }
             for gid, group_items in groups.items()
-        )
+        ]
 
-        template = f"""Verify QR group: $group_id ($item_count items)
+        tmpl = f"""Verify QR group: $group_id ($item_count items)
 Items: $item_ids
 Checks: $checks_summary
 
@@ -369,27 +354,25 @@ Start: python3 -m {verify_script} --step 1 --state-dir {state_dir} $qr_item_flag
 
         command = f"python3 -m {verify_script} --step 1 --state-dir {state_dir} $qr_item_flags"
 
-        node = TemplateDispatchNode(
+        dispatch_text = template_dispatch(
             agent_type="quality-reviewer",
-            template=template,
+            template=tmpl,
             targets=targets,
             command=command,
             instruction=f"Verify {len(groups)} groups ({len(items)} items) in parallel.",
         )
 
-        dispatch_xml = render_template_dispatch(node)
-
         action_children = [
-            TextNode(f"VERIFY: {len(items)} items"),
-            TextNode(""),
-            TextNode(dispatch_xml),
-            TextNode(""),
-            TextNode(f"Dispatch ALL {len(items)} agents in parallel. Wait for ALL results."),
-            TextNode("  - ALL pass -> --qr-status pass"),
-            TextNode("  - ANY fail -> --qr-status fail"),
-            TextNode(""),
-            TextNode("These are the blocking items for this iteration."),
-            TextNode("Every dispatched item must be verified. No exceptions."),
+            f"VERIFY: {len(items)} items",
+            "",
+            dispatch_text,
+            "",
+            f"Dispatch ALL {len(items)} agents in parallel. Wait for ALL results.",
+            "  - ALL pass -> --qr-status pass",
+            "  - ANY fail -> --qr-status fail",
+            "",
+            "These are the blocking items for this iteration.",
+            "Every dispatched item must be verified. No exceptions.",
         ]
 
         next_step = step + 1
@@ -617,83 +600,34 @@ def get_step_guidance(step: int, qr_status, state_dir) -> dict | str:
 
 
 def format_output(step: int, qr_status, state_dir) -> str | GateResult:
-    """Format output for display using XML format."""
-    from skills.planner.shared.constants import PLANNER_TOTAL_STEPS
-
+    """Format output for display."""
     guidance = get_step_guidance(step, qr_status, state_dir=state_dir)
 
-    # Why passthrough: gate steps return GateResult. main() dispatches
-    # on type -- str flows through unchanged, GateResult triggers
-    # translate logic.
     if isinstance(guidance, GateResult):
         return guidance
-
     if isinstance(guidance, str):
         return guidance
-
     if "error" in guidance:
         return f"Error: {guidance['error']}"
 
-    nodes = []
-
-    nodes.append(build_step_header(guidance["title"], "planner", step))
-    nodes.append(TextNode(""))
-
+    body_parts = []
     if step == 1:
-        nodes.append(build_xml_format_mandate())
-        nodes.append(TextNode(""))
-        nodes.append(build_output_efficiency())
-        nodes.append(TextNode(""))
+        body_parts.append(THINKING_EFFICIENCY)
+        body_parts.append("")
 
-    next_cmd = guidance.get("next")
+    for action in guidance["actions"]:
+        body_parts.append(str(action))
+
+    body = "\n".join(body_parts)
+    title = guidance["title"]
+
     if_pass = guidance.get("if_pass")
     if_fail = guidance.get("if_fail")
-
-    if next_cmd or (if_pass and if_fail):
-        nodes.append(TextNode("<workflow>"))
-
-    actions = guidance["actions"]
-    action_children = []
-    for action in actions:
-        if isinstance(action, str):
-            action_children.append(TextNode(action))
-        else:
-            action_children.append(action)
-    nodes.append(W.el("current_action", *action_children).node())
-    nodes.append(TextNode(""))
+    next_cmd = guidance.get("next", "")
 
     if if_pass and if_fail:
-        from skills.lib.workflow.ast.nodes import ElementNode
-
-        if_pass_node = ElementNode("if_pass", {}, [TextNode(if_pass)])
-        if_fail_node = ElementNode("if_fail", {}, [TextNode(if_fail)])
-        nodes.append(W.el("invoke_after", if_pass_node, if_fail_node).node())
-        nodes.append(TextNode(""))
-        nodes.append(
-            W.el(
-                "next",
-                TextNode("After current_action completes, execute invoke_after."),
-                TextNode(f"Re-read now: if_pass -> {if_pass}"),
-                TextNode(f"            if_fail -> {if_fail}"),
-                required="true",
-            ).node()
-        )
-        nodes.append(TextNode("</workflow>"))
-    elif next_cmd:
-        nodes.append(W.el("invoke_after", TextNode(next_cmd)).node())
-        nodes.append(TextNode(""))
-        nodes.append(
-            W.el(
-                "next",
-                TextNode("After current_action completes, execute invoke_after."),
-                TextNode(f"Re-read now: {next_cmd}"),
-                required="true",
-            ).node()
-        )
-        nodes.append(TextNode("</workflow>"))
-
-    doc = Document(children=nodes)
-    return render(doc, XMLRenderer())
+        return format_step(body, title=title, if_pass=if_pass, if_fail=if_fail)
+    return format_step(body, next_cmd, title=title)
 
 
 def main():

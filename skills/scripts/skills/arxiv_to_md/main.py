@@ -20,322 +20,333 @@ Two invocation modes:
 import argparse
 import sys
 
-from skills.lib.workflow.core import (
-    StepDef,
-    Workflow,
-)
-from skills.lib.workflow.ast import W, XMLRenderer, render
-from skills.lib.workflow.ast.nodes import (
-    TextNode, StepHeaderNode, CurrentActionNode, InvokeAfterNode,
-)
-from skills.lib.workflow.ast.renderer import (
-    render_step_header, render_current_action, render_invoke_after,
-)
-from skills.lib.workflow.ast import (
-    TemplateDispatchNode, render_template_dispatch,
-)
+from skills.lib.workflow.prompts import format_step, template_dispatch
 
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
 
 MODULE_PATH = "skills.arxiv_to_md.main"
-SUBAGENT_MODULE = "skills.arxiv_to_md.sub_agent"
+SUBAGENT_MODULE_PATH = "skills.arxiv_to_md.sub_agent"
 
 
+# ============================================================================
+# MESSAGE TEMPLATES
+# ============================================================================
 
+# --- STEP 1: DISCOVER --------------------------------------------------------
 
-
-
-# Step definitions
-STEP_DISCOVER = StepDef(
-    id="discover",
-    title="Discover and Dispatch",
-    actions=[
-        "MODE DETECTION:",
-        "Determine which mode based on user input:",
-        "",
-        "MODE 1 (default): Direct conversion",
-        "  Trigger: User provides arXiv IDs directly, or asks to convert papers",
-        "  Filename: Orchestrator constructs from paper title + date",
-        "",
-        "MODE 2: PDF folder sync",
-        "  Trigger: User specifies source PDF folder AND destination markdown folder",
-        "  Filename: Derived from PDF filename (orchestrator provides to sub-agent)",
-        "",
-        "=" * 60,
-        "",
-        "MODE 1 DISCOVERY:",
-        "Before asking the user for arXiv IDs, check for:",
-        "  - CLAUDE.md in current directory (may list arXiv IDs)",
-        "  - README.md or similar docs with arXiv links/IDs",
-        "  - .bib files with arXiv entries",
-        "If IDs found, confirm with user: 'Found arXiv ID(s) X, Y. Convert these?'",
-        "",
-        "PARSE USER INPUT:",
-        "If user provides input directly, parse for arXiv IDs:",
-        "  - Format: YYMM.NNNNN (e.g., 2503.05179)",
-        "  - Or full URL: https://arxiv.org/abs/YYMM.NNNNN",
-        "  - May be multiple IDs (comma-separated, space-separated, or multiple URLs)",
-        "",
-        "MODE 1 DISPATCH:",
-        "PLACEHOLDER_MODE1_DISPATCH",
-        "",
-        "=" * 60,
-        "",
-        "MODE 2 DISCOVERY (PDF folder sync):",
-        "",
-        "FORBIDDEN - NEVER read PDF files. Resolve arXiv IDs by searching online for paper title.",
-        "",
-        "CRITICAL - CHECK EXISTING FILES FIRST:",
-        "",
-        "Most files WILL already exist. Skipping is the common case.",
-        "Before dispatching ANY sub-agent, check if output already exists.",
-        "",
-        "If a PDF already has a matching .md file, STOP. Do NOT dispatch.",
-        "Skip that PDF entirely.",
-        "",
-        "FILE NAMING CONVENTION:",
-        "  PDFs:     YYYY-MM-DD <title>.pdf",
-        "  Markdown: YYYY-MM-DD <title>.md",
-        "  Example:  2025-01-08 Pruning the Unsurprising.pdf",
-        "",
-        "1. SCAN DESTINATION FOLDER for existing markdown FIRST:",
-        "   - List all *.md files in destination folder",
-        "",
-        "2. SCAN SOURCE FOLDER for PDFs:",
-        "   - List all *.pdf files in source folder",
-        "   - Extract base filename (without .pdf extension)",
-        "",
-        "3. For EACH PDF, check if matching .md exists:",
-        "   Matching logic: same YYYY-MM-DD prefix + similar title",
-        "   - '2025-01-08 Pruning the Unsurprising.pdf' matches '2025-01-08 Pruning the Unsurprising.md'",
-        "   If match exists -> SKIP this PDF (do not dispatch)",
-        "",
-        "4. RESOLVE ARXIV IDs from unmatched PDFs:",
-        "   - Extract paper title from PDF filename (after YYYY-MM-DD prefix)",
-        "   - Use WebSearch to find arXiv ID for that paper title",
-        "   - DO NOT read the PDF file",
-        "",
-        "5. DETERMINE DESTINATION FILENAMES:",
-        "   For each unmatched PDF with resolved arXiv ID:",
-        "   - dest_file = '<dest_folder>/<pdf_basename>.md'",
-        "   - Example: source/2025-01-08 Pruning the Unsurprising.pdf",
-        "             -> dest/2025-01-08 Pruning the Unsurprising.md",
-        "",
-        "MODE 2 DISPATCH:",
-        "PLACEHOLDER_MODE2_DISPATCH",
-    ],
+DISCOVER_INSTRUCTIONS = (
+    "MODE DETECTION:\n"
+    "Determine which mode based on user input:\n"
+    "\n"
+    "MODE 1 (default): Direct conversion\n"
+    "  Trigger: User provides arXiv IDs directly, or asks to convert papers\n"
+    "  Filename: Orchestrator constructs from paper title + date\n"
+    "\n"
+    "MODE 2: PDF folder sync\n"
+    "  Trigger: User specifies source PDF folder AND destination markdown folder\n"
+    "  Filename: Derived from PDF filename (orchestrator provides to sub-agent)\n"
+    "\n"
+    "============================================================\n"
+    "\n"
+    "MODE 1 DISCOVERY:\n"
+    "Before asking the user for arXiv IDs, check for:\n"
+    "  - CLAUDE.md in current directory (may list arXiv IDs)\n"
+    "  - README.md or similar docs with arXiv links/IDs\n"
+    "  - .bib files with arXiv entries\n"
+    "If IDs found, confirm with user: 'Found arXiv ID(s) X, Y. Convert these?'\n"
+    "\n"
+    "PARSE USER INPUT:\n"
+    "If user provides input directly, parse for arXiv IDs:\n"
+    "  - Format: YYMM.NNNNN (e.g., 2503.05179)\n"
+    "  - Or full URL: https://arxiv.org/abs/YYMM.NNNNN\n"
+    "  - May be multiple IDs (comma-separated, space-separated, or multiple URLs)\n"
+    "\n"
+    "MODE 1 DISPATCH:\n"
 )
 
-STEP_WAIT = StepDef(
-    id="wait",
-    title="Wait for Completion",
-    actions=[
-        "WAIT for all sub-agents to complete.",
-        "",
-        "Collect results from each sub-agent:",
-        "",
-        "MODE 1 response format:",
-        "  - FILE: <path>   -> successful conversion",
-        "    TITLE: <title> -> paper title (for filename)",
-        "    DATE: <date>   -> submission date YYYY-MM-DD (for filename)",
-        "  - FAIL: <reason> -> conversion failed",
-        "",
-        "MODE 2 response format:",
-        "  - FILE: <path>   -> successful conversion (no TITLE/DATE)",
-        "    dest_file: already known from dispatch",
-        "  - FAIL: <reason> -> conversion failed",
-        "",
-        "Build results summary:",
-        "```",
-        "mode: 1 or 2",
-        "results:",
-        "  - arxiv_id: 2503.05179",
-        "    status: success",
-        "    temp_path: /tmp/arxiv_2503.05179/cleaned.md",
-        "    title: 'Pruning the Unsurprising'  # MODE 1 only",
-        "    date: 2025-03-08                   # MODE 1 only",
-        "    dest_file: /path/to/dest.md       # MODE 2 only",
-        "  - arxiv_id: 2401.12345",
-        "    status: failed",
-        "    reason: PDF-only submission",
-        "```",
-    ],
+MODE1_TEMPLATE = (
+    "Convert this arXiv paper to markdown.\n"
+    "\n"
+    "arXiv ID: $ARXIV_ID\n"
+    "\n"
+    "Start: <invoke working-dir=\".claude/skills/scripts\" cmd=\"python3 -m skills.arxiv_to_md.sub_agent --step 1 --arxiv-id $ARXIV_ID\" />\n"
+    "\n"
+    "<expected_output>\n"
+    "Sub-agent responds with ONLY:\n"
+    "\n"
+    "On success:\n"
+    "FILE: <path-to-markdown>\n"
+    "TITLE: <paper title>\n"
+    "DATE: <YYYY-MM-DD>\n"
+    "\n"
+    "On failure:\n"
+    "FAIL: <reason>\n"
+    "</expected_output>"
 )
 
-STEP_FINALIZE = StepDef(
-    id="finalize",
-    title="Finalize",
-    actions=[
-        "For each SUCCESSFUL conversion:",
-        "",
-        "MODE 1 (dest_file NOT provided - construct filename from metadata):",
-        "",
-        "1. CONSTRUCT FILENAME from metadata:",
-        "",
-        "   Format: YYYY-MM-DD Title - Subtitle.md",
-        "",
-        "   Transformation steps:",
-        "   a) Start with DATE from sub-agent (already YYYY-MM-DD)",
-        "   b) Take TITLE from sub-agent",
-        "   c) Replace ? ; : with ' - ' (space-dash-space)",
-        "      'Foo: Bar Baz' -> 'Foo - Bar Baz'",
-        "      'What? Why; How:' -> 'What - Why - How -'",
-        "   d) Remove characters unsafe for filenames: / \\ < > | \" *",
-        "   e) Collapse multiple spaces to single space",
-        "   f) Trim leading/trailing whitespace",
-        "   g) Concatenate: '<date> <title>.md'",
-        "",
-        "   Example:",
-        "     title: 'Pruning the Unsurprising: Efficient LLM Reasoning via First-Token Surprisal'",
-        "     date: 2026-01-08",
-        "     result: '2026-01-08 Pruning the Unsurprising - Efficient LLM Reasoning via First-Token Surprisal.md'",
-        "",
-        "   FALLBACK: If title/date missing, use <arxiv_id>.md",
-        "",
-        "2. Copy the cleaned.md to target:",
-        "   ```bash",
-        "   cp /tmp/arxiv_<id>/cleaned.md './<constructed_filename>'",
-        "   ```",
-        "   Note: Quote the filename - it contains spaces.",
-        "",
-        "=" * 60,
-        "",
-        "MODE 2 (dest_file WAS provided - copy to pre-determined destination):",
-        "",
-        "1. Copy the cleaned.md to dest_file:",
-        "   ```bash",
-        "   cp /tmp/arxiv_<id>/cleaned.md '<dest_file>'",
-        "   ```",
-        "",
-        "   The dest_file was determined in step 1 and passed to sub-agent.",
-        "   No filename construction needed.",
-        "",
-        "=" * 60,
-        "",
-        "VERIFICATION (both modes):",
-        "  - Use Read tool to confirm file exists and has content",
-        "",
-        "PRESENT FINAL SUMMARY to user:",
-        "```",
-        "Processed M PDFs: N converted, K skipped (already exist), F failed",
-        "",
-        "Skipped (already exist):",
-        "  2025-01-08 Pruning the Unsurprising -> already exists",
-        "",
-        "Converted:",
-        "  [OK] 2025-01-10 New Paper Title -> ./2025-01-10 New Paper Title.md",
-        "",
-        "Failed:",
-        "  [FAIL] 2024-12-15 Some Paper -> PDF-only submission (no TeX source)",
-        "```",
-    ],
+MODE2_DISCOVERY_INSTRUCTIONS = (
+    "\n"
+    "============================================================\n"
+    "\n"
+    "MODE 2 DISCOVERY (PDF folder sync):\n"
+    "\n"
+    "FORBIDDEN - NEVER read PDF files. Resolve arXiv IDs by searching online for paper title.\n"
+    "\n"
+    "CRITICAL - CHECK EXISTING FILES FIRST:\n"
+    "\n"
+    "Most files WILL already exist. Skipping is the common case.\n"
+    "Before dispatching ANY sub-agent, check if output already exists.\n"
+    "\n"
+    "If a PDF already has a matching .md file, STOP. Do NOT dispatch.\n"
+    "Skip that PDF entirely.\n"
+    "\n"
+    "FILE NAMING CONVENTION:\n"
+    "  PDFs:     YYYY-MM-DD <title>.pdf\n"
+    "  Markdown: YYYY-MM-DD <title>.md\n"
+    "  Example:  2025-01-08 Pruning the Unsurprising.pdf\n"
+    "\n"
+    "1. SCAN DESTINATION FOLDER for existing markdown FIRST:\n"
+    "   - List all *.md files in destination folder\n"
+    "\n"
+    "2. SCAN SOURCE FOLDER for PDFs:\n"
+    "   - List all *.pdf files in source folder\n"
+    "   - Extract base filename (without .pdf extension)\n"
+    "\n"
+    "3. For EACH PDF, check if matching .md exists:\n"
+    "   Matching logic: same YYYY-MM-DD prefix + similar title\n"
+    "   - '2025-01-08 Pruning the Unsurprising.pdf' matches '2025-01-08 Pruning the Unsurprising.md'\n"
+    "   If match exists -> SKIP this PDF (do not dispatch)\n"
+    "\n"
+    "4. RESOLVE ARXIV IDs from unmatched PDFs:\n"
+    "   - Extract paper title from PDF filename (after YYYY-MM-DD prefix)\n"
+    "   - Use WebSearch to find arXiv ID for that paper title\n"
+    "   - DO NOT read the PDF file\n"
+    "\n"
+    "5. DETERMINE DESTINATION FILENAMES:\n"
+    "   For each unmatched PDF with resolved arXiv ID:\n"
+    "   - dest_file = '<dest_folder>/<pdf_basename>.md'\n"
+    "   - Example: source/2025-01-08 Pruning the Unsurprising.pdf\n"
+    "             -> dest/2025-01-08 Pruning the Unsurprising.md\n"
+    "\n"
+    "MODE 2 DISPATCH:\n"
 )
 
-# Workflow definition
-WORKFLOW = Workflow(
-    "arxiv-to-md",
-    STEP_DISCOVER,
-    STEP_WAIT,
-    STEP_FINALIZE,
-    description="Convert arXiv papers to LLM-consumable markdown",
-    validate=False,
+MODE2_TEMPLATE = (
+    "Convert this arXiv paper to markdown.\n"
+    "\n"
+    "arXiv ID: $ARXIV_ID\n"
+    "Destination: $DEST_FILE\n"
+    "\n"
+    "Start: <invoke working-dir=\".claude/skills/scripts\" cmd=\"python3 -m skills.arxiv_to_md.sub_agent --step 1 --arxiv-id $ARXIV_ID --dest-file '$DEST_FILE'\" />\n"
+    "\n"
+    "<expected_output>\n"
+    "Sub-agent responds with ONLY:\n"
+    "\n"
+    "On success:\n"
+    "FILE: <path-to-markdown>\n"
+    "\n"
+    "On failure:\n"
+    "FAIL: <reason>\n"
+    "</expected_output>"
+)
+
+# --- STEP 2: WAIT ------------------------------------------------------------
+
+WAIT_INSTRUCTIONS = (
+    "WAIT for all sub-agents to complete.\n"
+    "\n"
+    "Collect results from each sub-agent:\n"
+    "\n"
+    "MODE 1 response format:\n"
+    "  - FILE: <path>   -> successful conversion\n"
+    "    TITLE: <title> -> paper title (for filename)\n"
+    "    DATE: <date>   -> submission date YYYY-MM-DD (for filename)\n"
+    "  - FAIL: <reason> -> conversion failed\n"
+    "\n"
+    "MODE 2 response format:\n"
+    "  - FILE: <path>   -> successful conversion (no TITLE/DATE)\n"
+    "    dest_file: already known from dispatch\n"
+    "  - FAIL: <reason> -> conversion failed\n"
+    "\n"
+    "Build results summary:\n"
+    "```\n"
+    "mode: 1 or 2\n"
+    "results:\n"
+    "  - arxiv_id: 2503.05179\n"
+    "    status: success\n"
+    "    temp_path: /tmp/arxiv_2503.05179/cleaned.md\n"
+    "    title: 'Pruning the Unsurprising'  # MODE 1 only\n"
+    "    date: 2025-03-08                   # MODE 1 only\n"
+    "    dest_file: /path/to/dest.md       # MODE 2 only\n"
+    "  - arxiv_id: 2401.12345\n"
+    "    status: failed\n"
+    "    reason: PDF-only submission\n"
+    "```"
+)
+
+# --- STEP 3: FINALIZE --------------------------------------------------------
+
+FINALIZE_INSTRUCTIONS = (
+    "For each SUCCESSFUL conversion:\n"
+    "\n"
+    "MODE 1 (dest_file NOT provided - construct filename from metadata):\n"
+    "\n"
+    "1. CONSTRUCT FILENAME from metadata:\n"
+    "\n"
+    "   Format: YYYY-MM-DD Title - Subtitle.md\n"
+    "\n"
+    "   Transformation steps:\n"
+    "   a) Start with DATE from sub-agent (already YYYY-MM-DD)\n"
+    "   b) Take TITLE from sub-agent\n"
+    "   c) Replace ? ; : with ' - ' (space-dash-space)\n"
+    "      'Foo: Bar Baz' -> 'Foo - Bar Baz'\n"
+    "      'What? Why; How:' -> 'What - Why - How -'\n"
+    "   d) Remove characters unsafe for filenames: / \\ < > | \" *\n"
+    "   e) Collapse multiple spaces to single space\n"
+    "   f) Trim leading/trailing whitespace\n"
+    "   g) Concatenate: '<date> <title>.md'\n"
+    "\n"
+    "   Example:\n"
+    "     title: 'Pruning the Unsurprising: Efficient LLM Reasoning via First-Token Surprisal'\n"
+    "     date: 2026-01-08\n"
+    "     result: '2026-01-08 Pruning the Unsurprising - Efficient LLM Reasoning via First-Token Surprisal.md'\n"
+    "\n"
+    "   FALLBACK: If title/date missing, use <arxiv_id>.md\n"
+    "\n"
+    "2. Copy the cleaned.md to target:\n"
+    "   ```bash\n"
+    "   cp /tmp/arxiv_<id>/cleaned.md './<constructed_filename>'\n"
+    "   ```\n"
+    "   Note: Quote the filename - it contains spaces.\n"
+    "\n"
+    "============================================================\n"
+    "\n"
+    "MODE 2 (dest_file WAS provided - copy to pre-determined destination):\n"
+    "\n"
+    "1. Copy the cleaned.md to dest_file:\n"
+    "   ```bash\n"
+    "   cp /tmp/arxiv_<id>/cleaned.md '<dest_file>'\n"
+    "   ```\n"
+    "\n"
+    "   The dest_file was determined in step 1 and passed to sub-agent.\n"
+    "   No filename construction needed.\n"
+    "\n"
+    "============================================================\n"
+    "\n"
+    "VERIFICATION (both modes):\n"
+    "  - Use Read tool to confirm file exists and has content\n"
+    "\n"
+    "PRESENT FINAL SUMMARY to user:\n"
+    "```\n"
+    "Processed M PDFs: N converted, K skipped (already exist), F failed\n"
+    "\n"
+    "Skipped (already exist):\n"
+    "  2025-01-08 Pruning the Unsurprising -> already exists\n"
+    "\n"
+    "Converted:\n"
+    "  [OK] 2025-01-10 New Paper Title -> ./2025-01-10 New Paper Title.md\n"
+    "\n"
+    "Failed:\n"
+    "  [FAIL] 2024-12-15 Some Paper -> PDF-only submission (no TeX source)\n"
+    "```"
 )
 
 
-def format_output(step: int, step_def: StepDef, is_step_one: bool = False) -> str:
-    """Format output using AST builder API."""
-    parts = []
+# ============================================================================
+# MESSAGE BUILDERS
+# ============================================================================
 
-    # Step header
-    title = f"ARXIV-TO-MD - {step_def.title}"
-    parts.append(render_step_header(StepHeaderNode(
-        title=title,
-        script="arxiv_to_md",
-        step=str(step),
-    )))
-    parts.append("")
 
-    # XML format mandate on first step
-    if is_step_one:
-        parts.append("""<xml_format_mandate>
-CRITICAL: All script outputs use XML format. You MUST:
-1. Execute the action in <current_action>
-2. When complete, invoke the exact command in <invoke_after>
-3. DO NOT skip steps.
-</xml_format_mandate>""")
-        parts.append("")
+def build_mode1_dispatch() -> str:
+    """Build MODE 1 dispatch instructions."""
+    return template_dispatch(
+        agent_type="general-purpose",
+        template=MODE1_TEMPLATE,
+        targets=[{"ARXIV_ID": "EXAMPLE"}],
+        command=f'python3 -m {SUBAGENT_MODULE_PATH} --step 1 --arxiv-id $ARXIV_ID',
+        model="opus",
+        instruction="Launch one sub-agent per arXiv ID.\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
+    )
 
-    # Current action (with dispatch node substitution)
-    actions = []
-    for action in step_def.actions:
-        if action == "PLACEHOLDER_MODE1_DISPATCH":
-            mode1_template = """Convert this arXiv paper to markdown.
 
-arXiv ID: $ARXIV_ID
+def build_mode2_dispatch() -> str:
+    """Build MODE 2 dispatch instructions."""
+    return template_dispatch(
+        agent_type="general-purpose",
+        template=MODE2_TEMPLATE,
+        targets=[{"ARXIV_ID": "EXAMPLE", "DEST_FILE": "EXAMPLE"}],
+        command=f'python3 -m {SUBAGENT_MODULE_PATH} --step 1 --arxiv-id $ARXIV_ID --dest-file \'$DEST_FILE\'',
+        model="opus",
+        instruction="Launch one sub-agent per arXiv ID.\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
+    )
 
-Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.arxiv_to_md.sub_agent --step 1 --arxiv-id $ARXIV_ID" />
 
-<expected_output>
-Sub-agent responds with ONLY:
+def build_discover_body() -> str:
+    """Build step 1 body with both dispatch modes."""
+    return (
+        DISCOVER_INSTRUCTIONS
+        + build_mode1_dispatch() + "\n"
+        + MODE2_DISCOVERY_INSTRUCTIONS
+        + build_mode2_dispatch()
+    )
 
-On success:
-FILE: <path-to-markdown>
-TITLE: <paper title>
-DATE: <YYYY-MM-DD>
 
-On failure:
-FAIL: <reason>
-</expected_output>"""
-            mode1_node = TemplateDispatchNode(
-                agent_type="general-purpose",
-                template=mode1_template,
-                targets=({"ARXIV_ID": "EXAMPLE"},),
-                command=f'python3 -m {SUBAGENT_MODULE} --step 1 --arxiv-id $ARXIV_ID',
-                model="opus",
-                instruction="Launch one sub-agent per arXiv ID.\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge."
-            )
-            actions.append(render_template_dispatch(mode1_node))
-        elif action == "PLACEHOLDER_MODE2_DISPATCH":
-            mode2_template = """Convert this arXiv paper to markdown.
+def build_next_command(step: int) -> str | None:
+    """Build invoke command for next step."""
+    if step == 1:
+        return f'python3 -m {MODULE_PATH} --step 2'
+    elif step == 2:
+        return f'python3 -m {MODULE_PATH} --step 3'
+    elif step == 3:
+        return None
+    return None
 
-arXiv ID: $ARXIV_ID
-Destination: $DEST_FILE
 
-Start: <invoke working-dir=".claude/skills/scripts" cmd="python3 -m skills.arxiv_to_md.sub_agent --step 1 --arxiv-id $ARXIV_ID --dest-file '$DEST_FILE'" />
+# ============================================================================
+# STEP DEFINITIONS
+# ============================================================================
 
-<expected_output>
-Sub-agent responds with ONLY:
+STATIC_STEPS = {
+    2: ("Wait for Completion", WAIT_INSTRUCTIONS),
+    3: ("Finalize", FINALIZE_INSTRUCTIONS),
+}
 
-On success:
-FILE: <path-to-markdown>
 
-On failure:
-FAIL: <reason>
-</expected_output>"""
-            mode2_node = TemplateDispatchNode(
-                agent_type="general-purpose",
-                template=mode2_template,
-                targets=({"ARXIV_ID": "EXAMPLE", "DEST_FILE": "EXAMPLE"},),
-                command=f'python3 -m {SUBAGENT_MODULE} --step 1 --arxiv-id $ARXIV_ID --dest-file \'$DEST_FILE\'',
-                model="opus",
-                instruction="Launch one sub-agent per arXiv ID.\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge."
-            )
-            actions.append(render_template_dispatch(mode2_node))
-        else:
-            actions.append(action)
+def _format_step_1() -> tuple[str, str]:
+    """Step 1: Discover and Dispatch - dynamic body generation."""
+    return ("Discover and Dispatch", build_discover_body())
 
-    parts.append(render_current_action(CurrentActionNode(actions)))
-    parts.append("")
 
-    # Next step or completion
-    total_steps = 3
-    if step < total_steps:
-        next_step = step + 1
-        next_cmd = f'python3 -m {MODULE_PATH} --step {next_step}'
-        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
+DYNAMIC_STEPS = {
+    1: _format_step_1,
+}
+
+
+# ============================================================================
+# OUTPUT FORMATTING
+# ============================================================================
+
+
+def format_output(step: int) -> str:
+    """Format output for the given step."""
+    if step in STATIC_STEPS:
+        title, instructions = STATIC_STEPS[step]
+    elif step in DYNAMIC_STEPS:
+        formatter = DYNAMIC_STEPS[step]
+        title, instructions = formatter()
     else:
-        parts.append("WORKFLOW COMPLETE - Present results to user.")
+        return f"ERROR: Invalid step {step}"
 
-    return "\n".join(parts)
+    next_cmd = build_next_command(step)
+    return format_step(instructions, next_cmd or "", title=f"ARXIV-TO-MD - {title}")
+
+
+# ============================================================================
+# ENTRY POINT
+# ============================================================================
 
 
 def main():
@@ -346,17 +357,10 @@ def main():
     parser.add_argument("--step", type=int, required=True, help="Current step (1-3)")
     args = parser.parse_args()
 
-    total = WORKFLOW.total_steps
+    if args.step < 1 or args.step > 3:
+        sys.exit(f"ERROR: --step must be 1-3, got {args.step}")
 
-    if args.step < 1 or args.step > total:
-        sys.exit(f"ERROR: --step must be 1-{total}, got {args.step}")
-
-    # Map step number to step definition
-    step_ids = list(WORKFLOW.steps.keys())
-    step_id = step_ids[args.step - 1]
-    step_def = WORKFLOW.steps[step_id]
-
-    output = format_output(args.step, step_def, is_step_one=(args.step == 1))
+    output = format_output(args.step)
     print(output)
 
 

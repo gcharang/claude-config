@@ -12,7 +12,7 @@ For QR fix mode, see plan_code_qr_fix.py.
 Router (plan_code.py) dispatches to appropriate script.
 """
 
-from skills.lib.workflow.ast import W, XMLRenderer, render
+from skills.planner.shared.constraints import format_state_banner
 from skills.lib.conventions import get_convention
 from skills.planner.shared.resources import (
     STATE_DIR_ARG_REQUIRED,
@@ -47,10 +47,7 @@ def get_step_guidance(
         validate_state_dir_requirement(step, state_dir)
         context_file = get_context_path(state_dir)
         context_display = render_context_file(context_file)
-        banner = render(
-            W.el("state_banner", checkpoint="DEV-FILL-DIFFS", iteration="1", mode="work").build(),
-            XMLRenderer()
-        )
+        banner = format_state_banner("DEV-FILL-DIFFS", 1, "work")
 
         return {
             "title": STEPS[1],

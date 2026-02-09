@@ -17,7 +17,7 @@ Fix scripts separate from execute scripts:
 - Fix scripts are shorter, focused on QR findings
 """
 
-from skills.lib.workflow.ast import W, XMLRenderer, render
+from skills.planner.shared.constraints import format_state_banner
 from skills.lib.conventions import get_convention
 from skills.planner.shared.resources import validate_state_dir_requirement, get_context_path, render_context_file
 from skills.planner.shared.qr.utils import (
@@ -50,10 +50,7 @@ def get_step_guidance(
         qr_state = load_qr_state(state_dir, PHASE)
         failed_items_block = format_failed_items_for_fix(qr_state) if qr_state else ""
 
-        banner = render(
-            W.el("state_banner", checkpoint="DEV-FILL-DIFFS", iteration=str(qr_iteration), mode="fix").build(),
-            XMLRenderer()
-        )
+        banner = format_state_banner("DEV-FILL-DIFFS", qr_iteration, "fix")
         diff_convention = get_convention("diff-format.md")
 
         # Load context for semantic validation reference

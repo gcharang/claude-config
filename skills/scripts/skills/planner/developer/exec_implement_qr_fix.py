@@ -11,7 +11,7 @@ For first-time implementation, see exec_implement_execute.py.
 Router (exec_implement.py) dispatches to appropriate script.
 """
 
-from skills.lib.workflow.ast import W, XMLRenderer, render
+from skills.planner.shared.constraints import format_state_banner
 from skills.planner.shared.resources import validate_state_dir_requirement
 from skills.planner.shared.qr.utils import (
     load_qr_state,
@@ -43,10 +43,7 @@ def get_step_guidance(
         qr_state = load_qr_state(state_dir, PHASE)
         failed_items_block = format_failed_items_for_fix(qr_state) if qr_state else ""
 
-        banner = render(
-            W.el("state_banner", checkpoint="IMPLEMENTATION-FIX", iteration=str(qr_iteration), mode="fix").build(),
-            XMLRenderer()
-        )
+        banner = format_state_banner("IMPLEMENTATION-FIX", qr_iteration, "fix")
 
         return {
             "title": STEPS[1],

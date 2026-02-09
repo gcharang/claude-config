@@ -12,7 +12,7 @@ For QR fix mode, see exec_implement_qr_fix.py.
 Router (exec_implement.py) dispatches to appropriate script.
 """
 
-from skills.lib.workflow.ast import W, XMLRenderer, render
+from skills.planner.shared.constraints import format_state_banner
 
 
 STEPS = {
@@ -31,10 +31,7 @@ def get_step_guidance(
     state_dir_arg = f" --state-dir {state_dir}" if state_dir else ""
 
     if step == 1:
-        banner = render(
-            W.el("state_banner", checkpoint="IMPLEMENTATION", iteration="1", mode="work").build(),
-            XMLRenderer()
-        )
+        banner = format_state_banner("IMPLEMENTATION", 1, "work")
         return {
             "title": STEPS[1],
             "actions": [

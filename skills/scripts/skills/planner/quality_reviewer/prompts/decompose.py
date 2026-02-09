@@ -28,7 +28,6 @@ from pathlib import Path
 
 from skills.planner.shared.qr.utils import load_qr_state
 from skills.planner.shared.resources import get_context_path, render_context_file
-from skills.lib.workflow.ast import W, render, XMLRenderer, TextNode
 
 
 # =============================================================================
@@ -36,21 +35,19 @@ from skills.lib.workflow.ast import W, render, XMLRenderer, TextNode
 # =============================================================================
 
 def render_item_list(items: list[dict], label: str = "ungrouped_items") -> str:
-    """Render item list as XML for LLM parsing.
+    """Render QR item list for LLM parsing.
 
-    WHY XML: LLMs parse structured XML more reliably than free-form text.
-    Each item becomes an <item> element with id/scope attributes.
+    WHY 80-char truncation: Check descriptions can be verbose. Truncation
+    preserves readability without obscuring item identity.
     """
     if not items:
-        return f"<{label} count=\"0\" />"
-
-    item_nodes = [
-        W.el("item", TextNode(i.get('check', '')[:80]),
-             id=i['id'], scope=i.get('scope', '*')).node()
-        for i in items
-    ]
-    list_node = W.el(label, *item_nodes, count=str(len(items))).build()
-    return render(list_node, XMLRenderer())
+        return f"{label}: 0 items"
+    lines = [f"{label}: {len(items)} items"]
+    for i in items:
+        scope = i.get("scope", "*")
+        check = i.get("check", "")[:80]
+        lines.append(f"  {i['id']} [scope={scope}]: {check}")
+    return "\n".join(lines)
 
 
 def load_ungrouped_todo_items(state_dir: str, phase: str) -> list[dict]:

@@ -11,13 +11,16 @@ from pathlib import Path
 SKILLS_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
 
 
-def format_step(body: str, next_cmd: str = "", title: str = "") -> str:
+def format_step(body: str, next_cmd: str = "", title: str = "",
+                if_pass: str = "", if_fail: str = "") -> str:
     """Assemble complete workflow step: title + body + invoke directive.
 
     Args:
         body: Free-form prompt content (no wrapper needed)
         next_cmd: Command for next step (empty string signals completion)
         title: Optional title rendered as "TITLE\\n======\\n\\n" header
+        if_pass: Branching command when QR gate passes
+        if_fail: Branching command when QR gate fails
 
     Returns:
         Complete step output as plain text
@@ -26,7 +29,19 @@ def format_step(body: str, next_cmd: str = "", title: str = "") -> str:
         header = f"{title}\n{'=' * len(title)}\n\n"
         body = header + body
 
-    if next_cmd:
+    if if_pass and if_fail:
+        # Branching invoke for QR gate routing: the LLM chooses based on
+        # aggregated QR outcome (all pass vs any fail).
+        invoke = (
+            f"NEXT STEP (conditional):\n"
+            f"    Working directory: {SKILLS_DIR}\n"
+            f"    If PASS: {if_pass}\n"
+            f"    If FAIL: {if_fail}\n\n"
+            f"Choose based on outcome, then execute."
+        )
+        return f"{body}\n\n{invoke}"
+
+    elif next_cmd:
         # Working directory is explicit because CLI execution context varies.
         # Command is literal shell invocation for next step.
         invoke = (

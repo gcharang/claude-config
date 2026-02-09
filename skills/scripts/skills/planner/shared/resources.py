@@ -238,35 +238,13 @@ def load_context_block(context_file: str | None) -> list[str]:
 
 
 def render_context_file(context_file: str) -> str:
+    """Load and format context.json for sub-agent consumption.
+
+    WHY logical name: LLM sees "context.json" (semantic) not
+    "/tmp/planner_xyz/context.json" (implementation detail).
     """
-    Renders context.json using FileContentNode for structured XML output.
+    from skills.lib.workflow.prompts import format_file_content
 
-    WHY this function exists:
-    - Standardizes context display across all 3 sub-agents (architect, developer, technical_writer)
-    - Uses FileContentNode to leverage existing AST infrastructure for file display
-    - Produces XML with CDATA escaping, matching other file content displays in workflow
-    - Single point of change if context rendering logic needs adjustment
-
-    WHY FileContentNode instead of raw string:
-    - Consistent with how other files are displayed in step guidance (e.g., workflow/ast usage)
-    - CDATA escaping prevents JSON special chars from breaking XML structure
-    - <file path="..."> tag makes it clear this is a file artifact, not inline text
-    - XMLRenderer handles edge cases (empty files, encoding issues) consistently
-
-    Args:
-        context_file: Absolute path to context.json handover file
-
-    Returns:
-        XML string: <file path="context.json"><![CDATA[{...}]]></file>
-
-    Raises:
-        FileNotFoundError: With context-specific message identifying orchestrator bug
-    """
-    from skills.lib.workflow.ast import XMLRenderer
-    from skills.lib.workflow.ast.nodes import FileContentNode
-
-    # WHY explicit error handling: Generic Python traceback wastes investigation time.
-    # Context-specific error identifies orchestrator bug (forgot to create context.json).
     try:
         content = Path(context_file).read_text()
     except FileNotFoundError:
@@ -274,12 +252,6 @@ def render_context_file(context_file: str) -> str:
             f"Context file not found: {context_file}. "
             "Orchestrator must create context.json before sub-agent dispatch."
         )
-
-    # WHY hardcode path="context.json": LLM sees logical name, not /tmp/xyz123 paths
-    # The actual filesystem path is already known to the orchestrator; sub-agent
-    # only cares about the content and the semantic role ("this is the context").
-    node = FileContentNode(path="context.json", content=content)
-
-    return XMLRenderer().render_file_content(node)
+    return format_file_content("context.json", content)
 
 

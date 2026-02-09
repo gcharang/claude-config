@@ -7,12 +7,17 @@ import argparse
 from pathlib import Path
 from typing import Callable
 
-from .ast import W, XMLRenderer, render, TextNode
-from .ast.nodes import StepHeaderNode, CurrentActionNode, InvokeAfterNode
-from .ast.renderer import (
-    render_step_header, render_current_action, render_invoke_after,
-)
+from .prompts.step import format_step
 from .types import UserInputResponse
+
+
+# Injected on step 1 only. Replaces the deleted xml_format_mandate.
+THINKING_EFFICIENCY = (
+    "THINKING EFFICIENCY:\n"
+    "  Max 5 words per step. Symbolic notation preferred.\n"
+    '  Good: "Patterns needed -> grep auth -> found 3"\n'
+    '  Bad: "For the patterns we need, let me search for auth..."'
+)
 
 
 def _compute_module_path(script_file: str) -> str:
@@ -78,7 +83,6 @@ def mode_main(
         description: Script description for --help
         extra_args: Additional arguments beyond standard QR args
     """
-    script_name = Path(script_file).stem
     module_path = _compute_module_path(script_file)
 
     parser = argparse.ArgumentParser(description=description)
@@ -96,42 +100,25 @@ def mode_main(
     )
 
     # Handle both dict and dataclass (GuidanceResult) returns
-    # Scripts use different patterns - some return dicts, others return GuidanceResult
     if hasattr(guidance, '__dataclass_fields__'):
-        # GuidanceResult dataclass - convert to dict
         guidance_dict = {
             "title": guidance.title,
             "actions": guidance.actions,
             "next": guidance.next_command,
         }
     else:
-        # Already a dict
         guidance_dict = guidance
 
-    # Build step output using AST builder
-    parts = []
-    # step_header omits total attribute: cosmetic display ('step X of Y') never parsed
-    # by consumers. Omission eliminates workflow parameter coupling in mode_main().
-    parts.append(render_step_header(StepHeaderNode(
-        title=guidance_dict["title"],
-        script=script_name,
-        step=str(parsed.step)
-    )))
+    # Build body from actions list
+    body_parts = []
     if parsed.step == 1:
-        parts.append("")
-        parts.append("<xml_format_mandate>")
-        parts.append("  All workflow output MUST be well-formed XML.")
-        parts.append("  Use CDATA for code: <![CDATA[...]]>")
-        parts.append("</xml_format_mandate>")
-        parts.append("")
-        parts.append("<thinking_efficiency>")
-        parts.append("Max 5 words per step. Symbolic notation preferred.")
-        parts.append('Good: "Patterns needed -> grep auth -> found 3"')
-        parts.append('Bad: "For the patterns we need, let me search for auth..."')
-        parts.append("</thinking_efficiency>")
-    parts.append("")
-    parts.append(render_current_action(CurrentActionNode(guidance_dict["actions"])))
-    if guidance_dict.get("next"):
-        parts.append("")
-        parts.append(render_invoke_after(InvokeAfterNode(cmd=guidance_dict["next"])))
-    print("\n".join(parts))
+        body_parts.append(THINKING_EFFICIENCY)
+        body_parts.append("")
+
+    for action in guidance_dict["actions"]:
+        body_parts.append(str(action))
+
+    body = "\n".join(body_parts)
+    next_cmd = guidance_dict.get("next", "")
+
+    print(format_step(body, next_cmd, title=guidance_dict["title"]))
