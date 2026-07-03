@@ -10,16 +10,12 @@ from typing import Any
 
 import pytest
 
-# Skills excluded from testing (not in git or incompatible)
-EXCLUDED = {
-    "leon-writing-style",
-    "prompt-engineer-improver",
-}
+# Skills excluded from testing (not in git or incompatible). None currently.
+EXCLUDED: set[str] = set()
 
 # All skill modules to import for registry population
 SKILL_MODULES = [
     "skills.decision_critic.decision_critic",
-    "skills.leon_writing_style.writing_style",
     "skills.problem_analysis.analyze",
     "skills.codebase_analysis.analyze",
     "skills.deepthink.think",

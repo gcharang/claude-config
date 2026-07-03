@@ -2,7 +2,7 @@
 
 ## Path Resolution
 
-**Problem**: The sub-agent workflow includes a bash heredoc that must inject the correct `sys.path` entry to import `skills.arxiv_to_md.tex_utils`. A hardcoded path like `/Users/lmergen/.claude/skills/scripts` only works on the original author's machine.
+**Problem**: The sub-agent workflow includes a bash heredoc that must inject the correct `sys.path` entry to import `skills.arxiv_to_md.tex_utils`. A hardcoded path like `/Users/alex/.claude/skills/scripts` only works on the original author's machine.
 
 **Solution**: Compute `SCRIPTS_DIR` at module load time using `Path(__file__).resolve().parent.parent.parent`, which traverses from `skills/arxiv_to_md/sub_agent.py` up to `skills/scripts/`.
 

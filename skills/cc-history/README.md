@@ -22,13 +22,13 @@ Claude Code stores conversation history in `~/.claude/projects/` with directorie
 
 ```
 ~/.claude/projects/
-  |-- -Users-leon--claude/              # /Users/leon/.claude
+  |-- -Users-alex--claude/              # /Users/alex/.claude
   |   |-- {session-uuid}.jsonl          # Main conversation
   |   |-- {session-uuid}/
   |       |-- subagents/
   |       |   |-- agent-{hash}.jsonl    # Subagent conversations
   |       |-- tool-results/             # Large tool outputs
-  |-- -Users-leon-git-myproject/        # /Users/leon/git/myproject
+  |-- -Users-alex-git-myproject/        # /Users/alex/git/myproject
       |-- ...
 ```
 
@@ -38,7 +38,7 @@ Working directory paths are encoded:
 
 | Original       | Encoded        | Rule                |
 | -------------- | -------------- | ------------------- |
-| `/Users/leon`  | `-Users-leon`  | Leading `/` -> `-`  |
+| `/Users/alex`  | `-Users-alex`  | Leading `/` -> `-`  |
 | `/git/project` | `-git-project` | Internal `/` -> `-` |
 | `/.claude`     | `--claude`     | `/.` -> `--`        |
 

@@ -82,4 +82,3 @@ BoundedInt(1, 5) for iteration domain matches QR_ITERATION_LIMIT constant. Hardc
 - pytest available
 - run_skill_invocation() in conftest.py handles subprocess execution
 - MAX_ITERATIONS = 5 standard across workflows
-- Excluded skills: leon-writing-style, prompt-engineer-improver (not in git)
