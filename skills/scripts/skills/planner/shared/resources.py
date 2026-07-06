@@ -78,7 +78,6 @@ __all__ = [
     "get_context_path",
     "get_exhaustiveness_prompt",
     "get_mode_script_path",
-    "get_qa_schema",
     "get_resource",
     "render_context_file",
     "render_phase_context",
@@ -183,18 +182,6 @@ def get_exhaustiveness_prompt() -> list[str]:
         "second examination finds nothing new.",
         "</exhaustiveness_check>",
     ]
-
-
-def get_qa_schema() -> str:
-    """Return QA state schema documentation.
-
-    QA state tracks verification tasks across decomposition iterations.
-    Schema defines structure for qa.yaml state file.
-
-    Returns:
-        Full content of qa-schema.md resource
-    """
-    return get_resource("qa-schema.md")
 
 
 def render_context_file(context_file: str | Path, *, missing_ok: bool = False) -> str:

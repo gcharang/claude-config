@@ -2,20 +2,22 @@
 
 ## Overview
 
-Templates injected by planner scripts at runtime. Scripts load these via direct
-Path resolution, not through `get_resource()` from `shared/resources.py`.
+Reference files for the planner. One is injected into a sub-agent prompt at
+runtime; the rest are read by whoever edits the planner's structure.
 
-## Loading Mechanism
+## Loading mechanism
 
-Resources are loaded inline in each script that needs them:
+`plan-json-schema.md` is the authoritative plan.json (JSON-IR) schema. The
+architect sub-agent loads it at runtime through
+`PlannerResourceProvider.get_resource()` (`shared/resources.py`) during its
+plan-writing step (`architect/plan_design_execute.py`, step 6) and injects it
+into the prompt, so the agent emits schema-conformant JSON without an embedded
+copy that could drift from the schema.
 
-```python
-# planner.py:168
-format_path = Path(__file__).parent.parent / "resources" / "plan-format.md"
+`plan-format.md` (human-readable plan-structure reference) and
+`explore-output-format.md` (XML schema for exploration output) are NOT injected
+— they are reference docs, read when editing the plan or exploration structure.
 
-# explore.py:52
-format_path = Path(__file__).parent.parent / "resources" / "explore-output-format.md"
-```
-
-The `get_resource()` function in `shared/resources.py` exists but is unused for
-these files. Scripts prefer inline Path resolution for explicitness.
+`get_resource(name)` is the single loader for runtime-injected resources; it
+resolves `<deploy-root>/skills/planner/resources/<name>` (the repo tree under
+`.claude/` once synced).
