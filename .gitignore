@@ -18,6 +18,7 @@
 # Track root files
 !README.md
 !LICENSE
+!DEFERRED.md
 !.gitignore
 
 # Always ignore these, even in tracked directories
