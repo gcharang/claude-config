@@ -3,11 +3,20 @@ name: Skills Tests
 on:
   push:
     paths:
-      - 'skills/scripts/**'
+      # skills/scripts/** (the Python package) plus every tree the
+      # reference-resolution guard scans: skill/agent markdown and the
+      # conventions/output-styles files their <file uri> targets point at.
+      - 'skills/**'
+      - 'agents/**'
+      - 'conventions/**'
+      - 'output-styles/**'
       - '.github/workflows/skills-test.yml'
   pull_request:
     paths:
-      - 'skills/scripts/**'
+      - 'skills/**'
+      - 'agents/**'
+      - 'conventions/**'
+      - 'output-styles/**'
       - '.github/workflows/skills-test.yml'
   workflow_dispatch:
 
