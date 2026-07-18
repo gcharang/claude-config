@@ -56,10 +56,19 @@ SKILLS_SCRIPTS = REPO_ROOT / "skills" / "scripts"
 PKG_ROOT = SKILLS_SCRIPTS / "skills"  # the `skills` Python package (packages=["skills"])
 
 # The only directories `working-dir` may name — the deploy roots the sync creates.
-# `.claude` ≡ REPO_ROOT; `.claude/skills/scripts` ≡ SKILLS_SCRIPTS.
-WORKING_DIR_ROOTS: dict[str, Path] = {
+# `.claude` ≡ REPO_ROOT; `.claude/skills/scripts` ≡ SKILLS_SCRIPTS. A downstream
+# fork may deploy an additional first-party script package (e.g. a private
+# `skills/custom-scripts/`); its candidate is listed here unconditionally and the
+# `.exists()` filter below drops it wherever that tree is absent — so R3 stays
+# correct both upstream (candidate filtered out, roots unchanged) and in a fork
+# (present → that fork's `working-dir` refs resolve), with no per-fork divergence.
+_WORKING_DIR_ROOT_CANDIDATES: dict[str, Path] = {
     ".claude": REPO_ROOT,
     ".claude/skills/scripts": SKILLS_SCRIPTS,
+    ".claude/skills/custom-scripts": REPO_ROOT / "skills" / "custom-scripts",
+}
+WORKING_DIR_ROOTS: dict[str, Path] = {
+    k: v for k, v in _WORKING_DIR_ROOT_CANDIDATES.items() if v.exists()
 }
 
 # `uri` targets deployed from outside this repo's tree: the global CLAUDE.md is
