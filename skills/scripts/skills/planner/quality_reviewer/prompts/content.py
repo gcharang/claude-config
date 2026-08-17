@@ -651,41 +651,6 @@ class ImplCodeVerify(VerifyBase):
         # Add check-specific guidance
         rules = [
             (
-                lambda c: "factored" in c and "expect" in c,
-                [
-                    "FACTORED VERIFICATION - STEP 1 (Expectations):",
-                    "  Write down what you EXPECT to observe in code",
-                    "  BEFORE reading the actual implementation.",
-                    "  | Criterion | Expected Code Evidence |",
-                    "  | --------- | ---------------------- |",
-                    "  Fill this table FIRST, then proceed to observation step.",
-                    "",
-                ],
-            ),
-            (
-                lambda c: "factored" in c and "actually" in c,
-                [
-                    "FACTORED VERIFICATION - STEP 2 (Observations):",
-                    "  Document what the code ACTUALLY does",
-                    "  WITHOUT re-reading acceptance criteria.",
-                    "  | Function/Section | What It Actually Does |",
-                    "  | ---------------- | --------------------- |",
-                    "  Note behaviors, not what it should do.",
-                    "",
-                ],
-            ),
-            (
-                lambda c: "factored" in c and "compare" in c,
-                [
-                    "FACTORED VERIFICATION - STEP 3 (Comparison):",
-                    "  NOW compare your expectations vs observations.",
-                    "  | Criterion | Expected | Observed | Match? |",
-                    "  | --------- | -------- | -------- | ------ |",
-                    "  Report mismatches as FAIL.",
-                    "",
-                ],
-            ),
-            (
                 lambda c: "marker" in c or ":perf:" in c or ":unsafe:" in c,
                 lambda: self._intent_marker_guidance(include_examples=True),
             ),

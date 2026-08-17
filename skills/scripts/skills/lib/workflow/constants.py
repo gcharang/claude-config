@@ -38,28 +38,6 @@ EXAMPLE (don't batch):
 
 
 # =============================================================================
-# Subagent Return Constants
-# =============================================================================
-
-SUBAGENT_RETURN_BUDGET = """\
-<return_budget>
-TOKEN BUDGET (ENFORCED):
-  - Total return: MAX 1500 tokens
-  - Per section: MAX 500 tokens
-  - Per finding/item: MAX 50 tokens
-
-COMPRESSION STYLE:
-  VERBOSE: 'The module implements a factory pattern that creates service
-           instances, enabling dependency injection and testability...'
-  DRAFT:   'Factory pattern -> DI + testability'
-
-If findings exceed budget, OMIT low-relevance items.
-Write detailed content to FILES, return only status + metadata.
-</return_budget>
-"""
-
-
-# =============================================================================
 # State File Constants (JSON migration)
 # =============================================================================
 

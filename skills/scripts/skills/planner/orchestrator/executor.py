@@ -33,7 +33,6 @@ from skills.lib.workflow.prompts import subagent_dispatch
 from skills.lib.workflow.prompts.step import SKILLS_DIR, format_step, pin_cwd
 from skills.planner.shared.builders import (
     ESCALATE_HANDLER,
-    THINKING_EFFICIENCY,
     build_fix_mode_dispatch,
     build_qr_decompose_dispatch,
     build_qr_verify_dispatch,
@@ -85,8 +84,6 @@ MODULE_PATH = "skills.planner.orchestrator.executor"
 def format_step_1(state_dir: str, reconciliation_check: bool) -> str:
     """Create state_dir, analyze plan, transcribe wave list."""
     actions = [
-        THINKING_EFFICIENCY,
-        "",
         "Plan file: $PLAN_FILE (substitute from context)",
         "",
         "ANALYZE plan:",
@@ -162,12 +159,10 @@ def format_step_1(state_dir: str, reconciliation_check: bool) -> str:
                 "    - Code may exist but NOT meet the criteria (done wrong).",
                 "    - Criteria may be met by DIFFERENT code than planned (done correctly).",
                 "",
-                "  For EACH milestone, run a factored check (resist confirmation bias):",
-                "    1. EXTRACT its acceptance criteria into a checklist (do not evaluate yet).",
-                "    2. For each criterion, STATE what you expect, then SEARCH the codebase",
-                "       (Grep/Read) with OPEN questions -- 'what is the retry threshold?', NOT",
-                "       'is the threshold 3?' -- and verify BEHAVIOR, not just that code exists.",
-                "    3. RECORD MET | NOT_MET with evidence (file:line, or 'not found').",
+                "  For EACH milestone, check every acceptance criterion against the codebase",
+                "  (Grep/Read) and RECORD MET | NOT_MET with evidence (file:line, or 'not",
+                "  found'). Verify BEHAVIOR -- what the code actually does under the criterion's",
+                "  conditions -- not merely that code with the right name exists.",
                 "",
                 "  Mark a milestone complete ONLY when ALL its criteria are MET; if any is",
                 "  NOT_MET, execute that milestone (fully, or just the missing parts).",
@@ -272,14 +267,14 @@ def format_step_2(qr: QRState, state_dir: str) -> str:
             "     - Milestone: [number and name]",
             "     - Files: [exact paths to create/modify]",
             "     - Acceptance criteria: [from plan, milestones[].acceptance_criteria]",
-            # Code Intent is the durable contract: there are no
-            # plan-time diffs. The developer regenerates the implementation JIT
-            # against the live file; impl-code QR reviews exactly what ships.
+            # Code Intent is the durable contract: the developer regenerates the
+            # implementation JIT against the live file; impl-code QR reviews exactly
+            # what ships.
             "     - Code Intent: the milestone's code_intents[] from plan.json",
             "       ({file, function, behavior, decision_refs}) -- the durable contract.",
             "       Implement these behaviors just-in-time against the CURRENT file:",
             "       read the live file, then write code satisfying the Code Intent +",
-            "       acceptance criteria. No precomputed diffs, nothing to re-anchor.",
+            "       acceptance criteria.",
             "",
             "  3. Wait for ALL agents in wave to complete",
             "",

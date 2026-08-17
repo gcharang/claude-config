@@ -1,9 +1,8 @@
 # Plan JSON Schema
 
 JSON-IR-first architecture. The architect's **Code Intent is the durable contract**;
-the developer implements it just-in-time against the live file at execution (there are
-no plan-time diffs). `plan.json` is authoritative and is rendered to Markdown when the
-plan is approved.
+the developer implements it just-in-time against the live file at execution.
+`plan.json` is authoritative and is rendered to Markdown when the plan is approved.
 
 This reference mirrors the Pydantic models in `skills/planner/shared/schema.py` (the sole
 source of truth). Build `plan.json` with the CLI (`set-decision`, `set-milestone`,
@@ -164,15 +163,15 @@ its `files` to satisfy its `acceptance_criteria` at execution; impl-docs QR veri
 
 ## Code Intent
 
-Architect populates — **the durable, binding contract** (you read the source; there are
-no plan-time diffs). The developer implements it just-in-time against the live file at
-execution, and impl-code QR reviews exactly what ships. Make it complete: per file give
+Architect populates — **the durable, binding contract**. The developer implements it
+just-in-time against the live file at execution, working from this text alone, and
+impl-code QR reviews exactly what ships. Make it complete: per file give
 symbol signatures + purpose, precise behavior (control flow, error/edge handling, data
 shapes), the integration seam by name, and a `decision_ref` for every value / threshold /
 tradeoff.
 
 CLI: `set-intent`. Encode every threshold / value / unit inside `behavior` (prose) and
-cite the deciding `decision_ref` — there is no separate params structure.
+cite the deciding `decision_ref`.
 
 ```json
 {
@@ -192,8 +191,8 @@ cite the deciding `decision_ref` — there is no separate params structure.
 ## Wave
 
 Top-level `waves`: each wave groups milestone IDs that execute in parallel; waves run in
-order. Mirrors the `Wave` model (`id`, `milestones`) — there is no separate
-`milestone_dependencies` block. CLI: `set-wave --milestones M-001,M-002` (architect).
+order. Mirrors the `Wave` model (`id`, `milestones`); wave membership is the only
+ordering mechanism. CLI: `set-wave --milestones M-001,M-002` (architect).
 Do not co-schedule two milestones that touch the same file in one wave — they run as
 concurrent developer agents and would corrupt it mid-write.
 
@@ -255,8 +254,7 @@ render. CLI: `set-diagram`, `add-diagram-node`, `add-diagram-edge`, `set-diagram
 - Every non-documentation-only milestone appears in exactly one wave
 - Documentation-only milestones appear in NO wave (they route to exec-docs)
 
-Execution runs from this plan (developer implements Code Intent JIT, then code/docs QR);
-there is no plan-code or plan-docs phase.
+Execution runs from this plan (developer implements Code Intent JIT, then code/docs QR).
 
 ---
 

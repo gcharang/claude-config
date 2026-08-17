@@ -11,14 +11,6 @@ from pathlib import Path
 from .prompts.step import format_step
 from .types import UserInputResponse
 
-# Injected on step 1 only. Replaces the deleted xml_format_mandate.
-THINKING_EFFICIENCY = (
-    "THINKING EFFICIENCY:\n"
-    "  Max 5 words per step. Symbolic notation preferred.\n"
-    '  Good: "Patterns needed -> grep auth -> found 3"\n'
-    '  Bad: "For the patterns we need, let me search for auth..."'
-)
-
 
 def _compute_module_path(script_file: str) -> str:
     """Compute module path from script file path.
@@ -63,20 +55,14 @@ def get_user_answer(args) -> UserInputResponse | None:
     return None
 
 
-def render_step(step: int, guidance: dict) -> str:
+def render_step(guidance: dict) -> str:
     """Assemble a step's printable output: body + cd-pinned NEXT STEP footer.
 
     Shared by mode_main and the QR verify entry point so both render steps
-    identically. Step 1 gets the THINKING_EFFICIENCY preamble; the trailing
-    invoke directive (with its absolute cd) is supplied by format_step.
+    identically; the trailing invoke directive (with its absolute cd) is
+    supplied by format_step.
     """
-    body_parts: list[str] = []
-    if step == 1:
-        body_parts.append(THINKING_EFFICIENCY)
-        body_parts.append("")
-    for action in guidance["actions"]:
-        body_parts.append(str(action))
-    body = "\n".join(body_parts)
+    body = "\n".join(str(action) for action in guidance["actions"])
     return format_step(body, guidance.get("next", ""), title=guidance["title"])
 
 
@@ -135,4 +121,4 @@ def mode_main(
         print(f"Error: {guidance_dict['error']}", file=sys.stderr)
         sys.exit(1)
 
-    print(render_step(parsed.step, guidance_dict))
+    print(render_step(guidance_dict))

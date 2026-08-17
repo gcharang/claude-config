@@ -51,17 +51,10 @@ CRITICAL: Copy the block above EXACTLY. Do not paraphrase or summarize.
 The subagent needs "FIRST ACTION REQUIRED" to know it must run the command."""
 
 PARALLEL_CONSTRAINT = """\
-PARALLEL EXECUTION (MANDATORY):
-    You MUST dispatch ALL {count} agents in ONE assistant message.
-    Send exactly {count} Task tool calls together.
-
-    CORRECT:
-        [ONE message with Task call 1, Task call 2, ... Task call N]
-
-    WRONG:
-        [Message with Task call 1] -> [wait] -> [Message with Task call 2]
-
-    FORBIDDEN: Waiting for any agent before dispatching the next."""
+PARALLEL EXECUTION:
+    Dispatch all {count} agents in one assistant message -- {count} Task tool calls
+    issued together -- so they run concurrently. Do not wait for one agent to
+    return before dispatching the next."""
 
 
 # ============================================================================
@@ -166,7 +159,7 @@ def sub_agent_invoke(cmd: str) -> str:
 
 
 def parallel_constraint(count: int) -> str:
-    """Enforce MANDATORY_PARALLEL execution for multiple agents."""
+    """Render the parallel-dispatch instruction for N agents."""
     return PARALLEL_CONSTRAINT.format(count=count)
 
 

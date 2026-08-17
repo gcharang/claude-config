@@ -12,7 +12,7 @@ Flow:
 
 Code Intent is the durable contract: at execution the developer regenerates the
 implementation just-in-time per wave against the live file (see executor.py), and
-impl-code QR is the single authoritative code review. There are no plan-time diffs.
+impl-code QR is the single authoritative code review.
 
 QR Block Pattern (4 steps per phase):
   N   work        1 agent (architect)          Modified plan.json
@@ -36,7 +36,6 @@ from skills.lib.workflow.prompts.step import format_step
 from skills.lib.workflow.types import AgentRole
 from skills.planner.shared.builders import (
     ESCALATE_HANDLER,
-    THINKING_EFFICIENCY,
     build_fix_mode_dispatch,
     build_qr_decompose_dispatch,
     build_qr_verify_dispatch,
@@ -566,15 +565,7 @@ def format_output(
     if "error" in guidance:
         return f"Error: {guidance['error']}"
 
-    body_parts = []
-    if step == 1:
-        body_parts.append(THINKING_EFFICIENCY)
-        body_parts.append("")
-
-    for action in guidance["actions"]:
-        body_parts.append(str(action))
-
-    body = "\n".join(body_parts)
+    body = "\n".join(str(action) for action in guidance["actions"])
     title = guidance["title"]
 
     if_pass = guidance.get("if_pass")

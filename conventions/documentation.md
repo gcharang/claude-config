@@ -70,7 +70,7 @@ regeneration commands in the "What" column or in a dedicated Regenerate section.
 This prevents LLMs from wasting effort analyzing or "improving" auto-generated
 code, and prevents edits that will be overwritten or cause merge conflicts.
 
-See also: conventions/code-quality/baseline.md "Generated and Vendored Code Awareness".
+See also: conventions/code-quality/05-documentation-and-tests.md "Generated and Vendored Code Awareness".
 
 ### ROOT vs SUBDIRECTORY CLAUDE.md
 

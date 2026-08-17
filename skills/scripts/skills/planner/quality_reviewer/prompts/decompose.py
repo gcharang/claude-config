@@ -280,7 +280,7 @@ def dispatch_step(
                 "  - What is this plan trying to accomplish?",
                 "  - What does success look like for this phase?",
                 "",
-                "DO NOT generate items yet. Understanding first.",
+                "Items come in step 5; this step establishes the context they are checked against.",
             ],
             "next": next_cmd(2),
         }
@@ -290,13 +290,12 @@ def dispatch_step(
         return {
             "title": f"QR Decomposition Step 2: Holistic Concerns ({phase})",
             "actions": [
-                "THINKING TOP-DOWN: If reviewing this phase output, what would you check?",
+                "TOP-DOWN: If reviewing this phase output, what would you check?",
                 "",
                 phase_prompts[2],
                 "",
-                "OUTPUT: Bulleted list of concerns.",
-                "  - Quantity over quality at this step",
-                "  - No filtering yet - capture everything",
+                "OUTPUT: Bulleted list of concerns -- capture everything; step 4 maps them",
+                "to items and step 5 turns the cross-cutting ones into umbrella items.",
                 "",
                 "These concerns will drive umbrella items in Step 5.",
             ],
@@ -308,7 +307,7 @@ def dispatch_step(
         return {
             "title": f"QR Decomposition Step 3: Structural Enumeration ({phase})",
             "actions": [
-                "THINKING BOTTOM-UP: What EXISTS in the plan for this phase?",
+                "BOTTOM-UP: What EXISTS in the plan for this phase?",
                 "",
                 phase_prompts[3],
                 "",

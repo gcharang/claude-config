@@ -51,13 +51,13 @@ fix, and the iteration ceiling escalates to you) → `retrospective`.
 
 Definitions live in `agents/`. Model tiers are configurable per agent.
 
-| Agent            | Role                                                     | Default tier   |
+| Agent            | Role                                                    | Default tier   |
 | ---------------- | ------------------------------------------------------- | -------------- |
 | Architect        | Turns ambiguous requests into unambiguous plans         | opus, xhigh    |
-| Developer        | Implements code intents just-in-time; writes no prose   | sonnet, max    |
-| Quality Reviewer | Decomposes and verifies plans and code for defects      | opus, max      |
+| Developer        | Implements code intents just-in-time; writes no prose   | sonnet, xhigh  |
+| Quality Reviewer | Decomposes and verifies plans and code for defects      | opus, xhigh    |
 | Technical Writer | Authors documentation after code passes review          | sonnet, medium |
-| Debugger         | Systematic root-cause analysis                           | sonnet, max    |
+| Debugger         | Systematic root-cause analysis                          | sonnet, xhigh  |
 
 ### The gates and loops
 
@@ -138,9 +138,8 @@ pass review before execution begins, and each milestone passes review before the
 
 The orchestrator delegates to smaller agents — cheaper tiers for straightforward and
 moderate-complexity work — and injects prompts just-in-time, giving those models precisely the
-guidance they need at each step. When quality review fails or problems recur, the orchestrator
-escalates to higher-quality models. Expensive models are reserved for genuine ambiguity, not
-routine work.
+guidance they need at each step. When quality review keeps failing, the orchestrator stops
+at the iteration ceiling and escalates to you, not to a larger model.
 
 ## Quick Start
 

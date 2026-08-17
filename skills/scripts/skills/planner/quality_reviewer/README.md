@@ -34,9 +34,15 @@ QR gates now integrate with QA state tracking for structured verification. QA de
 
 ### Why Main Agent Doesn't Parse
 
-The LLM reads sub-agent responses and follows instructions naturally. No JSON parsing, no status extraction logic. Sub-agents return text responses with embedded instructions like "PASS: continue to next phase" or "FAIL: invoke fixer with items [...]". Main agent reads and follows.
+The main agent needs no parsing logic because the reply it routes on is one bare word: each
+verify agent returns `PASS` or `FAIL`, and the main agent tallies those to pick the gate's
+`--qr-status`. The detail behind a FAIL lives in qr-{phase}.json, written by the verify
+runner's `--result/--finding` flags and read by the script, never lifted out of the response
+text. A fix agent returns a bare `PASS` when done, which routes the orchestrator back into a
+fresh QR pass rather than into a status tally; decompose returns its item summary as text
+(see Response Formats below).
 
-This eliminates an entire class of bugs: parsing errors, schema mismatches, JSON escaping issues. The LLM's natural language understanding handles all response interpretation.
+This eliminates an entire class of bugs: parsing errors, schema mismatches, JSON escaping issues.
 
 ### Why Status Overview is Sub-Agent Only
 
@@ -60,30 +66,21 @@ Items created: 7
 NEXT: Invoke verifiers for each item.
 ```
 
-**VERIFY Mode**: Returns PASS/FAIL verdict.
+**VERIFY Mode**: the agent's entire final response is one bare word.
 
 ```
-VERIFICATION COMPLETE
-
-Status: PASS
-Items: 7 total, 7 PASS, 0 FAIL
-
-NEXT: Continue to next phase.
+PASS
 ```
 
 or
 
 ```
-VERIFICATION COMPLETE
-
-Status: FAIL
-Items: 7 total, 5 PASS, 2 FAIL
-Failed items:
-- plan-002: Acceptance criteria missing for M1
-- plan-005: Diff has merge conflict markers
-
-NEXT: Invoke fixer with failed items.
+FAIL
 ```
+
+Per-item verdicts and findings reach qr-{phase}.json through the runner's
+`--result PASS|FAIL --finding <text>` flag, never through the returned text; the
+orchestrator tallies the single word to pick `--qr-status pass|fail`.
 
 **FIX_GUIDANCE Mode**: Returns specific instructions for fixing failures.
 
@@ -181,18 +178,18 @@ Main agent reads response, sees "NEXT: Invoke verifiers"
 Main agent invokes verify (macro items sequential, micro parallel)
      |
      v
-Verify sub-agent returns: "Status: FAIL, 2 failed items"
+Verify sub-agent returns: "FAIL" (its per-item findings already recorded)
      |
      v
 Step 4: plan-structure-qr-gate
-Main agent reads response, sees "NEXT: Invoke fixer"
+Main agent reads the gate's response, sees "NEXT: Invoke fixer"
      |
      v
 Step 2 (with --qr-fail): plan-structure-execute
 Main agent invokes fixer
      |
      v
-Fixer returns: "Fixes applied"
+Fixer returns: "PASS" (its terminal step returns the bare word)
      |
      v
 Main agent loops back to Step 3: plan-structure-qr
@@ -223,7 +220,7 @@ Execute fixes
 Update qr-{phase}.json with new statuses
      |
      v
-Return response: "Status: PASS, all items fixed"
+Return response: "PASS" (fix runner's terminal step returns the bare word)
 ```
 
 Status overview computed on-demand. Not stored in qr-{phase}.json. Main agent never sees it.

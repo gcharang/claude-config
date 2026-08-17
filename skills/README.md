@@ -550,7 +550,7 @@ Building blocks (also exported):
 
 - `task_tool_instruction(agent_type, model)` -- how to use Task tool
 - `sub_agent_invoke(cmd)` -- command the spawned agent runs
-- `parallel_constraint(count)` -- MANDATORY_PARALLEL enforcement
+- `parallel_constraint(count)` -- parallel dispatch instruction
 
 ### step.py
 

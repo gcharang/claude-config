@@ -16,8 +16,8 @@ This works by:
 2. Calculate total steps from item count
 3. Route step number to (CONTEXT, ANALYZE, CONFIRM, SUMMARY)
 4. ANALYZE: explore codebase, form preliminary conclusion
-5. CONFIRM: verify confidence, record the verdict via this script's
-   --result PASS|FAIL flag (verify_main delegates to cli/qr.py's locked update)
+5. CONFIRM: record the verdict via this script's --result PASS|FAIL flag
+   (verify_main delegates to cli/qr.py's locked update)
 6. SUMMARY: aggregate pass/fail, output single word
 
 Invariants:
@@ -337,7 +337,7 @@ class VerifyBase(ABC):
     def _step_confirm(
         self, state_dir: str, module_path: str, item_ids: list[str], item_idx: int, total_steps: int
     ) -> dict:
-        """CONFIRM step: Verify confidence, record result via cli/qr.py."""
+        """CONFIRM step: record result via cli/qr.py."""
         assert self.PHASE is not None
         state_dir_arg, phase_arg, item_flags = self._verify_cmd_args(state_dir, item_ids)
         current_step = 2 + (item_idx * 2) + 1  # CONFIRM is second of the pair
@@ -374,10 +374,8 @@ class VerifyBase(ABC):
                 f"CONFIRMING: {item_id} (item {item_idx + 1} of {len(item_ids)})",
                 f"SEVERITY: {severity}",
                 "",
-                "CONFIDENCE CHECK:",
-                "- Are you confident in your conclusion?",
-                "- Did you verify against actual code/plan content?",
-                "- Is your evidence specific and verifiable?",
+                "Your verdict must rest on the actual code/plan content you read, with",
+                "evidence specific enough that another reviewer could re-check it.",
                 "",
                 f"RECORD RESULT for {item_id} (run ONE, then run the NEXT STEP below):",
                 "",
@@ -404,38 +402,11 @@ class VerifyBase(ABC):
             "actions": [
                 f"VERIFICATION COMPLETE: {len(item_ids)} items processed",
                 "",
-                "=" * 60,
-                "FINAL OUTPUT FORMAT - READ THIS CAREFULLY",
-                "=" * 60,
-                "",
-                "After processing all items, output EXACTLY ONE WORD:",
-                "",
-                "    PASS",
-                "",
-                "  or",
-                "",
-                "    FAIL",
-                "",
-                "RULES:",
-                "- Your ENTIRE response after the CLI commands is ONE WORD",
-                "- No markdown headers (## or **)",
-                "- No 'VERDICT:' prefix",
-                "- No explanation or reasoning",
-                "- No prose of any kind",
-                "- The finding/explanation goes in the --finding flag, NOT in your output",
-                "",
-                "WRONG outputs (DO NOT DO THIS):",
-                "  '## VERDICT: FAIL'",
-                "  '**FAIL**: The check failed because...'",
-                "  'FAIL: M-002 lists buffer_test.go...'",
-                "  'FAIL\\n\\nThe analysis shows...'",
-                "",
-                "CORRECT outputs (DO THIS):",
-                "  'PASS'",
-                "  'FAIL'",
-                "",
-                "If ANY item fails -> output: FAIL",
-                "If ALL items pass -> output: PASS",
+                "FINAL OUTPUT: your entire response after the CLI commands is exactly one",
+                "word -- PASS if every item passed, FAIL if any item failed. No headers,",
+                "no 'VERDICT:' prefix, no explanation: the orchestrator tallies these words",
+                "mechanically, and each finding already lives in its item's --finding flag.",
+                "This replaces the free-form Output Format in your agent definition.",
             ],
             "next": "",
         }

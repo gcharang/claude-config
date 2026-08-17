@@ -59,7 +59,7 @@ def get_step_guidance(step: int, module_path: str | None = None, **kwargs) -> di
                 "     - Code Intent: the milestone's code_intents[] (file, function,",
                 "       behavior, decision_refs) -- the durable contract. Implement the",
                 "       behavior JIT against the CURRENT file (read it first) to satisfy the",
-                "       acceptance criteria. No plan-time diffs exist; nothing to re-anchor.",
+                "       acceptance criteria.",
                 "  3. Wait for ALL agents in wave to complete",
                 "  4. Run tests: pytest / tsc / go test -race",
                 "  5. Proceed to next wave",
@@ -86,7 +86,7 @@ def get_step_guidance(step: int, module_path: str | None = None, **kwargs) -> di
                 "  - CODE_INTENT: the milestone's code_intents[] from plan.json -- the",
                 "    durable contract (file, function, behavior, decision_refs). Implement",
                 "    these behaviors against the CURRENT file; impl-code QR reviews exactly",
-                "    what ships. There are no precomputed diffs and nothing to re-anchor.",
+                "    what ships.",
             ],
             "next": f"uv run python -m {MODULE_PATH} --step 3{state_dir_arg}",
         }

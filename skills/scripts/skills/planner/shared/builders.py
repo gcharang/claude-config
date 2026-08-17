@@ -5,13 +5,6 @@ Constants for static text, functions for parameterized output.
 
 import shlex
 
-THINKING_EFFICIENCY = (
-    "THINKING EFFICIENCY:\n"
-    "  Max 5 words per step. Symbolic notation preferred.\n"
-    "  -> for implies | for alternatives ; for sequence\n"
-    '  Example: "QR failed -> route step 8 | iteration++"'
-)
-
 PEDANTIC_ENFORCEMENT = (
     "QR exists to catch problems BEFORE they reach production.\n"
     "ALL issues must be fixed before proceeding."
@@ -160,6 +153,7 @@ def build_qr_verify_dispatch(
         f"After ALL {group_count} agents return, tally results mechanically:",
         "  ALL agents returned PASS  ->  invoke next step with --qr-status pass",
         "  ANY agent returned FAIL   ->  invoke next step with --qr-status fail",
+        "  A reply that is neither word counts as FAIL (fail closed; do not re-read it).",
         "",
         format_forbidden(*QR_VERIFY_FORBIDDEN),
     ]

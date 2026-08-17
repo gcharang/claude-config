@@ -226,8 +226,8 @@ Include, per affected file:
 - The integration seam (where it connects), named
 - A Decision Log reference for every value/threshold/algorithm/tradeoff
 
-The developer implements this just-in-time against the live file and escalates if it is
-under-specified -- so make it complete. There are no plan-time diffs; impl-code QR
+The developer implements this just-in-time against the live file, working from this text
+alone, and escalates if it is under-specified -- so make it complete. The impl-code QR
 reviews the actual implementation at execution.
 
 Example:

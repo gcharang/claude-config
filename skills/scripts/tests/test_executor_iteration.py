@@ -174,18 +174,18 @@ class TestEmptyQrVerifyRouting:
 
 
 class TestReconciliationRigor:
-    """--reconciliation-check restores the factored verification protocol inline
+    """--reconciliation-check restores per-criterion verification rigor inline
     (B1: the deleted exec_reconcile.py's rigor, not a bare 'mark satisfied' nudge).
     """
 
-    def test_reconciliation_block_carries_factored_protocol(self, tmp_path: Path):
+    def test_reconciliation_block_carries_per_criterion_rigor(self, tmp_path: Path):
         out = format_output(
             step=1, state_dir=str(tmp_path), qr_status=None, reconciliation_check=True
         )
         assert "RECONCILIATION CHECK REQUESTED" in out
         assert "validate REQUIREMENTS, not code presence" in out  # the key distinction
         assert "MET | NOT_MET" in out                              # per-criterion record
-        assert "OPEN questions" in out                             # anti-confirmation-bias
+        assert "Verify BEHAVIOR" in out                            # behavior, not code presence
         assert "ALL its criteria are MET" in out                   # complete-only-when-all gate
 
     def test_reconciliation_absent_when_not_requested(self, tmp_path: Path):

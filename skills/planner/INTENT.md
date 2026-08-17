@@ -583,7 +583,7 @@ Step 2: impl-code-work
   Routing: If qr-impl-code.json has FAIL items -> quality_reviewer/exec_qr_fix.py --phase impl-code
            Otherwise -> developer/exec_implement_execute.py
   Dispatch carries: files, acceptance_criteria, Code Intent (code_intents[]),
-                    decision/IK context -- NOT code_changes[].diff (no diffs exist)
+                    decision/IK context
   Output: code_intents implemented JIT against current live files (regenerated per wave)
   Next: Step 3
 
@@ -864,12 +864,13 @@ uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m
 
 Each sub-agent receives a batch of semantically related items to verify. Items are grouped by the decompose step (e.g., by component, by concern, or parent-child relationships). The agent reads the qr file, verifies each assigned item, and updates status to PASS or FAIL with finding.
 
-**Output contract**: Verify agents MUST conclude with exactly one of:
+**Output contract**: a verify agent's entire final response is one bare word -- `PASS` if
+every item it was assigned passed, `FAIL` if any failed. Per-item findings are recorded in
+qr-{phase}.json through the script's `--result PASS|FAIL --finding <text>` flag, not in the
+returned text.
 
-- `PASS` -- item verified successfully
-- `FAIL: <reason>` -- item failed verification, reason required
-
-Orchestrator parses this via LLM comprehension, not programmatically. Malformed output is treated as FAIL.
+The orchestrator tallies these words mechanically (see `build_qr_verify_dispatch`): all PASS
+-> `--qr-status pass`, any FAIL -> `--qr-status fail`. Malformed output is treated as FAIL.
 
 **Route step (orchestrator only):**
 

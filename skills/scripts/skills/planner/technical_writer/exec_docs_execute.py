@@ -253,9 +253,8 @@ def get_step_guidance(step: int, module_path: str | None = None, **kwargs) -> di
                 "If implementation unclear, add:",
                 "  Missing: [what is needed]",
                 "",
-                "DO NOT include text before or after the format block.",
-                "",
-                "When complete, output: PASS",
+                "Add no prose around the format block -- the block, then PASS on its own",
+                "final line, and nothing else.",
             ],
             "next": "",
         }
