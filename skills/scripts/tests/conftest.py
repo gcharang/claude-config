@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import leak_guard
 import pytest
 
 # Skills excluded from testing (not in git or incompatible). None currently.
@@ -116,3 +117,58 @@ def populate_workflow_registry():
     unexpected = [(mod, exc) for mod, exc in failures if not any(excl in mod for excl in EXCLUDED)]
     if unexpected:
         pytest.fail(f"Unexpected import failures: {unexpected}")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def no_leaks_into_the_projects_the_suite_can_reach():
+    """Fail if the suite wrote into a checkout it was only meant to read.
+
+    Session-scoped teardown rather than a test: a test runs at whatever position it is
+    collected at, leaving every test after it unguarded. Compared against a snapshot taken
+    at session start, so state and plans that already existed -- the feature working -- do
+    not red the suite.
+
+    It NEVER skips. A skip raised in a session-scoped autouse fixture skips every test in
+    the run and still exits 0, a silent no-op suite that is worse than the inert guard it
+    would be reporting; pytest_sessionfinish below is the outcome-level backstop for that.
+    Where there is nothing to watch, guard() simply has nothing to compare.
+
+    Two projects are watched rather than one because two mechanisms pick a destination
+    independently -- see leak_guard.projects_under_test. Removals are reported alongside
+    creations, so a real /plan run whose reaper fires mid-suite in one of them would red
+    the run; that is rare enough to prefer over not noticing a leak.
+    """
+    yield from leak_guard.guard(leak_guard.projects_under_test())
+
+
+def pytest_sessionfinish(session):
+    """Refuse to report green when every collected test was skipped.
+
+    A skip raised in a session-scoped autouse fixture skips every test and exits 0. No
+    source-level check survives an alias or an extracted helper; the OUTCOME does -- an
+    all-skipped session cannot pass, whatever raised the skips. A deliberate `-k`
+    selection made only of skipped tests (the `requires_unprivileged` set run as root,
+    say) trips this too: accepted, because it fails loud.
+    """
+    # session.exitstatus is what _pytest/main.py's wrap_session returns after calling this
+    # hook, so assigning it here IS the process exit status -- and an already non-green one
+    # (INTERRUPTED, USAGE_ERROR) must never be overwritten. testscollected is set from the
+    # item list after pytest_collection_modifyitems, so it is post-deselection.
+    if session.exitstatus != 0 or not session.testscollected:
+        return
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is None:
+        return
+    # Categories are whatever pytest_report_teststatus returned. "" is the one
+    # _pytest/runner.py gives a PASSED setup or teardown report, so it accompanies every
+    # skip and is not a signal on its own; call-phase outcomes come from
+    # _pytest/terminal.py's trylast implementation, and xfail from _pytest/skipping.py.
+    seen = {category for category, reports in reporter.stats.items() if reports}
+    if "skipped" in seen and seen <= {"skipped", "", "deselected", "warnings"}:
+        # write_line calls ensure_newline itself, so this cannot land mid-progress-line.
+        # The summary line keeps the colour it was given before this ran; only this line
+        # says what happened.
+        reporter.write_line(
+            "every collected test was skipped -- refusing to report green", red=True
+        )
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED

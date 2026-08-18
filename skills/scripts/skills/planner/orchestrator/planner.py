@@ -23,7 +23,6 @@ QR Block Pattern (4 steps per phase):
 
 import argparse
 import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -48,9 +47,21 @@ from skills.planner.shared.gates import GateResult, build_gate_output
 from skills.planner.shared.qr.cli import add_qr_args
 from skills.planner.shared.qr.types import LoopState
 from skills.planner.shared.qr.utils import prepare_verify_items, qr_file_exists
-from skills.planner.shared.resources import get_mode_script_path
+from skills.planner.shared.resources import (
+    ensure_project_root_recorded,
+    get_mode_script_path,
+    load_project_root,
+    require_usable_state_dir,
+    resolve_state_dir,
+    validate_state_dir_requirement,
+)
 
 MODULE_PATH = "skills.planner.orchestrator.planner"
+
+# Where an approved plan is archived, relative to the recorded project root. Named rather
+# than inlined so everything that reasons about the archive location imports it, and moving
+# it breaks that import instead of silently leaving them pointed at the old path.
+DOCS_PLANS_RELATIVE = Path("docs") / "plans"
 
 
 def _translate_plan(state_dir: str) -> str | None:
@@ -102,28 +113,11 @@ def _slugify(text: str) -> str:
     return slug or "plan"
 
 
-def _find_repo_root() -> "Path | None":
-    """Walk up from current file to find .git directory or file.
-
-    Supports both regular repos (.git directory) and git worktrees
-    (.git file pointing to parent repo).
-
-    Returns repo root path on success, None if not found.
-    """
-    current = Path(__file__).resolve().parent
-    while current != current.parent:
-        git_path = current / ".git"
-        if git_path.is_dir() or git_path.is_file():
-            return current
-        current = current.parent
-    return None
-
-
 def _save_plan_to_docs(state_dir: str) -> "Path | None":
     """Copy plan.md to docs/plans/YYYY-MM-DD-slug.md.
 
-    Derives slug from plan.json overview.problem, finds repo root,
-    creates docs/plans/ if needed. Appends numeric suffix (-2, -3, ...)
+    Derives slug from plan.json overview.problem, reads the project recorded by
+    step 1, creates docs/plans/ if needed. Appends numeric suffix (-2, -3, ...)
     if target file already exists.
 
     Returns output path on success, None on failure.
@@ -144,12 +138,15 @@ def _save_plan_to_docs(state_dir: str) -> "Path | None":
         problem = plan_data.get("overview", {}).get("problem", "")
         slug = _slugify(problem)
 
-        repo_root = _find_repo_root()
-        if not repo_root:
-            print("Warning: repo root not found (.git directory)", file=sys.stderr)
+        # The project recorded by step 1, not a fresh lookup: this step runs through
+        # `cd <SKILLS_DIR> && ...`, so cwd names the skill tree, and anchoring there
+        # archives every project's approved plan into whichever repo holds the scripts.
+        repo_root, reason = load_project_root(state_dir)
+        if repo_root is None:
+            print(f"Warning: not saving to docs/plans/ -- {reason}", file=sys.stderr)
             return None
 
-        docs_plans = repo_root / "docs" / "plans"
+        docs_plans = repo_root / DOCS_PLANS_RELATIVE
         docs_plans.mkdir(parents=True, exist_ok=True)
 
         date_prefix = datetime.now().strftime("%Y-%m-%d")
@@ -202,22 +199,76 @@ def _build_fix_mode_output(title, agent, script, qr, ctx):
 
 
 # =============================================================================
+# Run Lifecycle (entry point only)
+# =============================================================================
+
+
+def _begin_run(supplied: str | None) -> str:
+    """Mint (or adopt) step 1's state dir: placement, then usability, then identity.
+
+    Lives in the entry point rather than in init_step's handler because the first of
+    these three can APPEND to the user's .gitignore and create directories in their tree.
+    Reaching that through get_step_guidance would make RENDERING a step mutate the
+    caller's repository -- and this codebase inspects modules by sweeping every step
+    through get_step_guidance() (see tests/test_newa_cwd_pinning.py), so a side-effecting
+    step-1 handler mutates a developer's checkout the first time planner.py is swept that
+    way.
+
+    The ORDER is load-bearing: validation must precede recording, or an unusable
+    --state-dir draws a soft "not recording a project" warning immediately before the
+    real error, reading as a degradation when it is a caller mistake. This is the
+    planner's copy of a sequence the executor's main() repeats inline; consolidating the
+    two is recorded in DEFERRED.md, not done here.
+    """
+    state_dir = supplied or resolve_state_dir("planner")
+    require_usable_state_dir(state_dir)
+    # Identity, not placement: every route through step 1 -- project-local, temp
+    # fallback, or a supplied --state-dir that skipped resolve_state_dir entirely --
+    # must leave the terminal docs/plans save able to find the project.
+    ensure_project_root_recorded(state_dir)
+    return state_dir
+
+
+def _write_plan_skeleton(state_dir: str) -> None:
+    """Write an empty plan.json, unless one is already there.
+
+    Skeleton only for a fresh dir: re-running step 1 against a supplied --state-dir is
+    the resume path, and an unconditional write would replace the plan being resumed
+    with an empty one.
+    """
+    from skills.planner.shared.schema import Overview, Plan
+
+    plan_path = Path(state_dir) / "plan.json"
+    try:
+        if not plan_path.exists():
+            plan_path.write_text(
+                Plan(overview=Overview(problem="", approach="")).model_dump_json(indent=2)
+            )
+    except OSError as e:
+        # require_usable_state_dir already rejected a missing path, a file, and a NUL
+        # (is_dir() returns False for a NUL path rather than raising).
+        # What still reaches here is a directory that exists but cannot be written:
+        # no write or search permission, no space, or the directory removed between
+        # that check and this write.
+        sys.exit(f"Error: cannot write plan.json into the state dir {state_dir}: {e}")
+
+
+# =============================================================================
 # Step Pattern Functions
 # =============================================================================
 
 
 def init_step(title, actions):
-    """Step 1: creates state_dir, writes plan.json skeleton."""
+    """Step 1: renders the init guidance for an already-minted state dir.
+
+    The state dir arrives through ctx; main() mints it (see _begin_run). A --state-dir
+    passed at step 1 is honoured there, matching the executor's step 1: it is the resume
+    path for a run whose state dir already exists, and minting a second one instead
+    loses the plan being resumed.
+    """
 
     def handler(ctx):
-        state_dir = tempfile.mkdtemp(prefix="planner-")
-
-        from skills.planner.shared.schema import Overview, Plan
-
-        plan_path = Path(state_dir) / "plan.json"
-        plan_path.write_text(Plan(overview=Overview(problem="", approach="")).model_dump_json(indent=2))
-
-        print(f"STATE_DIR={state_dir}")
+        state_dir = ctx["state_dir"]
 
         return {
             "title": title,
@@ -232,11 +283,7 @@ def verify_step(title, actions):
     """Step 2: context verification."""
 
     def handler(ctx):
-        from skills.planner.shared.resources import validate_state_dir_requirement
-
         state_dir = ctx["state_dir"]
-
-        validate_state_dir_requirement(2, state_dir)
 
         return {
             "title": title,
@@ -251,13 +298,9 @@ def execute_dispatch_step(title, agent, script, post_dispatch=None, phase=None):
     """Step 3: work execution dispatch."""
 
     def handler(ctx):
-        from skills.planner.shared.resources import validate_state_dir_requirement
-
         state_dir = ctx["state_dir"]
         qr = ctx["qr"]
         step = ctx["step"]
-
-        validate_state_dir_requirement(step, state_dir)
 
         if qr.state == LoopState.RETRY:
             return _build_fix_mode_output(title, agent, script, qr, ctx)
@@ -516,7 +559,12 @@ STEPS = {
 
 
 def get_step_guidance(
-    step: int, qr_status, state_dir, accept_findings=False, plan=None, qr_states=None
+    step: int,
+    qr_status: str | None,
+    state_dir: str,
+    accept_findings: bool = False,
+    plan=None,
+    qr_states=None,
 ) -> dict | str | GateResult:
     """Returns guidance for a step.
 
@@ -551,7 +599,12 @@ def get_step_guidance(
 
 
 def format_output(
-    step: int, qr_status, state_dir, accept_findings=False, plan=None, qr_states=None
+    step: int,
+    qr_status: str | None,
+    state_dir: str,
+    accept_findings: bool = False,
+    plan=None,
+    qr_states=None,
 ) -> str | GateResult:
     """Format output for display."""
     guidance = get_step_guidance(
@@ -586,7 +639,11 @@ def main():
 
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument(
-        "--state-dir", type=str, default=None, help="State directory path (for retry mode)"
+        "--state-dir",
+        type=str,
+        default=None,
+        help="State directory path. Step 1 creates one when omitted and resumes the "
+        "supplied one when given; required for every later step.",
     )
     add_qr_args(parser)
     parser.add_argument(
@@ -603,19 +660,42 @@ def main():
     if args.step < 1:
         sys.exit("Error: step must be >= 1")
 
+    # Step 1 owns creation; every later step is handed the path it printed.
+    state_dir = args.state_dir
+    if args.step == 1:
+        state_dir = _begin_run(state_dir)
+        _write_plan_skeleton(state_dir)
+        print(f"STATE_DIR={state_dir}")
+    else:
+        # resources.py owns the "steps 2+ require --state-dir" rule, as it does for the
+        # executor. Without this the handler-level checks fire for steps 2/3 as a raw
+        # ValueError traceback, while steps 4 and 6 do not check at all: step 4 emitted
+        # `--step 5 --state-dir ''` as its own next command, and step 6 printed
+        # WORKFLOW COMPLETE while silently skipping the render and the docs/plans save.
+        # It raises, and this is a CLI entry point, so it becomes a clean exit.
+        try:
+            validate_state_dir_requirement(args.step, state_dir)
+        except ValueError as e:
+            sys.exit(f"Error: {e}")
+        # Distinguishes "the state dir is gone" from "plan.json was never written". Both
+        # reach step 2, and the second is the likelier one -- so reporting the first as
+        # the second invites re-Writing plan.json, which recreates the directory without
+        # its project marker and silently costs the run its docs/plans/ archive.
+        require_usable_state_dir(state_dir)
+
     # Validate state before running step (skip for step 1 which creates state).
     # Capture the parse so the route gate reuses it instead of re-reading plan.json.
     plan = None
     qr_states = None
-    if args.step > 1 and args.state_dir:
+    if args.step > 1:
         from skills.planner.shared.schema import SchemaValidationError, validate_state
 
         try:
-            plan, qr_states = validate_state(args.state_dir)
+            plan, qr_states = validate_state(state_dir)
         except SchemaValidationError as e:
             sys.exit(f"Schema validation failed: {e}")
         if plan is None:
-            sys.exit(f"Error: plan.json not found in {args.state_dir} (required for step {args.step})")
+            sys.exit(f"Error: plan.json not found in {state_dir} (required for step {args.step})")
 
     # Route steps require --qr-status; provide helpful output if missing
     if args.step in PLANNER_GATE_STEPS and not args.qr_status:
@@ -629,7 +709,7 @@ def main():
     result = format_output(
         args.step,
         args.qr_status,
-        state_dir=args.state_dir,
+        state_dir=state_dir,
         accept_findings=args.accept_findings,
         plan=plan,
         qr_states=qr_states,
@@ -640,11 +720,11 @@ def main():
         # QR fix cycles). plan.md is a rendered view. Terminal gate approval
         # signals plan.json is stable -- safe to regenerate the markdown.
         print(result.output)
-        if result.terminal_pass and args.state_dir:
-            plan_path = _translate_plan(args.state_dir)
+        if result.terminal_pass:
+            plan_path = _translate_plan(state_dir)
             if plan_path:
                 print(f"\nPlan rendered to: {plan_path}")
-                docs_path = _save_plan_to_docs(args.state_dir)
+                docs_path = _save_plan_to_docs(state_dir)
                 if docs_path:
                     print(f"Plan saved to: {docs_path}")
                 else:

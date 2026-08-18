@@ -26,7 +26,6 @@ QR Block Pattern (matching planner's 4-step pattern per phase):
 
 import argparse
 import sys
-import tempfile
 from typing import TYPE_CHECKING
 
 from skills.lib.workflow.prompts import subagent_dispatch
@@ -58,7 +57,13 @@ from skills.planner.shared.qr.utils import (
     qr_file_exists,
     resolve_qr_for_step,
 )
-from skills.planner.shared.resources import get_mode_script_path
+from skills.planner.shared.resources import (
+    ensure_project_root_recorded,
+    get_mode_script_path,
+    require_usable_state_dir,
+    resolve_state_dir,
+    validate_state_dir_requirement,
+)
 from skills.planner.shared.verify_state import (
     format_verify_failures_for_fix,
     load_verify_state,
@@ -82,7 +87,7 @@ MODULE_PATH = "skills.planner.orchestrator.executor"
 
 
 def format_step_1(state_dir: str, reconciliation_check: bool) -> str:
-    """Create state_dir, analyze plan, transcribe wave list."""
+    """Render step-1 guidance for an already-minted state dir: analyze plan, transcribe waves."""
     actions = [
         "Plan file: $PLAN_FILE (substitute from context)",
         "",
@@ -100,7 +105,7 @@ def format_step_1(state_dir: str, reconciliation_check: bool) -> str:
         "  contract (file-disjoint within a wave, validated at plan time).",
         "",
         "STATE SETUP:",
-        f"  State directory created: {state_dir}",
+        f"  State directory: {state_dir}",
         f"  Write plan context to: {state_dir}/plan.json",
         "",
         "  After analyzing the plan, use the Write tool to create plan.json (author it",
@@ -676,7 +681,11 @@ def main():
 
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument(
-        "--state-dir", type=str, default=None, help="State directory path (created in step 1)"
+        "--state-dir",
+        type=str,
+        default=None,
+        help="State directory path. Step 1 creates one when omitted and resumes the "
+        "supplied one when given; required for every later step.",
     )
     add_qr_args(parser)
     parser.add_argument("--reconciliation-check", action="store_true")
@@ -686,29 +695,59 @@ def main():
     if args.step < 1 or args.step > 12:
         sys.exit("Error: step must be 1-12")
 
-    # Create state_dir for step 1 if not provided
+    # One block. The order is load-bearing: validation precedes recording, or an unusable
+    # --state-dir draws a soft "not recording a project" line immediately before the real
+    # error. The stale-verify.json clear may sit between them because neither the
+    # validation nor the recording reads verify.json; consolidating the sequence with the
+    # planner's is in DEFERRED.md.
+    #
+    # No plan.json skeleton is pre-written on EITHER route. format_step_1 has the
+    # orchestrator author plan.json fresh via Write; a pre-existing FULL-schema skeleton
+    # (planning_context/diagram_graphs keys present) both contradicts the reduced subset
+    # the agent is told to produce and forces a read-before-write. If the agent skips the
+    # Write, step 2 fails closed ("plan.json not found").
     state_dir = args.state_dir
-    if args.step == 1 and not state_dir:
+    if args.step == 1:
+        if not state_dir:
+            state_dir = resolve_state_dir("executor")
+        # Same guard the planner's step 1 applies: without it a supplied --state-dir that
+        # is missing or is a file gets reported as "State directory created: <path>" and
+        # the agent is told to Write plan.json into a directory that does not exist.
+        # ORDER: validate before recording -- see planner.py::_begin_run.
+        require_usable_state_dir(state_dir)
+        # Clear stale verify.json (reused state-dir path) so the current session's
+        # step 10/11 is the sole writer of the session's verdict.
         try:
-            state_dir = tempfile.mkdtemp(prefix="executor-")
+            verify_path(state_dir).unlink(missing_ok=True)
         except OSError as e:
-            sys.exit(
-                f"Error: failed to create executor state directory (tempdir={tempfile.gettempdir()}): {e}"
-            )
-        # No plan.json skeleton is pre-written. format_step_1 has the orchestrator
-        # author plan.json fresh via Write; a pre-existing FULL-schema skeleton
-        # (planning_context/diagram_graphs keys present) both contradicts the reduced
-        # subset the agent is told to produce and forces a read-before-write. If the
-        # agent skips the Write, step 2 fails closed ("plan.json not found").
-
-    # Validate state_dir for steps 2+
-    if args.step > 1 and not state_dir:
-        sys.exit(f"Error: --state-dir required for step {args.step}")
-
-    # Clear stale verify.json on step 1 (reused state-dir path) so the current
-    # session's step 10/11 is the sole writer of the session's verdict.
-    if args.step == 1 and state_dir:
-        verify_path(state_dir).unlink(missing_ok=True)
+            # missing_ok covers ENOENT only, so an unwritable or unsearchable supplied
+            # --state-dir raised here. Degrade rather than abort: the same unwritable
+            # directory fails the plan.json Write this step is about to instruct anyway,
+            # and that failure names the real problem.
+            #
+            # The cost if a stale file DOES survive is not small. format_step_2 reads it
+            # (verify_has_failures) long before step 10 exists to overwrite it, so a stale
+            # failure routes this fresh run into Verify Fix Mode -- dispatching against a
+            # previous session's failing checks, told not to re-implement milestones, on a
+            # plan nothing has implemented -- and reset_qr_for_reverify drops the code and
+            # docs QR state on the way.
+            print(f"Warning: could not clear stale verify.json: {e}", file=sys.stderr)
+        # Identity, not placement -- see planner.py's step 1. Runs for every route,
+        # including a supplied --state-dir that never called resolve_state_dir.
+        ensure_project_root_recorded(state_dir)
+    else:
+        # resources.py owns the "steps 2+ require --state-dir" rule; re-stating it here
+        # is how the two drift. It raises, and this is a CLI entry point, so the message
+        # is turned into a clean exit rather than a traceback.
+        try:
+            validate_state_dir_requirement(args.step, state_dir)
+        except ValueError as e:
+            sys.exit(f"Error: {e}")
+        # Distinguishes "the state dir is gone" from "plan.json was never written". Both
+        # reach step 2, and the second is the likelier one -- so reporting the first as
+        # the second invites re-Writing plan.json, which recreates the directory without
+        # its project marker and silently costs the run its docs/plans/ archive.
+        require_usable_state_dir(state_dir)
 
     # plan is threaded into format_output so the QR gate (steps 5/9) reuses this
     # parse instead of re-reading plan.json. None for step 1 (no plan yet).
@@ -719,7 +758,7 @@ def main():
     # planner.py. The orchestrator hand-writes plan.json in step 1 from the plan;
     # catch a malformed or non-conforming write here instead of letting downstream
     # steps re-derive against a broken contract.
-    if args.step > 1 and state_dir:
+    if args.step > 1:
         from skills.planner.shared.schema import SchemaValidationError, validate_state
 
         try:

@@ -17,7 +17,7 @@ QR PASS/FAIL is determined by LLM reading QR output, not Python. Gate routing is
 
 ## State Files
 
-All state mutations (except initial context.json) happen via Python CLI commands. State directory created via `tempfile.mkdtemp()` in `/tmp`.
+All state mutations (except initial context.json) happen via Python CLI commands. The state directory is created by `shared/resources.py::resolve_state_dir()`, anchored on `$CLAUDE_PROJECT_DIR` then the working directory: project-local and git-ignored (`<project>/.agent-state/_runs/{planner,executor}/<UTC-stamp>-<rand>/`) when that resolves to a repo whose `.agent-state` is ignorable, is not already tracked there, and whose minted run directory git confirms as ignored, else a per-session temp path (`<tmpdir>/cc-<session>/{planner,executor}-<rand>/`), with the reason on stderr. Step 1 records the resolved project in the state dir; later steps read it back rather than re-deriving it from a working directory that is no longer the project's. Old run dirs are pruned once they are both surplus and stale. Nothing is created at a top-level `/tmp/{planner,executor}-*` -- that flat namespace is shared by every session on the machine, so one session's cleanup glob deleted another's in-flight plan. See `skills/planner/INTENT.md` for the full contract.
 
 | File              | Schema         | Created     | Mutated By     | Lifecycle              |
 | ----------------- | -------------- | ----------- | -------------- | ---------------------- |
@@ -102,7 +102,7 @@ Phases: `qr-plan-design`, `qr-impl-code`, `qr-impl-docs`
 
 | Step | Name                    | Pattern Function          | Mutates              | Agent        |
 | ---- | ----------------------- | ------------------------- | -------------------- | ------------ |
-| 1    | plan-init               | `init_step()`             | Creates plan.json    | Orchestrator |
+| 1    | plan-init               | `init_step()` (renders; `main()` mints the state dir and writes the skeleton) | Creates plan.json    | Orchestrator |
 | 2    | context-verify          | `verify_step()`           | Creates context.json | Orchestrator |
 | 3    | plan-design-work        | `execute_dispatch_step()` | plan.json            | Architect    |
 | 4    | plan-design-qr-decompose| `qr_decompose_step()`     | qr-plan-design.json  | QR           |

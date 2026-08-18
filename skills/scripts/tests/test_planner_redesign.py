@@ -12,6 +12,7 @@ silently return.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from conftest import write_qr  # pyright: ignore[reportMissingImports]
@@ -1041,6 +1042,20 @@ def test_accept_findings_yields_terminal_pass_at_ceiling(tmp_path):
 
 
 # --- Terminal-pass FS write: _save_plan_to_docs writes plan.md into docs/plans/ ---
+def _record_project_root(state_dir, repo):
+    """Point a state dir at `repo`, the way step 1 does.
+
+    load_project_root re-validates the recorded path, so the fixture repo needs a real
+    .git marker (a directory with HEAD) rather than a bare mkdir.
+    """
+    from skills.planner.shared.resources import PROJECT_ROOT_FILE
+
+    git_dir = Path(repo) / ".git"
+    git_dir.mkdir(exist_ok=True)
+    (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    (Path(state_dir) / PROJECT_ROOT_FILE).write_text(f"{repo}\n", encoding="utf-8")
+
+
 def _write_terminal_plan_json(state_dir, problem="p", approach="a"):
     (state_dir / "plan.json").write_text(
         json.dumps(
@@ -1056,7 +1071,7 @@ def _write_terminal_plan_json(state_dir, problem="p", approach="a"):
     )
 
 
-def test_save_plan_to_docs_writes_dated_slug_file(tmp_path, monkeypatch):
+def test_save_plan_to_docs_writes_dated_slug_file(tmp_path):
     from datetime import datetime
 
     from skills.planner.orchestrator import planner as planner_orch
@@ -1065,14 +1080,14 @@ def test_save_plan_to_docs_writes_dated_slug_file(tmp_path, monkeypatch):
     repo.mkdir()
     _write_terminal_plan_json(state, problem="Fix the login bug")
     (state / "plan.md").write_text("# Plan body\n", encoding="utf-8")
-    monkeypatch.setattr(planner_orch, "_find_repo_root", lambda: repo)
+    _record_project_root(state, repo)
     out = planner_orch._save_plan_to_docs(str(state))
     expected = repo / "docs" / "plans" / f"{datetime.now().strftime('%Y-%m-%d')}-fix-the-login-bug.md"
     assert out == expected and expected.exists()
     assert expected.read_text(encoding="utf-8") == "# Plan body\n"
 
 
-def test_save_plan_to_docs_appends_collision_suffix(tmp_path, monkeypatch):
+def test_save_plan_to_docs_appends_collision_suffix(tmp_path):
     from datetime import datetime
 
     from skills.planner.orchestrator import planner as planner_orch
@@ -1085,7 +1100,7 @@ def test_save_plan_to_docs_appends_collision_suffix(tmp_path, monkeypatch):
     docs_plans = repo / "docs" / "plans"
     docs_plans.mkdir(parents=True)
     (docs_plans / f"{date_prefix}-fix-the-login-bug.md").write_text("# v1\n", encoding="utf-8")
-    monkeypatch.setattr(planner_orch, "_find_repo_root", lambda: repo)
+    _record_project_root(state, repo)
     out = planner_orch._save_plan_to_docs(str(state))
     assert out is not None
     assert out == docs_plans / f"{date_prefix}-fix-the-login-bug-2.md"
@@ -1093,13 +1108,13 @@ def test_save_plan_to_docs_appends_collision_suffix(tmp_path, monkeypatch):
     assert (docs_plans / f"{date_prefix}-fix-the-login-bug.md").read_text(encoding="utf-8") == "# v1\n"
 
 
-def test_save_plan_to_docs_returns_none_when_plan_md_absent(tmp_path, monkeypatch, capsys):
+def test_save_plan_to_docs_returns_none_when_plan_md_absent(tmp_path, capsys):
     from skills.planner.orchestrator import planner as planner_orch
     state, repo = tmp_path / "state", tmp_path / "repo"
     state.mkdir()
     repo.mkdir()
     _write_terminal_plan_json(state)
-    monkeypatch.setattr(planner_orch, "_find_repo_root", lambda: repo)
+    _record_project_root(state, repo)
     out = planner_orch._save_plan_to_docs(str(state))
     assert out is None
     assert "plan.md not found" in capsys.readouterr().err
@@ -1125,7 +1140,7 @@ def test_main_terminal_pass_saves_to_docs_plans(tmp_path, monkeypatch, capsys):
     repo.mkdir()
     _write_terminal_plan_json(state, problem="Add OAuth support")
     write_qr(state, "plan-design", [])
-    monkeypatch.setattr(planner_orch, "_find_repo_root", lambda: repo)
+    _record_project_root(state, repo)
     monkeypatch.setattr(sys, "argv",
         ["planner.py", "--step", "6", "--qr-status", "pass", "--state-dir", str(state)])
     planner_orch.main()
@@ -2131,14 +2146,26 @@ def test_executor_step1_writes_no_skeleton_plan_json(tmp_path, monkeypatch):
     # main() must NOT pre-write a full-schema plan.json skeleton on a fresh step 1: a
     # pre-existing skeleton (planning_context/diagram_graphs keys) both contradicted the
     # reduced-subset contract and forced read-before-write. The orchestrator authors
-    # plan.json fresh via Write instead. Pin mkdtemp so the fresh (no --state-dir)
-    # branch runs against a pytest-managed dir -- no stdout parsing, no tmp leak.
+    # plan.json fresh via Write instead. Neutralise BOTH project anchors and pin the temp
+    # branch into pytest-managed space: resolve_project_root reads CLAUDE_PROJECT_DIR and
+    # falls back to the cwd, and pytest's cwd is this checkout -- leaving either live
+    # makes this test create .agent-state/_runs/executor/ in the real repo (and append to
+    # its .gitignore). tempfile.tempdir must be pinned as well as mkdtemp: the session
+    # parent is mkdir'd directly, so pinning mkdtemp alone still creates
+    # <real tmp>/cc-<session> outside anything pytest cleans up.
     import tempfile
 
     from skills.planner.orchestrator.executor import main as executor_main
 
     state_dir = tmp_path / "executor-state"
     state_dir.mkdir()
+    nowhere = tmp_path / "nowhere"
+    nowhere.mkdir()
+    fake_tmp = tmp_path / "tmp"
+    fake_tmp.mkdir()
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    monkeypatch.chdir(nowhere)
+    monkeypatch.setattr(tempfile, "tempdir", str(fake_tmp))
     monkeypatch.setattr(tempfile, "mkdtemp", lambda *a, **k: str(state_dir))
     monkeypatch.setattr("sys.argv", ["executor", "--step", "1"])
     executor_main()

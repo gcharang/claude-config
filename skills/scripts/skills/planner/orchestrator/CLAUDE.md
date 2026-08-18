@@ -12,7 +12,7 @@ Main workflow orchestrators: `planner` (6-step plan creation with one QR block) 
 
 ## Run
 
-```bash
-uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.planner.orchestrator.planner --step 1
-uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.planner.orchestrator.executor --step 1
-```
+Step 1 is anchored on the caller's working directory: run it from inside the project and
+do not `cd` into the skills tree. The two entry-point commands live in
+`skills/planner/SKILL.md` -- one self-contained line each, form 2b in
+`skills/lib/workflow/prompts/README.md`. Duplicating them here is how the two drift.

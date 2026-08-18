@@ -49,4 +49,4 @@ Example:
 
 <invoke working-dir=".claude/skills/scripts" cmd="uv run python -m skills.problem_analysis.analyze --step 1" />
 
-See `scripts/skills/lib/workflow/prompts/README.md` for the cd-wrapper invariant and why this particular form works across user-global and project-local installs.
+See `scripts/skills/lib/workflow/prompts/README.md` for the cd-wrapper invariant and why this particular form works across user-global and project-local installs -- and for the one exception, entry points that must locate the caller's project (`skills/planner/SKILL.md`), which cannot use `working-dir` because resolving it discards the caller's working directory.

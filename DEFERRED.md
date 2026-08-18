@@ -75,56 +75,203 @@ two renderings with identical wording. Delete the hand-rolled copy in `refactor.
 same pass. Re-run the refactor skill's step 2 before/after to confirm the rendered dispatch
 is still well-formed XML.
 
-## Give planner and executor state dirs a collision-proof location
+## Persist the executor's reduced `plan.json` at plan approval (audit finding S4)
 
-**Status:** SCHEDULED -- implementation starts in the checkpoint after this audit lands;
-this entry stays until then as the spec. · **Surfaced:** 2026-08-18 (a review subagent's `rm -rf /tmp/planner-*`
-destroyed another session's planner state dir; confirmed by that session to affect
-`/tmp/executor-*` identically)
+**Status:** SCHEDULED -- next checkpoint of the state-dir durability work. ·
+**Surfaced:** 2026-08-18 (prompt audit of the planner skill)
 
-**Problem.** Both orchestrators mint their state directory with a bare temp prefix:
+The state-dir placement half has landed: `shared/resources.py::resolve_state_dir` puts
+state under `<project>/.agent-state/_runs/{planner,executor}/`, anchored on
+`$CLAUDE_PROJECT_DIR` then cwd, with a per-session temp fallback and its own retention.
+The contract is documented in `skills/planner/INTENT.md` ("State directory location").
 
-- `skills/scripts/skills/planner/orchestrator/planner.py:213` — `tempfile.mkdtemp(prefix="planner-")`
-- `skills/scripts/skills/planner/orchestrator/executor.py:693` — `tempfile.mkdtemp(prefix="executor-")`
+**What remains.** Executor step 1 asks the model to hand-retype the reduced `plan.json`
+(overview, milestones with `code_intents`/`is_documentation_only`, waves, referenced
+decision-log entries) out of the `plan.md` rendering. The cost is a schema-mismatch risk
+on every run, and a fresh session that has lost the state-dir path having nothing
+structured to resume from.
 
-Every session on a machine therefore shares one flat `/tmp/planner-*` + `/tmp/executor-*`
-namespace, with no session or repo identity in the path. Consequences:
+Note the motivation is narrower than it was before the state-dir placement work. "An interrupted run
+leaves nothing behind" was true against `/tmp`; a project-local state dir now keeps
+`plan.json` and the whole QR state. What is left is the transcription risk plus
+discoverability across sessions.
 
-1. A cleanup glob in any session (`rm -rf /tmp/planner-*`) destroys every other session's
-   planning and execution state. This happened: a planner state dir belonging to a
-   concurrent session in another repo was deleted mid-effort.
-2. State that outlives a session (`plan.json` is authoritative until approval renders
-   `plan.md`; the executor's copy plus its `qr-*.json` live for the whole run) sits in a
-   directory whose name carries no clue about which repo or session owns it, so it cannot
-   be attributed, backed up, or safely reaped.
-3. `/tmp` reapers and reboots discard in-flight plans with no warning.
+Fix: reduce the approved plan in Python (`shared/schema.py::reduce_plan_for_executor`),
+give the executor `--plan-json`, and shrink step 1's LLM job to reading the plan for
+context plus the optional reconciliation check. Keep the hand-authoring path for plans
+approved before the change. The on-disk key is `planning_context.decision_log` (the input
+alias), not `.decisions` -- reading the wrong one yields a false unresolvable-refs report.
 
-**Not covered by anything.** `docs/plans/` receives `plan.md` only at approval
-(`planner.py::_save_plan_to_docs`), and the executor's reduced `plan.json` is never
-persisted anywhere. A run interrupted before approval leaves nothing behind.
+**Decide where the artifact lives before starting.** Two candidates:
 
-**Fix (when scheduled).** Default the state dir to a repo-local, git-ignored path — e.g.
-`<repo>/.agent-state/planner/<slug>/` and `.../executor/<slug>/`, resolved through the same
-`_find_repo_root()` the plan-saving path already uses — and fall back to a per-session temp
-path (session id in the prefix) when no repo root is found. `--state-dir` already exists on
-every entry point, so the change is the default plus the docs that name `/tmp` paths.
+1. Beside the approved `plan.md`, as `docs/plans/<date>-<slug>.plan.json`. Needs
+   `_save_plan_to_docs`'s stem and collision-suffix logic extracted into something both
+   writers share (today it is inline), and note `docs/plans/` is itself git-ignored in
+   this repo -- its root `.gitignore` is `*` plus an allowlist that omits `docs/` -- so a
+   durability artifact would land untracked.
+2. In the state dir, which the state-dir placement work made durable and project-local. Sidesteps the
+   ignored-directory problem entirely and keeps the reduced plan next to the QR state it
+   belongs with, at the cost of not being browsable alongside the approved plans.
 
-**Decisions taken (2026-08-18).** Repo-local is the **default**: state goes under
-`<repo>/.agent-state/` in a subtree that cannot collide with the task-tracking convention's
-`.agent-state/<task-slug>/` (a task slugged `planner` would otherwise clash). Detect whether
-that path is ignored with `git check-ignore -v --no-index` run with `cwd` set to the repo
-root -- never by grepping `.gitignore`, which misreports the negative-whitelist model this
-repo itself uses (`*` plus an anchored allowlist already ignores `.agent-state/`). When it is
-genuinely unignored, append `/.agent-state/` per the git-ignore policy: anchored, after the
-allowlist, existing model untouched. When no repo root is found, or the repo has no
-`.gitignore` to append to, fall back to a per-session temp path
-(`<tmpdir>/cc-<session>/{planner,executor}-<rand>/`) -- the load-bearing property is that
-nothing lands at `/tmp/{planner,executor}-*` top level.
+Two things the choice also settles, so decide them together rather than after:
 
-The executor **does** persist its reduced `plan.json` beside the approved `plan.md`, and loads
-it instead of having the model re-type it -- closing, in the same work, the finding that an
-interrupted executor run leaves nothing resumable behind (numbered S4 in the prompt-audit
-report, which is not tracked in this repo; the in-repo mentions of "S4" in
-`tests/test_batch_roundtrip_fixes.py` and `tests/test_audit_s4_cleanup.py` are unrelated).
+- **The executor's project marker currently has no reader.** `load_project_root` has
+  exactly one caller, `planner.py::_save_plan_to_docs`. The executor writes `project_root`
+  on every route and pays a git walk, a marker write, and a stderr line for a value
+  nothing consumes -- including the cross-project warning it emits on a resume from
+  another shell. Candidate 1 gives it a reader; candidate 2 leaves it write-only, which
+  is then a deliberate choice for symmetry and human discoverability rather than an
+  oversight. It is defensible either way; it should not stay accidental.
+- **Write-gating asymmetry.** `.agent-state/` is created only after git PROVES it ignored,
+  and taken back again if the proof fails; `_save_plan_to_docs` mkdirs into the tracked
+  tree unconditionally. That asymmetry is correct and now stated as a rule in
+  `INTENT.md` -- machine state is gated, deliverables are not. Candidate 1 routes a
+  MACHINE artifact through the ungated path, which contradicts the rule; candidate 2
+  does not. Whichever is chosen, the rule is what has to be argued against.
 
-Still open: whether to reap old state dirs on init.
+Design constraint, not a question: `_save_plan_to_docs` allocates its `-2`/`-3` collision
+suffix by probing `.md` existence alone, so a sibling `.plan.json` under candidate 1 is a
+two-file publish with one suffix and no atomicity.
+
+## Make a truncated `project_root` marker decidable
+
+**Status:** DEFERRED -- low value. · **Surfaced:** 2026-08-18 (architecture review)
+
+`ensure_project_root_recorded` replaces a marker this planner could not have written
+(after a lossy decode: empty, relative, or carrying a non-blank remainder after its first
+line) but reports-and-keeps a well-formed absolute path whose project no longer resolves.
+A trailing blank line or NUL tail is explicitly NOT foreign -- our own single-line write
+survives intact ahead of such padding, and treating it as foreign re-points the run. A truncated write lands in the second case and is
+byte-for-byte what a deleted project looks like, so it is never repaired.
+
+Making the two separable needs a format change -- a trailing sentinel line, or
+path-plus-length -- not a smarter heuristic; every shape-based rule fails on this input.
+
+Low value because `_save_project_root` is atomic, so nothing here can originate a
+truncated marker. What remains is markers already on disk from another writer, and
+hardware faults.
+
+## Extract the repo/run-state helpers out of the planner package
+
+**Status:** DEFERRED -- decided 2026-08-18 to keep them in `resources.py` for now, so the
+state-dir checkpoint stayed reviewable. · **Surfaced:** 2026-08-18 (architecture review)
+
+`shared/resources.py` is chartered as a resource loader plus the `state_dir` argument
+contract. It now also runs `git` in a subprocess, reads the environment, mutates a user's
+`.gitignore`, and mints directories. None of `_is_git_dir`, `find_repo_root`,
+`resolve_project_root`, `_check_ignored`, `ensure_agent_state_ignored`, `_session_token`,
+`_temp_state_dir`, or `resolve_state_dir` is planner-specific -- only the two `StateDirKind`
+values are. A sibling skill wanting a durable run dir would have to import from
+`skills.planner.shared`, which inverts the layering.
+
+Proposed split: `skills/lib/gitrepo.py` (`is_git_dir`, `find_repo_root`, `is_ignored`,
+`ensure_ignored`, `_tracks_anything`, plus the `_has_rule` / `_append_gitignore_rule`
+helpers and `GITIGNORE_RULE`) and
+`skills/lib/runstate.py` (`AGENT_STATE_DIRNAME` -- which `ensure_ignored` probes, so
+`gitrepo` takes it as an argument rather than importing it -- `RUNS_NAMESPACE`,
+`_RUN_DIR_RE`, `StateDirKind`, the `MARKER_*` kinds, `resolve_state_dir`,
+`require_usable_state_dir`,
+`ensure_project_root_recorded`, `_save_project_root`, `load_project_root`, `_read_marker`,
+`_fallback`,
+`PROJECT_ROOT_FILE`, `_reap_old_runs`, `_last_activity`, `_created_ancestors`,
+`_prune_empty`, `_session_parent`, `_is_our_private_dir`, `_mkdtemp_usable`, the retention
+constants, the session token and the temp fallback), with `resources.py` back to its
+charter. `_mkdtemp_usable` has three callers (`_session_parent`, `_temp_state_dir`,
+`resolve_state_dir`) so the move-it-with-its-owner rule has no single answer -- all three
+are `runstate`-bound, which settles it. `resolve_project_root` and `_resolved_home` go with `runstate`, NOT with
+`gitrepo`: they read `$CLAUDE_PROJECT_DIR` -- a Claude Code harness variable -- and
+encode a product policy (refuse a `$HOME` reached by stumbling, honour one named
+explicitly). Filing them under `gitrepo` would split "which project does this run belong
+to" across both modules and make a module named for git plumbing harness-aware and
+policy-bearing, which is the same charter creep the move exists to cure. Move each
+function's private helpers with it -- leaving `_reap_old_runs`/`_last_activity` behind is
+the easy mistake. Keep the project-root
+persistence with `runstate`, not `gitrepo`: `resolve_state_dir` and both orchestrators use
+it, so splitting it the other way recreates the inverted import the move exists to remove.
+Do this when a second skill needs a run dir, or alongside the next substantial change to
+these functions -- whichever comes first.
+
+Two shape changes belong to the same pass, both deliberately not done now because they
+churn a module that is about to move:
+
+- `resolve_state_dir` is named for a computation and has three side effects, sitting
+  beside the pure `resolve_project_root` under a shared `resolve_` prefix. Split it into
+  anchor resolution plus a `_mint_project_local(repo_root, kind)` owning the whole
+  create -> gate -> verify -> undo transaction, and rename it (`mint_state_dir`) so the
+  prefix stops implying it is a query. The `decline()` closure is that transaction's
+  current shape; a function boundary makes "no decline leaves anything behind" readable
+  in one place rather than provable by inspection.
+- `ensure_ignored` should keep taking the probe path from its caller, as
+  `ensure_agent_state_ignored` now does. A hardcoded `<dirname>/probe` asks about a file
+  nothing creates, which a rule matching that basename satisfies while the real directory
+  stays visible to git. It must ALSO take the dirname and the rule as parameters in the
+  same pass: today only the probe is a parameter, while `GITIGNORE_RULE` and the
+  tracked-files question stay hardcoded to `.agent-state`. Left that way the move produces
+  a generic-looking `ensure_ignored(repo_root, probe)` in a shared module that silently
+  works for one directory only -- worse there than here, where the pairing is local and
+  stated as a precondition. Target `ensure_ignored(repo_root, dirname, rule, probe)`, and
+  drop that precondition note when it lands.
+- `_created_ancestors` gained a `stop in leaf.parents` guard so containment is structural
+  rather than a property of its single call site; keep it when the helper moves.
+- The "our directories are exactly 0o700" invariant has one reader (`_is_our_private_dir`)
+  and two writers (`_mkdtemp_usable`, and `_session_parent`'s create branch), each
+  restating the same umask fact. Give them a shared `_force_private(path)` tail so the
+  rationale is stated once -- deleting either chmod is the exact misconception the fix
+  exists to correct, and under a hostile umask it silently scatters a session's runs
+  across fresh unguessable parents rather than failing.
+- `_check_ignored`'s `None` contract records that "beyond a symbolic link" is one of its
+  cases. That refusal is git's, not a check in this module, and it is what keeps a
+  symlinked `.agent-state` from being written through -- do not lose the note.
+
+Two helpers resist that rule. `_read_all` and `_close_quietly` are each shared by
+`_read_marker` (bound for `runstate`) and `ensure_agent_state_ignored` (bound for
+`gitrepo`), so "move each function's private helpers with it" has two answers and no
+tiebreak; duplicating them into both modules is worse still, since the next fix to one
+descriptor path silently leaves the other behind. Put both in `skills/lib/io.py` beside
+`atomic_write_text`: they are descriptor plumbing with nothing repo- or run-specific in
+them, and that module is already where this codebase keeps its I/O idioms.
+
+Do NOT unify the two `os.open` sites while moving them. Their flag sets differ for
+reasons local to each: the marker opens `O_RDONLY | O_NONBLOCK | O_NOFOLLOW`, where
+`O_NONBLOCK` exists solely so a FIFO planted at the marker path opens instead of blocking
+step 1 forever with nothing on stderr; the `.gitignore` opens
+`O_RDWR | O_APPEND | O_NOFOLLOW`, where `O_APPEND` is what keeps a concurrent editor's
+write from being clobbered. Only `O_NOFOLLOW` is genuinely common to both. A shared opener
+would hand `O_NONBLOCK` to a site that has no use for it and strand the comment explaining
+why it is there -- and that rationale is the entire reason the flag survives review.
+
+Fold in one more thing when this moves: step 1's three-call sequence
+(`supplied or resolve_state_dir(kind)` -> `require_usable_state_dir` ->
+`ensure_project_root_recorded`) is duplicated across both orchestrators, and its order
+is load-bearing -- validation must precede recording, or an unusable state dir draws a
+soft "could not record" warning immediately before the real error. Today that invariant lives in
+`planner.py::_begin_run` (which names the order and is the planner's local precursor to
+this helper) and a cross-reference comment in `executor.py`. Nothing else enforces it:
+`test_step_1_rejects_an_unusable_state_dir` constrains which INPUTS both orchestrators
+refuse, not the SEQUENCE -- both orders exit with a byte-identical message, differing only
+by a stderr warning. `test_step_1_validates_before_it_records` pins the order for both, so
+this fold-in is a simplification rather than a repair.
+
+The steps-2+ preamble is duplicated too, and more literally: both orchestrators run
+`validate_state_dir_requirement` then `require_usable_state_dir` in the same order, under a
+byte-identical four-line comment, and wrap the first in the same `try/except ValueError ->
+sys.exit` because the two validators report through different protocols (one raises, one
+exits). Fold both branches into one `resolve_run_state_dir(kind, step, supplied)` and settle
+the protocol split in the same pass; duplicated RATIONALE is the reliable signal.
+
+A single `begin_run(kind, supplied) -> str` would own the step-1 order and let both helpers
+become private. It is NOT a straight lift on either side: the executor interleaves
+`verify_path(state_dir).unlink()` between validation and recording, and the planner appends
+`_write_plan_skeleton` after recording. Either the executor's clear moves to after the
+recording -- nothing between them reads `verify.json` -- or the helper takes a callback;
+settling that here stops it being re-litigated at implementation time. It would also fold away the
+redundant `resolve_project_root()` call -- `resolve_state_dir` and
+`ensure_project_root_recorded` each make one, and while they cannot disagree inside a
+single process, only one of them needs to. Two review lanes split on
+whether this is worth doing on its own (one proposed it, then withdrew it as stylistic;
+the other re-raised it) -- do it as part of the move, not before, and note that the
+executor's `--plan-json` work would otherwise be the third site to re-derive the order.
+
+The visible symptom meanwhile: `planner.py` imports `load_project_root` and
+`ensure_project_root_recorded` from a module named `resources`, purely so step 1 and
+`_save_plan_to_docs` can ask "which project is this".
