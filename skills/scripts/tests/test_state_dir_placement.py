@@ -29,6 +29,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from conftest import _git_repo, requires_unprivileged
 
 from skills.planner.shared import resources
 from skills.planner.shared.resources import (
@@ -47,24 +48,10 @@ from skills.planner.shared.resources import (
     resolve_state_dir,
 )
 
-# chmod is a no-op for uid 0, so every permission-dependent test below would pass
-# without exercising the branch it names (Docker CI commonly runs as root).
-requires_unprivileged = pytest.mark.skipif(
-    os.geteuid() == 0, reason="chmod-based permission tests are meaningless as root"
-)
-
-
 # What resolve_state_dir passes in: the runs directory whose ignore status decides the
 # branch. Tests that call the gate directly use the same shape rather than a synthetic
 # path, so a rule matching only a made-up basename cannot satisfy them either.
 _PROBE = f"{AGENT_STATE_DIRNAME}/{RUNS_NAMESPACE}/planner"
-
-
-def _git_repo(path: Path) -> Path:
-    """Real git repo (not a fake .git dir): check-ignore needs git to accept it."""
-    path.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "init", "-q"], cwd=path, check=True, capture_output=True)
-    return path
 
 
 def _commit_all(repo: Path, message: str = "init") -> None:
@@ -150,30 +137,13 @@ def _fail_close_of(monkeypatch, target: Path) -> None:
 
 
 @pytest.fixture
-def temp_root(tmp_path, monkeypatch):
-    """Isolate the temp branch and guarantee the project anchor resolves to nothing.
-
-    Both anchors must be neutralised, not just the env var: resolve_project_root falls
-    back to the cwd, and pytest's own cwd is inside this checkout. tempfile.tempdir is
-    patched rather than TMPDIR because gettempdir() caches on first call.
-    """
-    fallback = tmp_path / "tmp"
-    fallback.mkdir()
-    nowhere = tmp_path / "nowhere"
-    nowhere.mkdir()
-    monkeypatch.setattr(tempfile, "tempdir", str(fallback))
-    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
-    monkeypatch.chdir(nowhere)
-    return fallback
-
-
-@pytest.fixture
 def repo(tmp_path, temp_root, monkeypatch):
     """A git repo named by CLAUDE_PROJECT_DIR, with the temp branch isolated.
 
     Sets the real anchor rather than patching resolve_project_root, so the project-local
-    assertions cover the path production actually takes. Depends on temp_root so an
-    accidental fallback lands under tmp_path and the two branches stay distinguishable.
+    assertions cover the path production actually takes. Depends on conftest's temp_root
+    so an accidental fallback lands under tmp_path and the two branches stay
+    distinguishable.
     """
     root = _git_repo(tmp_path / "repo")
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
@@ -294,20 +264,57 @@ def test_find_repo_root_accepts_a_file_start(tmp_path):
 
 @requires_unprivileged
 def test_find_repo_root_survives_an_unsearchable_ancestor(tmp_path):
-    """An unreadable ancestor reads as "no marker here", not a PermissionError traceback.
+    """The walk climbs PAST an ancestor it cannot search and finds the repo above it.
 
     pathlib absorbs only ENOENT/ENOTDIR/EBADF/ELOOP, so probing `.git` under a directory
-    with no search bit raises EACCES; _is_git_dir catches it and the walk climbs past.
-    Unguarded, it surfaces as a raw traceback out of executor step 1.
+    with no search bit raises EACCES; _is_git_dir catches it and the climb continues.
+    The repo has to sit ABOVE the blocked directory for this to say anything: with
+    nothing up there, find_repo_root's own handler answers None either way.
     """
-    blocked = tmp_path / "blocked"
+    root = _git_repo(tmp_path / "repo")
+    blocked = root / "blocked"
     inner = blocked / "inner"
     inner.mkdir(parents=True)
     blocked.chmod(0o000)
     try:
-        assert find_repo_root(inner) is None
+        assert find_repo_root(inner) == root
     finally:
         blocked.chmod(0o755)
+
+
+def test_resolve_project_root_answers_none_when_the_working_directory_is_gone(
+    tmp_path, monkeypatch
+):
+    """A relative $CLAUDE_PROJECT_DIR is resolved against the cwd, which can be gone.
+
+    Path.resolve() then raises FileNotFoundError before any repo probe runs, and that has
+    to read as "no repo found here" rather than as a traceback out of step 1. Reachable in
+    practice: an exported relative CLAUDE_PROJECT_DIR plus a shell whose directory was
+    removed under it.
+    """
+    doomed = tmp_path / "doomed"
+    doomed.mkdir()
+    monkeypatch.chdir(doomed)  # restored at teardown, so removing it now is safe
+    os.rmdir(doomed)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", "rel")
+
+    root, reason = resolve_project_root()
+
+    assert root is None
+    assert "CLAUDE_PROJECT_DIR" in reason and "rel" in reason
+
+
+def test_find_repo_root_answers_none_for_a_path_carrying_a_nul(monkeypatch):
+    """resolve() raises ValueError for an embedded NUL, before any errno exists.
+
+    Driven directly rather than through the env var: the environment cannot carry such a
+    value at all, which the first assertion pins -- so this half of the handler is pinned
+    where the contract lives instead.
+    """
+    with pytest.raises(ValueError):
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", "\x00nul")
+
+    assert find_repo_root(Path("\x00nul")) is None
 
 
 def test_find_repo_root_requires_an_explicit_start():
@@ -1596,7 +1603,7 @@ def test_unreadable_gitignore_declines_without_raising(tmp_path):
 
 
 def test_a_missing_git_binary_is_an_unanswerable_probe_not_an_ignored_one(tmp_path, monkeypatch):
-    """`git` absent (or the probe timing out) must answer None, never True.
+    """`git` absent must answer None, never True.
 
     Answering True writes state into a repo where `.agent-state` is not ignored, which
     `git status` then shows and `git clean -fd` destroys. The exit-128 path (a non-repo)
@@ -1606,6 +1613,50 @@ def test_a_missing_git_binary_is_an_unanswerable_probe_not_an_ignored_one(tmp_pa
     monkeypatch.setenv("PATH", str(tmp_path / "no-binaries-here"))
 
     assert resources._check_ignored(root, _PROBE) is None
+
+
+def test_a_hung_git_is_an_unanswerable_probe_not_a_hang(tmp_path, monkeypatch):
+    """A probe that timed out answers None, and the caller then leaves `.gitignore` alone.
+
+    TimeoutExpired is a SubprocessError, not an OSError: drop that arm from `_run_git`
+    and the bound written to keep step 1 moving becomes a traceback out of a helper whose
+    whole contract is a tri-state answer -- the loudest possible way to fail at the one
+    thing the timeout exists to survive.
+    """
+    root = _git_repo(tmp_path / "repo")
+
+    def hangs(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=["git"], timeout=10)
+
+    monkeypatch.setattr(resources.subprocess, "run", hangs)
+
+    assert resources._check_ignored(root, _PROBE) is None
+
+    ignored, reason = ensure_agent_state_ignored(root, _PROBE)
+
+    assert ignored is False
+    assert "git cannot determine" in reason
+
+
+def test_the_ignore_probe_is_bounded_by_a_timeout(tmp_path, monkeypatch):
+    """The bound is the only thing between a wedged `git` and a step 1 that never returns.
+
+    Read off a REAL call rather than by wedging a `git` shim and waiting: the wait is the
+    bound itself, ten seconds onto a suite that finishes in under thirty. A weak pin, but
+    the alternative to it is no pin.
+    """
+    root = _git_repo(tmp_path / "repo")
+    real_run = resources.subprocess.run
+    seen = {}
+
+    def record(*args, **kwargs):
+        seen.update(kwargs)
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(resources.subprocess, "run", record)
+
+    assert resources._check_ignored(root, _PROBE) is False
+    assert seen["timeout"] == 10
 
 
 def test_no_gitignore_edit_when_git_cannot_answer(tmp_path):
@@ -2464,7 +2515,7 @@ def test_the_reaper_ranks_by_name_not_by_mtime(repo, monkeypatch):
     assert newest_name.exists(), "the highest-sorting name must occupy a keep slot"
 
 
-def test_a_run_one_day_inside_the_age_bound_survives(repo, filled_window):
+def test_a_run_one_day_inside_the_age_bound_survives(filled_window):
     """The bound is `>= cutoff` keeps. A run inactive for RUNS_MAX_AGE_DAYS - 1 is inside
     it, and INTENT.md promises that run is kept.
 
@@ -2601,7 +2652,7 @@ def test_reaper_scan_tolerates_a_broken_symlink_child(filled_window):
 
 
 @requires_unprivileged
-def test_reaper_spares_a_run_dir_it_cannot_enumerate(repo, filled_window):
+def test_reaper_spares_a_run_dir_it_cannot_enumerate(filled_window):
     """A surplus, stale run holding an unreadable subdirectory is left whole.
 
     rmtree cannot clear that subdirectory either: it unlinks the siblings it reaches
@@ -2654,7 +2705,7 @@ def test_reaper_survives_an_unreadable_runs_parent(repo, temp_root):
         parent.chmod(0o700)
 
 
-def test_reaper_spares_a_run_with_a_child_it_cannot_stat(repo, filled_window, monkeypatch):
+def test_reaper_spares_a_run_with_a_child_it_cannot_stat(filled_window, monkeypatch):
     """A child can vanish between iterdir() and lstat() -- another session reaping, or the
     user deleting mid-scan. That run is skipped for the pass, not judged on the rest.
 
@@ -2678,9 +2729,10 @@ def test_reaper_spares_a_run_with_a_child_it_cannot_stat(repo, filled_window, mo
 
     monkeypatch.setattr(Path, "lstat", vanishing_lstat)
 
-    # Direct, for the same reason as the unreadable-subdirectory case: rmtree uses os.lstat
-    # rather than Path.lstat, so it would clear this run and the end state alone cannot say
-    # whether the child was skipped or the whole run was.
+    # The direct call is what pins that _last_activity RAISES. The end-state assertion
+    # below is the consequence -- rmtree uses os.lstat, which is not patched here, so a
+    # run judged on the readable part really would be removed -- but it is also satisfied
+    # by a reaper that never ran at all.
     with pytest.raises(FileNotFoundError):
         resources._last_activity(stale)
 
@@ -2689,7 +2741,7 @@ def test_reaper_spares_a_run_with_a_child_it_cannot_stat(repo, filled_window, mo
     assert stale.exists(), "a run that cannot be judged whole is not reaped"
 
 
-def test_a_candidate_that_vanishes_before_it_is_judged_is_skipped(repo, filled_window, monkeypatch):
+def test_a_candidate_that_vanishes_before_it_is_judged_is_skipped(filled_window, monkeypatch):
     """Two orchestrators reaping one repo: the other one wins the race.
 
     A candidate deleted between the listing and the judgement makes _last_activity's root
@@ -3100,10 +3152,9 @@ def test_step_1_degrades_on_an_unwritable_state_dir(tmp_path, temp_root, monkeyp
     monkeypatch.setattr(sys, "argv", [orchestrator, "--step", "1", "--state-dir", str(state)])
     try:
         # Either completing or exiting cleanly is acceptable; raising is not.
-        try:
-            main()
-        except SystemExit:
-            pass
+        main()
+    except SystemExit:
+        pass
     finally:
         state.chmod(0o755)
 

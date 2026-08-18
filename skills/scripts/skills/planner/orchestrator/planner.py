@@ -58,9 +58,7 @@ from skills.planner.shared.resources import (
 
 MODULE_PATH = "skills.planner.orchestrator.planner"
 
-# Where an approved plan is archived, relative to the recorded project root. Named rather
-# than inlined so everything that reasons about the archive location imports it, and moving
-# it breaks that import instead of silently leaving them pointed at the old path.
+# Where an approved plan is archived, relative to the recorded project root.
 DOCS_PLANS_RELATIVE = Path("docs") / "plans"
 
 

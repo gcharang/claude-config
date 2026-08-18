@@ -2142,30 +2142,19 @@ def test_executor_step1_warns_against_verbatim_source_copy(tmp_path):
     assert "verbatim" in out
 
 
-def test_executor_step1_writes_no_skeleton_plan_json(tmp_path, monkeypatch):
+def test_executor_step1_writes_no_skeleton_plan_json(tmp_path, temp_root, monkeypatch):
     # main() must NOT pre-write a full-schema plan.json skeleton on a fresh step 1: a
     # pre-existing skeleton (planning_context/diagram_graphs keys) both contradicted the
     # reduced-subset contract and forced read-before-write. The orchestrator authors
-    # plan.json fresh via Write instead. Neutralise BOTH project anchors and pin the temp
-    # branch into pytest-managed space: resolve_project_root reads CLAUDE_PROJECT_DIR and
-    # falls back to the cwd, and pytest's cwd is this checkout -- leaving either live
-    # makes this test create .agent-state/_runs/executor/ in the real repo (and append to
-    # its .gitignore). tempfile.tempdir must be pinned as well as mkdtemp: the session
-    # parent is mkdir'd directly, so pinning mkdtemp alone still creates
-    # <real tmp>/cc-<session> outside anything pytest cleans up.
+    # plan.json fresh via Write instead. temp_root (conftest) neutralises both project
+    # anchors and pins the temp branch; mkdtemp is pinned on top so the run dir is a known
+    # path this can assert on.
     import tempfile
 
     from skills.planner.orchestrator.executor import main as executor_main
 
     state_dir = tmp_path / "executor-state"
     state_dir.mkdir()
-    nowhere = tmp_path / "nowhere"
-    nowhere.mkdir()
-    fake_tmp = tmp_path / "tmp"
-    fake_tmp.mkdir()
-    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
-    monkeypatch.chdir(nowhere)
-    monkeypatch.setattr(tempfile, "tempdir", str(fake_tmp))
     monkeypatch.setattr(tempfile, "mkdtemp", lambda *a, **k: str(state_dir))
     monkeypatch.setattr("sys.argv", ["executor", "--step", "1"])
     executor_main()

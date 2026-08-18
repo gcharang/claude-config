@@ -37,6 +37,6 @@ main() -> format_output() -> print() -> LLM reads -> follows <invoke_after>
 
 ```bash
 SCRIPTS="${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts"
-uv run --project "$SCRIPTS" pytest "$SCRIPTS" -v
-uv run --project "$SCRIPTS" pytest "$SCRIPTS" -k deepthink -v
+uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS" -v
+uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS" -k deepthink -v
 ```

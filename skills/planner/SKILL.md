@@ -46,7 +46,8 @@ Step 1 is the only step that can see which project the run belongs to. It reads
 `$CLAUDE_PROJECT_DIR`, then falls back to the working directory, and records the answer in
 the state directory; every later step arrives through a `cd <SKILLS_DIR> && ...` wrapper
 and reads it back rather than looking again. That is why these two entry points use
-`--project` instead of the `<invoke working-dir=...>` form other skills use -- `working-dir`
-resolves the install layout by `cd`-ing into it, discarding the one signal step 1 has. See
+`--project` instead of the `<invoke working-dir=...>` form other skills use: `working-dir`
+resolves the install layout by `cd`-ing into it, discarding the working directory -- the
+one signal Claude Code supplies for these subprocesses. See
 `skills/scripts/skills/lib/workflow/prompts/README.md` ("Three Invocation Forms") and
 `skills/planner/INTENT.md` ("State directory location").

@@ -21,13 +21,13 @@ Python package root for skill implementations. uv-managed; `pyproject.toml` decl
 
 ```bash
 SCRIPTS="${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts"
-uv run --project "$SCRIPTS" pytest "$SCRIPTS" -v
+uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS" -v
 ```
 
 ## Lint / Type-check
 
 ```bash
 SCRIPTS="${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts"
-uv run --project "$SCRIPTS" ruff check "$SCRIPTS"
-uv run --project "$SCRIPTS" pyright "$SCRIPTS"
+uv run --project "$SCRIPTS" --extra dev python -m ruff check "$SCRIPTS"
+uv run --project "$SCRIPTS" --extra dev python -m pyright "$SCRIPTS"
 ```

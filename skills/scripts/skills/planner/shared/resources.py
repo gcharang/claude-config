@@ -1,6 +1,8 @@
 """Resource management for planner scripts.
 
-Handles loading of resource files, path resolution, and state-directory placement.
+The state_dir argument contract and path derivation come first, then state-directory
+placement, which is most of the file; the resource provider and the loading helpers sit
+at the end.
 """
 
 import contextlib
@@ -233,8 +235,8 @@ def resolve_project_root() -> tuple[Path | None, str]:
     project first. That is step 1 alone: its SKILL.md invocation uses
     `uv run --project <SKILLS_DIR>` precisely so cwd survives, while every later step
     arrives through `cd <SKILLS_DIR> && ...`. Steps after the first therefore read the
-    answer step 1 recorded (see save_project_root / load_project_root) instead of
-    calling this.
+    answer step 1 recorded (see ensure_project_root_recorded / load_project_root) instead
+    of calling this.
 
     WHY the reason string: both callers report the degradation to the user, and the two
     None cases need different wording. Returning it keeps the input names in one place
@@ -579,6 +581,42 @@ def require_usable_state_dir(state_dir: str) -> None:
         sys.exit(f"Error: state directory {state_dir} is unusable: {e}")
 
 
+def _run_git(args: list[str], repo_root: Path) -> subprocess.CompletedProcess[bytes] | None:
+    """Run `git *args` in `repo_root`, or None when the process could not run at all.
+
+    Shared by the two probes below, which are tri-state for the same reason: a probe that
+    could not run cannot answer, and None is the case where the caller must not act on a
+    guess. The scrub and the timeout are therefore stated once rather than per probe.
+
+    GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE override cwd discovery outright, so inheriting
+    them reintroduces the wrong-repository answer cwd= is set to prevent -- through the
+    other door. Scrubbing the whole GIT_ prefix also drops config overrides
+    (GIT_CONFIG_GLOBAL, GIT_CONFIG_COUNT/KEY/VALUE): accepted, because these probes want
+    the repository's real rules and index, not a caller's substituted config. HOME and
+    XDG_CONFIG_HOME are left alone -- they are not GIT_-prefixed, and a global
+    excludesFile is part of those real rules rather than a redirection to another
+    repository.
+
+    ValueError joins OSError and SubprocessError for a repo_root carrying an embedded
+    NUL. No caller can currently produce one -- resolve_state_dir's root is resolved and
+    existence-checked, and it is the only production path in. Kept because the cost is one
+    except clause and the alternative is a subprocess-layer traceback out of helpers whose
+    whole contract is a tri-state answer; not kept on the strength of a hypothetical
+    caller.
+    """
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=repo_root,
+            env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
 def _check_ignored(repo_root: Path, relative_path: str) -> bool | None:
     """Tri-state git check-ignore for `relative_path`, resolved against `repo_root`.
 
@@ -594,30 +632,8 @@ def _check_ignored(repo_root: Path, relative_path: str) -> bool | None:
     not against the repo it is asked about. A drifted cwd silently probes the wrong
     repository and reports a confident wrong answer.
     """
-    try:
-        result = subprocess.run(
-            ["git", "check-ignore", "-q", "--no-index", relative_path],
-            cwd=repo_root,
-            # GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE override cwd discovery outright, so
-            # inheriting them reintroduces the wrong-repository answer cwd= is set to
-            # prevent -- through the other door. Scrubbing the whole GIT_ prefix also
-            # drops config overrides (GIT_CONFIG_GLOBAL, GIT_CONFIG_COUNT/KEY/VALUE):
-            # accepted, because this probe wants the repository's real ignore rules, not
-            # a caller's substituted config. HOME and XDG_CONFIG_HOME are left alone --
-            # they are not GIT_-prefixed, and a global excludesFile is part of those real
-            # rules rather than a redirection to another repository.
-            env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-    except (OSError, ValueError, subprocess.SubprocessError):
-        # ValueError for a repo_root carrying an embedded NUL. No caller can currently
-        # produce one -- resolve_state_dir's root is resolved and existence-checked, and
-        # it is the only production path in. Kept because the cost is one except clause
-        # and the alternative is a subprocess-layer traceback out of a helper whose whole
-        # contract is a tri-state answer; not kept on the strength of a hypothetical
-        # caller.
+    result = _run_git(["check-ignore", "-q", "--no-index", relative_path], repo_root)
+    if result is None:
         return None
     if result.returncode in (0, 1):
         return result.returncode == 0
@@ -634,20 +650,8 @@ def _tracks_anything(repo_root: Path, relative_dir: str) -> bool | None:
     does make every NEW file under it invisible. Committed content is the plainest form
     of expressed intent there is, so Rule B declines rather than reinterpreting it.
     """
-    try:
-        result = subprocess.run(
-            ["git", "ls-files", "-z", "--", relative_dir],
-            cwd=repo_root,
-            # Same GIT_* scrub and reasoning as _check_ignored: an inherited GIT_DIR or
-            # GIT_INDEX_FILE would answer for a different repository's index.
-            env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return None
-    if result.returncode != 0:
+    result = _run_git(["ls-files", "-z", "--", relative_dir], repo_root)
+    if result is None or result.returncode != 0:
         return None
     return bool(result.stdout.strip(b"\x00"))
 
@@ -871,7 +875,10 @@ def _last_activity(path: Path) -> float:
     rmtree cannot remove either -- it unlinks the entries it reaches and then fails at
     that child -- so a run judged on the readable part of its tree would be partially
     destroyed rather than reaped, which is the one outcome retention must never produce.
-    _reap_old_runs leaves such a run whole for the pass.
+    _reap_old_runs leaves such a run whole for the pass. A child that vanishes between
+    iterdir() and lstat() -- a concurrent reaper, or the user deleting mid-scan -- raises
+    here too, and skipping that run costs nothing: next pass the child is not in the
+    listing at all.
 
     lstat for every entry in the WALK: a symlink reports as S_ISLNK rather than S_ISDIR,
     so it cannot be followed out of the state dir and cannot cycle. The root is stat'ed,
@@ -914,9 +921,9 @@ def _reap_old_runs(parent: Path) -> None:
     without inferring intent.
 
     Non-fatal throughout: failing to reap is untidy, failing a run is not acceptable. A
-    candidate whose subtree cannot be fully examined -- or that another orchestrator
-    removed between the listing and the judgement -- is left whole for the pass rather
-    than judged on the part that could be read.
+    candidate whose subtree cannot be fully examined is left whole for the pass rather
+    than judged on the part that could be read; one that another orchestrator removed
+    between the listing and the judgement is simply skipped.
     """
     try:
         candidates = sorted(
@@ -1148,8 +1155,9 @@ def resolve_state_dir(kind: StateDirKind) -> str:
 
     def decline(why: str) -> str:
         # One signature, one list. The minted run dir is pushed onto `created` the moment
-        # it exists, so a decline added after the mint inherits its cleanup too -- with an
-        # optional leaf parameter that was the one thing each new exit had to remember.
+        # it exists, so a decline added after the mint inherits its cleanup too, rather
+        # than through an optional leaf parameter, which was the one thing each new exit
+        # had to remember.
         _prune_empty(created)
         return _fallback(kind, why)
 

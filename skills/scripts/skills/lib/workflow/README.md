@@ -289,10 +289,10 @@ All tests use pytest. Run via uv. Set `SCRIPTS="${CLAUDE_PROJECT_DIR:-$HOME}/.cl
 
 ```bash
 SCRIPTS="${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts"
-uv run --project "$SCRIPTS" pytest "$SCRIPTS" -v                                          # everything
-uv run --project "$SCRIPTS" pytest "$SCRIPTS" -k deepthink -v                             # one workflow
-uv run --project "$SCRIPTS" pytest "$SCRIPTS/tests/test_workflow_import.py" -v            # imports only
-uv run --project "$SCRIPTS" pytest "$SCRIPTS/tests/test_workflow_structure.py" -v         # structure validation
-uv run --project "$SCRIPTS" pytest "$SCRIPTS/tests/test_workflow_steps.py" -v             # exhaustive step invocability
-uv run --project "$SCRIPTS" pytest "$SCRIPTS/tests/test_domain_types.py" -v               # domain type units
+uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS" -v                                          # everything
+uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS" -k deepthink -v                             # one workflow
+uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS/tests/test_workflow_import.py" -v            # imports only
+uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS/tests/test_workflow_structure.py" -v         # structure validation
+uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS/tests/test_workflow_steps.py" -v             # exhaustive step invocability
+uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS/tests/test_domain_types.py" -v               # domain type units
 ```

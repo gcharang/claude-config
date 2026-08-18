@@ -3,7 +3,7 @@
 Plan Executor - Execute approved plans through delegation.
 
 Twelve-step workflow with parallel QR verification:
-  1. Execution Planning - analyze plan, transcribe wave list, create state_dir
+  1. Execution Planning - analyze plan, transcribe wave list
   2. Implementation - dispatch developers (wave-aware parallel)
   3. Code QR Decompose - generate verification items
   4. Code QR Verify - parallel verification of items

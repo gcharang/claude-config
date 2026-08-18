@@ -25,6 +25,7 @@ All state mutations (except initial context.json) happen via Python CLI commands
 | `context.json`    | Loose JSON     | Step 2      | LLM Write tool | frozen after step 2    |
 | `qr-{phase}.json` | QA item schema | QR dispatch | LLM during QR  | ephemeral per QR cycle |
 | `verify.json`     | Pydantic v2    | Step 10     | `cli/verify.py`| suite/lint/type record |
+| `project_root`    | Absolute path  | Step 1, every route | `ensure_project_root_recorded` | written when absent; content this planner provably did not write is replaced; anything else, including a marker naming another project, is kept |
 
 ### plan.json Schema
 
@@ -171,15 +172,11 @@ quality_reviewer/
   prompts/decompose.py         Shared 13-step decompose flow (dispatch_step)
 
 shared/
-  resources.py    Path derivation, context loading
+  resources.py    Conventions, script paths, state dir validation + placement
   builders.py     XML output builders
   constraints.py  Orchestrator constraint AST builders
+  schema.py       Pydantic v2 schemas + defaults for plan.json / context.json / qr state
   qr/             QR utilities (types, constants, utils, schema)
-
-state/
-  models.py       Pydantic v2 schemas for plan.json
-  validator.py    Validation functions
-  decisions.py    Decision lifecycle enum (reserved for future use)
 
 cli/
   plan.py         plan.json manipulation commands
@@ -241,7 +238,10 @@ STEPS = {
 
 **QR iteration blocking**: Severity thresholds vary by iteration. Early iterations block all severities. Later iterations block only MUST to prevent infinite loops.
 
-**No temp directory cleanup**: OS handles /tmp cleanup on reboot.
+**Run-dir retention**: the project-local branch reaps its own `_runs/<kind>/` -- a run
+dir is removed only once it is BOTH surplus beyond `RUNS_KEEP_NEWEST` and idle past
+`RUNS_MAX_AGE_DAYS`, and a run whose subtree cannot be examined in full is left alone.
+The temp fallback is left to the OS.
 
 **Fix-mode routing**: routers call `route_work_phase()` (`shared/routing.py`) to detect fix
 mode from `qr-{phase}.json` state — no `--qr-fail` flag is threaded.

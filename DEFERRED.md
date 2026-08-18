@@ -101,37 +101,50 @@ give the executor `--plan-json`, and shrink step 1's LLM job to reading the plan
 context plus the optional reconciliation check. Keep the hand-authoring path for plans
 approved before the change. The on-disk key is `planning_context.decision_log` (the input
 alias), not `.decisions` -- reading the wrong one yields a false unresolvable-refs report.
+The reduced log is filtered to the entries some `code_intent.decision_refs` references --
+stricter than, and therefore always compatible with, the executor's own guard
+(`executor.py::main`'s `has_decision_refs` check, beside the
+`validate_structural_executability` call), which rejects only decisions present with no
+referencing intent at all.
 
-**Decide where the artifact lives before starting.** Two candidates:
+**Decisions (2026-08-18, user):**
 
-1. Beside the approved `plan.md`, as `docs/plans/<date>-<slug>.plan.json`. Needs
-   `_save_plan_to_docs`'s stem and collision-suffix logic extracted into something both
-   writers share (today it is inline), and note `docs/plans/` is itself git-ignored in
-   this repo -- its root `.gitignore` is `*` plus an allowlist that omits `docs/` -- so a
-   durability artifact would land untracked.
-2. In the state dir, which the state-dir placement work made durable and project-local. Sidesteps the
-   ignored-directory problem entirely and keeps the reduced plan next to the QR state it
-   belongs with, at the cost of not being browsable alongside the approved plans.
+- The reduced artifact lives in the STATE DIR, not `docs/plans/`. Machine state is created
+  only where git proves it ignored, deliverables unconditionally (`INTENT.md`, "Two rules
+  that govern every write"); `docs/plans/` is the ungated path, and routing a machine
+  artifact through it contradicts the rule the rest of the checkpoint follows.
+  `docs/plans/` is also git-ignored in this repo (root `.gitignore` is `*` plus an
+  allowlist that omits `docs/`), so its "browsable" benefit was partly illusory. Rejected:
+  `docs/plans/<date>-<slug>.plan.json` -- it would also have required extracting
+  `_save_plan_to_docs`'s stem/collision-suffix logic and solving a two-file publish under
+  one suffix with no atomicity (the suffix loop probes `.md` existence alone).
+- `--plan-json` is DATA, never a project anchor. Identity stays recorded marker >
+  `$CLAUDE_PROJECT_DIR` > cwd. Rejected: letting a supplied plan's origin outrank the live
+  shell -- a third input multiplies the disagreement cases with no arbitration rule.
+- Identity fails closed ONLY when `--plan-json` is passed. Without it, best-effort as today
+  (warn, proceed), so every existing invocation -- including the fresh-`git init` shape
+  that degrades to temp -- is unchanged. With it, an unresolvable or contradictory project
+  aborts step 1, because identity then decides what gets built, not only where the plan is
+  archived. Rejected: fail closed always (turns today's soft warning into a hard stop for
+  existing invocations); best-effort everywhere (an execution input the run cannot vouch
+  for is the exact case the marker mechanism exists to refuse).
+- Cross-kind reaping is AVOIDED, not managed: the executor reads the planner's artifact
+  once at step 1 and copies it into its own run dir. Retention stays per-kind. Rejected:
+  bumping the planner run's mtime on read (a read that mutates); an explicit
+  back-reference (cross-run state that itself needs retention).
 
-Two things the choice also settles, so decide them together rather than after:
+**Consequences.** The executor's `project_root` marker stays write-only
+(`load_project_root` keeps its single caller, `planner.py::_save_plan_to_docs`) -- a
+deliberate choice for symmetry and human discoverability. The `.agent-state`-vs-
+`docs/plans` write-gating asymmetry is deliberate and stated in `INTENT.md`.
 
-- **The executor's project marker currently has no reader.** `load_project_root` has
-  exactly one caller, `planner.py::_save_plan_to_docs`. The executor writes `project_root`
-  on every route and pays a git walk, a marker write, and a stderr line for a value
-  nothing consumes -- including the cross-project warning it emits on a resume from
-  another shell. Candidate 1 gives it a reader; candidate 2 leaves it write-only, which
-  is then a deliberate choice for symmetry and human discoverability rather than an
-  oversight. It is defensible either way; it should not stay accidental.
-- **Write-gating asymmetry.** `.agent-state/` is created only after git PROVES it ignored,
-  and taken back again if the proof fails; `_save_plan_to_docs` mkdirs into the tracked
-  tree unconditionally. That asymmetry is correct and now stated as a rule in
-  `INTENT.md` -- machine state is gated, deliverables are not. Candidate 1 routes a
-  MACHINE artifact through the ungated path, which contradicts the rule; candidate 2
-  does not. Whichever is chosen, the rule is what has to be argued against.
-
-Design constraint, not a question: `_save_plan_to_docs` allocates its `-2`/`-3` collision
-suffix by probing `.md` existence alone, so a sibling `.plan.json` under candidate 1 is a
-two-file publish with one suffix and no atomicity.
+**Still open, decide at implementation:** the artifact's file NAME. `plan.json` in the
+planner's run dir is already the FULL plan and `plan.json` in the executor's run dir is
+step 1's own target, so the reduced artifact needs a distinct name (e.g.
+`executor-plan.json`) -- chosen when the reducer is written, not before.
+`ensure_project_root_recorded()` returns `None` today; the fail-closed branch needs the
+classification it discards, so it should return the marker kind (or the resolved root)
+when `--plan-json` lands rather than a third `resolve_project_root()` call in one step 1.
 
 ## Make a truncated `project_root` marker decidable
 
@@ -165,11 +178,11 @@ values are. A sibling skill wanting a durable run dir would have to import from
 `skills.planner.shared`, which inverts the layering.
 
 Proposed split: `skills/lib/gitrepo.py` (`is_git_dir`, `find_repo_root`, `is_ignored`,
-`ensure_ignored`, `_tracks_anything`, plus the `_has_rule` / `_append_gitignore_rule`
-helpers and `GITIGNORE_RULE`) and
+`ensure_ignored`, `_tracks_anything`, `_run_git`, plus the `_has_rule` /
+`_append_gitignore_rule` helpers and `GITIGNORE_RULE`) and
 `skills/lib/runstate.py` (`AGENT_STATE_DIRNAME` -- which `ensure_ignored` probes, so
 `gitrepo` takes it as an argument rather than importing it -- `RUNS_NAMESPACE`,
-`_RUN_DIR_RE`, `StateDirKind`, the `MARKER_*` kinds, `resolve_state_dir`,
+`_RUN_DIR_RE`, `StateDirKind`, the `_MARKER_*` kinds, `resolve_state_dir`,
 `require_usable_state_dir`,
 `ensure_project_root_recorded`, `_save_project_root`, `load_project_root`, `_read_marker`,
 `_fallback`,
@@ -222,6 +235,9 @@ churn a module that is about to move:
 - `_check_ignored`'s `None` contract records that "beyond a symbolic link" is one of its
   cases. That refusal is git's, not a check in this module, and it is what keeps a
   symlinked `.agent-state` from being written through -- do not lose the note.
+- The test module splits with the source: `tests/test_state_dir_placement.py` (~3100
+  lines) divides along the same `gitrepo` / `runstate` seam (`test_gitrepo.py` /
+  `test_runstate.py`), so the split does not leave a monolithic test file behind.
 
 Two helpers resist that rule. `_read_all` and `_close_quietly` are each shared by
 `_read_marker` (bound for `runstate`) and `ensure_agent_state_ignored` (bound for
@@ -244,13 +260,14 @@ Fold in one more thing when this moves: step 1's three-call sequence
 (`supplied or resolve_state_dir(kind)` -> `require_usable_state_dir` ->
 `ensure_project_root_recorded`) is duplicated across both orchestrators, and its order
 is load-bearing -- validation must precede recording, or an unusable state dir draws a
-soft "could not record" warning immediately before the real error. Today that invariant lives in
-`planner.py::_begin_run` (which names the order and is the planner's local precursor to
-this helper) and a cross-reference comment in `executor.py`. Nothing else enforces it:
-`test_step_1_rejects_an_unusable_state_dir` constrains which INPUTS both orchestrators
-refuse, not the SEQUENCE -- both orders exit with a byte-identical message, differing only
-by a stderr warning. `test_step_1_validates_before_it_records` pins the order for both, so
-this fold-in is a simplification rather than a repair.
+soft project-marker warning ("not recording a project" when no anchor resolves, "could
+not record project root" when one does) immediately before the real error. Today that
+invariant lives in `planner.py::_begin_run` (which names the order and is the planner's
+local precursor to this helper) and a cross-reference comment in `executor.py`. Nothing
+else enforces it: `test_step_1_rejects_an_unusable_state_dir` constrains which INPUTS both
+orchestrators refuse, not the SEQUENCE -- both orders exit with a byte-identical message,
+differing only by a stderr warning. `test_step_1_validates_before_it_records` pins the
+order for both, so this fold-in is a simplification rather than a repair.
 
 The steps-2+ preamble is duplicated too, and more literally: both orchestrators run
 `validate_state_dir_requirement` then `require_usable_state_dir` in the same order, under a
@@ -258,19 +275,24 @@ byte-identical four-line comment, and wrap the first in the same `try/except Val
 sys.exit` because the two validators report through different protocols (one raises, one
 exits). Fold both branches into one `resolve_run_state_dir(kind, step, supplied)` and settle
 the protocol split in the same pass; duplicated RATIONALE is the reliable signal.
+The fold-in's clean exit should reach all six call sites of
+`validate_state_dir_requirement`, not just the two orchestrators -- the four sub-agent
+scripts (`quality_reviewer/prompts/fix.py`, `architect/plan_design_execute.py`,
+`developer/exec_implement_execute.py`, `technical_writer/exec_docs_execute.py`) let the
+`ValueError` escape as a raw traceback today.
 
 A single `begin_run(kind, supplied) -> str` would own the step-1 order and let both helpers
 become private. It is NOT a straight lift on either side: the executor interleaves
 `verify_path(state_dir).unlink()` between validation and recording, and the planner appends
-`_write_plan_skeleton` after recording. Either the executor's clear moves to after the
-recording -- nothing between them reads `verify.json` -- or the helper takes a callback;
-settling that here stops it being re-litigated at implementation time. It would also fold away the
-redundant `resolve_project_root()` call -- `resolve_state_dir` and
-`ensure_project_root_recorded` each make one, and while they cannot disagree inside a
-single process, only one of them needs to. Two review lanes split on
-whether this is worth doing on its own (one proposed it, then withdrew it as stylistic;
-the other re-raised it) -- do it as part of the move, not before, and note that the
-executor's `--plan-json` work would otherwise be the third site to re-derive the order.
+`_write_plan_skeleton` after recording. Settled here so it is not re-litigated at
+implementation time: the executor's clear moves to after the recording -- nothing between
+them reads `verify.json` -- rather than the helper growing a callback for one call site.
+It would also fold away the redundant `resolve_project_root()` call -- `resolve_state_dir`
+and `ensure_project_root_recorded` each make one, and while they cannot disagree inside a
+single process, only one of them needs to. Two review lanes split on whether this is worth
+doing on its own (one proposed it, then withdrew it as stylistic; the other re-raised it)
+-- do it as part of the move, not before, and note that the executor's `--plan-json` work
+would otherwise be the third site to re-derive the order.
 
 The visible symptom meanwhile: `planner.py` imports `load_project_root` and
 `ensure_project_root_recorded` from a module named `resources`, purely so step 1 and

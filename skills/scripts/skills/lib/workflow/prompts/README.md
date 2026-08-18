@@ -44,8 +44,10 @@ When constructing commands for a new caller context, pick the form whose caller 
 invokes planner and executor step 1 with form 2b, not form 1. Step 1 mints the run's state
 directory under `<project>/.agent-state/`, and the only in-process signals naming the
 project are `$CLAUDE_PROJECT_DIR` and the cwd. Form 1's `working-dir` `cd`s into the skill tree before
-Python starts, leaving both unusable and the state dir anchored on whichever repo holds
-the scripts. Form 2b keeps it.
+Python starts, which discards the cwd -- the one of the two Claude Code actually supplies
+for these subprocesses -- and, with `CLAUDE_PROJECT_DIR` unset, anchors the state dir on
+whichever repo holds the scripts. A `cd` cannot unset an exported variable, so a user who
+exports it is unaffected. Form 2b keeps the cwd.
 
 The trade-off is concrete and worth stating plainly: Claude Code populates
 `CLAUDE_PROJECT_DIR` for **hook** subprocesses but not for Bash-tool ones, so unless the

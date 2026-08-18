@@ -43,3 +43,5 @@ All plan state lives in plan.json. Context captured separately in context.json. 
 | `context.json`    | User-provided planning context          | frozen after step 2 | Sub-agent context handover     |
 | `qr-{phase}.json` | QA items for specific phase (ephemeral) | ephemeral           | QA decomposition, verification |
 | `verify.json`     | Final suite/lint/type record (executor step 10) | written by cli/verify.py | Final-verification gate |
+| `project_root`    | The project this run belongs to, one    | written when absent; content this planner provably did not write is replaced; anything else, including a marker naming another project, is kept | Terminal docs/plans save       |
+|                   | absolute path (`ensure_project_root_recorded`) |                     | (`_save_plan_to_docs`)         |
