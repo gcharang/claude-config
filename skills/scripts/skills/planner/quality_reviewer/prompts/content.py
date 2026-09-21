@@ -11,8 +11,9 @@ files (`{plan_design,impl_code,impl_docs}_qr_{decompose,verify}.py`). The
   get_verification_guidance), registered in VERIFIERS. Shared step routing / CLI
   wiring / result recording stay in qr_verify_base.
 
-The prompt blocks and guidance bodies are relocated VERBATIM from the old files
-(triple-quoted to preserve exact text -- tests assert on substrings/offsets).
+Decompose prompt blocks are triple-quoted constants kept verbatim because
+tests assert on substrings and offsets. Guidance bodies are lists of strings;
+an element renders as one line of the reviewer prompt.
 Constants are phase-prefixed ([PHASE]_[TYPE]) so the three phases coexist here.
 """
 
@@ -467,6 +468,8 @@ def get_decompose_content(phase: str) -> dict:
 # check-specific guidance is an ordered (predicate, lines) table resolved by
 # select_check_guidance (first match wins). Emitted lines are verbatim -- tests
 # assert on substrings/offsets.
+# qr_verify_base splats each list into actions; workflow.cli joins them with
+# newlines. Each element is a prompt line, so source wrapping wraps the prompt.
 
 
 class PlanDesignVerify(VerifyBase):
@@ -542,8 +545,7 @@ class PlanDesignVerify(VerifyBase):
                     "  confirm the plan enumerates EVERY call site (not just the one being",
                     "  fixed). Missing call sites let the same defect re-seed.",
                     "  - Read the helper function.",
-                    "  - Search the codebase for ALL call sites (trace_path, grep for the",
-                    "    function name).",
+                    "  - Search the codebase for ALL call sites (grep for the function name).",
                     "  - For each call site: is it listed in the code_intent behavior or",
                     "    milestone requirements with a classification (needs-same-fix /",
                     "    needs-variant / safe-as-is) and evidence?",
@@ -580,8 +582,8 @@ class PlanDesignVerify(VerifyBase):
                     "  - Search the test suite for ALL tests exercising it: by function",
                     "    name, by its callers, and by the behavior being changed/removed.",
                     "  - FAIL if any coupled test class is absent from milestone.tests.",
-                    "  (Grep/Read; codebase graph optional. This checks the plan's test",
-                    "   enumeration vs codebase reality -- not code correctness.)",
+                    "  (Grep/Read. This checks the plan's test enumeration vs codebase reality",
+                    "   -- not code correctness.)",
                     "",
                 ],
             ),

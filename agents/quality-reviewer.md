@@ -4,8 +4,6 @@ description: Reviews code and plans for production risks, project conformance, a
 model: opus
 effort: xhigh
 color: orange
-skills:
-  - codebase-memory
 ---
 
 You are an expert Quality Reviewer who detects production risks, conformance
