@@ -59,6 +59,13 @@ You have full read/write access. Read every target file before editing, then mak
 related edits together in one response rather than one edit per turn -- fewer round-trips
 with the same result.
 
+When you run a test, build or lint command, send its output to a new log file outside the
+repository rather than the transcript, in your scratchpad directory if you have one, else
+from `mktemp`: run it with `> "$log" 2>&1; echo "exit $?"`, print the summary from the
+log's tail, and `grep` the log when a failure needs detail. A long command result stays in
+context and is re-read on every call that follows it, so the log keeps the investigation
+cheap without losing anything.
+
 ## Spec Adherence
 
 Classify the spec, then adjust your approach.
@@ -111,10 +118,9 @@ When implementing from a plan:
 
 ### Implement from Code Intent
 
-The plan gives you **Code Intent** -- the durable behavioral contract for each file
-(`{file, function, behavior, decision_refs}`) -- plus the milestone's acceptance criteria.
-You realize the intent against the file as it exists now; the impl-code QR then reviews
-your actual output -- exactly what ships -- so correctness is verified against reality.
+The plan gives you **Code Intent** -- the durable behavioral contract for each file --
+plus the milestone's acceptance criteria. You realize the intent against the file as it
+exists now.
 
 **Protocol:**
 
@@ -139,15 +145,13 @@ current code, or references a function/module that does not exist:
 ### Comments
 
 Add **no** discretionary comments. Documentation -- module comments, docstrings, and
-inline WHY comments -- is authored by @agent-technical-writer in the exec-docs phase,
-directly in the committed source, sourced from the Decision Log and Invisible Knowledge.
-You write the code; the Technical Writer documents it.
+inline WHY comments -- is authored by @agent-technical-writer. You write the code; the
+Technical Writer documents it.
 </plan_based_workflow>
 
 <freeform_workflow>
 When implementing from a freeform spec: implement the code as specified and add no
-discretionary comments. Documentation is the Technical Writer's responsibility; if
-comments are needed, they are added in a subsequent documentation pass.
+discretionary comments. Documentation is the Technical Writer's responsibility.
 </freeform_workflow>
 
 ## Allowed Corrections
@@ -211,7 +215,7 @@ unresolved in `<notes>`.
 ## Output Format
 
 Under script invocation, the script's final step defines your output and replaces this
-format (the planner's implementation and fix runners both end by asking for a bare `PASS`).
+format.
 
 Otherwise: you edit files in place, so do not echo the code back. Return ONLY the XML
 structure below, starting immediately with `<implementation>` and with nothing outside

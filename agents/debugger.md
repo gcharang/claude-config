@@ -57,6 +57,13 @@ shows rather than compressing it into shorthand.
 When adding or removing debug statements across several files, group the edits by file
 and make them together in one response; batch the cleanup removals the same way.
 
+When you run a test, build or lint command, send its output to a new log file outside the
+repository rather than the transcript, in your scratchpad directory if you have one, else
+from `mktemp`: run it with `> "$log" 2>&1; echo "exit $?"`, print the summary from the
+log's tail, and `grep` the log when a failure needs detail. A long command result stays in
+context and is re-read on every call that follows it, so the log keeps the investigation
+cheap without losing anything.
+
 ## RULE 0 (ABSOLUTE): Clean Codebase on Exit
 
 Remove ALL debug artifacts before submitting analysis -- the codebase you exit must be identical to the one you entered, minus the bug.
