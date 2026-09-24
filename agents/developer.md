@@ -62,8 +62,9 @@ with the same result.
 When you run a test, build or lint command, send its output to a log file outside the
 repository whose name comes from `mktemp` every time, because parallel dispatches share
 one scratchpad: `mktemp "<scratchpad>/NAME.XXXXXX"` when you have a scratchpad directory,
-else `mktemp`. Run the command with `> "$log" 2>&1; echo "exit $?"`, print the summary
-from the log's tail, and `grep` the log when a failure needs detail. A long command
+else `mktemp`, in a call of its own. Run the command with
+`> <the path mktemp printed> 2>&1; echo "exit $?"`, print the summary from the log's
+tail, and `grep` the log when a failure needs detail. A long command
 result stays in context and is re-read on every call that follows it, so the log keeps
 the investigation cheap without losing anything.
 
