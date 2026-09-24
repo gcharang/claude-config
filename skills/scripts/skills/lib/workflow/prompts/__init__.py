@@ -7,7 +7,7 @@ Prompts as strings composed via f-strings. No XML, no AST.
 from skills.lib.workflow.prompts.file import format_file_content
 
 # format_step provides step assembly: body content + continuation directive
-# pin_cwd makes a prose command cwd-independent (absolute cd into SKILLS_DIR)
+# pin_cwd makes a prose `uv run` command cwd-independent
 from skills.lib.workflow.prompts.step import format_step, pin_cwd
 from skills.lib.workflow.prompts.subagent import (
     parallel_constraint,

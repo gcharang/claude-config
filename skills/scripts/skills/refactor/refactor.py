@@ -2,13 +2,7 @@
 """
 Refactor Skill - Category-based code smell detection and synthesis.
 
-Six-phase workflow:
-  1. Mode Selection - Analyze user request to determine design/code/both
-  2. Dispatch      - Launch parallel Explore agents (one per randomly selected target)
-  3. Triage        - Review findings, structure as smells with IDs
-  4. Cluster       - Group smells by shared root cause
-  5. Contextualize - Extract user intent, prioritize issues
-  6. Synthesize    - Generate actionable work items
+WORKFLOW and format_output below define the steps and their routing.
 """
 
 import argparse
@@ -42,7 +36,6 @@ from skills.lib.workflow.prompts.step import pin_cwd
 class DocumentAvailability(Enum):
     """Explicit document availability states.
 
-    Document filtering has 3 valid states (design+code, code-only, not-available).
     Enum makes valid states explicit and eliminates silent filtering bugs.
 
     Centralizes phase + design_mode logic across call sites.
@@ -61,12 +54,11 @@ EXPLORE_MODULE_PATH = "skills.refactor.explore"
 def _invoke_tag(cmd: str) -> str:
     """Render a well-formed <invoke> directive for the refactor workflow.
 
-    pin_cwd prefixes an absolute ``cd`` into SKILLS_DIR so a sub-agent whose cwd
-    has drifted still resolves the ``skills`` package (matches dispatch_renderer.py;
-    a relative working-dir attr fails with "No module named 'skills'"). quoteattr
-    then escapes the whole command so a --scope path containing XML metacharacters
-    (&, <, ") cannot break out of the attribute and malform the directive. Matches
-    the escaping render_invoke_after already applies to InvokeAfterNode commands.
+    pin_cwd makes the command cwd-independent, so a sub-agent whose cwd has drifted
+    still resolves the ``skills`` package (a relative working-dir attr fails with
+    "No module named 'skills'"). quoteattr then escapes the whole command so a
+    --scope path containing XML metacharacters (&, <, ") cannot break out of the
+    attribute and malform the directive.
     """
     return f"<invoke cmd={quoteattr(pin_cwd(cmd))} />"
 
@@ -113,11 +105,8 @@ def parse_documents() -> list[dict]:
         if phases_match:
             phases = [p.strip() for p in phases_match.group(1).split(",")]
 
-        # NOTE: has_design creates implicit AND with applicable_phases check.
-        # A doc needs BOTH refactor_design in phases AND <design-mode> tag
-        # to generate design targets. Tag absence silently excludes all design
-        # targets even if phase is present. This dual-gate prevents target generation
-        # from docs that haven't implemented mode-specific guidance.
+        # NOTE: build_target_pool gates design targets on this tag as well as on the
+        # phase; its docstring gives the reason.
         has_design = "<design-mode>" in content
 
         categories = []
@@ -198,7 +187,7 @@ def select_categories(n: int = DEFAULT_CATEGORY_COUNT) -> list[dict]:
     """Randomly select N categories (backward compatibility).
 
     Args:
-        n: Number of categories to select (default 10)
+        n: Number of categories to select
 
     Returns:
         List of N randomly selected category dicts
@@ -211,7 +200,7 @@ def select_targets(n: int = DEFAULT_CATEGORY_COUNT, mode_filter: str = "both") -
     """Randomly select N targets from filtered pool.
 
     Args:
-        n: Number of targets to select (default 10)
+        n: Number of targets to select
         mode_filter: "design", "code", or "both"
 
     Returns:
@@ -231,13 +220,12 @@ def build_explore_dispatch(
 ) -> str:
     """Build parallel dispatch block for explore agents.
 
-    Each category uses the same 5-step explore workflow; only the category reference differs.
+    Each category uses the same explore workflow.
     Uses TemplateDispatchNode for SIMD-style dispatch: single instruction, multiple data.
     """
     selected = select_targets(n, mode_filter)
 
     # Build targets with substitution variables
-    # Template uses: $ref, $name, $mode
     targets = tuple(
         {
             "ref": f"{t['file']}:{t['start_line']}-{t['end_line']}",
@@ -257,9 +245,8 @@ def build_explore_dispatch(
     scope_arg = f" --scope {shlex.quote(scope)}".replace("$", "$$") if scope else ""
 
     # Template prompt with $var placeholders. The command lives in `command`
-    # below (rendered once as an escaped <invoke> by render_template_dispatch),
-    # not inline here -- a hand-built <invoke> in the prose double-wrapped and
-    # interpolated $scope unescaped.
+    # below, not inline here -- a hand-built <invoke> in the prose would
+    # double-wrap and interpolate $scope unescaped.
     template = (
         "Explore the codebase for this code smell.\n"
         "\n"
@@ -270,7 +257,7 @@ def build_explore_dispatch(
     )
 
     # Bare command (with $var placeholders); render_template_dispatch wraps it in
-    # a single quoteattr-escaped, cwd-pinned <invoke>.
+    # the <invoke>.
     command = f"uv run python -m {EXPLORE_MODULE_PATH} --step 1 --category $ref --mode $mode{scope_arg}"
 
     node = TemplateDispatchNode(

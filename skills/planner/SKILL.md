@@ -44,7 +44,7 @@ project-local-only install and silently runs the global scripts when both exist.
 
 Step 1 is the only step that can see which project the run belongs to. It reads
 `$CLAUDE_PROJECT_DIR`, then falls back to the working directory, and records the answer in
-the state directory; every later step arrives through a `cd <SKILLS_DIR> && ...` wrapper
+the state directory; every later step runs under `uv run --directory <SKILLS_DIR> ...`
 and reads it back rather than looking again. That is why these two entry points use
 `--project` instead of the `<invoke working-dir=...>` form other skills use: `working-dir`
 resolves the install layout by `cd`-ing into it, discarding the working directory -- the

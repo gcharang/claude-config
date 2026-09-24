@@ -1,20 +1,18 @@
 """Phase-specific QR content for the parameterized decompose/verify runners.
 
-Single home for the per-phase content that used to live in six near-identical
-files (`{plan_design,impl_code,impl_docs}_qr_{decompose,verify}.py`). The
-`qr_decompose.py` / `qr_verify.py` runners select by `--phase`:
+The per-phase content lives in this one module rather than in a near-identical file
+per phase and runner. The `qr_decompose.py` / `qr_verify.py` runners select by
+`--phase`:
 
-- DECOMPOSE: phase-specific cognitive prompts (steps 1-3, 5) + grouping examples,
-  registered in DECOMPOSE_CONTENT. The 13-step control flow stays in
-  prompts/decompose.dispatch_step; this module only supplies content.
-- VERIFY: one VerifyBase subclass per phase (the only per-phase behavior is
-  get_verification_guidance), registered in VERIFIERS. Shared step routing / CLI
-  wiring / result recording stay in qr_verify_base.
+- DECOMPOSE: phase-specific cognitive prompts + grouping examples, registered in
+  DECOMPOSE_CONTENT. The control flow stays in prompts/decompose.dispatch_step;
+  this module supplies content.
+- VERIFY: one VerifyBase subclass per phase, registered in VERIFIERS. Shared
+  behavior stays in qr_verify_base.
 
 Decompose prompt blocks are triple-quoted constants kept verbatim because
-tests assert on substrings and offsets. Guidance bodies are lists of strings;
-an element renders as one line of the reviewer prompt.
-Constants are phase-prefixed ([PHASE]_[TYPE]) so the three phases coexist here.
+tests assert on substrings and offsets. Guidance bodies are lists of strings.
+Constants are phase-prefixed ([PHASE]_[TYPE]) so the phases coexist here.
 """
 
 import json
@@ -53,10 +51,9 @@ def get_shared_scope_guidance(
     scoped_read: str,
     milestone_tail: str | None = None,
 ) -> list[str]:
-    """MILESTONE and scoped-fallback verify branches shared by all three phases.
+    """MILESTONE and scoped-fallback verify branches shared by the phases.
 
-    Each phase emits a structurally identical MILESTONE block (header, a lead-in line,
-    the milestone jq selector, an optional follow-up line) and an identical SCOPED
+    Each phase emits a structurally identical MILESTONE block and an identical SCOPED
     fallback block; only the per-phase wording differs. One owner for the structure;
     each caller passes its own lead-in / follow-up / read-target text so no line is lost.
     Lives here (not qr_verify_base) because it depends on _jq_select_by_id.
@@ -402,10 +399,6 @@ IMPL_DOCS_CONCERN_EXAMPLES = """\
 # ============================================================================
 # DECOMPOSE CONTENT REGISTRY
 # ============================================================================
-#
-# phase -> {phase_prompts: {step: prompt}, grouping_config: {*_examples}}.
-# Keys mirror the old per-file PHASE_PROMPTS / GROUPING_CONFIG dicts, so
-# dispatch_step is called identically -- only the lookup moved here.
 
 DECOMPOSE_CONTENT: dict[str, dict] = {
     "plan-design": {
@@ -453,7 +446,7 @@ DECOMPOSE_CONTENT: dict[str, dict] = {
 def get_decompose_content(phase: str) -> dict:
     """Phase-specific decompose prompts + grouping examples.
 
-    Raises ValueError on an unknown phase (matches get_phase_config / get_verifier).
+    Raises ValueError on an unknown phase.
     """
     get_phase_config(phase)
     return DECOMPOSE_CONTENT[phase]
@@ -463,13 +456,12 @@ def get_decompose_content(phase: str) -> dict:
 # VERIFY CLASSES
 # ============================================================================
 #
-# One VerifyBase subclass per phase; the only per-phase behavior is
-# get_verification_guidance. Scope dispatch is shared via parse_scope; the
+# One VerifyBase subclass per phase. Scope dispatch is shared via parse_scope; the
 # check-specific guidance is an ordered (predicate, lines) table resolved by
 # select_check_guidance (first match wins). Emitted lines are verbatim -- tests
 # assert on substrings/offsets.
-# qr_verify_base splats each list into actions; workflow.cli joins them with
-# newlines. Each element is a prompt line, so source wrapping wraps the prompt.
+# qr_verify_base splats each list into actions, which lib.workflow.cli.render_step
+# renders; under its contract, source wrapping here wraps the prompt.
 
 
 class PlanDesignVerify(VerifyBase):
@@ -507,7 +499,7 @@ class PlanDesignVerify(VerifyBase):
                 ]
             )
         else:
-            # milestone + scoped-fallback branches shared across all three phases
+            # milestone + scoped-fallback branches shared across the phases
             guidance.extend(
                 get_shared_scope_guidance(
                     kind, value, scope, state_dir,
@@ -640,7 +632,7 @@ class ImplCodeVerify(VerifyBase):
                 ]
             )
         else:
-            # milestone + scoped-fallback branches shared across all three phases
+            # milestone + scoped-fallback branches shared across the phases
             guidance.extend(
                 get_shared_scope_guidance(
                     kind, value, scope, state_dir,
@@ -769,7 +761,7 @@ class ImplDocsVerify(VerifyBase):
                 ]
             )
         else:
-            # milestone + scoped-fallback branches shared across all three phases
+            # milestone + scoped-fallback branches shared across the phases
             guidance.extend(
                 get_shared_scope_guidance(
                     kind, value, scope, state_dir,
@@ -929,17 +921,14 @@ VERIFIERS: dict[str, type[VerifyBase]] = {
     "impl-docs": ImplDocsVerify,
 }
 
-# The DECOMPOSE_CONTENT == VERIFIERS == QR_PHASES coverage check now lives in
-# phases.validate_phase_registries(), invoked from get_phase_config so a phase
-# added to QR_PHASES but missing its content/verifier here fails on the eager
-# routing/arg path (at startup) instead of only when this module is first imported
-# mid-dispatch.
+# phases.validate_phase_registries() checks these registries against QR_PHASES, so a
+# phase missing its content or verifier here fails at startup rather than mid-dispatch.
 
 
 def get_verifier(phase: str) -> VerifyBase:
     """Instantiate the VerifyBase subclass for a phase.
 
-    Raises ValueError on an unknown phase (matches get_phase_config).
+    Raises ValueError on an unknown phase.
     """
     get_phase_config(phase)
     return VERIFIERS[phase]()

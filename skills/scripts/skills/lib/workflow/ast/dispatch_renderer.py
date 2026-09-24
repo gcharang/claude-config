@@ -27,7 +27,7 @@ def _expand_template_targets(
     Substitution happens here, not in render_template_dispatch, so render
     functions only assemble XML from pre-expanded data. Thin wrapper over the
     shared expand_template_pairs -- see it for the $var contract and the "$$"
-    literal-escape rule (single owner so this and template_dispatch can't drift).
+    literal-escape rule.
     """
     return expand_template_pairs(template, command, targets)
 
@@ -117,8 +117,8 @@ def render_subagent_dispatch(node: SubagentDispatchNode) -> str:
         lines.append("  </prompt>")
 
     # Wrap invoke in directive to signal immediate execution.
-    # pin_cwd: absolute cd so the invocation survives a drifted agent cwd
-    # (relative ".claude/skills/scripts" breaks from /tmp or a user-global install).
+    # pin_cwd so the invocation survives a drifted agent cwd (relative
+    # ".claude/skills/scripts" breaks from /tmp or a user-global install).
     lines.append('  <directive action="IMMEDIATELY invoke">')
     lines.append(f'    <invoke cmd={quoteattr(pin_cwd(node.command))} />')
     lines.append("  </directive>")

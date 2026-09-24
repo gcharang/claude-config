@@ -1,9 +1,4 @@
-"""Resource management for planner scripts.
-
-The state_dir argument contract and path derivation come first, then state-directory
-placement, which is most of the file; the resource provider and the loading helpers sit
-at the end.
-"""
+"""Resource management for planner scripts."""
 
 import contextlib
 import os
@@ -20,14 +15,12 @@ from typing import Literal
 
 from skills.lib.io import atomic_write_text, read_text_or_exit
 
-# WHY an explicit __all__: sub-agent scripts and the two orchestrators import from this
-# module by name, and the test suite pins the rest of the surface directly. The list is
-# what a future split into skills/lib must keep importable under some name; everything
-# else here (the _-prefixed helpers especially) is an implementation detail that split is
-# free to move. Three kinds of entry qualify: something a production module imports,
-# something the suite pins (a dependency the split has to honour just the same), and the
-# types naming a public parameter. It sits beside the imports so a reader sees the
-# surface first.
+# WHY an explicit __all__: the list is what a future split into skills/lib must keep
+# importable under some name; everything else here (the _-prefixed helpers especially) is
+# an implementation detail that split is free to move. An entry qualifies when it is
+# something a production module imports, something the suite pins (a dependency the split
+# has to honour just the same), or a type naming a public parameter. It sits beside the
+# imports so a reader sees the surface first.
 __all__ = [
     "AGENT_STATE_DIRNAME",
     "GITIGNORE_RULE",
@@ -60,12 +53,11 @@ __all__ = [
 # real rule.
 # Step 1: creates state_dir when --state-dir is absent; a supplied one is the resume path
 # Steps 2+: Requires state_dir (passed from step 1)
-# QR retry mode: Detected via qr-{phase}.json file inspection
 
 # WHY STATE_DIR_ARG_REQUIRED instead of CONTEXT_FILE_ARG_REQUIRED:
 # Convention over configuration. If state_dir is known, all other paths are deterministic.
 # This matches the pattern: component that READS a file owns its location convention.
-# Single source of truth for path derivation prevents drift across 3 sub-agent scripts.
+# Single source of truth for path derivation prevents drift.
 STATE_DIR_ARG_REQUIRED = (
     ["--state-dir"],
     {"type": str, "required": True, "help": "Path to state directory (REQUIRED)"},
@@ -85,12 +77,9 @@ def validate_state_dir_requirement(step: int, state_dir: str | None) -> None:
     WHY steps 2+ require state_dir:
     - All workflow state persists in this directory (qa_state.json, plan.md, etc.)
     - Without it, steps can't read previous work or write outputs
-    - Orchestrator passes state_dir between steps via invoke_after
 
     WHERE step 1 puts it: resolve_state_dir() owns the location when --state-dir is
-    absent; a supplied path is honoured as the resume path. Project-local and git-ignored
-    by default so state survives a /tmp reap and is attributable to the project it
-    belongs to; per-session temp only as a fallback.
+    absent; a supplied path is honoured as the resume path.
 
     WHAT BREAKS if validation changes:
     - Remove step > 1 check -> Step 1 fails spuriously (no state_dir exists yet)
@@ -106,9 +95,7 @@ def validate_state_dir_requirement(step: int, state_dir: str | None) -> None:
 def get_context_path(state_dir: str) -> Path:
     """Derive context.json path from state directory.
 
-    WHY this function: Centralizes path derivation convention. If context.json location
-    changes (e.g., moves to state_dir/inputs/context.json), only this function needs updating.
-    Sub-agents call this instead of manually constructing Path(state_dir) / "context.json".
+    WHY this function: Centralizes path derivation convention.
     """
     return Path(state_dir) / "context.json"
 
@@ -131,10 +118,9 @@ RUNS_NAMESPACE = "_runs"
 # never a nested path that happens to share the name.
 GITIGNORE_RULE = f"/{AGENT_STATE_DIRNAME}/"
 
-# File inside a state dir recording the project it belongs to. Step 1 is the only step
-# whose cwd is the project (see resolve_project_root); every later step arrives with
-# `cd <SKILLS_DIR> && ...` already applied, so the answer has to be carried, not
-# re-derived.
+# File inside a state dir recording the project it belongs to. Later steps run under
+# `uv run --directory <SKILLS_DIR> ...`, whose cwd is the skill tree (see
+# resolve_project_root), so the answer has to be carried, not re-derived.
 PROJECT_ROOT_FILE = "project_root"
 
 # Retention for minted run dirs. A repo working tree has no reaper of its own, so
@@ -143,17 +129,14 @@ PROJECT_ROOT_FILE = "project_root"
 RUNS_KEEP_NEWEST = 20
 RUNS_MAX_AGE_DAYS = 14
 
-# Name shape resolve_state_dir mints: <UTC yyyymmdd-HHMMSS>-<mkdtemp suffix>. The reaper
-# deletes only paths matching it, so anything a user parks in the same directory is left
-# alone no matter how old.
+# Name shape resolve_state_dir mints: <UTC yyyymmdd-HHMMSS>-<mkdtemp suffix>.
 _RUN_DIR_RE = re.compile(r"\d{8}-\d{6}-")
 
-# The two orchestrators that mint a state dir. `kind` becomes both a path component
-# under _runs/ and a temp-dir prefix, so a stray value would open a second namespace
-# ("Planner") or escape .agent-state/ ("../../etc"). The annotation is enforced by
-# pyright, not at runtime -- which is sufficient here because `kind` is developer-
-# supplied at two call sites. Environment-supplied values are a different trust class
-# and ARE sanitised at runtime; see _session_token.
+# `kind` becomes both a path component under _runs/ and a temp-dir prefix, so a stray
+# value would open a second namespace ("Planner") or escape .agent-state/ ("../../etc").
+# The annotation is enforced by pyright, not at runtime -- which is sufficient here
+# because `kind` is developer-supplied. Environment-supplied values are a different trust
+# class and ARE sanitised at runtime; see _session_token.
 StateDirKind = Literal["planner", "executor"]
 
 
@@ -232,14 +215,11 @@ def resolve_project_root() -> tuple[Path | None, str]:
     another project's repo.
 
     The cwd is only trustworthy where the caller has not been `cd`'d away from the
-    project first. That is step 1 alone: its SKILL.md invocation uses
-    `uv run --project <SKILLS_DIR>` precisely so cwd survives, while every later step
-    arrives through `cd <SKILLS_DIR> && ...`. Steps after the first therefore read the
-    answer step 1 recorded (see ensure_project_root_recorded / load_project_root) instead
-    of calling this.
+    project first; a step that has been moved away reads the recorded answer instead
+    (see ensure_project_root_recorded / load_project_root).
 
-    WHY the reason string: both callers report the degradation to the user, and the two
-    None cases need different wording. Returning it keeps the input names in one place
+    WHY the reason string: callers report the degradation to the user, and the None
+    cases need different wording. Returning it keeps the input names in one place
     instead of re-derived at each call site. On success the reason is "" -- the pair is
     (Path, "") or (None, non-empty), never anything else.
     """
@@ -327,11 +307,9 @@ def _close_quietly(fd: int) -> None:
     close() releases the descriptor even when it reports failure, so there is nothing to
     retry and nothing leaks. What it can report is a deferred write-back error -- NFS
     surfaces one here rather than at write() -- and that must not become a traceback out
-    of step 1, which calls resolve_state_dir bare in both orchestrators.
+    of step 1.
 
-    Swallowing is safe because neither caller trusts the descriptor for its verdict: the
-    marker read already holds its bytes by this point, and the .gitignore append is
-    confirmed by a fresh `git check-ignore`, which reads the file back from disk.
+    Swallowing is safe while no caller trusts the descriptor for its verdict.
     """
     with contextlib.suppress(OSError):
         os.close(fd)
@@ -341,10 +319,7 @@ def _read_all(fd: int) -> bytes:
     """Every byte of `fd` from offset 0, without disturbing its file position.
 
     pread rather than read: it takes its offset as an argument, so this neither needs a
-    seek to start nor moves a position the caller shares -- the .gitignore descriptor is
-    also the one _append_gitignore_rule writes through. (O_APPEND governs writes only,
-    so that descriptor's read position is 0 either way; independence is the property
-    worth having, not a fix for a broken starting offset.)
+    seek to start nor moves a position the caller shares.
     """
     chunks = []
     offset = 0
@@ -360,11 +335,10 @@ def _read_marker(state_dir: str) -> tuple[Path | None, str, str]:
     The kind is what ensure_project_root_recorded dispatches on; the reason is what the
     user reads. Separating them keeps a reworded message from changing behaviour.
 
-    Every consumer classifies here, so the file-type check lives here too: a marker
-    that is not a regular file must not be trusted by the terminal docs/plans save any
-    more than by the recorder. Splitting that judgement across the two gives them
-    different answers, with step 1 refusing the marker while _save_plan_to_docs follows
-    it into another repo.
+    The file-type check lives here: a marker that is not a regular file must not be
+    trusted by the terminal docs/plans save any more than by the recorder. Splitting that
+    judgement across consumers gives them different answers, with step 1 refusing the
+    marker while _save_plan_to_docs follows it into another repo.
 
     Two questions decide _MARKER_CORRUPT vs _MARKER_KEEP, in order:
 
@@ -397,8 +371,7 @@ def _read_marker(state_dir: str) -> tuple[Path | None, str, str]:
     #   O_NOFOLLOW -- a symlink raises ELOOP rather than letting whoever planted it
     #                 choose which repository the approved plan lands in.
     #   O_NONBLOCK -- a FIFO opens instead of blocking forever, so fstat can reject it;
-    #                 without it step 1 hangs in both orchestrators with nothing on
-    #                 stderr.
+    #                 without it step 1 hangs with nothing on stderr.
     try:
         fd = os.open(marker, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
     except FileNotFoundError:
@@ -558,35 +531,37 @@ def ensure_project_root_recorded(state_dir: str) -> None:
 def require_usable_state_dir(state_dir: str) -> None:
     """Exit with one clear line when `state_dir` cannot hold this run's state.
 
-    In practice only a caller-supplied --state-dir fails this; resolve_state_dir returns
-    a directory it just created. Missing, or a file rather than a directory, are caller
-    mistakes rather than degradations, because every later step writes into this path.
+    Missing, or a file rather than a directory, are caller mistakes rather than
+    degradations, because every later step writes into this path.
 
     Existence only -- NOT writability. A directory that exists but cannot be written is
     left to the individual writes, which degrade with their own messages; probing
     permissions here would be advisory anyway on ACL filesystems, and a false reject is
     worse than a late one.
 
-    Called by BOTH orchestrators at step 1 before anything touches the directory, and
-    again for steps 2+ before the plan.json read -- so a state dir that has been reaped or
-    deleted reads as this message rather than as "plan.json not found", which names a file
-    and invites a fix that recreates the directory without its project marker.
+    A state dir that has been reaped or deleted must read as this message rather than as
+    "plan.json not found", which names a file and invites a fix that recreates the
+    directory without its project marker.
     """
     try:
-        if not Path(state_dir).is_dir():
-            sys.exit(f"Error: state directory {state_dir} is missing or not a directory")
+        is_dir = stat.S_ISDIR(os.stat(state_dir).st_mode)
+    except (FileNotFoundError, NotADirectoryError, ValueError):
+        # ValueError is an embedded NUL, which names no directory either.
+        is_dir = False
     except OSError as e:
-        # is_dir() absorbs an embedded NUL (returns False, so the branch above reports
-        # it) but re-raises EACCES from an unsearchable ancestor.
+        # os.stat, not Path.is_dir(): from Python 3.14 is_dir() answers False for every
+        # OSError, which would report an unsearchable ancestor's EACCES as a missing dir.
         sys.exit(f"Error: state directory {state_dir} is unusable: {e}")
+    if not is_dir:
+        sys.exit(f"Error: state directory {state_dir} is missing or not a directory")
 
 
 def _run_git(args: list[str], repo_root: Path) -> subprocess.CompletedProcess[bytes] | None:
     """Run `git *args` in `repo_root`, or None when the process could not run at all.
 
-    Shared by the two probes below, which are tri-state for the same reason: a probe that
-    could not run cannot answer, and None is the case where the caller must not act on a
-    guess. The scrub and the timeout are therefore stated once rather than per probe.
+    Tri-state: a probe that could not run cannot answer, and None is the case where the
+    caller must not act on a guess. The scrub and the timeout are therefore stated once
+    rather than per probe.
 
     GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE override cwd discovery outright, so inheriting
     them reintroduces the wrong-repository answer cwd= is set to prevent -- through the
@@ -598,11 +573,8 @@ def _run_git(args: list[str], repo_root: Path) -> subprocess.CompletedProcess[by
     repository.
 
     ValueError joins OSError and SubprocessError for a repo_root carrying an embedded
-    NUL. No caller can currently produce one -- resolve_state_dir's root is resolved and
-    existence-checked, and it is the only production path in. Kept because the cost is one
-    except clause and the alternative is a subprocess-layer traceback out of helpers whose
-    whole contract is a tri-state answer; not kept on the strength of a hypothetical
-    caller.
+    NUL: the cost is one except clause, and the alternative is a subprocess-layer
+    traceback out of helpers whose whole contract is a tri-state answer.
     """
     try:
         return subprocess.run(
@@ -740,8 +712,7 @@ def ensure_agent_state_ignored(repo_root: Path, probe: str) -> tuple[bool, str]:
     PRECONDITION: `probe` must be under AGENT_STATE_DIRNAME. Only that directory's rule is
     appended and only its index is consulted, so a probe outside it gets an append that
     cannot affect the answer, followed by a re-probe that fails -- a mutation of the user's
-    file for nothing. The dirname becomes a parameter when this moves to skills/lib
-    (see DEFERRED.md); until then the pairing is the caller's to keep.
+    file for nothing. The pairing is the caller's to keep.
 
     Returns (True, "") when it is ignored, or (False, reason) naming which decline
     happened -- the caller prints that reason, so every path out of here is
@@ -867,15 +838,14 @@ def _last_activity(path: Path) -> float:
     an in-place rewrite of plan.json leaves it untouched. Keying retention on the
     directory alone therefore calls a run stale while it is being actively edited.
 
-    Walks the whole subtree, not just direct children: the state dir is flat today, but
-    a run whose only recent write is one level deeper would otherwise be invisible to
-    this and get reaped while live.
+    Walks the whole subtree, not just direct children: a run whose only recent write is
+    one level deeper would otherwise be invisible to this and get reaped while live.
 
     Raises rather than judging on a partial view. A directory this cannot list is one
     rmtree cannot remove either -- it unlinks the entries it reaches and then fails at
     that child -- so a run judged on the readable part of its tree would be partially
     destroyed rather than reaped, which is the one outcome retention must never produce.
-    _reap_old_runs leaves such a run whole for the pass. A child that vanishes between
+    A child that vanishes between
     iterdir() and lstat() -- a concurrent reaper, or the user deleting mid-scan -- raises
     here too, and skipping that run costs nothing: next pass the child is not in the
     listing at all.
@@ -914,9 +884,8 @@ def _reap_old_runs(parent: Path) -> None:
         through -- _last_activity would otherwise report the TARGET's mtime.
 
     Deliberately NOT keyed on whether a plan was approved. A planner run dir does record
-    it -- plan.md has one writer, and its only caller sits behind the terminal gate -- but
-    approval is the wrong signal to key on: the run that must survive is the UNapproved one
-    still being worked, while an approved plan has already been published to docs/plans/.
+    it, but approval is the wrong signal to key on: the run that must survive is the
+    UNapproved one still being worked, while an approved plan has already been published to docs/plans/.
     An executor run dir has no plan.md at all. Age plus count protects in-progress work
     without inferring intent.
 
@@ -954,9 +923,7 @@ def _created_ancestors(leaf: Path, stop: Path) -> list[Path]:
     """
     if stop not in leaf.parents:
         # Containment is a precondition, not something to work around: without it the
-        # walk climbs past `stop` and _prune_empty could rmdir outside the repo. Today
-        # the single call site guarantees it; this keeps that true after the move
-        # recorded in DEFERRED.md puts the helper in a shared module.
+        # walk climbs past `stop` and _prune_empty could rmdir outside the repo.
         return []
     missing = []
     current = leaf
@@ -1053,8 +1020,7 @@ def _session_parent(tmpdir: Path) -> Path:
     An unguessable 0700 directory is the floor this must not fall below, so a parent we
     cannot vouch for is not repaired and not adopted -- mkdtemp mints an unguessable one
     instead. Grouping by session is a convenience for attribution; it is not worth a
-    hijacked run dir. The decline is announced, because every other decline in this
-    module is, and this is the one with an adversarial reading.
+    hijacked run dir. The decline is announced, because it has an adversarial reading.
 
     The load-bearing property holds on both paths: nothing lands at the flat
     /tmp/{planner,executor}-* prefix another session's cleanup glob would sweep.
@@ -1089,9 +1055,8 @@ def _temp_state_dir(kind: StateDirKind) -> str:
     """Per-session temp fallback: <tmpdir>/cc-<session>/<kind>-<rand>/.
 
     Exits rather than raising: this is the last resort, so failing here means no state
-    dir at all, and every caller would only turn the exception into the same message.
-    Mirrors lib.io.read_text_or_exit, the codebase's idiom for an unrecoverable I/O
-    failure inside a helper, and lets both orchestrators call resolve_state_dir bare.
+    dir at all. Mirrors lib.io.read_text_or_exit, the codebase's idiom for an
+    unrecoverable I/O failure inside a helper, and lets callers use resolve_state_dir bare.
     """
     tmpdir = Path(tempfile.gettempdir())
     try:
@@ -1103,9 +1068,8 @@ def _temp_state_dir(kind: StateDirKind) -> str:
 def _fallback(kind: StateDirKind, reason: str) -> str:
     """Take the temp branch, saying why project-local was declined.
 
-    Every condition that declines project-local routes here and the returned str cannot
-    distinguish them, so "why is my state in /tmp again?" would otherwise be answerable
-    only by re-deriving the predicates by hand.
+    The returned str cannot distinguish the declines, so "why is my state in /tmp
+    again?" would otherwise be answerable only by re-deriving the predicates by hand.
     """
     print(f"Note: {kind} state dir falls back to temp ({reason})", file=sys.stderr)
     return _temp_state_dir(kind)
@@ -1150,14 +1114,13 @@ def resolve_state_dir(kind: StateDirKind) -> str:
 
     # EVERY decline past this point routes through here, so "a tree that was never going
     # to hold state keeps nothing" holds by construction rather than by remembering to
-    # undo at each exit. A fifth decline path added later inherits it.
+    # undo at each exit.
     created = _created_ancestors(parent, repo_root)
 
     def decline(why: str) -> str:
         # One signature, one list. The minted run dir is pushed onto `created` the moment
         # it exists, so a decline added after the mint inherits its cleanup too, rather
-        # than through an optional leaf parameter, which was the one thing each new exit
-        # had to remember.
+        # than through an optional leaf parameter.
         _prune_empty(created)
         return _fallback(kind, why)
 
@@ -1212,10 +1175,9 @@ class PlannerResourceProvider:
     """
 
     def get_resource(self, name: str) -> str:
-        """Retrieve resource content from conventions directory.
+        """Retrieve resource content from the planner resources directory.
 
         Implements ResourceProvider protocol for planner workflows.
-        Maps resource name to file in CONVENTIONS_DIR.
         """
         resource_path = Path(__file__).resolve().parents[4] / "planner" / "resources" / name
         try:
@@ -1226,7 +1188,7 @@ class PlannerResourceProvider:
     def get_step_guidance(self, **kwargs) -> dict:
         """Get step-specific guidance (placeholder for forward compatibility).
 
-        Returns empty dict until per-step guidance requirements emerge.
+        Returns empty dict.
         Decision Log (get_step_guidance placeholder) explains deferral rationale.
         """
         return {}
@@ -1261,7 +1223,6 @@ def get_mode_script_path(script_name: str) -> str:
     """Get module path for -m invocation.
 
     Mode scripts provide step-based workflows for sub-agents.
-    Scripts are organized by agent: qr/, dev/, tw/
 
     Args:
         script_name: Script path relative to planner/ (e.g., "developer/exec_implement.py")
@@ -1306,12 +1267,11 @@ def render_context_file(context_file: str | Path, *, missing_ok: bool = False) -
     "<state_dir>/context.json" (implementation detail).
 
     missing_ok: when True, a missing context.json degrades to a placeholder
-    note instead of raising. Execution-phase QR (impl-code/impl-docs) runs in a
-    state dir the executor populated with plan.json but no context.json, so its
-    absence there is expected, not an error. Plan-phase callers keep the default
-    (strict): the planner writes context.json in step 2, so a missing file there
-    is a real dispatch-ordering bug worth surfacing loudly. See
-    qr.phases.is_execution_phase, which callers pass through to this flag.
+    note instead of raising. Execution-phase QR runs in a state dir the executor
+    populated with plan.json but no context.json, so its absence there is expected,
+    not an error. Plan-phase callers keep the default (strict): the planner writes
+    context.json in step 2, so a missing file there is a real dispatch-ordering bug
+    worth surfacing loudly. See qr.phases.is_execution_phase.
     """
     from skills.lib.workflow.prompts import format_file_content
 
@@ -1335,9 +1295,8 @@ def render_context_file(context_file: str | Path, *, missing_ok: bool = False) -
 def render_phase_context(state_dir: str, phase: str) -> str:
     """Render context.json for a phase, degrading gracefully for execution phases.
 
-    impl-* state dirs carry no context.json (the executor writes plan.json only), so
-    missing_ok follows is_execution_phase; plan phases stay strict. Single owner of the
-    'which phases tolerate a missing context.json' rule.
+    impl-* state dirs carry no context.json, so missing_ok follows is_execution_phase;
+    plan phases stay strict.
     """
     from skills.planner.shared.qr.phases import is_execution_phase
 

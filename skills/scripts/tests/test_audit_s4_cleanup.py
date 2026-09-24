@@ -1,13 +1,5 @@
-"""Regression guards for the planner-workflow audit §4 structural/cleanup fixes.
-
-Covers, one class per fix:
-- QR-verify forbidden list is a single SSOT (planner == executor, no drift).
-- format_step fails loud on malformed branch/next_cmd combinations.
-- validate_conventions surfaces non-literal get_convention() calls (no silent skip).
-- planner never interpolates an unquoted state_dir into an emitted command.
-- Plan.created_at is timezone-aware (no deprecated naive utcnow).
-- The two phase-parameterized QR runners serve every phase and thread --phase
-  through every emitted next/record command.
+"""Regression guards for the planner-workflow audit §4 structural/cleanup fixes, one
+class per fix.
 """
 
 import json
@@ -18,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-from conftest import write_qr  # pyright: ignore[reportMissingImports]
+from conftest import write_qr
 
 import validate_conventions as vc
 from skills.lib.workflow.prompts.step import format_step
@@ -91,8 +83,8 @@ class TestFormatStepGuard:
     def test_valid_combinations_do_not_raise(self):
         # terminal (WORKFLOW COMPLETE), next_cmd, and branching are all valid
         assert "WORKFLOW COMPLETE" in format_step("body")
-        assert "NEXT STEP" in format_step("body", next_cmd="n")
-        assert "PASS" in format_step("body", if_pass="p", if_fail="f")
+        assert "NEXT STEP" in format_step("body", next_cmd="uv run n")
+        assert "PASS" in format_step("body", if_pass="uv run p", if_fail="uv run f")
 
 
 # --- §4.4e: validate_conventions fails loud on non-literal args ---------------
@@ -130,8 +122,7 @@ class TestPlannerStateDirQuoting:
     def test_no_raw_state_dir_interpolation_in_source(self):
         """Source invariant: every emitted --state-dir is shell-quoted.
 
-        A raw `--state-dir {state_dir}` would reintroduce the copy/paste shell
-        injection the executor/gates were already hardened against.
+        A raw `--state-dir {state_dir}` would reintroduce copy/paste shell injection.
         """
         src = (
             _SCRIPTS_DIR / "skills" / "planner" / "orchestrator" / "planner.py"
@@ -208,7 +199,7 @@ class TestQrRunnerParametrization:
 
     def test_decompose_grouping_next_uses_runner_module(self):
         # The grouping steps' next command must target the parameterized runner
-        # (so --phase round-trips), not a deleted per-phase module.
+        # (so --phase round-trips).
         g = decompose_guidance(
             9, "skills.planner.quality_reviewer.qr_decompose", phase="impl-code", state_dir="/tmp/x"
         )

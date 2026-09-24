@@ -1,19 +1,14 @@
-"""Shared QR fix-mode step machine for all three phases.
+"""Shared QR fix-mode step machine for the QR phases.
 
-ONE 3-step control flow (load failures -> apply fixes -> validate) parameterized by
---phase, replacing the three near-identical *_qr_fix.py files. The shared step-1 load
-(load_qr_state -> iteration -> failed-items), the assembly scaffold, the next-command
-generation, and the PASS-return contract live once in fix_dispatch_step; per-phase
-content lives in FIX_CONTENT. Like the decompose path this separates the dispatcher
+ONE control flow, fix_dispatch_step, parameterized by --phase; per-phase content
+lives in FIX_CONTENT. Like the decompose path this separates the dispatcher
 (fix_dispatch_step, cf. decompose.dispatch_step) from the per-phase content
 (FIX_CONTENT, cf. content.DECOMPOSE_CONTENT) -- but co-locates both in THIS module
 rather than splitting them across two files, because the fix content is small and
 self-contained (decompose's larger content lives in content.py).
 
 Step-2/step-3 bodies are a list[str] when static, or a (state_dir) -> list[str] builder
-when they need runtime composition (impl-docs's apply injects temporal.md; plan-design's
-validate shell-quotes state_dir into its command). plan-design's apply body is likewise a
-builder: it imports the architect batch-contract preambles at call time.
+when they need runtime composition.
 """
 
 from __future__ import annotations
@@ -93,8 +88,7 @@ def _impl_docs_apply(state_dir: str) -> list[str]:
     """impl-docs apply body; injects the temporal-contamination convention at runtime.
 
     state_dir is unused (it only needs get_convention) but kept to satisfy the
-    StepBody builder signature that _resolve_body calls; the sibling _plan_design_validate
-    is the builder that actually consumes state_dir.
+    StepBody builder signature that _resolve_body calls.
     """
     return [
         "APPLY targeted fixes to documentation.",
@@ -143,11 +137,10 @@ IMPL_DOCS_VALIDATE: list[str] = [
     "  Do not add summaries, explanations, or any other text.",
 ]
 
-# pin_cwd only prefixes a fixed `cd SKILLS_DIR`, and these commands carry a literal
-# $STATE_DIR placeholder (the agent substitutes it). The BATCH-MODE preamble (header +
-# JSON-RPC shape + method catalog + underscore note) and the pipe lead-in are shared
-# with plan_design_execute so the architect and QR-fix surfaces teach one batch
-# contract; only this prompt's example array and fix-pattern prose stay local.
+# pin_cwd pins a fixed SKILLS_DIR, and these commands carry a literal $STATE_DIR
+# placeholder (the agent substitutes it). The BATCH-MODE preamble and the pipe lead-in
+# are shared with plan_design_execute so the architect and QR-fix surfaces teach one
+# batch contract.
 def _plan_design_apply(state_dir: str) -> list[str]:
     from skills.planner.architect.plan_design_execute import (
         _render_batch_mode_preamble,
@@ -305,8 +298,7 @@ FIX_CONTENT: dict[str, dict] = {
 
 
 def get_fix_content(phase: str) -> dict:
-    """Per-phase fix content. Raises ValueError on an unknown phase (matches
-    get_decompose_content / get_verifier via get_phase_config)."""
+    """Per-phase fix content. Raises ValueError on an unknown phase."""
     get_phase_config(phase)
     return FIX_CONTENT[phase]
 

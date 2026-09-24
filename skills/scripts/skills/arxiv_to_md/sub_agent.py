@@ -6,13 +6,7 @@ Arguments:
   --dest-file  Optional. When provided by orchestrator, skip metadata extraction.
                The orchestrator has already determined the destination filename.
 
-6-step workflow:
-  1. Fetch     - Download and extract arXiv source; extract metadata if --dest-file not provided
-  2. Preprocess - Expand inputs, normalize encoding
-  3. Convert   - TeX to markdown via pandoc
-  4. Clean     - Inventory sections, remove unwanted
-  5. Verify    - Factored verification: source vs output
-  6. Validate  - Check output quality, return FILE: (+ TITLE/DATE if no --dest-file) or FAIL:
+The steps are _format_step_1 and STATIC_STEPS below.
 """
 
 import argparse
@@ -46,7 +40,7 @@ FETCH_INSTRUCTIONS = (
     "  curl -L https://arxiv.org/e-print/<id> -o /tmp/arxiv_<id>/source.tar.gz\n"
     "\n"
     "Extract the tarball:\n"
-    "  cd /tmp/arxiv_<id> && tar -xzf source.tar.gz\n"
+    "  tar -xzf /tmp/arxiv_<id>/source.tar.gz -C /tmp/arxiv_<id>\n"
     "\n"
     "Find the main .tex file:\n"
     "  - Use Glob tool to find *.tex files\n"
@@ -59,7 +53,7 @@ FETCH_INSTRUCTIONS = (
     "\n"
     "  1. Check https://arxiv.org/abs/<id> to find available versions\n"
     "  2. Try downloading older versions in reverse order:\n"
-    "     curl -L https://arxiv.org/e-print/<id>v<N-1> -o source.tar.gz\n"
+    "     curl -L https://arxiv.org/e-print/<id>v<N-1> -o /tmp/arxiv_<id>/source.tar.gz\n"
     "  3. Stop when you find a version with .tex source\n"
     "  4. If no version has TeX source, respond: FAIL: PDF-only submission\n"
     "\n"

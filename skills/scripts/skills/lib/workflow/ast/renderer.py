@@ -61,8 +61,7 @@ class XMLRenderer:
         """Render generic element with attributes and children.
 
         Attribute values go through quoteattr so a value containing a quote,
-        ``&``, or ``<`` cannot break out of the attribute (matches
-        render_invoke_after).
+        ``&``, or ``<`` cannot break out of the attribute.
         """
         attrs_str = ""
         if node.attrs:
@@ -119,12 +118,10 @@ class XMLRenderer:
         WHY no validation here: __post_init__ validates at construction time.
         Renderer assumes valid node, focuses solely on XML generation.
 
-        WHY pin_cwd: routes through the absolute-cd helper (same as
-        dispatch_renderer.py) so the emitted invoke is cwd-independent; the
-        agent can run it from any directory without a "No module named 'skills'"
-        error. quoteattr escapes the final shell string for safe XML attribute
-        embedding so quotes/angle brackets inside node.cmd do not produce
-        malformed XML. Composition of caller-supplied node.cmd parts remains
+        WHY pin_cwd: the emitted invoke is cwd-independent; the agent can run it
+        from any directory without a "No module named 'skills'" error. quoteattr
+        escapes the final shell string for safe XML attribute embedding so
+        quotes/angle brackets inside node.cmd do not produce malformed XML. Composition of caller-supplied node.cmd parts remains
         the caller's responsibility.
         """
         if node.cmd is not None:

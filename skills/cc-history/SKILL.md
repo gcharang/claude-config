@@ -216,7 +216,7 @@ TARGET=$(jq -r 'select(.timestamp | startswith("2026-01-28T11:23")) | .uuid' fil
 ```bash
 # Outputs one message per line (JSONL), oldest first
 extract_branch() {
-  jq -c -s --arg target "$1" '
+  jq -c -s --arg target "${1}" '
     (map({(.uuid): .}) | add) as $lookup |
     {chain: [], current: $target} |
     until(.current == null or ($lookup[.current] | not);
@@ -225,7 +225,7 @@ extract_branch() {
       .current = $msg.parentUuid
     ) |
     .chain | reverse | .[]
-  ' "$2"
+  ' "${2}"
 }
 
 # Usage: extract_branch <target-uuid> <file>

@@ -1,13 +1,9 @@
-"""Unified gate output builder for planner and executor workflows.
-
-Single implementation eliminates ~150 lines of duplicated gate logic.
-Both planner.py and executor.py call this with their MODULE_PATH.
-"""
+"""Unified gate output builder for the orchestrator workflows."""
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from skills.lib.workflow.prompts.step import SKILLS_DIR, format_step
+from skills.lib.workflow.prompts.step import format_step, pin_cwd
 from skills.planner.shared.builders import (
     ESCALATE_HANDLER,
     PEDANTIC_ENFORCEMENT,
@@ -33,8 +29,8 @@ if TYPE_CHECKING:
 class _UnsetType:
     """Sentinel for qr_state default: distinguishes 'not provided' from None.
 
-    The orchestrators thread their loaded dict-or-None; only a direct caller
-    (e.g. tests) omits it, leaving _UNSET to trigger the self-load.
+    A direct caller (e.g. tests) that omits it leaves _UNSET to trigger the
+    self-load.
     """
 
     def __repr__(self) -> str:
@@ -96,9 +92,8 @@ def _has_recorded_failure_from_state(qr_state: dict | None) -> bool:
 def _has_blocking_todo_from_state(qr_state: dict | None) -> bool:
     """True when qr_state still has an unverified item that blocks now.
 
-    Delegates to _blocking_items_from_state (the single read/filter pipeline
-    shared with has_qr_failures_from_state) with status="TODO", so the iteration-default and
-    severity logic lives in one place. Takes the pre-loaded qr_state dict
+    Delegates to _blocking_items_from_state with status="TODO", so the
+    iteration-default and severity logic lives in one place. Takes the pre-loaded qr_state dict
     build_gate_output already read.
     """
     return bool(_blocking_items_from_state(qr_state, "TODO"))
@@ -114,9 +109,7 @@ def _render_iteration_limit_banner(
 ) -> str:
     """Render the common iteration-limit escalation skeleton.
 
-    Both the QR gate (gates.py) and the Final Verification gate (executor.py)
-    build the same user-escalation banner at the iteration ceiling; this helper
-    provides the shared skeleton each caller wraps with its specific content.
+    Each caller wraps this shared skeleton with its specific content.
     """
     parts = [
         format_gate_result(passed=False),
@@ -170,7 +163,7 @@ def _build_iteration_limit_escalation(
     detail_lines.extend(findings or ["  (see qr state; no per-item findings recorded)"])
 
     if pass_step is not None:
-        accept_cmd = f"cd {shell_quote(str(SKILLS_DIR))} && uv run python -m {module_path} --step {pass_step}"
+        accept_cmd = pin_cwd(f"uv run python -m {module_path} --step {pass_step}")
         if state_dir:
             accept_cmd += f" --state-dir {shell_quote(state_dir)}"
         accept_text = f"  Accept (proceed despite findings):\n    {accept_cmd}"
@@ -180,9 +173,8 @@ def _build_iteration_limit_escalation(
         # build_gate_output forces a terminal pass and planner.main() renders plan.md
         # + saves it to docs/plans/. --qr-status pass is REQUIRED -- the planner
         # gate-step guard sys.exit(0)s before rendering when it is absent.
-        accept_cmd = (
-            f"cd {shell_quote(str(SKILLS_DIR))} && uv run python -m {module_path} "
-            f"--step {step} --qr-status pass --accept-findings"
+        accept_cmd = pin_cwd(
+            f"uv run python -m {module_path} --step {step} --qr-status pass --accept-findings"
         )
         if state_dir:
             accept_cmd += f" --state-dir {shell_quote(state_dir)}"
@@ -213,9 +205,9 @@ def _build_completeness_block(
 ) -> GateResult:
     """Gate output when QR passed but the plan is structurally unexecutable.
 
-    Routes back to the fixer (work_step) with the completeness errors, mirroring
-    the executor's validate_completeness hard-exit but BEFORE approval -- so an
-    approved plan is never saved to docs only to dead-end at execution.
+    Routes back to the fixer (work_step) with the completeness errors BEFORE
+    approval -- so an approved plan is never saved to docs only to dead-end at
+    execution.
     """
     target_name = fix_target.value if fix_target else "architect"
     parts = [
@@ -279,16 +271,13 @@ def build_gate_output(
     # Severity-aware on-disk state is the primary source of truth. The
     # agent-supplied qr.status (--qr-status) is a severity-blind PASS/FAIL
     # tally; past the de-escalation threshold it disagrees with the work step
-    # and router (which read the same severity-aware blocking-FAIL state), so routing on it made the gate
-    # dispatch a fixer while the work step ran first-time EXECUTE with no fix
-    # context. Derive the verdict from the same predicate everyone else uses.
-    # qr_state is loaded ONCE per gate by the calling frame (executor.format_output
-    # / planner.get_step_guidance) and threaded in, then reused by every _from_state
-    # predicate below (has_qr_failures_from_state, _has_recorded_failure_from_state,
-    # _has_blocking_todo_from_state, _unresolved_blocking_findings_from_state); their
-    # former state_dir-taking twins each re-read the file, yielding 4-5 redundant
-    # open()+json.load() per gate. _UNSET means a direct caller (e.g. tests) skipped
-    # the pre-load, so we self-load here to preserve standalone usability.
+    # and router (which read the same severity-aware blocking-FAIL state), so routing
+    # on it would make the gate dispatch a fixer while the work step runs first-time
+    # EXECUTE with no fix context.
+    # qr_state is loaded ONCE per gate by the calling frame and threaded in, then
+    # reused by the _from_state predicates below, so the file is read once per gate.
+    # _UNSET means a direct caller (e.g. tests) skipped the pre-load, so we self-load
+    # here to preserve standalone usability.
     resolved_state: dict | None = None
     has_blocking_fail = False  # raw blocking-FAIL verdict; reused by fail_step below
     if state_dir and phase:
@@ -330,7 +319,7 @@ def build_gate_output(
             # LLM tally. With no recorded blocking FAIL to fix, the fail routes to the
             # verify step (see the next_cmd selection below), which re-dispatches the
             # still-TODO item, so a transient verifier crash self-heals next pass; the loop is
-            # intentionally un-ceilinged (iteration advances only on a recorded blocking FAIL).
+            # un-ceilinged (iteration advances only on a recorded blocking FAIL).
             if passed and _has_blocking_todo_from_state(resolved_state):
                 passed = False
     else:
@@ -352,19 +341,19 @@ def build_gate_output(
 
     # User accepted the findings AT THE CEILING: override to passed so the gate
     # neither re-escalates nor loops, and a terminal gate finalizes the plan. Gated
-    # on the ceiling because the flag is only meaningful there (it is emitted solely
-    # by the iteration-limit escalation) -- so a stray or copied --accept-findings
-    # cannot silently pass a gate that has not yet exhausted its fix iterations.
+    # on the ceiling because the flag is only meaningful there -- so a stray or
+    # copied --accept-findings cannot silently pass a gate that has not yet exhausted
+    # its fix iterations.
     if accept_findings and iteration >= QR_ITERATION_LIMIT:
         passed = True
 
     # Deterministic structural gate: QR is LLM judgement, but an approved plan must
-    # also satisfy the same completeness contract the executor enforces (and hard-
-    # exits on). A QR-pass that is structurally unexecutable -- a code milestone in
-    # no wave, a doc-only milestone left in a wave -- routes back to the fixer
-    # instead of finalizing an unexecutable plan. Even --accept-findings cannot
-    # waive this: the override is about QR finding severity, not structural validity.
-    # validate_completeness self-gates by phase (single source of truth, no separate flag).
+    # also satisfy the completeness contract. A QR-pass that is structurally
+    # unexecutable -- a code milestone in no wave, a doc-only milestone left in a
+    # wave -- routes back to the fixer instead of finalizing an unexecutable plan.
+    # Even --accept-findings cannot waive this: the override is about QR finding
+    # severity, not structural validity.
+    # validate_completeness self-gates by phase.
     if passed and phase:
         from skills.planner.shared.schema import plan_completeness_errors
 

@@ -4,13 +4,7 @@ The load-bearing property under test is that nothing lands at the flat
 /tmp/{planner,executor}-* namespace a cleanup glob in any other session would sweep
 (2026-08-18: `rm -rf /tmp/planner-*` destroyed a concurrent session's plan).
 
-Sections run outward from the primitives: repo discovery, the project anchor, its
-persistence, ignore gating, placement, retention, then the orchestrator call sites.
-That is resources.py's order but for the last pair, which is deliberately swapped:
-the source keeps private helpers above their caller throughout (_last_activity above
-_reap_old_runs, _temp_state_dir and _fallback above resolve_state_dir), which is a
-convention rather than a requirement -- module-level names resolve at call time -- and
-reading the tests wants the caller first.
+Sections run outward from the primitives.
 """
 
 from __future__ import annotations
@@ -250,7 +244,7 @@ def test_find_repo_root_rejects_a_non_gitdir_file(tmp_path):
 def test_find_repo_root_accepts_a_file_start(tmp_path):
     """The walk starts at whatever it is given; a file start is not special-cased.
 
-    Contract pin for the leak guard's second anchor, which is
+    Contract pin for the leak guard's anchor on
     find_repo_root(Path(resources.__file__)) -- a FILE. A defensive
     `if not start.is_dir(): return None` added here would turn that anchor into None
     and leave the guard watching nothing, silently.
@@ -266,9 +260,9 @@ def test_find_repo_root_accepts_a_file_start(tmp_path):
 def test_find_repo_root_survives_an_unsearchable_ancestor(tmp_path):
     """The walk climbs PAST an ancestor it cannot search and finds the repo above it.
 
-    pathlib absorbs only ENOENT/ENOTDIR/EBADF/ELOOP, so probing `.git` under a directory
-    with no search bit raises EACCES; _is_git_dir catches it and the climb continues.
-    The repo has to sit ABOVE the blocked directory for this to say anything: with
+    Probing `.git` under a directory with no search bit raises EACCES before Python 3.14
+    and answers False from 3.14 on; _is_git_dir reads either as "not a repo" and the climb
+    continues. The repo has to sit ABOVE the blocked directory for this to say anything: with
     nothing up there, find_repo_root's own handler answers None either way.
     """
     root = _git_repo(tmp_path / "repo")
@@ -346,8 +340,7 @@ def test_project_root_falls_back_to_cwd(tmp_path, monkeypatch):
 
 def test_an_unreadable_working_directory_degrades_rather_than_raising(tmp_path, monkeypatch):
     """A cwd deleted out from under the process -- a vanished mount, an `rm -rf` of the
-    shell's directory -- makes Path.cwd() raise, and both orchestrators call this through
-    _begin_run with nothing wrapping it.
+    shell's directory -- makes Path.cwd() raise.
     """
 
     def gone():
@@ -812,9 +805,8 @@ def test_a_well_formed_path_to_a_vanished_project_is_kept(tmp_path, monkeypatch,
 def test_a_marker_that_cannot_be_written_is_reported_not_swallowed(tmp_path, monkeypatch, capsys):
     """Losing the marker degrades the run rather than failing it, but must not be silent.
 
-    Only docs/plans/ depends on it, so this is a degrade -- and the terminal save is the
-    step that will fail later, far from the cause. The warning is the only thing linking
-    the two.
+    The terminal save is the step that will fail later, far from the cause; the warning
+    links the two.
     """
     project = _git_repo(tmp_path / "project")
     state = tmp_path / "state"
@@ -869,8 +861,8 @@ def test_marker_write_goes_through_the_atomic_primitive(tmp_path, monkeypatch):
     Asserting the end state cannot show this -- a plain write_text produces an identical
     file when there is only one writer. What distinguishes them is the primitive, so
     that is what this pins: a truncate-then-write leaves content that decodes fine, is
-    not a repo, and reads as a vanished project -- the one state deliberately never
-    replaced, so the run's identity would be lost for good.
+    not a repo, and reads as a vanished project -- a state deliberately never replaced,
+    so the run's identity would be lost for good.
     """
     root = _git_repo(tmp_path / "repo")
     state = tmp_path / "state"
@@ -933,10 +925,10 @@ def test_an_unreadable_marker_is_kept_not_overwritten(tmp_path, monkeypatch, cap
 def test_marker_read_survives_a_close_time_error(repo, tmp_path, monkeypatch, capsys):
     """close() on the marker descriptor must not escape into step 1.
 
-    Both orchestrators call ensure_project_root_recorded bare, so an OSError from the
-    close in _read_marker's finally aborts step 1 with a traceback -- and does it on the
-    path where nothing is wrong: the bytes were read before the close, the verdict is
-    already decided, and the descriptor is released whether or not close reports.
+    An OSError from the close in _read_marker's finally aborts step 1 with a traceback --
+    and does it on the path where nothing is wrong: the bytes were read before the close,
+    the verdict is already decided, and the descriptor is released whether or not close
+    reports.
 
     Both consumers are covered here because the read side runs under the same patch.
     """
@@ -976,9 +968,8 @@ def test_corrupt_marker_with_no_project_does_not_claim_a_replacement(temp_root, 
 def test_a_non_regular_marker_is_kept_not_opened(tmp_path, temp_root, kind, capsys):
     """Opening a marker that is not a regular file is never safe.
 
-    A FIFO passes an is_symlink() check and then blocks the read forever, hanging step 1
-    in both orchestrators and the terminal docs/plans save with nothing on stderr. The
-    type test has to come first, and covers every non-regular type at once.
+    A FIFO passes an is_symlink() check and then blocks the read forever, with nothing on
+    stderr. The type test has to come first.
     """
     state = tmp_path / "state"
     state.mkdir()
@@ -1004,7 +995,7 @@ def test_a_marker_whose_bytes_cannot_be_READ_is_kept_and_not_re_pointed(
     The bytes may name a perfectly good project. Classifying CORRUPT replaces the marker
     with whichever project the resuming shell sits in; classifying MISSING replaces it AND
     reports success. Both are the silent re-point this module exists to prevent, and the
-    end state alone cannot tell the three kinds apart.
+    end state alone cannot tell the kinds apart.
     """
 
     def raise_io(_fd):
@@ -1095,7 +1086,7 @@ def test_padding_after_our_own_path_is_kept_not_replaced(tmp_path, monkeypatch, 
     An editor "fixing" the file on save produces the first; a post-crash ext4 tail
     produces the second. Judging the whole body as multi-line calls both foreign and
     REPLACES a marker whose payload is perfectly good -- re-pointing the run at whichever
-    repo the resuming shell sits in, which is the one outcome this module exists to
+    repo the resuming shell sits in, which is the outcome this module exists to
     prevent. "/a\n/b" is two real paths and must still classify CORRUPT; see below.
     """
     ours = _git_repo(tmp_path / "ours")
@@ -1171,9 +1162,8 @@ def test_a_problem_is_stated_without_promising_a_replacement(tmp_path, monkeypat
 
     err = capsys.readouterr().err
     assert "did not write" in err, "the problem must still be stated"
-    # The success announcement is "state dir belongs to project <x>"; there is no
-    # "replacing it" phrasing anywhere in the source, so asserting on that would pin
-    # nothing. What must not appear is a claim that the marker now names a project.
+    # The success announcement is "state dir belongs to project <x>". What must not
+    # appear is a claim that the marker now names a project.
     assert "belongs to project" not in err, "nothing was recorded"
     assert "cannot be stored" in err
     assert (state / PROJECT_ROOT_FILE).read_text(encoding="utf-8") == "relative/path"
@@ -1183,7 +1173,7 @@ def test_a_problem_is_stated_without_promising_a_replacement(tmp_path, monkeypat
 
 
 def test_already_ignored_by_negative_whitelist_appends_nothing(tmp_path):
-    """The model this repo itself uses: '*' + anchored allowlist already ignores it.
+    """'*' + anchored allowlist already ignores it.
 
     A literal-string grep for '.agent-state' reads this as unignored and appends a
     redundant rule. check-ignore must see it as covered and leave the file untouched.
@@ -1330,7 +1320,7 @@ def test_symlinked_gitignore_is_never_written_through(tmp_path):
 
 
 def test_hardlinked_gitignore_is_appended_normally(tmp_path):
-    """git reads a hardlink like any regular file; only symlinks are special-cased."""
+    """git reads a hardlink like any regular file."""
     root = _git_repo(tmp_path / "repo")
     source = tmp_path / "source"
     source.write_text("node_modules/\n", encoding="utf-8")
@@ -1363,8 +1353,7 @@ def test_rule_below_the_read_boundary_is_still_found(tmp_path):
     The decline above is decided by _has_rule over the bytes _read_all returns, so an
     implementation that stops at one chunk reads a rule below that boundary as absent
     and appends a duplicate -- reversing the user's `!.agent-state` in exactly the way
-    the single-chunk case is written to prevent. Every other fixture in this file is a
-    few hundred bytes, so nothing else makes the loop run twice.
+    the single-chunk case is written to prevent.
     """
     root = _git_repo(tmp_path / "repo")
     gitignore = root / ".gitignore"
@@ -1384,10 +1373,9 @@ def test_append_survives_a_close_time_error(repo, monkeypatch, capsys):
     """close() on the .gitignore descriptor must not escape into step 1 either.
 
     It fires from the finally, so it beats the announcement: the rule is on disk and the
-    error aborts resolve_state_dir -- which both orchestrators call bare -- before
-    anything says the user's tracked file was touched. That silent-mutation outcome is
-    the one the announcement exists to prevent, so the note is asserted, not just the
-    absence of a traceback.
+    error aborts resolve_state_dir before anything says the user's tracked file was
+    touched. That silent-mutation outcome is what the announcement exists to prevent, so
+    the note is asserted, not just the absence of a traceback.
     """
     (repo / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
     _fail_close_of(monkeypatch, repo / ".gitignore")
@@ -1400,7 +1388,7 @@ def test_append_survives_a_close_time_error(repo, monkeypatch, capsys):
 
 
 def test_an_unanswerable_tracked_probe_declines_rather_than_appending(tmp_path, monkeypatch):
-    """Rule A governs BOTH questions the decision depends on, not just the ignore status.
+    """Rule A governs the tracked probe, not just the ignore status.
 
     `None` is falsy, so without the guard an unreadable index falls through to the append
     -- writing to a tracked file on evidence git could not produce.
@@ -1437,8 +1425,8 @@ def test_the_tracked_probe_ignores_inherited_git_env(tmp_path, monkeypatch):
     another repository's index -- and the answer here decides whether a tracked
     `.agent-state` is left alone.
 
-    The ignore probe has the same scrub and its own test; this one needs an `other` repo
-    whose index DIFFERS, or the two answers coincide and the scrub is unobservable.
+    This test needs an `other` repo whose index DIFFERS, or the two answers coincide and
+    the scrub is unobservable.
     """
     root = _git_repo(tmp_path / "repo")
     (root / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
@@ -1474,9 +1462,9 @@ def test_the_ignore_probe_answers_from_rules_not_from_the_index(tmp_path):
 def test_a_gitignore_swapped_after_the_probe_is_refused(tmp_path, monkeypatch):
     """fstat classifies what was actually OPENED, not what the probe saw.
 
-    O_NOFOLLOW stops a symlink at open(); nothing else does. A FIFO opens fine under
-    O_RDWR|O_APPEND|O_NOFOLLOW -- O_RDWR does not block on one -- and the append then
-    goes into a pipe instead of a file.
+    O_NOFOLLOW stops a symlink at open(). A FIFO opens fine under O_RDWR|O_APPEND|O_NOFOLLOW
+    -- O_RDWR does not block on one -- and the append then goes into a pipe instead of a
+    file.
 
     Reaching that guard needs the probe to have already answered, because a .gitignore
     that is a FIFO from the start makes git itself hang and Rule A declines first (a real
@@ -1560,7 +1548,7 @@ def test_a_write_that_fails_immediately_claims_nothing(tmp_path, monkeypatch, ca
     """The partial-write warning must not fire when nothing was written.
 
     Announcing there tells the user to hand-remove a truncated line from a file this run
-    never touched -- a false report in the one place the module is careful never to make one.
+    never touched -- a false report the module is careful never to make.
     """
     root = _git_repo(tmp_path / "repo")
     gitignore = root / ".gitignore"
@@ -1620,8 +1608,8 @@ def test_a_hung_git_is_an_unanswerable_probe_not_a_hang(tmp_path, monkeypatch):
 
     TimeoutExpired is a SubprocessError, not an OSError: drop that arm from `_run_git`
     and the bound written to keep step 1 moving becomes a traceback out of a helper whose
-    whole contract is a tri-state answer -- the loudest possible way to fail at the one
-    thing the timeout exists to survive.
+    whole contract is a tri-state answer -- the loudest possible way to fail at what the
+    timeout exists to survive.
     """
     root = _git_repo(tmp_path / "repo")
 
@@ -1639,11 +1627,10 @@ def test_a_hung_git_is_an_unanswerable_probe_not_a_hang(tmp_path, monkeypatch):
 
 
 def test_the_ignore_probe_is_bounded_by_a_timeout(tmp_path, monkeypatch):
-    """The bound is the only thing between a wedged `git` and a step 1 that never returns.
+    """The bound stands between a wedged `git` and a step 1 that never returns.
 
     Read off a REAL call rather than by wedging a `git` shim and waiting: the wait is the
-    bound itself, ten seconds onto a suite that finishes in under thirty. A weak pin, but
-    the alternative to it is no pin.
+    bound itself, ten seconds. A weak pin, but the alternative to it is no pin.
     """
     root = _git_repo(tmp_path / "repo")
     real_run = resources.subprocess.run
@@ -1755,10 +1742,9 @@ def test_ignore_probe_ignores_inherited_git_env(tmp_path, monkeypatch):
 def test_the_appended_rule_is_anchored_to_the_repo_root(tmp_path):
     """Asserted through git, not against the constant.
 
-    Every other gitignore test compares to GITIGNORE_RULE, so dropping its leading `/`
-    stays self-consistent across the whole suite while silently changing what it matches:
-    unanchored, it also ignores `packages/app/.agent-state/`, which the constant's own
-    comment and INTENT.md both forbid.
+    Dropping the constant's leading `/` stays self-consistent against the constant while
+    silently changing what it matches: unanchored, it also ignores
+    `packages/app/.agent-state/`.
     """
     root = _git_repo(tmp_path / "repo")
     (root / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
@@ -1807,11 +1793,9 @@ def test_an_untracked_agent_state_directory_is_still_appendable(tmp_path):
 
 
 def test_gitignore_failure_names_the_file_once(tmp_path, monkeypatch):
-    """This reason is the user's only explanation for state going to temp.
+    """This reason is the user's explanation for state going to temp.
 
-    Each branch names the file exactly once. A reason carrying the path twice reads as
-    two different files, and this arm is not otherwise reached: the unreadable-.gitignore
-    test fails earlier, at open().
+    A reason carrying the path twice reads as two different files.
     """
 
     def raise_io(_fd):
@@ -1853,7 +1837,7 @@ def test_project_local_dir_is_actually_ignored_by_git(repo):
     ).stdout
     assert AGENT_STATE_DIRNAME not in status
     # The run dir is 0o700 on THIS branch too, not just in a shared /tmp. Only the leaf:
-    # the ancestors take mkdir's masked default, which is what INTENT.md now says.
+    # the ancestors take mkdir's masked default.
     assert stat.S_IMODE(state_dir.stat().st_mode) == 0o700
 
 
@@ -1861,7 +1845,7 @@ def test_resolve_state_dir_does_not_record_the_project(repo):
     """Placement and identity are separate jobs; step 1 owns the recording.
 
     resolve_state_dir is not called at all on the resume path, so making it the recorder
-    leaves that route -- and both fallback routes -- with no project.
+    leaves that route with no project.
     """
     (repo / ".gitignore").write_text("*\n", encoding="utf-8")
 
@@ -1980,7 +1964,7 @@ def test_a_rule_matching_a_synthetic_probe_basename_does_not_satisfy_the_gate(re
 
 
 def test_a_run_dir_that_cannot_be_minted_still_takes_the_parent_back(repo, temp_root, monkeypatch):
-    """The only decline that runs after the gate may have appended to a tracked file.
+    """A decline that runs after the gate may have appended to a tracked file.
 
     The tree is already dirty at this point, so leaving the directories behind as well
     would compound it -- and the reason must name minting, not the parent write that
@@ -2031,9 +2015,8 @@ def test_a_minted_run_dir_git_will_not_vouch_for_is_taken_back(repo, temp_root, 
     reaches it is git ceasing to be able to answer between the two probes, which
     `is not True` catches alongside an outright False.
 
-    The take-back is the half with no other guard. `git status` cannot see it -- git does
-    not report empty directories -- so only the filesystem shows whether a declined run
-    left its tree behind.
+    `git status` cannot see the take-back -- git does not report empty directories -- so
+    only the filesystem shows whether a declined run left its tree behind.
     """
     (repo / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
     real_check = resources._check_ignored
@@ -2069,8 +2052,8 @@ def test_a_declined_gate_leaves_nothing_behind_in_the_tree(repo, temp_root):
 def test_a_partly_created_parent_is_taken_back(repo, temp_root, monkeypatch):
     """The mkdir decline's take-back, with something actually to take back.
 
-    The other tests on this arm make `.agent-state` a regular file, so nothing was ever
-    created and the take-back is a no-op -- decline() and a bare _fallback look identical.
+    Where `.agent-state` is a regular file, nothing was ever created and the take-back is
+    a no-op -- decline() and a bare _fallback look identical.
     A partial mkdir(parents=True) is the shape where they differ.
     """
     real_mkdir = Path.mkdir
@@ -2146,9 +2129,9 @@ def test_taking_the_parent_back_cannot_delete_a_concurrent_runs_plan(tmp_path):
 
     _created_ancestors scopes it to what this run made, but between that capture and the
     decline a second orchestrator in the same repo can mint a run inside one of those
-    directories. rmdir refusing a non-empty directory is then the only thing between a
-    declining run and another session's in-flight plan -- which is the 2026-08-18 incident
-    this whole feature exists to prevent, relocated into the repo.
+    directories. rmdir refusing a non-empty directory then stands between a declining run
+    and another session's in-flight plan -- which is the 2026-08-18 incident this whole
+    feature exists to prevent, relocated into the repo.
     """
     parent = tmp_path / AGENT_STATE_DIRNAME / RUNS_NAMESPACE / "planner"
     parent.mkdir(parents=True)
@@ -2164,8 +2147,7 @@ def test_taking_the_parent_back_cannot_delete_a_concurrent_runs_plan(tmp_path):
 
 def test_the_take_back_refuses_a_leaf_outside_its_stop(tmp_path):
     """Containment is a precondition, not something to work around: without it the walk
-    climbs past `stop` and could rmdir outside the repo. The single call site guarantees
-    it today; the helper is bound for a shared module.
+    climbs past `stop` and could rmdir outside the repo.
     """
     assert resources._created_ancestors(tmp_path / "a" / "b", tmp_path / "elsewhere") == []
 
@@ -2241,7 +2223,7 @@ def test_a_git_dir_we_cannot_read_is_not_treated_as_a_repo(tmp_path):
 
 
 def test_a_regular_file_at_the_temp_parent_path_is_not_used(temp_root, monkeypatch):
-    """Ownership and mode both pass on a regular file we made; only the type test refuses.
+    """Ownership and mode both pass on a regular file we made.
 
     Vouched, it becomes `mkdtemp(dir=<a file>)`, which raises -- and _temp_state_dir turns
     that into sys.exit, so step 1 aborts where the contract says it degrades.
@@ -2263,9 +2245,8 @@ def test_a_temp_parent_that_is_a_symlink_is_not_followed(temp_root, tmp_path, mo
     """
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "sess-victim")
     attacker = tmp_path / "attacker"
-    # 0o700 and owned by us, so every test except "is it a link" passes: this is the
-    # ~/.ssh shape, where following the link lands the run in a directory that looks
-    # exactly like one of ours.
+    # 0o700 and owned by us: this is the ~/.ssh shape, where following the link lands the
+    # run in a directory that looks exactly like one of ours.
     attacker.mkdir(mode=0o700)
     (temp_root / "cc-sess-victim").symlink_to(attacker, target_is_directory=True)
 
@@ -2279,8 +2260,7 @@ def test_a_temp_parent_owned_by_someone_else_is_not_used(temp_root, monkeypatch)
     """Mode and ownership are separate tests, and the fixture can only vary the mode.
 
     A directory at 0o700 that belongs to another uid is not ours to put a run inside --
-    they can unlink it -- but every mode-based assertion passes on it, so without an
-    explicit ownership check nothing here would fail.
+    they can unlink it.
     """
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "sess-victim")
     theirs = temp_root / "cc-sess-victim"
@@ -2358,7 +2338,7 @@ def test_a_parent_this_session_created_is_reused_by_the_next_run(temp_root, monk
 
 
 def test_fallback_reason_is_reported_on_stderr(temp_root, capsys):
-    """Every condition that declines project-local returns one indistinguishable str."""
+    """A declined project-local placement returns an indistinguishable str."""
     resolve_state_dir("planner")
 
     err = capsys.readouterr().err
@@ -2423,7 +2403,7 @@ def test_temp_parent_is_not_world_readable(temp_root, monkeypatch):
 
 
 def test_resolve_state_dir_never_raises_oserror(tmp_path, temp_root, monkeypatch):
-    """Neither orchestrator wraps the call, so the helper owns the terminal failure.
+    """The helper owns the terminal failure.
 
     _temp_state_dir exits rather than raising (lib.io.read_text_or_exit's idiom); this
     pins that contract so a future edit cannot turn step 1 into a raw traceback.
@@ -2439,7 +2419,7 @@ def test_resolve_state_dir_never_raises_oserror(tmp_path, temp_root, monkeypatch
 
 @requires_unprivileged
 def test_resolve_state_dir_survives_an_unsearchable_anchor(tmp_path, temp_root, monkeypatch):
-    """A CLAUDE_PROJECT_DIR under a no-search-bit ancestor raises PermissionError."""
+    """A CLAUDE_PROJECT_DIR under a no-search-bit ancestor falls back to temp, not a traceback."""
     blocked = tmp_path / "blocked"
     inner = blocked / "inner"
     inner.mkdir(parents=True)
@@ -2489,20 +2469,18 @@ def test_reaper_deletes_only_what_is_both_surplus_and_stale(repo):
 def test_retention_bounds_are_the_documented_ones():
     """These two numbers decide when shutil.rmtree runs on someone's planning state.
 
-    Every other retention test imports them, so a typo in either propagates into the
-    assertions that would otherwise catch it.
+    Retention tests import them, so a typo in either propagates into the assertions that
+    would otherwise catch it.
     """
     assert RUNS_KEEP_NEWEST == 20
     assert RUNS_MAX_AGE_DAYS == 14
 
 
 def test_the_reaper_ranks_by_name_not_by_mtime(repo, monkeypatch):
-    """The stamp sorts chronologically, which is WHY the name is the key -- but every
-    other fixture makes name-order and mtime-order agree, so keying on mtime instead
-    passes them all.
+    """The stamp sorts chronologically, which is WHY the name is the key.
 
-    Here they disagree: the lexically newest run is the one touched longest ago. Ranking
-    by mtime would put it in the surplus tail and delete it.
+    Here name-order and mtime-order disagree: the lexically newest run is the one touched
+    longest ago. Ranking by mtime would put it in the surplus tail and delete it.
     """
     (repo / ".gitignore").write_text("*\n", encoding="utf-8")
     parent = _runs_parent(repo, "planner")
@@ -2518,9 +2496,6 @@ def test_the_reaper_ranks_by_name_not_by_mtime(repo, monkeypatch):
 def test_a_run_one_day_inside_the_age_bound_survives(filled_window):
     """The bound is `>= cutoff` keeps. A run inactive for RUNS_MAX_AGE_DAYS - 1 is inside
     it, and INTENT.md promises that run is kept.
-
-    Every other fixture is age 0 or age +1/+99, so an off-by-one in either direction
-    passes them all -- on the arithmetic that decides an rmtree.
     """
     parent = filled_window
     inside = _make_run(parent, "20200101-000000-inside", age_days=RUNS_MAX_AGE_DAYS - 1)
@@ -2558,8 +2533,8 @@ def test_reaper_ignores_paths_it_did_not_mint(filled_window):
     The foreign name must sort BELOW the minted stamps. Candidates are ranked by name
     descending, so a leading letter ("my-notes") puts it at rank 0 -- inside the keep
     window, where _RUN_DIR_RE is never consulted and the test passes with the guard
-    deleted. A leading "0000-" makes it genuinely surplus, so the regex is the only
-    thing standing between it and rmtree.
+    deleted. A leading "0000-" makes it genuinely surplus, so the regex stands between
+    it and rmtree.
     """
     parent = filled_window
     foreign = _make_run(parent, "0000-my-notes", age_days=RUNS_MAX_AGE_DAYS + 99)
@@ -2839,11 +2814,12 @@ def test_planner_step_1_resume_does_not_clobber_plan_json(repo, tmp_path, monkey
 
 @requires_unprivileged
 def test_an_unsearchable_ancestor_is_reported_not_raised(tmp_path):
-    """Path.is_dir() absorbs ENOENT, ENOTDIR, EBADF and ELOOP -- but NOT EACCES.
+    """An unsearchable ancestor is reported as unusable, not as missing, on every Python.
 
-    An unsearchable ancestor therefore re-raises out of the existence check, and without
-    the except arm both orchestrators' step 1 ends in a raw PermissionError traceback
-    rather than the one clear line this function exists to produce.
+    Path.is_dir() answers False for its EACCES from Python 3.14 on, which reads as a
+    missing directory; and without the except arm the EACCES ends step 1 in a raw
+    PermissionError traceback rather than the one clear line this function exists to
+    produce.
     """
     blocked = tmp_path / "blocked"
     blocked.mkdir()
@@ -2857,15 +2833,20 @@ def test_an_unsearchable_ancestor_is_reported_not_raised(tmp_path):
         blocked.chmod(0o755)
 
 
+def test_a_nul_state_dir_is_reported_missing_not_raised(tmp_path):
+    """os.stat raises ValueError, not OSError, for an embedded NUL; it names no directory."""
+    with pytest.raises(SystemExit) as excinfo:
+        require_usable_state_dir(str(tmp_path / "\x00nul"))
+    assert "is missing or not a directory" in str(excinfo.value)
+
+
 @pytest.mark.parametrize("orchestrator", ["planner", "executor"])
 def test_step_1_validates_before_it_records(tmp_path, temp_root, monkeypatch, capsys, orchestrator):
-    """The order is load-bearing and NOTHING else pins it.
+    """The order is load-bearing.
 
-    Both orchestrators exit with the same message under either order, so
-    test_step_1_rejects_an_unusable_state_dir cannot tell them apart -- it constrains
-    which INPUTS are refused, not the sequence. Recording first puts a soft
-    "not recording a project for <dir>" line on stderr immediately before the real error,
-    which reads as a degradation when it is a caller mistake. An empty stderr is the
+    Recording first puts a soft "not recording a project for <dir>" line on stderr
+    immediately before the real error, which reads as a degradation when it is a caller
+    mistake. An empty stderr is the
     observable, so the exact wording of that warning is not pinned here.
     """
     target = tmp_path / "nonexistent" / "nested"
@@ -2915,9 +2896,9 @@ def test_saving_to_docs_says_why_when_no_project_resolves(
 ):
     """The recorded project can be absent, unusable, or foreign.
 
-    In each case the approved plan is silently not archived, and the warning is the only
-    thing that says so. An end-state assertion cannot cover it: the outer
-    `except Exception` returns None either way.
+    In each case the approved plan is silently not archived, and the warning is what says
+    so. An end-state assertion cannot cover it: the outer `except Exception` returns None
+    either way.
     """
     from skills.planner.orchestrator import planner as planner_orch
 
@@ -2951,9 +2932,6 @@ def test_steps_after_the_first_reject_an_unusable_state_dir(
     hypothetical -- and the misdiagnosis names a file, whose natural fix re-Writes
     plan.json, recreating the directory WITHOUT its project marker and silently costing
     the run its docs/plans archive.
-
-    The flag-presence test below cannot cover this: `--state-dir ""` exits earlier, inside
-    validate_state_dir_requirement.
     """
     if bad == "missing":
         target = tmp_path / "reaped"
@@ -2980,7 +2958,7 @@ def test_steps_after_the_first_reject_an_unusable_state_dir(
 def test_steps_after_the_first_refuse_to_run_without_a_state_dir(
     temp_root, monkeypatch, orchestrator, step
 ):
-    """INTENT.md states "Steps 2+ always require --state-dir"; both entry points enforce it.
+    """INTENT.md states "Steps 2+ always require --state-dir".
 
     Enforcing it only inside step handlers is not equivalent: steps 2 and 3 surface it as
     a raw ValueError traceback, and steps 4 and 6 do not reach a handler that checks at
@@ -3016,17 +2994,11 @@ def test_no_orchestrator_mints_a_flat_temp_prefix():
         if "mkdtemp" in src:
             scanned += 1
         assert not flat.search(src), f"{src_path.name} mints a temp dir without an explicit dir="
-    # The mints live in shared/resources.py, not in the orchestrators; scanning only the
-    # two entry points would point this guard at files where the risk no longer is.
     assert scanned, "no mkdtemp call was scanned -- the guard is pointed at nothing"
 
 
 def test_skill_md_step_1_does_not_discard_the_caller_cwd():
-    """The anchor only resolves because step 1 is invoked without a working-dir/cd.
-
-    Every other anchor test stubs the anchor, so nothing else here can catch the entry
-    point regressing to a form that `cd`s into the skill tree before Python starts.
-    """
+    """The anchor only resolves because step 1 is invoked without a working-dir/cd."""
     skill_md = Path(__file__).parents[3] / "skills" / "planner" / "SKILL.md"
     body = skill_md.read_text(encoding="utf-8")
     rows = [
@@ -3077,9 +3049,7 @@ def test_planner_step_1_records_the_project_on_the_temp_branch(
 def test_planner_step_1_records_the_project_on_the_resume_path(
     tmp_path, temp_root, monkeypatch, capsys
 ):
-    """A supplied --state-dir skips resolve_state_dir entirely; nothing else records
-    the project on this route.
-    """
+    """A supplied --state-dir skips resolve_state_dir entirely."""
     from skills.planner.orchestrator import planner as planner_orch
 
     root = _git_repo(tmp_path / "repo")
@@ -3112,9 +3082,6 @@ def test_executor_step_1_records_the_project(tmp_path, temp_root, monkeypatch, c
 def test_step_1_rejects_an_unusable_state_dir(tmp_path, temp_root, monkeypatch, orchestrator, bad):
     """Without this, the executor announces "State directory: <path>" for a
     path that does not exist, and tells the agent to Write plan.json into it.
-
-    Both entry points validate through one helper, so they cannot diverge on which
-    inputs they accept.
     """
     if bad == "missing":
         target = tmp_path / "nonexistent" / "nested"
@@ -3136,10 +3103,9 @@ def test_step_1_rejects_an_unusable_state_dir(tmp_path, temp_root, monkeypatch, 
 def test_step_1_degrades_on_an_unwritable_state_dir(tmp_path, temp_root, monkeypatch, orchestrator):
     """A supplied --state-dir that exists but cannot be written must not traceback.
 
-    require_usable_state_dir checks existence only, so the individual writes are what
-    meet this. The executor's stale-verify.json unlink is one of them: missing_ok covers
-    ENOENT alone, so an unwritable directory makes the unlink raise PermissionError,
-    which must be caught rather than escaping main().
+    The individual writes are what meet this. The executor's stale-verify.json unlink is
+    one of them: missing_ok covers ENOENT alone, so an unwritable directory makes the
+    unlink raise PermissionError, which must be caught rather than escaping main().
     """
     state = tmp_path / "ro"
     state.mkdir()
@@ -3161,8 +3127,8 @@ def test_step_1_degrades_on_an_unwritable_state_dir(tmp_path, temp_root, monkeyp
 
 @requires_unprivileged
 def test_planner_step_1_reports_a_failed_skeleton_write(tmp_path, temp_root, monkeypatch):
-    """The unwritable-dir case above pre-seeds plan.json, so `if not exists()` short-
-    circuits and the write handler is never reached. This drives it with a fresh dir.
+    """Drives the skeleton write handler with a fresh dir, so `if not exists()` does not
+    short-circuit.
     """
     from skills.planner.orchestrator import planner as planner_orch
 

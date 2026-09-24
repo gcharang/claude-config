@@ -1,11 +1,11 @@
 """Guard test for audit §3b NEW-A: every prose uv-run command is cwd-pinned.
 
 For the plan-design sub-agent modules (the plan-phase work/fix scripts that emit
-cli.plan commands after the rigid-diff redesign removed plan-code/plan-docs), and
-for each of their steps, the test calls get_step_guidance() and flattens all string
-lines in the returned actions list. It then asserts that every line containing
-'uv run python -m skills.planner.cli' also contains 'cd ' at an earlier index,
-proving the line is cwd-pinned.
+cli.plan commands), and for each of their steps, the test calls get_step_guidance()
+and flattens all string lines in the returned actions list. It then asserts that
+every line running 'python -m skills.planner.cli' runs it as
+'uv run --directory <path> python -m skills.planner.cli', proving the line is
+cwd-pinned without a `cd` compound.
 
 A missing pin_cwd() call on any prose command will cause this test to fail.
 """
@@ -51,17 +51,17 @@ def _flatten_actions(result: dict) -> list[str]:
     return lines
 
 
-_PIN_RE = re.compile(r"cd\s+\S+\s+&&\s+uv run python -m skills\.planner\.cli")
+_PIN_RE = re.compile(r"uv run --directory\s+\S+\s+python -m skills\.planner\.cli")
 
 
 def _assert_all_pinned(lines: list[str], context: str) -> None:
-    """Assert every uv-run skills.planner.cli line is cwd-pinned."""
-    MARKER = "uv run python -m skills.planner.cli"
+    """Assert every skills.planner.cli line is cwd-pinned by uv's own option."""
+    MARKER = "python -m skills.planner.cli"
     for line in lines:
         if MARKER in line:
-            assert _PIN_RE.search(line), (
+            assert _PIN_RE.search(line) and "&&" not in line, (
                 f"Unpinned command found in {context}:\n  {line!r}\n"
-                f"Expected 'cd <path> && uv run python -m skills.planner.cli' pattern"
+                f"Expected 'uv run --directory <path> python -m skills.planner.cli' pattern"
             )
 
 
@@ -76,7 +76,7 @@ MODULES: list[ModuleSpec] = []
 
 
 def _plan_design_fix_guidance(step: int, **kwargs) -> dict:
-    """The plan-design fix path is now the shared exec_qr_fix runner (--phase bound)."""
+    """The plan-design fix path is the shared exec_qr_fix runner (--phase bound)."""
     from skills.planner.quality_reviewer import exec_qr_fix
 
     return exec_qr_fix.get_step_guidance(
@@ -126,7 +126,7 @@ def test_all_prose_commands_are_cwd_pinned(
     step: int,
     qr_phase: str | None,
 ) -> None:
-    """Every 'uv run python -m skills.planner.cli' line must be preceded by 'cd '."""
+    """Every 'python -m skills.planner.cli' line must run under 'uv run --directory'."""
     state_dir = _make_state_dir(qr_phase)
     try:
         result = fn(step, state_dir=state_dir)
@@ -140,14 +140,56 @@ def test_all_prose_commands_are_cwd_pinned(
     _assert_all_pinned(lines, context=f"{label}")
 
 
-def test_invariant_would_catch_missing_pin() -> None:
-    """Confirm _assert_all_pinned raises when a command is unpinned."""
-    unpinned_line = "  uv run python -m skills.planner.cli.plan --state-dir $X list"
+@pytest.mark.parametrize(
+    "unpinned_line",
+    [
+        "  uv run python -m skills.planner.cli.plan --state-dir $X list",
+        "  cd /some/path && uv run python -m skills.planner.cli.plan list",
+    ],
+    ids=["bare", "cd-compound"],
+)
+def test_invariant_would_catch_missing_pin(unpinned_line: str) -> None:
+    """Confirm _assert_all_pinned raises when a command is unpinned or cd-pinned."""
     with pytest.raises(AssertionError, match="Unpinned command found"):
         _assert_all_pinned([unpinned_line], context="synthetic")
 
 
 def test_invariant_passes_for_pinned_line() -> None:
     """Confirm _assert_all_pinned passes when a command is pinned."""
-    pinned_line = "  cd /some/path && uv run python -m skills.planner.cli.plan list"
+    pinned_line = "  uv run --directory /some/path python -m skills.planner.cli.plan list"
     _assert_all_pinned([pinned_line], context="synthetic")
+
+
+_CD_COMPOUND = re.compile(r"\bcd\s+\S+\s+&&")
+
+
+@pytest.mark.parametrize("pass_step", [None, 3], ids=["terminal", "non-terminal"])
+def test_qr_gate_escalation_accept_is_uv_pinned(pass_step: int | None) -> None:
+    """The escalation's Accept command is hand-built, outside format_step."""
+    from skills.lib.workflow.prompts.step import _SKILLS_DIR_Q
+    from skills.planner.shared.gates import _build_iteration_limit_escalation
+    from skills.planner.shared.qr.constants import QR_ITERATION_LIMIT
+
+    out = _build_iteration_limit_escalation(
+        "skills.x", "QR", 6, QR_ITERATION_LIMIT, pass_step, "/tmp/sd"
+    ).output
+    assert f"uv run --directory {_SKILLS_DIR_Q} python -m skills.x --step" in out
+    assert not _CD_COMPOUND.search(out), out
+
+
+def test_executor_verify_escalation_accept_is_uv_pinned(tmp_path) -> None:
+    """The Final Verification ceiling's Accept command is hand-built, outside format_step."""
+    from conftest import write_verify
+
+    from skills.lib.workflow.prompts.step import _SKILLS_DIR_Q
+    from skills.planner.orchestrator import executor
+    from skills.planner.shared.qr.constants import QR_ITERATION_LIMIT
+
+    red = [("suite", "fail", "1 failed"), ("lint", "pass", "ok"), ("type", "pass", "ok")]
+    write_verify(tmp_path, red, iteration=QR_ITERATION_LIMIT)
+    out = executor.format_output(11, str(tmp_path), None, False, None, None)
+    assert isinstance(out, str)
+    assert (
+        f"uv run --directory {_SKILLS_DIR_Q} python -m {executor.MODULE_PATH} --step 12" in out
+    )
+    assert not _CD_COMPOUND.search(out), out

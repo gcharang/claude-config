@@ -2,22 +2,9 @@
 """
 Plan Executor - Execute approved plans through delegation.
 
-Twelve-step workflow with parallel QR verification:
-  1. Execution Planning - analyze plan, transcribe wave list
-  2. Implementation - dispatch developers (wave-aware parallel)
-  3. Code QR Decompose - generate verification items
-  4. Code QR Verify - parallel verification of items
-  5. Code QR Gate - route pass/fail
-  6. Documentation - TW pass
-  7. Doc QR Decompose - generate verification items
-  8. Doc QR Verify - parallel verification of items
-  9. Doc QR Gate - route pass/fail
-  10. Final Verification - run full suite/lint/type, record verify.json
-  11. Final Verification Gate - read verify.json; green -> retrospective,
-      red -> reset QR state + back to step 2 (re-review the fix), ceiling -> user
-  12. Retrospective - present summary
+Workflow with parallel QR verification; format_output below dispatches the steps.
 
-QR Block Pattern (matching planner's 4-step pattern per phase):
+QR Block Pattern (per phase):
   N   work        developer/TW agents     Implementation or documentation
   N+1 decompose   1 QR agent              qr-{phase}.json
   N+2 verify      N QR agents (parallel)  Each: PASS or FAIL
@@ -29,7 +16,7 @@ import sys
 from typing import TYPE_CHECKING
 
 from skills.lib.workflow.prompts import subagent_dispatch
-from skills.lib.workflow.prompts.step import SKILLS_DIR, format_step, pin_cwd
+from skills.lib.workflow.prompts.step import format_step, pin_cwd
 from skills.planner.shared.builders import (
     ESCALATE_HANDLER,
     build_fix_mode_dispatch,
@@ -207,12 +194,12 @@ def format_step_2(qr: QRState, state_dir: str) -> str:
         # Reset code/doc QR so the post-verify fix gets a fresh review (the gate is
         # a pure renderer -- the reset side-effect lives here, in the step the gate
         # routes TO). After reset, qr-impl-code.json is clean -> this branch runs,
-        # not RETRY. Fix the failing suite/lint/type; the full pipeline (code QR ->
-        # docs -> doc QR -> verify) then re-runs to re-review the fix for new bugs.
+        # not RETRY. Fix the failing suite/lint/type; the full pipeline then re-runs
+        # to re-review the fix for new bugs.
         reset_qr_for_reverify(state_dir)
-        # Intentionally thinner than the RETRY (code-QR) fix path: it carries the
-        # failing-check detail inline but no mode-script scaffolding -- a red final
-        # suite needs the failures, not per-milestone fix context.
+        # Thinner than the RETRY (code-QR) fix path: it carries the failing-check
+        # detail inline but no mode-script scaffolding -- a red final suite needs the
+        # failures, not per-milestone fix context.
         title = "Implementation - Verify Fix Mode"
         vf = load_verify_state(state_dir)
         detail = format_verify_failures_for_fix(vf) if vf else "  (verify state unavailable)"
@@ -367,10 +354,6 @@ def format_qr_verify(
         next_cmd = f"uv run python -m {MODULE_PATH} --step {next_step} --state-dir {shell_quote(state_dir)} --qr-status pass"
         return format_step(body, next_cmd=next_cmd, title=title)
 
-    # Build the full verify action block (dispatch + PHASE 1/PHASE 2 aggregation
-    # prose) -- shared with planner.py via build_qr_verify_dispatch, which owns the
-    # cap scheme, vg-NNN labels, shell-quoting, the pinned Start: command, and the
-    # aggregation prose. Only the constraint differs between orchestrators.
     actions = build_qr_verify_dispatch(
         verify_script, phase, state_dir, items, ORCHESTRATOR_CONSTRAINT
     )
@@ -474,13 +457,12 @@ def format_step_10_verify(state_dir: str) -> str:
 def _build_verify_iteration_escalation(state_dir: str, vf: "VerifyFile") -> str:
     """User escalation when Final Verification keeps failing at the ceiling.
 
-    Mirrors the QR gate's iteration-limit escalation: the suite is unfixable in
-    QR_ITERATION_LIMIT cycles, so hand control to the user rather than loop again.
+    The suite is unfixable in QR_ITERATION_LIMIT cycles, so hand control to the user
+    rather than loop again.
     Rendered without format_step so it emits no "NEXT STEP" footer -- the user's
     choice selects the next command.
     """
-    accept_cmd = (
-        f"cd {shell_quote(str(SKILLS_DIR))} && "
+    accept_cmd = pin_cwd(
         f"uv run python -m {MODULE_PATH} --step 12 --state-dir {shell_quote(state_dir)}"
     )
     title = "Final Verification Gate -- Iteration Limit Reached"
@@ -508,7 +490,7 @@ def format_step_11_verify_gate(state_dir: str) -> str:
     Dedicated (NOT build_gate_output): a binary suite/lint/type record has no QR
     severity tiers, so the QR gate's de-escalation -- which would auto-pass a red
     suite at high iterations -- and its QR-specific escalation prose must not
-    apply. Reuses format_step / QR_ITERATION_LIMIT / the format helpers only.
+    apply.
     """
 
     def _cmd(step: int) -> str:
@@ -545,8 +527,7 @@ def format_step_11_verify_gate(state_dir: str) -> str:
     if vf.iteration >= QR_ITERATION_LIMIT:
         return _build_verify_iteration_escalation(state_dir, vf)
 
-    # Below the ceiling: route back to Implementation (step 2 renders verify-fix
-    # mode with the QR reset side-effect). The gate is a pure renderer.
+    # Below the ceiling: route back to Implementation. The gate is a pure renderer.
     parts = [
         format_gate_result(passed=False),
         "",
@@ -588,9 +569,8 @@ def format_step_12(state_dir: str) -> str:
         "Quality Review Summary: [counts by category]",
         "Feedback for Future Plans: [actionable suggestions]",
     ]
-    # Defensive: step 12 is reachable only via a green gate or an explicit user
-    # accept-at-ceiling. If verify.json is not all-green, surface the outstanding
-    # failures so the retrospective cannot silently report COMPLETED over a red suite.
+    # Defensive: if verify.json is not all-green, surface the outstanding failures so
+    # the retrospective cannot silently report COMPLETED over a red suite.
     vf = load_verify_state(state_dir)
     if vf is not None and verify_failures(vf):
         actions += [
@@ -617,19 +597,18 @@ def format_output(
 ) -> str:
     """Format output for display."""
 
-    # Derive QR state from on-disk qr-{phase}.json (planner.py does the same).
-    # Iteration lives in the state file; the gate no longer passes --qr-iteration
+    # Derive QR state from on-disk qr-{phase}.json.
+    # Iteration lives in the state file; the gate does not pass --qr-iteration
     # or --qr-fail (see skills/planner/shared/qr/cli.py), so CLI-derived fallbacks
     # would stale-cache iteration=1 forever in fix loops.
     # Applies to work step (N), decompose (N+1), verify (N+2), and gate (N+3) —
     # iteration bumps in verify only fire when state == RETRY, and the gate
     # renders different prose on retry. Restricting to N/N+1 would leave
-    # verify/gate running as INITIAL even mid-fix-loop (Qodo review #4).
+    # verify/gate running as INITIAL even mid-fix-loop.
     phase = EXECUTOR_STEP_PHASES.get(step)
     qr_state, qr = resolve_qr_for_step(qr_states, state_dir, phase, qr_status)
 
-    # Non-QR steps carry no QR phase (1; 10/11/12 use verify.json); 2 and 6 have
-    # one the dispatch ignores. These early-return BEFORE the phase-is-None guard.
+    # The non-QR dispatches early-return BEFORE the phase-is-None guard.
     if step == 1:
         return format_step_1(state_dir, reconciliation_check)
     elif step == 2:
@@ -643,7 +622,6 @@ def format_output(
     elif step == 12:
         return format_step_12(state_dir)
 
-    # Steps 3-5 and 7-9 are QR steps; each has a phase in EXECUTOR_STEP_PHASES.
     invalid_step = f"Error: invalid step {step} (valid: 1-12)"
     if phase is None:
         return invalid_step
@@ -652,7 +630,7 @@ def format_output(
         return format_qr_decompose(step, phase, state_dir, qr)
     if step in (4, 8):
         return format_qr_verify(step, phase, state_dir, qr, qr_state)
-    if step in EXECUTOR_GATE_CONFIG:  # {5, 9}
+    if step in EXECUTOR_GATE_CONFIG:
         qr_name, work_step, pass_step, pass_message, fix_target = EXECUTOR_GATE_CONFIG[step]
         if not qr_status:
             return f"Error: --qr-status required for step {step} ({qr_name} Gate)"
@@ -710,9 +688,9 @@ def main():
     if args.step == 1:
         if not state_dir:
             state_dir = resolve_state_dir("executor")
-        # Same guard the planner's step 1 applies: without it a supplied --state-dir that
-        # is missing or is a file gets reported as "State directory created: <path>" and
-        # the agent is told to Write plan.json into a directory that does not exist.
+        # Without this guard a supplied --state-dir that is missing or is a file gets
+        # reported as "State directory created: <path>" and the agent is told to Write
+        # plan.json into a directory that does not exist.
         # ORDER: validate before recording -- see planner.py::_begin_run.
         require_usable_state_dir(state_dir)
         # Clear stale verify.json (reused state-dir path) so the current session's
@@ -749,15 +727,15 @@ def main():
         # its project marker and silently costs the run its docs/plans/ archive.
         require_usable_state_dir(state_dir)
 
-    # plan is threaded into format_output so the QR gate (steps 5/9) reuses this
-    # parse instead of re-reading plan.json. None for step 1 (no plan yet).
+    # plan is threaded into format_output so the QR gate reuses this parse instead
+    # of re-reading plan.json. None for step 1 (no plan yet).
     plan = None
     qr_states = None
 
-    # Validate the (LLM-authored) plan.json before running step 2+ -- mirrors
-    # planner.py. The orchestrator hand-writes plan.json in step 1 from the plan;
-    # catch a malformed or non-conforming write here instead of letting downstream
-    # steps re-derive against a broken contract.
+    # Validate the (LLM-authored) plan.json before running step 2+. The orchestrator
+    # hand-writes plan.json in step 1 from the plan; catch a malformed or
+    # non-conforming write here instead of letting downstream steps re-derive against
+    # a broken contract.
     if args.step > 1:
         from skills.planner.shared.schema import SchemaValidationError, validate_state
 
@@ -785,9 +763,9 @@ def main():
             sys.exit("Plan completeness failed: " + "; ".join(errors))
 
         # Structural backstop for the format_step_1 instruction above: nothing in the
-        # executor ever reads rejected_alternatives/constraints/risks/diagram_graphs
-        # (grepped, zero hits), so non-empty here is unambiguous evidence the
-        # orchestrator hand-transcribed fields it was told to omit -- hand-retyping a
+        # executor ever reads rejected_alternatives/constraints/risks/diagram_graphs,
+        # so non-empty here is unambiguous evidence the orchestrator hand-transcribed
+        # fields it was told to omit -- hand-retyping a
         # schema whose fields the transcriber never reads reliably drops required
         # fields and fails validation. A prompt instruction is advisory; this makes
         # the omission enforced, not requested. planning_context.decisions carries

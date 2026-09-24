@@ -56,11 +56,12 @@ def get_user_answer(args) -> UserInputResponse | None:
 
 
 def render_step(guidance: dict) -> str:
-    """Assemble a step's printable output: body + cd-pinned NEXT STEP footer.
+    """Assemble a step's printable output: body + cwd-pinned NEXT STEP footer.
 
-    Shared by mode_main and the QR verify entry point so both render steps
-    identically; the trailing invoke directive (with its absolute cd) is
-    supplied by format_step.
+    Render contract: the body is str() of each element of guidance["actions"],
+    joined by a single newline, so every element starts a new prompt line and a
+    sentence split across two elements in source is split across two lines in the
+    prompt. format_step supplies the title header and the invoke directive.
     """
     body = "\n".join(str(action) for action in guidance["actions"])
     return format_step(body, guidance.get("next", ""), title=guidance["title"])
@@ -81,8 +82,8 @@ def mode_main(
         description: Script description for --help
         extra_args: Additional arguments beyond standard QR args
         pre_dispatch: Optional hook called immediately after parse_args().
-            When it returns True, mode_main returns early (used by verify_main
-            to intercept --result flags before the --step requirement check).
+            When it returns True, mode_main returns early, so a caller can
+            handle its own flags before the --step requirement check.
     """
     module_path = _compute_module_path(script_file)
 
@@ -104,7 +105,6 @@ def mode_main(
         parsed.step, module_path, **{k: v for k, v in vars(parsed).items() if k not in ("step",)}
     )
 
-    # Handle both dict and dataclass (GuidanceResult) returns
     if isinstance(guidance, dict):
         guidance_dict = guidance
     else:

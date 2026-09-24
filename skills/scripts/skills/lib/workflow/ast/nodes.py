@@ -125,8 +125,8 @@ class InvokeAfterNode:
     """Invoke command for workflow step continuation.
 
     Constructs the <invoke_after> element containing the next step command.
-    The renderer routes through pin_cwd (absolute cd into SKILLS_DIR), so the
-    emitted command runs from the right directory regardless of the agent's cwd.
+    The renderer routes through pin_cwd, so the emitted command runs from the right
+    directory regardless of the agent's cwd.
 
     WHY __post_init__ validation: Catches invalid construction immediately instead of
     deferring to render time. Prevents workflow failure from invalid node reaching renderer.

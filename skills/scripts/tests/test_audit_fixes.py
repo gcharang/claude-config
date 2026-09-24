@@ -5,16 +5,16 @@ Each class guards one correctness bug from docs/planner-workflow-audit.md §3:
 - #2  enforced QR iteration ceiling with user escalation
 - #3  lenient severity ingest (no whole-run abort on "must"/"blocker")
 - #4  gate routes on severity-aware on-disk state, not the --qr-status word
-- #6  Template.safe_substitute (literal "$" in a path no longer crashes)
+- #6  Template.safe_substitute (literal "$" in a path does not crash)
 - #10 batch is all-or-nothing and rejects duplicate ids
 
 And the §3b "bugs surfaced only by the run logs":
-- NEW-A  cwd-fragile invocation: every emitted command carries an absolute cd
-         (pin_cwd), so a drifted agent cwd no longer yields "No module named 'skills'"
+- NEW-A  cwd-fragile invocation: every emitted command carries its absolute
+         directory (pin_cwd), so a drifted agent cwd does not yield "No module named 'skills'"
 - NEW-B  exec-phase QR tolerates a missing context.json (graceful), while the
          plan phase stays strict
 - NEW-C  verify scripts accept --result/--status to record a verdict directly,
-         so the natural one-tool guess no longer hard-fails
+         so the natural one-tool guess does not hard-fail
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
-from conftest import write_qr  # pyright: ignore[reportMissingImports]
+from conftest import write_qr
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import ValidationError
@@ -40,7 +40,7 @@ from skills.lib.workflow.ast.dispatch_renderer import (
     _expand_template_targets,
     render_subagent_dispatch,
 )
-from skills.lib.workflow.prompts.step import _SKILLS_DIR_Q, SKILLS_DIR, pin_cwd
+from skills.lib.workflow.prompts.step import _SKILLS_DIR_Q, pin_cwd
 from skills.lib.workflow.prompts.subagent import template_dispatch
 from skills.planner.cli import plan as plan_cli
 from skills.planner.cli import plan_commands, qr_commands
@@ -85,7 +85,7 @@ def _sentinel_is_free(lock_path: Path) -> bool:
 
 def _write_qr(tmp_path: Path, phase: str, iteration: int, items: list[dict]) -> None:
     # Adapter to the shared conftest.write_qr (this module passes iteration
-    # positionally); the qr-{phase}.json shape lives only in write_qr now.
+    # positionally).
     write_qr(tmp_path, phase, items, iteration=iteration)
 
 
@@ -157,8 +157,9 @@ class TestSeverityCoercion:
         assert pred({"severity": "should"}) is False
 
     def test_blocker_blocks_after_de_escalation(self):
-        # BLOCKER/CRITICAL now canonicalize to MUST, so they keep blocking at the
-        # iteration-4 ceiling where only MUST blocks (regression: previously SHOULD).
+        # BLOCKER/CRITICAL canonicalize to MUST, so they keep blocking at the
+        # iteration-4 ceiling where only MUST blocks (the guarded regression mapped
+        # them to SHOULD).
         pred = by_blocking_severity(4)  # blocking == {MUST}
         assert pred({"severity": "BLOCKER"}) is True
         assert pred({"severity": "critical"}) is True
@@ -217,8 +218,8 @@ class TestSeverityCoercion:
     def test_update_item_coerces_string_version_without_crashing(self, tmp_path: Path):
         # qr-{phase}.json is external (parse_qr_dict does no coercion); a hand-authored
         # or garbled string "version" must NOT crash the bump with an uncaught TypeError
-        # ("3" + 1). The CLI catches only ValueError and the RPC twin catches nothing, so
-        # an unguarded bump would surface a raw traceback on the verify-record path.
+        # ("3" + 1). An unguarded bump would surface a raw traceback on the
+        # verify-record path.
         _write_qr(
             tmp_path,
             "impl-code",
@@ -244,8 +245,7 @@ class TestSeverityCoercion:
         assert result["version"] == 2  # "garbled" -> default 1, bumped
 
     def test_coerce_positive_int_tolerates_external_garbage(self):
-        # The single coercion chokepoint for every external int field (version,
-        # iteration). int(float('inf')) raises OverflowError -- not ValueError, unlike
+        # int(float('inf')) raises OverflowError -- not ValueError, unlike
         # nan -- and json.loads accepts the bare Infinity token, so inf must be tolerated.
         from skills.planner.shared.qr.utils import _coerce_positive_int
 
@@ -314,8 +314,8 @@ class TestSeverityCoercion:
         assert data["items"][0]["severity"] == "MUST"
 
     def test_qr_commands_update_item_rejects_unknown_severity(self, tmp_path: Path):
-        # A deliberate single update rejects a typo (mirrors the CLI), unlike the
-        # lenient None->SHOULD ingest path.
+        # A deliberate single update rejects a typo, unlike the lenient None->SHOULD
+        # ingest path.
         _write_qr(
             tmp_path,
             "impl-code",
@@ -330,8 +330,8 @@ class TestSeverityCoercion:
             qr_commands.update_item(ctx, "q1", "PASS", severity="")
 
     def test_batch_update_item_canonicalizes_severity(self, tmp_path: Path):
-        # Through the dispatcher: a batch update-item carrying severity no longer
-        # raises an opaque TypeError (unexpected kwarg) and stores the canonical tier.
+        # Through the dispatcher: a batch update-item carrying severity does not
+        # raise an opaque TypeError (unexpected kwarg) and stores the canonical tier.
         _write_qr(
             tmp_path,
             "impl-code",
@@ -445,10 +445,9 @@ class TestSeverityCoercion:
             qr_cli.cmd_list_items(str(tmp_path), "impl-code", [])
 
     def test_list_items_sanitizes_finding_on_both_paths(self, tmp_path: Path, capsys):
-        # finding is free text neutralized at every sink (_fix_field_safe): a line break
-        # is kept but its continuation indented so it cannot forge a column-0 instruction
-        # line. The CLI list path already did this; the RPC twin returned raw findings --
-        # a divergence. Both now share filtered_items_view, so neutralization is identical.
+        # finding is free text neutralized by _fix_field_safe: a line break is kept but
+        # its continuation indented so it cannot forge a column-0 instruction line. The
+        # RPC twin returned raw findings -- a divergence from the CLI list path.
         _write_qr(
             tmp_path, "impl-code", 1,
             [{"id": "q1", "scope": "*", "check": "x", "status": "FAIL",
@@ -456,8 +455,8 @@ class TestSeverityCoercion:
         )
         ctx = qr_commands.QRContext(state_dir=tmp_path, phase="impl-code")
         rpc_finding = qr_commands.list_items(ctx)[0]["finding"]
-        assert "\nFORGED" not in rpc_finding       # RPC no longer leaks a column-0 line
-        assert "\n      FORGED" in rpc_finding     # continuation indented (now sanitized)
+        assert "\nFORGED" not in rpc_finding       # RPC does not leak a column-0 line
+        assert "\n      FORGED" in rpc_finding     # continuation indented
         qr_cli.cmd_list_items(str(tmp_path), "impl-code", [])
         assert rpc_finding in capsys.readouterr().out  # CLI renders the same safe text
 
@@ -472,7 +471,7 @@ class TestTemplateDollarSafety:
             agent_type="quality-reviewer",
             template=tmpl,
             targets=[{"group_id": "g1", "flags": "--qr-item a"}],
-            command=f"run --state-dir {state_dir} $flags",
+            command=f"uv run x --state-dir {state_dir} $flags",
         )
         assert "/tmp/x$y/state" in out  # $$ rendered as literal $
         assert "g1" in out
@@ -511,7 +510,7 @@ class TestTemplateDollarSafety:
                 agent_type="quality-reviewer",
                 template="Verify $group_id $flags",
                 targets=[{"group_id": "g1", "flags": "--x"}, {"group_id": "g2"}],
-                command="run $flags",
+                command="uv run x $flags",
             )
 
     def test_build_qr_verify_dispatch_survives_dollar_in_state_dir(self):
@@ -588,7 +587,7 @@ class TestGateSourceOfTruth:
         # Empty item set isolates THIS veto: no blocking FAIL (passed=True), no recorded
         # FAIL (explicit-fail veto fires), and no blocking TODO (the blocking-TODO veto,
         # which a MUST-at-TODO fixture would also trip, stays silent). Deleting the
-        # explicit-fail branch now flips this test red.
+        # explicit-fail branch flips this test red.
         _write_qr(tmp_path, "impl-code", 1, [])
         qr = QRState(iteration=1, state=LoopState.RETRY, status=QRStatus.FAIL)
         out = _gate(tmp_path, qr).output
@@ -900,38 +899,44 @@ class TestQrCliUpdatePath:
 # =============================================================================
 
 
-# --- NEW-A: cwd-fragile invocation -> every emitted command carries cd --------
+# --- NEW-A: cwd-fragile invocation -> every emitted command carries its directory ---
 class TestCwdPinnedCommands:
-    def test_pin_cwd_prefixes_absolute_skills_dir(self):
+    def test_pin_cwd_hands_uv_the_absolute_skills_dir(self):
         out = pin_cwd("uv run python -m skills.foo --step 1")
-        assert out == f"cd {_SKILLS_DIR_Q} && uv run python -m skills.foo --step 1"
-        assert out.startswith("cd /")  # absolute, never relative
+        assert out == f"uv run --directory {_SKILLS_DIR_Q} python -m skills.foo --step 1"
+        assert out.startswith("uv run --directory /")  # absolute, never relative
+        assert "cd " not in out  # a command that changes directory does nothing else
 
-    def test_ast_subagent_dispatch_uses_absolute_cd(self):
+    def test_pin_cwd_refuses_a_command_uv_cannot_pin(self):
+        with pytest.raises(ValueError, match="uv run"):
+            pin_cwd("python -m skills.foo --step 1")
+
+    def test_ast_subagent_dispatch_uses_uv_directory(self):
         node = SubagentDispatchNode(
             agent_type="general-purpose",
             command="uv run python -m skills.x --step 1",
         )
         out = render_subagent_dispatch(node)
-        # The invoke cmd is quoteattr-escaped (&& -> &amp;&amp;); parse the XML and
-        # assert the *decoded* command carries the absolute cd pin -- which also
-        # proves the dispatch fragment is well-formed (audit #9 sibling).
+        # Parse the XML and assert the *decoded* command carries the directory pin --
+        # which also proves the dispatch fragment is well-formed.
         invoke = ET.fromstring(out).find(".//invoke")
         assert invoke is not None
-        assert invoke.get("cmd") == f"cd {_SKILLS_DIR_Q} && uv run python -m skills.x --step 1"
-        assert "cd .claude/skills/scripts" not in out  # the relative form is gone
+        expected = f"uv run --directory {_SKILLS_DIR_Q} python -m skills.x --step 1"
+        assert invoke.get("cmd") == expected
+        assert ".claude/skills/scripts" not in out  # no relative form
 
-    def test_render_invoke_after_uses_absolute_cd(self):
+    def test_render_invoke_after_uses_uv_directory(self):
         from skills.lib.workflow.ast.nodes import InvokeAfterNode
         from skills.lib.workflow.ast.renderer import render_invoke_after
 
         node = InvokeAfterNode(cmd="uv run python -m skills.foo --step 1")
         rendered = render_invoke_after(node)
-        # Parse the XML and assert the *decoded* command carries the absolute cd pin.
+        # Parse the XML and assert the *decoded* command carries the directory pin.
         invoke = ET.fromstring(rendered).find("invoke")
         assert invoke is not None
-        assert invoke.get("cmd") == f"cd {_SKILLS_DIR_Q} && uv run python -m skills.foo --step 1"
-        assert "cd .claude/skills/scripts" not in rendered  # relative form — absolute cd pin uses the resolved path
+        expected = f"uv run --directory {_SKILLS_DIR_Q} python -m skills.foo --step 1"
+        assert invoke.get("cmd") == expected
+        assert ".claude/skills/scripts" not in rendered  # no relative form
 
     def test_executor_verify_start_line_is_pinned(self, tmp_path: Path):
         _write_qr(
@@ -941,7 +946,7 @@ class TestCwdPinnedCommands:
             [{"id": "qa-001", "scope": "*", "check": "c", "status": "TODO", "severity": "MUST"}],
         )
         out = executor_orch.format_output(4, str(tmp_path), None, False)
-        assert f"Start: cd {_SKILLS_DIR_Q} && uv run python -m" in out
+        assert f"Start: uv run --directory {_SKILLS_DIR_Q} python -m" in out
 
     def test_planner_verify_start_line_is_pinned(self, tmp_path: Path):
         _write_qr(
@@ -952,32 +957,32 @@ class TestCwdPinnedCommands:
         )
         out = planner_orch.format_output(5, None, str(tmp_path))
         assert isinstance(out, str)  # verify step returns str, not a GateResult
-        assert f"Start: cd {_SKILLS_DIR_Q} && uv run python -m" in out
+        assert f"Start: uv run --directory {_SKILLS_DIR_Q} python -m" in out
 
     def test_decompose_grouping_cli_prose_is_pinned(self):
         out = format_assign_cmd("/tmp/sd", "impl-code", "component-")
-        assert f"cd {_SKILLS_DIR_Q} && uv run python -m skills.planner.cli.qr" in out
+        assert f"uv run --directory {_SKILLS_DIR_Q} python -m skills.planner.cli.qr" in out
 
     def test_incoherence_dispatch_lines_are_pinned(self):
-        # The 3 hand-built AGENT PROMPT invoke lines now route through pin_cwd: the
-        # absolute cd is present and the cwd-fragile relative working-dir is gone.
+        # The hand-built AGENT PROMPT invoke lines route through pin_cwd and carry no
+        # cwd-fragile relative working-dir.
         from skills.incoherence import incoherence
 
         for step in (3, 9, 17):
             actions = incoherence.STEPS[step]["actions"]
             line = next(a for a in actions if a.strip().startswith("Start: <invoke"))
-            assert f'cmd="cd {_SKILLS_DIR_Q} && ' in line
+            assert f'cmd="uv run --directory {_SKILLS_DIR_Q} ' in line
             assert 'working-dir=".claude/skills/scripts"' not in line
 
     def test_arxiv_templates_drop_relative_invoke_and_dispatch_is_pinned(self):
-        # The duplicate relative-form Start line is removed from both templates; the
-        # canonical absolute-cd invoke comes from template_dispatch/sub_agent_invoke.
+        # Neither template carries a relative-form Start line; the pinned invoke comes
+        # from template_dispatch/sub_agent_invoke.
         from skills.arxiv_to_md import main
 
         assert 'working-dir=".claude/skills/scripts"' not in main.MODE1_TEMPLATE
         assert 'working-dir=".claude/skills/scripts"' not in main.MODE2_TEMPLATE
         out = main.build_mode1_dispatch()
-        assert f"cd {_SKILLS_DIR_Q} && uv run python -m skills.arxiv_to_md.sub_agent" in out
+        assert f"uv run --directory {_SKILLS_DIR_Q} python -m skills.arxiv_to_md.sub_agent" in out
         assert 'working-dir=".claude/skills/scripts"' not in out
 
 
@@ -1080,10 +1085,9 @@ class TestExecContextOptional:
         assert "No planning context.json" in "\n".join(guidance["actions"])
 
 
-# The single verify runner serves every phase via --phase; its _step_confirm
-# emits the self-recording `--result` command, so it must route through
-# verify_main (not mode_main). Parametrized over phases to keep the per-phase
-# coverage the three old modules had.
+# The verify runner's _step_confirm emits the self-recording `--result` command,
+# so it must route through verify_main (not mode_main). Parametrized over phases
+# to keep per-phase coverage.
 _VERIFY_MODULE = "skills.planner.quality_reviewer.qr_verify"
 _VERIFY_PHASES = ["plan-design", "impl-code", "impl-docs"]
 
@@ -1184,11 +1188,11 @@ class TestVerifyResultRecording:
             qr_item=["qa-001"],
         )
         body = "\n".join(guidance["actions"])
-        assert f"cd {SKILLS_DIR} && uv run python -m" in body
+        assert f"uv run --directory {_SKILLS_DIR_Q} python -m" in body
         assert "--result PASS" in body
         assert "--result FAIL --finding" in body
         assert "backslash-escape" in body  # agent-facing escape hint, not just a code comment (re-review #5)
-        assert "update-item" not in body  # the two-tool cli.qr split is gone here
+        assert "update-item" not in body  # not the two-tool cli.qr split
 
 
 @st.composite
@@ -1563,7 +1567,7 @@ class TestStructuralExecutability:
         comp = plan.validate_completeness("plan-design")
         assert comp == ["overview.problem required", *plan.validate_structural_executability()]
         assert "milestone M-001 is not assigned to any wave" in comp
-        assert plan.validate_completeness("impl-code") == []  # no rule for other phases
+        assert plan.validate_completeness("impl-code") == []
 
 
 # --- #10: the three QR phase registries must stay key-synced -----------------
@@ -1577,7 +1581,7 @@ class TestQrPhaseRegistrySync:
     def test_validate_phase_registries_passes_for_current_registries(self):
         import skills.planner.shared.qr.phases as phases_mod
 
-        # Restore the one-shot cache flag in finally (like the sibling drift test): if
+        # Restore the one-shot cache flag in finally: if
         # validate_phase_registries() ever raised, a leaked False would force later tests
         # to re-validate against possibly-mutated module state.
         try:
@@ -1588,18 +1592,17 @@ class TestQrPhaseRegistrySync:
             phases_mod._registries_validated = False  # re-validate against current state
 
     def test_drifted_registry_raises_on_eager_check(self):
-        # The coverage check moved out of content.py's import into
-        # phases.validate_phase_registries(), invoked from get_phase_config -- so a
-        # phase that argparse would accept (present in QR_PHASES) but missing its
-        # content/verifier now fails at routing/arg time, not only when content.py
-        # is first imported mid-dispatch.
+        # phases.validate_phase_registries(), invoked from get_phase_config, checks
+        # coverage -- so a phase that argparse would accept (present in QR_PHASES) but
+        # missing its content/verifier fails at routing/arg time, not only when
+        # content.py is first imported mid-dispatch.
         import skills.planner.shared.qr.phases as phases_mod
 
         original = phases_mod.QR_PHASES
         drifted = dict(original)
         drifted["phantom-phase"] = dict(next(iter(original.values())))
         try:
-            phases_mod.QR_PHASES = drifted  # a 4th phase argparse would accept
+            phases_mod.QR_PHASES = drifted  # a phase argparse would accept
             phases_mod._registries_validated = False  # bypass the one-shot cache
             with pytest.raises(RuntimeError, match="registries out of sync"):
                 phases_mod.get_phase_config("impl-code")
@@ -1721,9 +1724,8 @@ class TestGateFailsClosedOnMissingState:
     def test_non_dict_qr_file_is_treated_as_absent(self, tmp_path: Path):
         # load_qr_state honors its dict|None contract: a valid-JSON-but-non-dict file
         # (e.g. a decompose scratch list) returns None, so the gate fails CLOSED
-        # instead of crashing on `.get`. Defense-in-depth for F6 -- the orchestrators'
-        # validate_state already rejects such a file, but a direct gate caller must
-        # not finalize an unconfirmable QR file either.
+        # instead of crashing on `.get`. Defense-in-depth for F6: a direct gate caller
+        # must not finalize an unconfirmable QR file either.
         from skills.planner.shared.qr.utils import load_qr_state
 
         (tmp_path / "qr-impl-code.json").write_text(json.dumps([{"id": "x"}]))
@@ -1739,7 +1741,7 @@ class TestRelpathNormalizedAndStored:
     def test_rpc_set_intent_create_strips_leading_space(self, tmp_path: Path):
         # set_intent was the genuinely store-raw site: it .strip()'d only for the
         # check, then persisted the unstripped value, so ' src/a.py' never matched
-        # 'src/a.py' in validate_refs' normpath overlap guard. It must now store the
+        # 'src/a.py' in validate_refs' normpath overlap guard. It must store the
         # normalized form.
         ctx = _init_plan(tmp_path)
         plan_commands.set_milestone(ctx, name="Code", files="a.py")
@@ -1757,7 +1759,7 @@ class TestRelpathNormalizedAndStored:
 
     def test_rpc_set_intent_rejects_embedded_dotdot(self, tmp_path: Path):
         # 'a/../../shared.py' has no leading '..' yet normpath collapses it to the
-        # out-of-tree '../shared.py' -- the second evasion the strip-only guard missed.
+        # out-of-tree '../shared.py' -- an evasion the strip-only guard missed.
         ctx = _init_plan(tmp_path)
         plan_commands.set_milestone(ctx, name="Code", files="a.py")
         with pytest.raises(ValueError, match="Parent-relative"):
@@ -1809,12 +1811,6 @@ class TestRelpathNormalizedAndStored:
 
 # --- set-intent: milestone optional on update (validate-match), required on create ---
 class TestSetIntentMilestoneOptionalOnUpdate:
-    # The accept/reject behavior for every create/update milestone case is pinned
-    # cross-surface by TestSetIntentTwoSurfaceEquivalence (_SETINTENT_EQUIV_MATRIX).
-    # The cases below are the ones the matrix can't express: CREATE-branch check
-    # ORDER, the "not found"-vs-mismatch negative, the batch/dispatch path, and that
-    # an accepted CLI update actually persists to plan.json (the matrix asserts the
-    # accept/reject decision, not the disk write).
     def test_rpc_create_check_order_version_before_milestone(self, tmp_path: Path):
         # CREATE-branch order pin: the version-guard precedes the milestone-required
         # guard, so a no-id create with version surfaces the VERSION error.
@@ -1999,12 +1995,10 @@ _SETINTENT_EQUIV_MATRIX = [
      "error", None),
     # --- JSON-typed params: the RPC/batch surface receives JSON values with types ---
     # (int, str, float, list) that argparse never produces.  Every row below must
-    # reach the same accept/reject decision on both surfaces, pinning the type-
-    # coercion paths added for _check_version (str->int), parse_csv (list->str),
-    # and dispatch._normalize_params (single-element list unwrap).
+    # reach the same accept/reject decision on both surfaces.
     #
-    # version as a JSON string — the step-6 catalog lists version as a key;
-    # an architect quoting it like every other JSON value sends "1" not 1.
+    # version as a JSON string — an architect quoting it like every other JSON value
+    # sends "1" not 1.
     ("update_version_string", _equiv_seed_codes_with_intent,
      {"id": "CI-M-001-001", "version": "1", "behavior": "new"},
      "ok", None),
@@ -2020,7 +2014,7 @@ _SETINTENT_EQUIV_MATRIX = [
     ("update_decision_refs_clear_array", _equiv_seed_codes_with_intent_and_decision,
      {"id": "CI-M-001-001", "version": 1, "decision_refs": [], "behavior": "new"},
      "ok", None),
-    # milestone as a single-element JSON array — dispatch unwraps it to scalar.
+    # milestone as a single-element JSON array.
     ("update_milestone_single_array", _equiv_seed_codes_with_intent,
      {"id": "CI-M-001-001", "version": 1, "milestone": ["M-001"], "behavior": "new"},
      "ok", None),
@@ -2094,9 +2088,8 @@ class TestSetIntentTwoSurfaceEquivalence:
 # --- F3: the CLI mirror warns (stderr) on a wedging reverse doc-only toggle ---
 class TestCliToggleOffWarning:
     def test_cli_toggle_off_into_wedged_warns_on_stderr(self, tmp_path: Path, monkeypatch, capsys):
-        # The RPC twin is covered by TestDocOnlyToggleOffWarning; this pins the CLI
-        # mirror now surfacing the same warning via warn() to stderr (keeps stdout's
-        # <entity_result> parse-clean).
+        # This pins the CLI mirror surfacing the wedging-toggle warning via warn() to
+        # stderr (keeps stdout's <entity_result> parse-clean).
         monkeypatch.setenv("PLAN_AGENT_ROLE", "architect")
         plan_cli.cli(["--state-dir", str(tmp_path), "init", "--task", "t"])
         plan_cli.cli(["--state-dir", str(tmp_path), "set-milestone", "--name", "Docs", "--documentation-only"])
@@ -2187,9 +2180,8 @@ class TestQrIterationIdempotency:
         from skills.planner.shared.qr.types import LoopState, QRState
         from skills.planner.shared.qr.utils import prepare_verify_items
 
-        # Synthetic RETRY with no recorded FAIL (production derives RETRY only from a
-        # recorded blocking FAIL, so it never reaches here): the bump must not fire
-        # without one, and no signature is written.
+        # Synthetic RETRY with no recorded FAIL: the bump must not fire without one,
+        # and no signature is written.
         _write_qr(tmp_path, "impl-code", 2, [
             {"id": "qa-001", "scope": "*", "check": "c", "status": "PASS", "version": 1, "severity": "MUST"}
         ])
@@ -2305,8 +2297,8 @@ class TestCsvParsingShared:
         assert parse_csv(None) == []
 
     def test_parse_csv_default_still_splits_comma_string(self):
-        # reject_comma_string defaults to False -- the live CLI's call sites (which
-        # never pass it) keep comma-splitting unchanged; only opted-in callers reject.
+        # reject_comma_string defaults to False: a caller that does not opt in keeps
+        # comma-splitting.
         from skills.planner.cli.plan_common import parse_csv
 
         assert parse_csv("do X, do Y") == ["do X", "do Y"]
@@ -2335,7 +2327,7 @@ class TestCsvParsingShared:
 
     def test_rpc_set_milestone_rejects_comma_bearing_requirement_string(self, tmp_path: Path):
         # The exact failure mode from the audit: a comma inside one prose requirement
-        # silently fractured it into bogus fragments on the RPC/batch surface. Now
+        # silently fractured it into bogus fragments on the RPC/batch surface. It is
         # rejected with guidance to use an array instead.
         ctx = _init_plan(tmp_path)
         with pytest.raises(ValueError, match="contains a comma") as exc:
@@ -2359,7 +2351,7 @@ class TestCsvParsingShared:
         self, tmp_path: Path, monkeypatch
     ):
         # The live CLI has no array alternative (argparse only ever yields a string),
-        # so it must keep comma-splitting unchanged -- reject_comma_string is RPC-only.
+        # so it must keep comma-splitting.
         monkeypatch.setenv("PLAN_AGENT_ROLE", "architect")
         cli_dir = tmp_path / "cli"
         cli_dir.mkdir()
@@ -2374,11 +2366,11 @@ class TestCsvParsingShared:
         assert reqs == ["do X", "do Y"]
 
     def test_cli_and_rpc_tokenize_files_identically(self, tmp_path: Path, monkeypatch):
-        # Pre-existing drift: plan.py kept empty tokens ('a,,b' -> ['a','','b']) while
-        # the RPC's parse_csv dropped them. Both now route through the shared parse_csv,
-        # so a doubled comma yields the same files list on each path.
+        # Guarded drift: plan.py kept empty tokens ('a,,b' -> ['a','','b']) while the
+        # RPC's parse_csv dropped them. A doubled comma must yield the same files list on
+        # each path.
         #
-        # The RPC side submits an array, not a comma string: parse_csv now rejects a
+        # The RPC side submits an array, not a comma string: parse_csv rejects a
         # comma-bearing string on the RPC/batch surface (a caller mistake there always
         # has a safe array alternative), while the live CLI keeps comma-splitting since
         # argparse has no array form. Parity is about the OUTCOME, not the input shape.
@@ -2404,7 +2396,7 @@ class TestCsvParsingShared:
 class TestRelpathRejectsCurrentDir:
     """A path that normalizes to the current directory ('.', './', 'a/..', or a
     whitespace-only value) names no file; storing it would seed a nonsense
-    milestone/intent target. The single shared guard rejects all of them."""
+    milestone/intent target."""
 
     @pytest.mark.parametrize("bad", [".", "./", "a/..", "   ", "src/.."])
     def test_validate_relpath_rejects_dot(self, bad):
@@ -2451,14 +2443,14 @@ class TestRelpathRejectsCurrentDir:
 
 # --- F8 read-side: state-file reads are UTF-8, not the process locale default --
 class TestStateFileEncoding:
-    """plan.json is the one state file with non-ASCII content (model_dump_json
-    does NOT ensure_ascii, unlike the json.dumps-written qr files). Its reads must
+    """plan.json carries non-ASCII content (model_dump_json does NOT
+    ensure_ascii, unlike the json.dumps-written qr files). Its reads must
     pin encoding='utf-8' so the write (already UTF-8 via atomic_write_text) round-
     trips regardless of the process locale."""
 
     def test_plan_json_non_ascii_roundtrips(self, tmp_path: Path):
         # Intent guard: a name with em-dash / accents / astral survives save->load
-        # through every plan.json reader (PlanContext.load_plan and validate_state).
+        # through PlanContext.load_plan and validate_state.
         from skills.planner.shared.schema import validate_state
 
         ctx = _init_plan(tmp_path)
@@ -2544,7 +2536,7 @@ class TestQrItemControlCharRejection:
     def test_multi_line_finding_round_trips_through_validate_state(self, tmp_path: Path):
         """A verifier-authored multi-line finding must survive validate_state
         without rejection — the sink neutralizers handle line forgery, not the
-        schema validator (which only guards id/scope)."""
+        schema validator."""
         item = {
             "id": "qa-001",
             "scope": "*",
@@ -2565,8 +2557,7 @@ class TestQrItemControlCharRejection:
 
     @pytest.mark.parametrize("field", ["id", "scope"])
     def test_validate_state_rejects_malicious_field_before_dispatch(self, tmp_path: Path, field: str):
-        # End-to-end: validate_state (run at step>1 entry in BOTH orchestrators,
-        # before any prompt renders) rejects the forged item, so the malicious
+        # End-to-end: validate_state rejects the forged item, so the malicious
         # listing is never rendered. Only the qr file is needed -- validate_state
         # validates each qr-{phase}.json independently of plan.json. Both id (parallel
         # verify dispatch) and scope (single-agent decompose/fix listings) are covered.
@@ -2583,13 +2574,11 @@ class TestTemporalGuidanceCanonical:
         from skills.planner.shared.temporal_detection import TEMPORAL_DETECTION_QUESTIONS
 
         block = "\n".join(ImplCodeVerify()._temporal_contamination_guidance())
-        # All five canonical categories (not just CHANGE_RELATIVE / BASELINE_REFERENCE)
-        # and their signals must appear -- the test fails if any is ever dropped again.
+        # Every canonical category and its signals must appear.
         for q in TEMPORAL_DETECTION_QUESTIONS:
             assert q.id in block, f"{q.id} missing from temporal guidance"
             for signal in q.signals:
                 assert signal in block, f"signal {signal!r} ({q.id}) missing"
-        # The three categories the old hand-list dropped are present.
         assert "LOCATION_DIRECTIVE" in block
         assert "PLANNING_ARTIFACT" in block
         assert "INTENT_LEAKAGE" in block
@@ -2729,8 +2718,8 @@ class TestJqCommandSafety:
         for line in jq_lines:
             cmd = line.strip()
             tokens = shlex.split(cmd)
-            # The id is a single safe shell token at the filter position (matching the
-            # sibling tests), not split into multiple injectable tokens.
+            # The id is a single safe shell token at the filter position, not split
+            # into multiple injectable tokens.
             assert len(tokens) == 5
             assert tokens[3] == "jq"
             assert "CI-001" in tokens[4]
@@ -2865,10 +2854,9 @@ class TestCorruptQrState:
 
 # --- QA sweep: structurally-malformed-but-top-level-dict qr file -------------
 class TestQrLoaderShapeContract:
-    """parse_qr_dict enforces the minimal items-of-dicts + str-identity-field shape
-    every direct (validate_state-skipping) consumer relies on, so a malformed-but-dict
-    qr-{phase}.json fails closed to a clean <qr_cli_error> frame / None instead of
-    crashing status_counts / by_status / decompose with a raw TypeError/KeyError.
+    """parse_qr_dict enforces the minimal items-of-dicts + str-identity-field shape,
+    so a malformed-but-dict qr-{phase}.json fails closed to a clean <qr_cli_error>
+    frame / None instead of crashing a consumer with a raw TypeError/KeyError.
     """
 
     def _write(self, tmp_path: Path, body: str) -> Path:
@@ -2998,7 +2986,7 @@ class TestQrLoaderShapeContract:
         assert "item status is not a string" in captured.out
         assert "Traceback" not in captured.out + captured.err
 
-    # -- decompose steps 9/13 no longer raw-traceback on a bad identity field --
+    # -- decompose steps 9/13 must not raw-traceback on a bad identity field --
     @pytest.mark.parametrize(
         "body",
         [
@@ -3059,7 +3047,7 @@ class TestTemplateDispatchFailFast:
                 agent_type="quality-reviewer",
                 template="Verify $group_id $flags /tmp/p$q",
                 targets=[{"group_id": "g1", "flags": "--x"}],
-                command="run $flags /tmp/p$q",
+                command="uv run x $flags /tmp/p$q",
             )
 
     def test_double_dollar_renders_literal_dollar(self):
@@ -3067,7 +3055,7 @@ class TestTemplateDispatchFailFast:
             agent_type="quality-reviewer",
             template="Path: /tmp/x$$y/state $group_id",
             targets=[{"group_id": "g1"}],
-            command="run /tmp/x$$y/state $group_id",
+            command="uv run x /tmp/x$$y/state $group_id",
         )
         assert "/tmp/x$y/state" in out
         assert "g1" in out
@@ -3245,8 +3233,7 @@ class TestVerifyStateHelpers:
 # --- Escalation SSOT (DL-010) -----------------------------------------------
 
 def test_both_escalation_builders_render_shared_banner(tmp_path):
-    """Both the QR gate and the verify gate escalation build from the shared
-    _render_iteration_limit_banner helper, so they share the skeleton lines:
+    """The QR gate and the verify gate escalation share the skeleton lines:
     format_gate_result(False) banner + ESCALATE/INTENT.md prose + first two
     format_forbidden lines.
     """
@@ -3308,7 +3295,7 @@ def test_impl_docs_stale_check_routes_to_stale_guidance_before_temporal():
     # The temporal block should NOT be rendered (stale matched first). Its
     # distinctive header is absent from the stale block (which only mentions
     # lower-case "temporal contamination" as a contrast), so this fails loudly
-    # if the broad temporal rule ever shadows the stale rule again.
+    # if the broad temporal rule shadows the stale rule.
     assert "TEMPORAL CONTAMINATION CHECK:" not in lines
 
 

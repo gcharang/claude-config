@@ -89,7 +89,7 @@ Dispatch nodes use dedicated renderers (`render_subagent_dispatch`, `render_temp
 2. **`ElementNode.children` is always `list[Node]`**, never `None`. Leaf elements carry an empty list.
 3. **`XMLRenderer` must handle every node type** reachable from the public API. `_render_node()` uses `match` for exhaustiveness.
 4. **Builder methods return NEW builder instances**. Final `.build()` returns a `Document`; `.node()` returns the single accumulated node when there is exactly one.
-5. **Invoke commands in dispatch output are self-contained**: `cd {working_dir} && {cmd}`. Sub-agent Bash tools sometimes ignore a separate `working-dir` attribute, so the cd must be in the command itself.
+5. **Invoke commands in dispatch output are self-contained**: `uv run --directory <SKILLS_DIR> …`, via `pin_cwd()`. Sub-agent Bash tools sometimes ignore a separate `working-dir` attribute, so the directory must be in the command itself, as uv's own option rather than a `cd … &&` prefix.
 
 ## Dispatch Node Semantics
 

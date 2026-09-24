@@ -2,19 +2,13 @@
 """
 Interactive Sequential Planner - Orchestrator with parallel QR verification.
 
-6-step planning workflow per INTENT.md:
-
-Flow:
-  1. plan-init (orchestrator captures context categories)
-  2. context-verify (orchestrator self-checks handover completeness)
-  3. plan-design-work (architect: Code Intent contract + decisions + diagram IR/render)
-  4. plan-design-qr-decompose -> 5. verify(N) -> 6. route -> Plan Approved
+Planning workflow per INTENT.md; STEPS below defines the flow.
 
 Code Intent is the durable contract: at execution the developer regenerates the
 implementation just-in-time per wave against the live file (see executor.py), and
 impl-code QR is the single authoritative code review.
 
-QR Block Pattern (4 steps per phase):
+QR Block Pattern (per phase):
   N   work        1 agent (architect)          Modified plan.json
   N+1 decompose   1 agent (QR)                  qr-{phase}.json
   N+2 verify      N agents (parallel, expanded) Each: PASS or FAIL
@@ -137,8 +131,9 @@ def _save_plan_to_docs(state_dir: str) -> "Path | None":
         slug = _slugify(problem)
 
         # The project recorded by step 1, not a fresh lookup: this step runs through
-        # `cd <SKILLS_DIR> && ...`, so cwd names the skill tree, and anchoring there
-        # archives every project's approved plan into whichever repo holds the scripts.
+        # `uv run --directory <SKILLS_DIR> ...`, so cwd names the skill tree, and
+        # anchoring there archives every project's approved plan into whichever repo
+        # holds the scripts.
         repo_root, reason = load_project_root(state_dir)
         if repo_root is None:
             print(f"Warning: not saving to docs/plans/ -- {reason}", file=sys.stderr)
@@ -220,9 +215,9 @@ def _begin_run(supplied: str | None) -> str:
     """
     state_dir = supplied or resolve_state_dir("planner")
     require_usable_state_dir(state_dir)
-    # Identity, not placement: every route through step 1 -- project-local, temp
-    # fallback, or a supplied --state-dir that skipped resolve_state_dir entirely --
-    # must leave the terminal docs/plans save able to find the project.
+    # Identity, not placement: every route through step 1, including a supplied
+    # --state-dir that skipped resolve_state_dir entirely, must leave the terminal
+    # docs/plans save able to find the project.
     ensure_project_root_recorded(state_dir)
     return state_dir
 
@@ -243,11 +238,9 @@ def _write_plan_skeleton(state_dir: str) -> None:
                 Plan(overview=Overview(problem="", approach="")).model_dump_json(indent=2)
             )
     except OSError as e:
-        # require_usable_state_dir already rejected a missing path, a file, and a NUL
-        # (is_dir() returns False for a NUL path rather than raising).
-        # What still reaches here is a directory that exists but cannot be written:
-        # no write or search permission, no space, or the directory removed between
-        # that check and this write.
+        # A path naming no directory has already exited in require_usable_state_dir, so
+        # what reaches here is a directory that exists but cannot be written -- no write
+        # or search permission, no space -- or one removed since that check.
         sys.exit(f"Error: cannot write plan.json into the state dir {state_dir}: {e}")
 
 
@@ -257,12 +250,11 @@ def _write_plan_skeleton(state_dir: str) -> None:
 
 
 def init_step(title, actions):
-    """Step 1: renders the init guidance for an already-minted state dir.
+    """Render the init guidance for an already-minted state dir.
 
     The state dir arrives through ctx; main() mints it (see _begin_run). A --state-dir
-    passed at step 1 is honoured there, matching the executor's step 1: it is the resume
-    path for a run whose state dir already exists, and minting a second one instead
-    loses the plan being resumed.
+    passed at step 1 is honoured there: it is the resume path for a run whose state dir
+    already exists, and minting a second one instead loses the plan being resumed.
     """
 
     def handler(ctx):
@@ -278,7 +270,7 @@ def init_step(title, actions):
 
 
 def verify_step(title, actions):
-    """Step 2: context verification."""
+    """Context verification."""
 
     def handler(ctx):
         state_dir = ctx["state_dir"]
@@ -293,7 +285,7 @@ def verify_step(title, actions):
 
 
 def execute_dispatch_step(title, agent, script, post_dispatch=None, phase=None):
-    """Step 3: work execution dispatch."""
+    """Work execution dispatch."""
 
     def handler(ctx):
         state_dir = ctx["state_dir"]
@@ -330,12 +322,12 @@ def execute_dispatch_step(title, agent, script, post_dispatch=None, phase=None):
             "next": next_cmd,
         }
 
-    handler.phase = phase  # pyright: ignore[reportFunctionMemberAccess]
+    handler.phase = phase
     return handler
 
 
 def qr_decompose_step(title, phase, script, model=None):
-    """Step 4: QR decomposition dispatch.
+    """QR decomposition dispatch.
 
     Dispatches single QR agent to decompose artifact into verification items.
     Agent outputs qr-{phase}.json.
@@ -374,12 +366,12 @@ def qr_decompose_step(title, phase, script, model=None):
             "next": next_cmd,
         }
 
-    handler.phase = phase  # pyright: ignore[reportFunctionMemberAccess]
+    handler.phase = phase
     return handler
 
 
 def qr_verify_step(title, phase):
-    """Step 5: Parallel QR verification with group-aware dispatch.
+    """Parallel QR verification with group-aware dispatch.
 
     Reads qr-{phase}.json and generates expanded dispatch.
     Decompose agent outputs item data. Orchestrator transforms this data
@@ -412,10 +404,6 @@ def qr_verify_step(title, phase):
         config = get_phase_config(phase)
         verify_script = config["verify_script"]
 
-        # Build the full verify action block (dispatch + PHASE 1/PHASE 2 aggregation
-        # prose) -- shared with executor.py via build_qr_verify_dispatch, which owns
-        # the cap scheme, vg-NNN labels, shell-quoting, the pinned Start: command, and
-        # the aggregation prose. Only the constraint differs between orchestrators.
         action_children = build_qr_verify_dispatch(
             verify_script, phase, state_dir, items, ORCHESTRATOR_CONSTRAINT_EXTENDED
         )
@@ -430,12 +418,12 @@ def qr_verify_step(title, phase):
             "if_fail": f"{base_cmd} --qr-status fail",
         }
 
-    handler.phase = phase  # pyright: ignore[reportFunctionMemberAccess]
+    handler.phase = phase
     return handler
 
 
 def qr_route_step(title, phase, work_step, pass_step, pass_message, fix_target=None):
-    """Step 6: Route based on aggregated QR results.
+    """Route based on aggregated QR results.
 
     PASS: delete qr file, approve the plan (pass_step=None -> terminal pass)
     FAIL: loop to work_step (fix mode detected via qr-{phase}.json inspection)
@@ -462,12 +450,12 @@ def qr_route_step(title, phase, work_step, pass_step, pass_message, fix_target=N
             plan=ctx.get("plan"),
         )
 
-    handler.phase = phase  # pyright: ignore[reportFunctionMemberAccess]
+    handler.phase = phase
     return handler
 
 
 # =============================================================================
-# Step Definitions (1-6)
+# Step Definitions
 # =============================================================================
 
 STEPS = {
@@ -568,7 +556,7 @@ def get_step_guidance(
 
     Iteration and fix mode derived from qr-{phase}.json file state.
     Phase derived from handler attribute set by step factory.
-    accept_findings is the user's ceiling override, consumed only by the route step.
+    accept_findings is the user's ceiling override.
     plan is the validate_state parse threaded from main, reused by the route gate.
     qr_states is the validate_state qr dict threaded from main so the gate
     path avoids a second load_qr_state.
@@ -665,12 +653,10 @@ def main():
         _write_plan_skeleton(state_dir)
         print(f"STATE_DIR={state_dir}")
     else:
-        # resources.py owns the "steps 2+ require --state-dir" rule, as it does for the
-        # executor. Without this the handler-level checks fire for steps 2/3 as a raw
-        # ValueError traceback, while steps 4 and 6 do not check at all: step 4 emitted
-        # `--step 5 --state-dir ''` as its own next command, and step 6 printed
-        # WORKFLOW COMPLETE while silently skipping the render and the docs/plans save.
-        # It raises, and this is a CLI entry point, so it becomes a clean exit.
+        # resources.py owns the "steps 2+ require --state-dir" rule. Without this call a
+        # missing --state-dir surfaces as a raw ValueError traceback or as a step that
+        # carries the empty path into its next command. It raises, and this is a CLI
+        # entry point, so it becomes a clean exit.
         try:
             validate_state_dir_requirement(args.step, state_dir)
         except ValueError as e:

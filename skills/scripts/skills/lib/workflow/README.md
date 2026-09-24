@@ -63,13 +63,13 @@ Discovery uses `importlib.import_module` + `pkgutil.walk_packages` to find `WORK
 
 ## Invocation Pattern
 
-Three distinct invocation forms are used across the repository, chosen by caller context:
+Distinct invocation forms are used across the repository, chosen by caller context:
 
 - `<invoke working-dir=".claude/skills/scripts" cmd="uv run python -m skills.X" />` — Claude Code `<invoke>` tags; `working-dir` resolves against the active `.claude/` dir.
 - `uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.X` — raw bash in code blocks; no `working-dir` resolution available.
-- `uv run python -m skills.X` — Python `next_cmd` strings fed to `format_step()`; the wrapper supplies cwd via a `cd` prefix.
+- `uv run python -m skills.X` — Python `next_cmd` strings fed to `format_step()`; `pin_cwd()` supplies cwd as `uv run --directory <SKILLS_DIR>`.
 
-Full rationale and the cd-wrapper invariant are in `prompts/README.md`.
+Full rationale and the working-directory invariant are in `prompts/README.md`.
 
 ## Core Types
 
@@ -228,7 +228,7 @@ Domain types separate from generation logic:
 
 ### Key Design Decisions
 
-**Exhaustive vs sampling**: Domains are small (~300–500 total combinations across all workflows). Exhaustive enumeration catches edge combinations that sampling would miss. Sampling would save seconds and risk missed regressions.
+**Exhaustive vs sampling**: Domains are small. Exhaustive enumeration catches edge combinations that sampling would miss. Sampling would save seconds and risk missed regressions.
 
 **Hardcoded mode-gating**: Only deepthink has a mode parameter (quick mode skips steps 6–11). Introspection machinery for the general case is not justified for a single consumer; `test_generation.py::get_mode_gated_steps` hardcodes the deepthink rule explicitly.
 

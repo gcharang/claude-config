@@ -1,11 +1,10 @@
 """Shared utilities for QR decomposition scripts.
 
-Mechanical utilities and truly-generic prompts (identical across all 3 phases).
-Phase-SPECIFIC cognitive prompts (steps 1-3, 5) belong in per-phase scripts.
+Mechanical utilities and truly-generic prompts (identical across the phases).
 
-WHY "truly-generic": GAP_ANALYSIS_PROMPT, ATOMICITY_RULES, COVERAGE_VALIDATION_PROMPT
-apply identical logic regardless of phase. Phase-specific prompts (what to absorb,
-what concerns to brainstorm, what severity categories) differ fundamentally per phase.
+WHY "truly-generic": the shared prompts apply identical logic regardless of phase.
+Phase-specific prompts (what to absorb, what concerns to brainstorm, what severity
+categories) differ fundamentally per phase.
 
 WHY functions not class: Composition without coupling. Each phase script imports
 only required utilities. No forced inheritance hierarchy.
@@ -20,7 +19,6 @@ Violating this causes unrecoverable QR loops.
 ORCHESTRATOR CONTRACT:
 All decompose scripts MUST implement get_step_guidance(step, module_path, **kwargs)
 returning {title: str, actions: list[str], next: str}.
-Called via: python3 -m {module_path} --step N --state-dir {dir}
 """
 
 import json
@@ -65,8 +63,7 @@ def load_ungrouped_todo_items(state_dir: str, phase: str) -> list[dict]:
     WHY filter: Grouping operates only on unassigned TODO items.
     Completed or already-grouped items retain their state.
 
-    Also runs QRFile/QRItem validation (mirroring the verify subprocess's
-    _load_validated_qr_state) so a verify-authored control-char-injected
+    Also runs QRFile/QRItem validation so a verify-authored control-char-injected
     check/finding loaded by the decompose subprocess fails closed here.
     """
     qr_state = load_validated_qr_state(state_dir, phase)
@@ -84,8 +81,8 @@ def format_assign_cmd(state_dir: str, phase: str, prefix: str) -> str:
 
     WHY CLI: Group assignments use the qr CLI tool for state mutation.
 
-    pin_cwd: this command is meant to be copy-run by the agent, so it carries an
-    absolute cd -- a bare `uv run python -m skills...` fails from a drifted cwd.
+    pin_cwd: this command is meant to be copy-run by the agent, and a bare
+    `uv run python -m skills...` fails from a drifted cwd.
     """
     cmd = pin_cwd(
         f"uv run python -m skills.planner.cli.qr --state-dir {shell_quote(state_dir)} --qr-phase {phase} "
@@ -95,7 +92,7 @@ def format_assign_cmd(state_dir: str, phase: str, prefix: str) -> str:
 
 
 # =============================================================================
-# SHARED PROMPTS (truly identical across all 3 phases)
+# SHARED PROMPTS (truly identical across the phases)
 # =============================================================================
 
 GAP_ANALYSIS_PROMPT = """\
@@ -191,13 +188,12 @@ def render_code_milestone_scope(state_dir: str, phase: str) -> str:
     milestone's acceptance_criteria can't be enumerated as unsatisfiable impl-code
     QR items. Returns "" for non-impl-code phases (plan-design enumerates
     everything; impl-docs targets doc-only milestones) and whenever plan.json is
-    absent or unparseable -- the static prose then stands alone, as before
-    (graceful degrade, like render_context_file's missing_ok).
+    absent or unparseable -- the static prose then stands alone (graceful degrade).
     """
     if phase != "impl-code" or not state_dir:
         return ""
-    # Local import + tolerant load mirror plan_completeness_errors: do NOT use
-    # cli.plan.load_plan (it error_exit()s, which would abort a prompt build).
+    # Local import + tolerant load: do NOT use cli.plan.load_plan (it error_exit()s,
+    # which would abort a prompt build).
     from skills.planner.shared.schema import Plan
 
     path = Path(state_dir) / "plan.json"
@@ -219,8 +215,8 @@ def render_code_milestone_scope(state_dir: str, phase: str) -> str:
 def no_scope(state_dir: str, phase: str) -> str:
     """Default scope provider: no extra in-scope enumeration.
 
-    Phases other than impl-code register this so dispatch_step always holds a
-    callable scope_provider (uniform slot) -- no `if provider` special-casing.
+    A phase with no scope registers this so dispatch_step always holds a callable
+    scope_provider (uniform slot) -- no `if provider` special-casing.
     """
     return ""
 
@@ -242,7 +238,7 @@ def dispatch_step(
 
     Args:
         step: Current step number (1-13)
-        phase: Phase name (plan-design, impl-code, impl-docs)
+        phase: Phase name
         module_path: Module path for next step command
         phase_prompts: Dict mapping step numbers to phase-specific prompt strings
                       Required keys: 1, 2, 3, 5

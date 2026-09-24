@@ -25,11 +25,9 @@ SCRIPT_MODE_RULES = (
     "The script tells the sub-agent what to do. You just invoke it."
 )
 
-# The QR-verify AGGREGATE-step forbidden items, shared by both orchestrators.
-# Single source of truth: the planner and executor inline copies had drifted (the
-# executor copy dropped the two plan-state lines), the exact silent divergence one
-# SSOT removes. Both plan-state lines only restate the orchestrator's standing
-# Read/Edit/Write prohibition, so this superset is behavior-safe in every phase.
+# The QR-verify AGGREGATE-step forbidden items. The plan-state lines restate the
+# orchestrator's standing Read/Edit/Write prohibition, so they are behavior-safe in
+# every phase.
 QR_VERIFY_FORBIDDEN = (
     "Interpreting results beyond PASS/FAIL tallying",
     "Claiming 'diminishing returns' or 'comprehensive enough'",
@@ -47,9 +45,7 @@ def shell_quote(path: str | None) -> str:
 
     Prevents breakage on paths with spaces and blocks copy/paste shell injection
     via a metacharacter-bearing state_dir; an absent path renders as an explicit
-    '' rather than a bare gap. Single owner for planner.py, executor.py, and
-    gates.py, which had drifted -- executor/gates quoted, planner did not (audit
-    §4: "planner interpolates state_dir ... without shlex.quote").
+    '' rather than a bare gap.
     """
     return shlex.quote(path) if path else "''"
 
@@ -72,20 +68,9 @@ def format_gate_result(passed: bool) -> str:
 def build_qr_verify_dispatch(
     verify_script: str, phase: str, state_dir: str, items: list[dict], constraint: str
 ) -> list[str]:
-    """Build the full QR-verify action block shared by planner + executor.
+    """Build the full QR-verify action block: the verify fan-out and the aggregation prose.
 
-    Single owner of BOTH the verify fan-out shape (the balanced-group cap scheme,
-    the display-only vg-NNN labels, the injected --phase, shell-quoting of the
-    --qr-item flags and the --state-dir, the checks_summary truncation, and the
-    pinned "Start:" command) AND the PHASE 1/PHASE 2 aggregation prose. Returns the
-    action lines; the only per-orchestrator difference is `constraint`
-    (ORCHESTRATOR_CONSTRAINT vs _EXTENDED), passed in. The caller wraps the list its
-    own way (planner returns it as `actions`; executor "\\n".join()s it).
-
-    Extracted because the two inlined copies had already drifted -- the planner copy
-    interpolated item ids and state_dir unquoted while the executor copy shlex-quoted
-    both, an injection divergence in commands the agent may copy/run; the PHASE
-    1/PHASE 2 prose was byte-duplicated across the two call sites too.
+    Returns the action lines, with the caller's `constraint` passed in.
     """
     from skills.lib.workflow.prompts import pin_cwd, template_dispatch
     from skills.planner.shared.qr.constants import VERIFY_MAX_PARALLEL, VERIFY_TARGET_PER_GROUP
@@ -122,8 +107,7 @@ def build_qr_verify_dispatch(
     template_prefix = base_cmd.removesuffix(" $qr_item_flags").replace("$", "$$")
     template_cmd = f"{template_prefix} $qr_item_flags"
     # pin_cwd: the prose "Start:" line is a command the agent may copy and run
-    # directly, so it carries the absolute cd the invoke block already has --
-    # otherwise a drifted cwd yields "No module named 'skills'".
+    # directly, and a drifted cwd otherwise yields "No module named 'skills'".
     tmpl = (
         "Verify QR group: $group_id ($item_count items)\n"
         "Items: $item_ids\n"
@@ -167,15 +151,10 @@ def build_qr_decompose_dispatch(
     constraint: str,
     model: str | None = None,
 ) -> list[str]:
-    """Build the QR-decompose dispatch action block shared by planner + executor.
+    """Build the QR-decompose dispatch action block.
 
-    Single owner of the decompose dispatch shape: the QR-<PHASE>-DECOMPOSE banner,
-    the injected --phase, the shell-quoted --state-dir, the quality-reviewer
-    subagent_dispatch, and the expected-output prose. The only per-orchestrator
-    differences are `constraint` (ORCHESTRATOR_CONSTRAINT vs _EXTENDED) and `model`,
-    passed in. The caller resolves decompose_script, keeps its own qr_file_exists
-    skip branch, and wraps the returned list its own way (planner returns it as
-    `actions`; executor "\\n".join()s it into format_step).
+    `constraint` and `model` are passed in. The caller resolves decompose_script and
+    keeps its own qr_file_exists skip branch.
     """
     from skills.lib.workflow.prompts import subagent_dispatch
     from skills.planner.shared.constraints import format_state_banner
@@ -205,16 +184,7 @@ def build_fix_mode_dispatch(
     invoke_cmd: str,
     follow_up: tuple[str, ...] = (),
 ) -> list[str]:
-    """Build the orchestrator's QR fix-mode dispatch action block.
-
-    Single owner of the [fix banner, "FIX MODE: ..." line, constraint,
-    subagent_dispatch, optional follow-up prose] shape that the planner plan-design
-    retry and the executor code/doc retries each built inline. Callers differ in the
-    banner label, the "FIX MODE" wording, the constraint (ORCHESTRATOR_CONSTRAINT vs
-    _EXTENDED), the sub-agent type, the router invoke command, and whether they append
-    follow-up lines (the doc retry appends none). Returns the action lines; the caller
-    wraps them (planner returns them as `actions`; executor "\\n".join()s them).
-    """
+    """Build the orchestrator's QR fix-mode dispatch action block; returns the lines."""
     from skills.lib.workflow.prompts import subagent_dispatch
     from skills.planner.shared.constraints import format_state_banner
 

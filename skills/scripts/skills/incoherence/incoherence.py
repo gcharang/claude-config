@@ -2,30 +2,7 @@
 """
 Incoherence Detector - Step-based incoherence detection workflow
 
-DETECTION PHASE (Steps 1-12):
-    Steps 1-3 (Parent): Survey, dimension selection, exploration dispatch
-    Steps 4-7 (Sub-Agent): Broad sweep, coverage check, gap-fill, format findings
-    Step 8 (Parent): Synthesis & candidate selection
-    Step 9 (Parent): Deep-dive dispatch
-    Steps 10-11 (Sub-Agent): Deep-dive exploration and formatting
-    Step 12 (Parent): Verdict analysis and grouping
-
-INTERACTIVE RESOLUTION PHASE (Steps 13-15):
-    Step 13 (Parent): Prepare resolution batches from groups
-    Step 14 (Parent): Present batch via AskUserQuestion
-                      - Group batches: ask group question ONLY first
-                      - Non-group or MODE=individual: ask per-issue questions
-    Step 15 (Parent): Loop controller
-                      - If unified chosen: record for all, next batch
-                      - If individual chosen: loop to step 14 with MODE=individual
-                      - If all batches done: proceed to application
-
-APPLICATION PHASE (Steps 16-21):
-    Step 16 (Parent): Analyze targets and select agent types
-    Step 17 (Parent): Dispatch current wave of agents
-    Steps 18-19 (Sub-Agent): Apply resolution, format result
-    Step 20 (Parent): Collect wave results, check for next wave
-    Step 21 (Parent): Present final report to user
+STEPS below defines the steps; main() maps each step to its phase and agent type.
 
 Resolution is interactive - user answers AskUserQuestion prompts inline.
 No manual file editing required.
@@ -55,11 +32,10 @@ MODULE_PATH = "skills.incoherence.incoherence"
 def _invoke_line(cmd: str) -> str:
     """Render a cwd-pinned sub-agent invoke line for an AGENT PROMPT block.
 
-    pin_cwd prefixes an absolute cd into SKILLS_DIR so a spawned agent whose cwd has
-    drifted still resolves the `skills` package; the prior relative
-    working-dir=".claude/skills/scripts" failed with "No module named 'skills'"
-    Matches the same pattern as refactor._invoke_tag / render_subagent_dispatch. No quoteattr:
-    render_current_action emits actions verbatim, so the literal `&&` and the
+    pin_cwd makes the command cwd-independent, so a spawned agent whose cwd has
+    drifted still resolves the `skills` package; a relative
+    working-dir=".claude/skills/scripts" fails with "No module named 'skills'". No
+    quoteattr: render_current_action emits actions verbatim, so the
     \\"...\\" / {{var}} placeholders must survive unescaped.
     """
     return f'  Start: <invoke cmd="{pin_cwd(cmd)}" />'
@@ -684,23 +660,23 @@ def main(step_number: int | None = None):
     guidance = get_step_guidance(args.step_number, WORKFLOW.total_steps)
 
     # Determine agent type and phase
-    # Detection sub-agents: 4-7 (exploration), 10-11 (deep-dive)
+    # Detection sub-agents: exploration and deep-dive
     if args.step_number in [4, 5, 6, 7, 10, 11]:
         agent_type = "SUB-AGENT"
         phase = "DETECTION"
-    # Application sub-agents: 18-19 (apply resolution)
+    # Application sub-agents: apply resolution
     elif args.step_number in [18, 19]:
         agent_type = "SUB-AGENT"
         phase = "APPLICATION"
-    # Detection parent: 1-12
+    # Detection parent
     elif args.step_number <= 12:
         agent_type = "PARENT"
         phase = "DETECTION"
-    # Resolution parent: 13-15
+    # Resolution parent
     elif args.step_number <= 15:
         agent_type = "PARENT"
         phase = "RESOLUTION"
-    # Application parent: 16-22
+    # Application parent
     else:
         agent_type = "PARENT"
         phase = "APPLICATION"

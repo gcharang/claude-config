@@ -8,19 +8,10 @@ Three dispatch patterns:
 - roster_dispatch: Parallel agents, shared context + unique tasks, fixed command
 """
 
-import shlex
 from collections.abc import Sequence
-from pathlib import Path
 from string import Template
 
-# ============================================================================
-# CONFIGURATION
-# ============================================================================
-
-# subagent.py -> prompts -> workflow -> lib -> skills -> scripts
-SKILLS_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
-_SKILLS_DIR_Q = shlex.quote(str(SKILLS_DIR))
-
+from skills.lib.workflow.prompts.step import pin_cwd
 
 # ============================================================================
 # SHARED PROMPTS
@@ -45,7 +36,7 @@ MANDATORY INVOKE BLOCK - Copy VERBATIM into the agent's prompt:
 FIRST ACTION REQUIRED: Run this command via Bash tool before any other response.
 Do NOT skip. Do NOT produce analysis first. Execute this command IMMEDIATELY.
 
-Command: cd {working_dir} && {cmd}
+Command: {cmd}
 ================================================================================
 CRITICAL: Copy the block above EXACTLY. Do not paraphrase or summarize.
 The subagent needs "FIRST ACTION REQUIRED" to know it must run the command."""
@@ -149,13 +140,13 @@ def task_tool_instruction(agent_type: str, model: str | None) -> str:
 
 
 def sub_agent_invoke(cmd: str) -> str:
-    """Tell sub-agent what command to run after spawning.
+    """Tell sub-agent what `uv run` command to run after spawning.
 
-    working_dir is shlex-quoted so `cd` stays safe if SKILLS_DIR contains
-    whitespace or shell metacharacters. Callers are responsible for
-    pre-quoting any user-controlled substitutions inside `cmd`.
+    pin_cwd makes the command cwd-independent and raises ValueError for one that is
+    not `uv run`. Callers are responsible for pre-quoting any user-controlled
+    substitutions inside `cmd`.
     """
-    return SUB_AGENT_INVOKE.format(working_dir=_SKILLS_DIR_Q, cmd=cmd)
+    return SUB_AGENT_INVOKE.format(cmd=pin_cwd(cmd))
 
 
 def parallel_constraint(count: int) -> str:
@@ -176,7 +167,7 @@ def subagent_dispatch(
 
     Args:
         agent_type: Task tool subagent_type (e.g., "general-purpose", "Explore")
-        command: Shell command sub-agent must run after spawning
+        command: `uv run` command sub-agent must run after spawning
         prompt: Optional task description for sub-agent
         model: Optional model override ("haiku", "sonnet", "opus")
 
@@ -197,9 +188,8 @@ def expand_template_pairs(
 ) -> list[dict[str, str]]:
     """Substitute a prompt+command template for each target, with validation.
 
-    Shared validate-and-substitute core of template_dispatch and
-    dispatch_renderer._expand_template_targets -- keep both callers thin; do NOT
-    reintroduce a second copy of this logic (the twin is what audit Issue 6 was).
+    The shared validate-and-substitute core: keep callers thin and do NOT
+    reintroduce a second copy of this logic.
     Returns one {"prompt", "command"} dict per target; empty targets -> [].
 
     Raises:
@@ -255,7 +245,7 @@ def template_dispatch(
         agent_type: Task tool subagent_type for all agents
         template: Prompt template with $var placeholders
         targets: List of dicts, each providing variable bindings for one agent
-        command: Command template with $var placeholders
+        command: `uv run` command template with $var placeholders
         model: Optional model override for all agents
         instruction: Optional instruction text
 
@@ -263,10 +253,8 @@ def template_dispatch(
         Complete dispatch prompt with expanded agent entries
 
     Raises:
-        ValueError: propagated from expand_template_pairs -- the template/command
-            references a $var no target declares (a typo or an unescaped literal
-            "$"; write a literal "$" as "$$"), or a $var some target provides is
-            absent from another target.
+        ValueError: propagated from expand_template_pairs, or from pin_cwd for a
+            command that is not `uv run`.
     """
     expanded = expand_template_pairs(template, command, targets)
 
@@ -310,7 +298,7 @@ def roster_dispatch(
     Args:
         agent_type: Task tool subagent_type for all agents
         agents: List of unique task descriptions, one per agent
-        command: Fixed command all agents run (same for all)
+        command: Fixed `uv run` command all agents run (same for all)
         shared_context: Optional context included in every agent's prompt
         model: Optional model override for all agents
         instruction: Optional instruction text

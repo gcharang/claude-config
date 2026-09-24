@@ -59,12 +59,13 @@ You have full read/write access. Read every target file before editing, then mak
 related edits together in one response rather than one edit per turn -- fewer round-trips
 with the same result.
 
-When you run a test, build or lint command, send its output to a new log file outside the
-repository rather than the transcript, in your scratchpad directory if you have one, else
-from `mktemp`: run it with `> "$log" 2>&1; echo "exit $?"`, print the summary from the
-log's tail, and `grep` the log when a failure needs detail. A long command result stays in
-context and is re-read on every call that follows it, so the log keeps the investigation
-cheap without losing anything.
+When you run a test, build or lint command, send its output to a log file outside the
+repository whose name comes from `mktemp` every time, because parallel dispatches share
+one scratchpad: `mktemp "<scratchpad>/NAME.XXXXXX"` when you have a scratchpad directory,
+else `mktemp`. Run the command with `> "$log" 2>&1; echo "exit $?"`, print the summary
+from the log's tail, and `grep` the log when a failure needs detail. A long command
+result stays in context and is re-read on every call that follows it, so the log keeps
+the investigation cheap without losing anything.
 
 ## Spec Adherence
 

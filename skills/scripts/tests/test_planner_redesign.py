@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 
 import pytest
-from conftest import write_qr  # pyright: ignore[reportMissingImports]
+from conftest import write_qr
 
 from skills.planner.shared.gates import GateResult
 
@@ -90,7 +90,7 @@ def test_step6_missing_plan_fails_closed(tmp_path):
     assert "plan.json not found" in (result.stdout + result.stderr)
 
 
-# --- Only three QR phases remain --------------------------------------------
+# --- Only three QR phases ---------------------------------------------------
 def test_qr_phases_are_three():
     from skills.planner.shared.qr.phases import QR_PHASES, get_phase_config
 
@@ -141,7 +141,7 @@ def test_executor_step2_dispatches_code_intent_not_diffs(tmp_path):
     out = executor.format_output(2, str(tmp_path), None, False)
     assert "Code Intent" in out
     assert "code_changes" not in out
-    assert "implementation source" not in out.lower()  # old diff-application framing gone
+    assert "implementation source" not in out.lower()  # no diff-application framing
     # Doc-only milestones route to the documentation phase, not a developer.
     assert "is_documentation_only" in out
 
@@ -153,7 +153,7 @@ def test_exec_implement_execute_implements_from_intent():
         body = "\n".join(get_step_guidance(step, state_dir="/tmp/x")["actions"])
         assert "Code Intent" in body or "code_intents" in body
         assert "code_changes" not in body
-        assert "implementation source" not in body.lower()  # old diff-application framing gone
+        assert "implementation source" not in body.lower()  # no diff-application framing
 
 
 # --- exec-docs authors documentation (no transcription) ---------------------
@@ -214,14 +214,14 @@ def test_rendered_diagram_surfaces_in_plan_markdown():
     assert "+--BOXART--+" in md  # rendered diagram appears
     assert "[Diagram pending" not in md  # not an unrendered placeholder
     assert "Code Intent" in md  # the contract is rendered
-    assert "Code Changes" not in md  # the diff block is gone
+    assert "Code Changes" not in md  # no diff block
 
 
 def test_plan_design_completeness_flags_stale_diagram_render():
     # ascii_render is hand-authored free text decoupled from nodes/edges -- add a
-    # node to the graph after the render was authored and nothing else catches the
-    # render silently going stale (confirmed: a milestone node added late never
-    # made it into the diagram). Caught at plan-design completeness time.
+    # node to the graph after the render was authored and the render silently goes
+    # stale (confirmed: a milestone node added late never made it into the diagram).
+    # Caught at plan-design completeness time.
     from skills.planner.shared.schema import DiagramGraph, DiagramNode, Overview, Plan
 
     plan = Plan(
@@ -424,7 +424,7 @@ def test_diagram_render_gaps_id_present_when_flanked_by_punctuation():
     # Same construct, id side: id_present shares _token_present with label_present,
     # so an id ending in punctuation (flanked by more punctuation in the render) is
     # subject to the identical edge rule -- just less likely to surface since ids
-    # are conventionally slug-like and nothing enforces that.
+    # are conventionally slug-like.
     from skills.planner.shared.schema import DiagramGraph, DiagramNode, Overview, Plan
 
     plan = Plan(
@@ -496,9 +496,8 @@ def test_diagram_render_gaps_accepts_gap_when_both_edges_are_punctuation():
 
 def test_diagram_render_gaps_present_when_left_edge_is_punctuation_right_is_word():
     # Mirror of label/id_present_when_flanked_by_punctuation on the opposite edge:
-    # text starts with punctuation and ends with a word char -- the remaining
-    # untested combination of _token_present's independently-computed left/right
-    # \b logic (word/word, word/nonword, and nonword/nonword are covered above).
+    # text starts with punctuation and ends with a word char, a combination of
+    # _token_present's independently-computed left/right \b logic.
     from skills.planner.shared.schema import DiagramGraph, DiagramNode, Overview, Plan
 
     plan = Plan(
@@ -586,8 +585,8 @@ def test_doc_only_toggle_clears_intents_to_stay_valid(tmp_path):
 
 
 def test_doc_only_cli_toggle_clears_intents(tmp_path, capsys):
-    # The single-CLI path (plan.py) mirrors the batch RPC: toggling doc-only on a
-    # milestone with intents clears them, reports the count, and leaves a valid plan.
+    # The single-CLI path (plan.py): toggling doc-only on a milestone with intents
+    # clears them, reports the count, and leaves a valid plan.
     from skills.planner.cli import plan as plan_cli
 
     plan_cli.cli(["--state-dir", str(tmp_path), "init", "--task", "t"])
@@ -707,9 +706,8 @@ def test_code_milestone_scope_degrades_without_plan(tmp_path):
 
 # --- plan_completeness_errors fails CLOSED on an empty plan by default ----------
 def test_completeness_fails_closed_on_empty_milestones_by_default(tmp_path):
-    # The gate veto and executor step>1 guard use the default (fail closed): a
-    # milestone-less plan is a real completeness error. Only the architect router
-    # passes suppress_if_no_milestones=True (first-time skeleton).
+    # The default fails closed: a milestone-less plan is a real completeness error.
+    # suppress_if_no_milestones=True is for a first-time skeleton.
     from skills.planner.shared.schema import Overview, Plan, plan_completeness_errors
 
     (tmp_path / "plan.json").write_text(
@@ -846,7 +844,7 @@ def test_plan_design_step5_mandates_sweep_token():
 def test_plan_design_call_site_incomplete_verify_guidance():
     # CALL_SITE_INCOMPLETE checks must route to the call-site enumeration
     # verification block, not fall through to generic guidance. Guards the
-    # predicate fix that adds "call_site" matching.
+    # predicate's "call_site" matching.
     from skills.planner.quality_reviewer.prompts.content import (
         PLAN_DESIGN_STEP_5_GENERATE,
         PlanDesignVerify,
@@ -884,7 +882,7 @@ def test_plan_design_call_site_incomplete_not_shadowed_by_code_intent():
 def test_plan_design_blast_radius_unverified_verify_guidance():
     # BLAST_RADIUS_UNVERIFIED checks must route to the gating-anchor
     # verification block, not fall through to generic guidance. Guards the
-    # predicate fix that adds "blast_radius"/"blast radius" matching.
+    # predicate's "blast_radius"/"blast radius" matching.
     from skills.planner.quality_reviewer.prompts.content import (
         PLAN_DESIGN_STEP_5_GENERATE,
         PlanDesignVerify,
@@ -1025,9 +1023,12 @@ def test_iteration_limit_escalation_emits_runnable_accept_command(tmp_path):
     assert isinstance(result, GateResult)
     out = result.output
     # The bug was a prose-only Accept with no command (nothing saved). The escalation
-    # must now carry a runnable --accept-findings command, and not finalize on its own.
+    # must carry a runnable, cwd-pinned --accept-findings command, and not finalize on
+    # its own.
+    from skills.lib.workflow.prompts.step import _SKILLS_DIR_Q
+
     assert "--accept-findings" in out
-    assert "uv run python -m" in out
+    assert f"uv run --directory {_SKILLS_DIR_Q} python -m" in out
     assert result.terminal_pass is False
 
 
@@ -1474,9 +1475,8 @@ def test_set_wave_cli_happy_path(tmp_path):
     assert [(w.id, w.milestones) for w in waves] == [("W-001", ["M-001"]), ("W-002", ["M-002"])]
     # Upsert: --id replaces the wave's milestone list (architect iterates).
     # RPC surface takes an array here: parse_csv rejects a comma-bearing string on
-    # this surface (it always has the array alternative); the live CLI (a
-    # different surface, exercised elsewhere) keeps the comma-string form since
-    # argparse has no array form.
+    # this surface (it always has the array alternative); the live CLI keeps the
+    # comma-string form since argparse has no array form.
     pc.set_wave(ctx, id="W-001", milestones=["M-001", "M-002"])
     assert ctx.load_plan().waves[0].milestones == ["M-001", "M-002"]
 
@@ -1517,8 +1517,7 @@ def test_set_wave_accepts_valid_multi_milestone_wave(tmp_path):
 
 def test_set_wave_rejects_doc_only_milestone(tmp_path):
     # D1: doc-only milestones route to exec-docs and must be rejected at write time
-    # on the RPC twin too (not only the CLI / the later executor gate). Regression for
-    # the RPC-bypass whole-class miss.
+    # on the RPC twin too. Regression for the RPC-bypass whole-class miss.
     import pytest
 
     from skills.planner.cli import plan_commands as pc
@@ -1817,8 +1816,8 @@ def test_wave_overlap_detected_cross_source_files_vs_intent(tmp_path):
 
 def test_plan_gate_blocks_qr_pass_on_incomplete_plan(tmp_path):
     # A QR-pass on a plan whose code milestone is in no wave must NOT terminal-pass:
-    # the gate runs the same completeness contract the executor hard-exits on and
-    # routes back to the architect instead of saving an unexecutable plan (audit F1).
+    # the gate runs the completeness contract and routes back to the architect
+    # instead of saving an unexecutable plan (audit F1).
     from skills.planner.orchestrator.planner import format_output
 
     plan = _plan_with_waves([("M-001", ["a.py"], False)], [])  # code milestone, no waves
@@ -1877,9 +1876,8 @@ def test_architect_router_silent_on_first_time_skeleton(tmp_path):
 
 
 def test_exec_routers_fail_closed_without_state_dir():
-    # AL2: the work-phase routers fail closed without --state-dir (matching plan_design)
-    # instead of silently routing to first-time EXECUTE. The policy lives once in
-    # build_route_dispatch, so all three routers agree.
+    # AL2: the work-phase routers fail closed without --state-dir instead of silently
+    # routing to first-time EXECUTE.
     from skills.planner.developer.exec_implement import get_step_guidance as impl_router
     from skills.planner.technical_writer.exec_docs import get_step_guidance as docs_router
 
@@ -1910,9 +1908,9 @@ def test_build_route_dispatch_fix_mode_reuses_threaded_iteration(tmp_path):
 
 
 def test_detect_qr_state_fails_closed_on_malformed_file(tmp_path):
-    # A structurally-malformed-but-top-level-dict qr file (unhashable status/id) used to
-    # raw-traceback in by_status/detect_qr_state. parse_qr_dict now rejects it -> load
-    # returns None -> the router fails open to EXECUTE (same as a missing file), never crashes.
+    # A structurally-malformed-but-top-level-dict qr file (unhashable status/id) must
+    # not raw-traceback in by_status/detect_qr_state: parse_qr_dict rejects it -> load
+    # returns None -> the router fails open to EXECUTE (same as a missing file).
     import json
 
     from skills.planner.shared.routing import detect_qr_state, route_work_phase
@@ -1930,8 +1928,8 @@ def test_detect_qr_state_fails_closed_on_malformed_file(tmp_path):
 
 
 class TestExecQrFixConsolidation:
-    """The three *_qr_fix.py files collapsed into one shared exec_qr_fix runner;
-    --phase selects FIX_CONTENT, and each phase still emits its own content (AL1).
+    """The shared exec_qr_fix runner: --phase selects FIX_CONTENT, and each phase
+    still emits its own content (AL1).
     """
 
     def _guidance(self, phase: str, step: int, tmp_path) -> dict:
@@ -2035,9 +2033,8 @@ def test_execution_waves_render_in_markdown():
 
 
 def test_known_risks_render_anchor_and_decision_ref():
-    # Known Risks used to render only risk+mitigation, silently dropping anchor and
-    # decision_ref even though both are populated -- unlike the sibling Rejected
-    # Alternatives table, which does render its decision_ref as "(ref: ...)".
+    # Known Risks must not render only risk+mitigation, silently dropping anchor and
+    # decision_ref when both are populated.
     from skills.planner.cli.plan import translate_to_markdown
     from skills.planner.shared.schema import Decision, Overview, Plan, Risk
 
@@ -2059,8 +2056,8 @@ def test_known_risks_render_anchor_and_decision_ref():
 
 
 def test_decision_and_rejected_alternative_tables_escape_pipe():
-    # A literal '|' or '||' in prose (e.g. "a || b", "string|null") used to shift a
-    # GFM table's columns since neither loop escaped it before interpolating.
+    # A literal '|' or '||' in prose (e.g. "a || b", "string|null") shifts a GFM
+    # table's columns unless it is escaped before interpolating.
     from skills.planner.cli.plan import translate_to_markdown
     from skills.planner.shared.schema import Decision, Overview, Plan, RejectedAlternative
 
@@ -2082,9 +2079,8 @@ def test_decision_and_rejected_alternative_tables_escape_pipe():
 
 
 def test_milestone_heading_includes_its_own_id():
-    # Every other id type (DL-/R-/CI-/W-) is grep-able at its own definition site;
-    # milestone headings used to show only the ordinal ("Milestone 1: ..."), so
-    # cross-references from Risks/Code-Intent prose to "M-010" had zero hits here.
+    # A milestone heading that shows only the ordinal ("Milestone 1: ...") leaves
+    # cross-references from Risks/Code-Intent prose to "M-010" with zero hits here.
     from skills.planner.cli.plan import translate_to_markdown
 
     plan = _plan_with_waves([("M-001", ["a.py"], False)], [("W-001", ["M-001"])])
@@ -2105,11 +2101,11 @@ def test_executor_step1_transcribes_waves_no_diagram_parse(tmp_path):
 
 
 def test_executor_step1_forbids_planning_context_and_diagram_transcription(tmp_path):
-    # Hand-retyping planning_context/diagram_graphs into the executor's plan.json is
-    # unread by every later step and was the actual source of a 28-error Pydantic
-    # failure (risks/rejected_alternatives/diagram_graphs all malformed at once) plus
-    # a separate decisions-missing-id failure in another session. Nothing should
-    # invite that transcription in the first place.
+    # Hand-retyping planning_context/diagram_graphs into the executor's plan.json was
+    # the actual source of a 28-error Pydantic failure (risks/rejected_alternatives/
+    # diagram_graphs all malformed at once) plus a separate decisions-missing-id
+    # failure in another session. Nothing should invite that transcription in the
+    # first place.
     from skills.planner.orchestrator import executor
 
     out = executor.format_output(1, str(tmp_path), None, False)
@@ -2119,10 +2115,8 @@ def test_executor_step1_forbids_planning_context_and_diagram_transcription(tmp_p
 
 
 def test_executor_step1_states_decisions_carveout_positively(tmp_path):
-    # The substring-STAY test above only pins 'planning_context' / 'diagram_graphs'
-    # / 'Do NOT add' staying present -- a silent revert to a blanket "forbid all
-    # planning_context" would still satisfy it. This positively asserts the
-    # decisions carve-out wording itself: decisions may be included ONLY for
+    # A silent revert to a blanket "forbid all planning_context" must fail, so this
+    # positively asserts the decisions carve-out wording itself: decisions may be included ONLY for
     # Decision entries a code_intent.decision_refs actually references.
     from skills.planner.orchestrator import executor
 
@@ -2144,8 +2138,8 @@ def test_executor_step1_warns_against_verbatim_source_copy(tmp_path):
 
 def test_executor_step1_writes_no_skeleton_plan_json(tmp_path, temp_root, monkeypatch):
     # main() must NOT pre-write a full-schema plan.json skeleton on a fresh step 1: a
-    # pre-existing skeleton (planning_context/diagram_graphs keys) both contradicted the
-    # reduced-subset contract and forced read-before-write. The orchestrator authors
+    # pre-existing skeleton (planning_context/diagram_graphs keys) both contradicts the
+    # reduced-subset contract and forces read-before-write. The orchestrator authors
     # plan.json fresh via Write instead. temp_root (conftest) neutralises both project
     # anchors and pins the temp branch; mkdtemp is pinned on top so the run dir is a known
     # path this can assert on.
