@@ -44,7 +44,7 @@ For each directory in scope, record:
 
 1. Does CLAUDE.md exist?
 2. If yes, does it have the required table-based index structure?
-3. What files/subdirectories exist that need indexing?
+3. Which subdirectories and entry-point files need a row (conventions/documentation.md)?
 
 ### Phase 2: Audit
 
@@ -54,10 +54,9 @@ For each directory, check for drift and misplaced content:
 <audit_check dir="[path]">
 CLAUDE.md exists: [YES/NO]
 Has table-based index: [YES/NO]
-Files in directory: [list]
-Files in index: [list]
+Subdirectories and entry-point files: [list]
 Missing from index: [list]
-Stale in index (file deleted): [list]
+Stale in index (path deleted): [list]
 Triggers are task-oriented: [YES/NO/PARTIAL]
 Contains misplaced content: [YES/NO] (architecture/design docs that belong in README.md)
 README.md exists: [YES/NO]
@@ -109,7 +108,7 @@ For each directory needing work:
 **Creating/Updating CLAUDE.md:**
 
 1. Use the appropriate template (ROOT or SUBDIRECTORY)
-2. Populate tables with all files and subdirectories
+2. Populate tables with the subdirectories and entry-point files
 3. Write "What" column: factual content description
 4. Write "When to read" column: action-oriented triggers
 5. If README.md exists, include it in the Files table
@@ -128,7 +127,7 @@ After all updates complete, verify:
 
 1. Every directory in scope has CLAUDE.md
 2. All CLAUDE.md files use table-based index format (pure navigation)
-3. No drift remains (files <-> index entries match)
+3. No drift remains: every subdirectory and entry-point file has a row, and no row names a deleted path
 4. No misplaced content in CLAUDE.md (explanatory prose moved to README.md)
 5. README.md files are indexed in their parent CLAUDE.md
 6. CLAUDE.md contains only: one-sentence overview + tabular index + operational sections
@@ -172,14 +171,11 @@ DO NOT create CLAUDE.md for:
 
 DO NOT index (skip these files in CLAUDE.md):
 
-- Generated files (_.generated._, compiled outputs)
-- Vendored dependency files
+- Generated or vendored files inside a directory whose own row already flags it as generated or vendored
 
 DO index:
 
-- Hidden config files that affect development (.eslintrc, .env.example, .gitignore)
-- Test files and test directories
-- Documentation files (including README.md)
+Every subdirectory, and the entry-point files conventions/documentation.md (`### Index Format`) defines.
 
 ## Anti-Patterns
 

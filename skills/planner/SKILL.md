@@ -13,18 +13,18 @@ script IS the workflow.
 | planning  | "plan", "design", "architect"      | `skills.planner.orchestrator.planner` step 1 |
 | execution | "execute", "implement", "run plan" | `skills.planner.orchestrator.executor` step 1 |
 
-Each command is self-contained: run one whole line, since shell state does not persist between invocations. `<scripts>` is a literal absolute path you write in: `<project>/.claude/skills/scripts` when that directory exists, the user-global `~/.claude/skills/scripts` otherwise.
+Each command is self-contained: run one whole line, since shell state does not persist between invocations. `<scripts>` is a literal absolute path you write in, inside the double quotes the command gives it: `<project>/.claude/skills/scripts` when `test -d "<project>/.claude/skills/scripts"`, run as a command of its own, exits 0, and `<home>/.claude/skills/scripts` otherwise, with `<home>` your home directory written out.
 
 **planning**
 
 ```bash
-uv run --project <scripts> python -m skills.planner.orchestrator.planner --step 1
+uv run --project "<scripts>" python -m skills.planner.orchestrator.planner --step 1
 ```
 
 **execution**
 
 ```bash
-uv run --project <scripts> python -m skills.planner.orchestrator.executor --step 1
+uv run --project "<scripts>" python -m skills.planner.orchestrator.executor --step 1
 ```
 
 **Run these with the shell sitting inside the project.** The Bash working directory
@@ -33,7 +33,7 @@ earlier work -- check it, and `cd` into the project first if it is not already t
 not `cd` into the skills directory: `--project` already locates the scripts, and step 1
 needs the project's own working directory left intact.
 
-`<scripts>` picks the install layout from that same project, so a project-local install wins when it exists. Write the path out rather than computing it in the command: Claude Code asks for approval outside bypass mode before it runs a command whose arguments carry a `$( … )` substitution. A bare `${CLAUDE_PROJECT_DIR:-$HOME}` cannot pick the layout either -- Claude Code does not populate `CLAUDE_PROJECT_DIR` for Bash-tool subprocesses, so unless the user exports it themselves it takes the `$HOME` arm, which fails outright on a project-local-only install and silently runs the global scripts when both exist.
+`<scripts>` picks the install layout from that same project, so a project-local install wins when it exists. Write the path out rather than computing it in the command: Claude Code asks for approval outside bypass mode when a command argument contains a shell substitution. An environment-variable fallback cannot pick the layout either -- Claude Code does not populate `CLAUDE_PROJECT_DIR` for Bash-tool subprocesses, so unless the user exports it themselves the fallback selects the user-global install. That fails on a project-local-only install and silently runs the global scripts when both exist.
 
 Step 1 is the only step that can see which project the run belongs to. It reads
 `$CLAUDE_PROJECT_DIR`, then falls back to the working directory, and records the answer in

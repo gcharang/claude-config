@@ -8,11 +8,35 @@
 | SHOULD | Maintainability debt     | Iterations 1-3            |
 | COULD  | Auto-fixable, low impact | Iterations 1-2            |
 
+## The MUST bar
+
+This bar governs free-form reviews: review lanes, and quality-reviewer outside
+script mode. A finding is MUST only when it is unrecoverable if it ships and has
+a trigger that shipped configuration or accepted input actually reaches. In an
+instruction file an agent loads and acts on, it is MUST only when a wrong
+reading changes what an agent does and nobody would notice. Scripts, test
+harnesses, tooling, docs no agent acts on, commit messages, plans and records
+are never MUST unless they make a product check pass falsely. A test's
+strength, mutation survival and guard completeness, and titles, comments,
+naming and restated claims, are SHOULD at most; a test is MUST only when it is
+the sole guard of a security property, or a bug-fix regression test with no
+evidence it failed on the pre-fix code. A finding that needs a hostile getter,
+proxy or mutated state outside the threat model is SHOULD. In a free-form
+review, a category below marked MUST yields a MUST only when its finding meets
+this bar, and a SHOULD otherwise.
+
+Scoped exception: the planner's script-mode plan and implementation reviews
+keep the MUST levels their step prompts assign in
+skills/scripts/skills/planner/quality_reviewer/prompts/content.py, knowledge
+categories included; this bar does not lower them.
+
 ## Categories by Recoverability
 
 ### KNOWLEDGE (MUST)
 
-Knowledge loss is permanent. These ALWAYS block.
+Knowledge loss is permanent. These block in the planner's script-mode review,
+under the scoped exception above, and in a free-form review when a finding
+meets the MUST bar.
 
 | Category                    | Detection                                   |
 | --------------------------- | ------------------------------------------- |

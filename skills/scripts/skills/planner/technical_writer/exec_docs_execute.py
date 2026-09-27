@@ -136,7 +136,7 @@ def get_step_guidance(step: int, module_path: str | None = None, **kwargs) -> di
                 "INDEX RULES:",
                 "  - WHAT: Nouns and actions (handlers, validators, models)",
                 "  - WHEN: Task-based triggers using action verbs",
-                "  - Every file in directory should have an entry",
+                "  - List subdirectories and entry-point files only, never every file",
                 "  - Exclude generated files (build artifacts, caches)",
                 "",
                 "IF CLAUDE.md exists but NOT tabular:",

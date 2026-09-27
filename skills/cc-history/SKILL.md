@@ -20,17 +20,9 @@ Reference documentation for querying and analyzing Claude Code's conversation hi
 
 ## Project Path Resolution
 
-Convert working directory to project directory:
-
-```bash
-PROJECT_DIR="~/.claude/projects/$(echo "$PWD" | sed 's|^/|-|; s|/\.|--|g; s|/|-|g')"
-```
-
-Encoding rules:
-
-- Leading `/` becomes `-`
-- Regular `/` becomes `-`
-- `/.` (hidden directory) becomes `--`
+The project directory is `<home>/.claude/projects/<slug>`. To form `<slug>`, replace
+every character of the absolute working directory other than an ASCII letter or digit
+with `-`. Write the result as `<project dir>` in the commands below.
 
 Examples:
 
@@ -82,13 +74,13 @@ Assistant message content blocks:
 
 ```bash
 # List by modification time (most recent first)
-ls -lt "$PROJECT_DIR"/*.jsonl
+ls -lt "<project dir>"/*.jsonl
 
 # Find by date
-ls -la "$PROJECT_DIR"/*.jsonl | grep "Jan 15"
+ls -la "<project dir>"/*.jsonl | grep "Jan 15"
 
 # Find by content
-grep -l "search term" "$PROJECT_DIR"/*.jsonl
+grep -l "search term" "<project dir>"/*.jsonl
 ```
 
 ### Extract Messages
@@ -129,7 +121,7 @@ Pattern: `python3? -m skills\.([a-z_]+)\.` — matches both legacy `python3 -m s
 grep -oE "python3? -m skills\.[a-z_]+" file.jsonl | sort -u
 
 # Find conversations using a specific skill
-grep -lE "python3? -m skills\.planner\." "$PROJECT_DIR"/*.jsonl
+grep -lE "python3? -m skills\.planner\." "<project dir>"/*.jsonl
 ```
 
 ### Token Usage
@@ -166,7 +158,7 @@ jq -s '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="
 
 ```bash
 # List subagents for a session
-ls "${SESSION_DIR}/subagents/"
+ls "<session dir>/subagents/"
 
 # Get subagent task description (first user message)
 jq -c 'select(.type=="user") | .message.content' agent-*.jsonl | head -1
@@ -193,8 +185,7 @@ jq -s 'group_by(.parentUuid) | map(select(length > 1)) | .[] | {
 }' file.jsonl
 
 # Show siblings at a known fork point
-FORK_POINT="parent-uuid-here"
-jq -c --arg fp "$FORK_POINT" 'select(.parentUuid==$fp) | {uuid, ts: .timestamp, preview: (.message.content | tostring)[:100]}' file.jsonl
+jq -c --arg fp "<fork point uuid>" 'select(.parentUuid==$fp) | {uuid, ts: .timestamp, preview: (.message.content | tostring)[:100]}' file.jsonl
 ```
 
 ### Extracting a Single Branch
@@ -203,12 +194,14 @@ To filter for exactly one branch, find a unique identifier in that branch, then 
 
 **Step 1: Find target message uuid**
 
+Write the printed uuid as `<target>` below.
+
 ```bash
 # By unique content
-TARGET=$(jq -r 'select(.message.content | tostring | contains("unique-identifier")) | .uuid' file.jsonl | tail -1)
+jq -r 'select(.message.content | tostring | contains("unique-identifier")) | .uuid' file.jsonl | tail -1
 
 # By timestamp prefix
-TARGET=$(jq -r 'select(.timestamp | startswith("2026-01-28T11:23")) | .uuid' file.jsonl | head -1)
+jq -r 'select(.timestamp | startswith("2026-01-28T11:23")) | .uuid' file.jsonl | head -1
 ```
 
 **Step 2: Extract branch as JSONL stream**
@@ -229,38 +222,41 @@ extract_branch() {
 }
 
 # Usage: extract_branch <target-uuid> <file>
-extract_branch "$TARGET" file.jsonl | jq -s 'length'
-extract_branch "$TARGET" file.jsonl | jq 'select(.type=="user")'
+extract_branch "<target>" file.jsonl | jq -s 'length'
+extract_branch "<target>" file.jsonl | jq 'select(.type=="user")'
 ```
 
 **Step 3: Common branch queries**
 
 ```bash
 # Message count
-extract_branch "$TARGET" file.jsonl | jq -s 'length'
+extract_branch "<target>" file.jsonl | jq -s 'length'
 
 # User messages only
-extract_branch "$TARGET" file.jsonl | jq 'select(.type=="user")'
+extract_branch "<target>" file.jsonl | jq 'select(.type=="user")'
 
 # Tool calls
-extract_branch "$TARGET" file.jsonl | jq 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use") | {name}'
+extract_branch "<target>" file.jsonl | jq 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use") | {name}'
 
 # First and last messages (verify correct branch)
-extract_branch "$TARGET" file.jsonl | jq -s '[.[0], .[-1]] | .[] | {type, ts: .timestamp}'
+extract_branch "<target>" file.jsonl | jq -s '[.[0], .[-1]] | .[] | {type, ts: .timestamp}'
 ```
 
 ### Workflow: Pinpoint and Explore
 
 ```bash
 # 1. Find conversation file
-FILE=$(grep -l "unique-identifier" "$PROJECT_DIR"/*.jsonl)
+grep -l "unique-identifier" "<project dir>"/*.jsonl
+```
 
+Write the printed path as `<file>` below.
+
+```bash
 # 2. Find matching messages (may show multiple branches)
-jq -c 'select(.message.content | tostring | contains("unique-identifier")) | {uuid, ts: .timestamp, parentUuid}' "$FILE"
+jq -c 'select(.message.content | tostring | contains("unique-identifier")) | {uuid, ts: .timestamp, parentUuid}' "<file>"
 
 # 3. Pick target uuid from desired branch, then query
-TARGET="uuid-from-step-2"
-extract_branch "$TARGET" "$FILE" | jq 'select(.type=="user") | .message.content'
+extract_branch "<target>" "<file>" | jq 'select(.type=="user") | .message.content'
 ```
 
 ## Correlation

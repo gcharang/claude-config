@@ -57,7 +57,7 @@ shows rather than compressing it into shorthand.
 When adding or removing debug statements across several files, group the edits by file
 and make them together in one response; batch the cleanup removals the same way.
 
-When you run a test, build or lint command, send its output to a log file outside the repository whose name comes from `mktemp` every time, because parallel dispatches share one scratchpad: `mktemp "<scratchpad>/NAME.XXXXXX"` when you have a scratchpad directory, else `mktemp`, in a call of its own. Run the command with `> <the path mktemp printed> 2>&1; echo "exit $?"`, print the summary from the log's tail, and `grep` the log when a failure needs detail. When the prompt names a log path and form, use those instead. A long command result stays in context and is re-read on every call that follows it, so the log keeps the investigation cheap without losing anything.
+When you run a test, build or lint command, send its output to a log file outside the repository at a new literal path you choose, with no separate `mktemp` call: in your scratchpad directory when you have one, else under `/tmp`, named for the command with a random suffix you make up, because parallel dispatches share one scratchpad. Run the command with `> <that path> 2>&1; echo "exit $?"`, print the summary from the log's tail, and `grep` the log when a failure needs detail. When the prompt names a log path and form, use those instead. A long command result stays in context and is re-read on every call that follows it, so the log keeps the investigation cheap without losing anything.
 
 ## RULE 0 (ABSOLUTE): Clean Codebase on Exit
 

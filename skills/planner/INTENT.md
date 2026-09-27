@@ -315,10 +315,12 @@ This trusts the LLM's prose comprehension. The decompose agent writes scopes tha
 
 After decomposition creates the initial qr-{phase}.json file, all subsequent mutations go through the QR CLI script. Agents do not modify the JSON file directly -- they invoke the script to update item status.
 
+`<scripts>` in these commands is the install's absolute path, chosen as `SKILL.md` says.
+
 **CLI interface:**
 
 ```
-uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.planner.cli.qr --state-dir {state_dir} --qr-phase <phase> update-item <id> --status <status> [--finding <text>]
+uv run --project "<scripts>" python -m skills.planner.cli.qr --state-dir {state_dir} --qr-phase <phase> update-item <id> --status <status> [--finding <text>]
 
 Arguments:
   --state-dir    State directory containing qr-{phase}.json (required)
@@ -331,11 +333,11 @@ Arguments:
 
 ```bash
 # Verify agent marks item as PASS
-uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.planner.cli.qr --state-dir {state_dir} --qr-phase plan-design \
+uv run --project "<scripts>" python -m skills.planner.cli.qr --state-dir {state_dir} --qr-phase plan-design \
     update-item qa-001 --status PASS
 
 # Verify agent marks item as FAIL
-uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.planner.cli.qr --state-dir {state_dir} --qr-phase plan-design \
+uv run --project "<scripts>" python -m skills.planner.cli.qr --state-dir {state_dir} --qr-phase plan-design \
     update-item qa-003 --status FAIL --finding "Missing null check in validate_token()"
 ```
 
@@ -391,10 +393,10 @@ Each versionable entity has a `version: int` field starting at 1. Updates requir
 **CLI interface:**
 
 ```
-uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.planner.cli.plan --state-dir <dir> set-intent \
+uv run --project "<scripts>" python -m skills.planner.cli.plan --state-dir <dir> set-intent \
     --milestone M-001 --file path.py --behavior "description"    # create
 
-uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.planner.cli.plan --state-dir <dir> set-intent \
+uv run --project "<scripts>" python -m skills.planner.cli.plan --state-dir <dir> set-intent \
     --id CI-M-001-001 --version 1 --behavior "updated"           # update
 ```
 
@@ -864,7 +866,7 @@ Each QR block consists of 4 orchestrator steps:
 **Decompose step (1 sub-agent):**
 
 ```
-uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.planner.quality_reviewer.qr_decompose --step 1 --phase <phase> --state-dir {state_dir}
+uv run --directory '<SKILLS_DIR>' python -m skills.planner.quality_reviewer.qr_decompose --step 1 --phase <phase> --state-dir {state_dir}
 ```
 
 Sub-agent explores the artifact being reviewed using an 8-step cognitive workflow, generates verification items adaptively (quantity determined by content, not preset bounds), writes qr-{phase}.json with all items status: TODO. Outputs parallel_dispatch block for orchestrator to parse.
@@ -923,7 +925,7 @@ More items with overlap is preferred over fewer items with gaps.
 **Verify step (N sub-agents, parallel):**
 
 ```
-uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.planner.quality_reviewer.qr_verify --step 1 --phase <phase> --state-dir {state_dir} --qr-item qa-001 --qr-item qa-002
+uv run --directory '<SKILLS_DIR>' python -m skills.planner.quality_reviewer.qr_verify --step 1 --phase <phase> --state-dir {state_dir} --qr-item qa-001 --qr-item qa-002
 ```
 
 Each sub-agent receives a batch of semantically related items to verify. Items are grouped by the decompose step (e.g., by component, by concern, or parent-child relationships). The agent reads the qr file, verifies each assigned item, and updates status to PASS or FAIL with finding.
@@ -988,7 +990,7 @@ Example prompt fragment for architect:
 
 ```
 State Mutation:
-  uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.planner.cli.plan --state-dir {state_dir} set-intent \
+  uv run --directory '<SKILLS_DIR>' python -m skills.planner.cli.plan --state-dir {state_dir} set-intent \
       --milestone M-001 --file path.py --behavior "description"
 ```
 

@@ -108,7 +108,7 @@ Read the convention index and follow "Design Review" applicability.
 | Write Code Intent (the binding contract) | Implement code (developer, at execution)     |
 | Make design decisions                    | Make user decisions (escalate)               |
 | Capture invisible knowledge              | Author code docs/comments (technical-writer) |
-| Build + render diagrams; explore source  | Review artifacts (quality-reviewer)          |
+| Build + render diagrams; explore source  |                                              |
 
 ## Escalation
 

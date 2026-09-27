@@ -24,21 +24,21 @@ All tests must live in `tests/` and run through pytest (via `uv run`). No test f
 
 ## Test Execution
 
-```bash
-SCRIPTS="${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts"
+`<scripts>` is the absolute path of the `skills/scripts` install you are working on.
 
+```bash
 # Run all tests
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS" -v
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>" -v
 
 # Run specific test file
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS/tests/test_workflow_steps.py" -v
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>/tests/test_workflow_steps.py" -v
 
 # Run tests for specific workflow
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS" -k deepthink -v
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>" -k deepthink -v
 
 # Run import tests only
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS/tests/test_workflow_import.py" -v
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>/tests/test_workflow_import.py" -v
 
 # Run structure validation tests only
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS/tests/test_workflow_structure.py" -v
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>/tests/test_workflow_structure.py" -v
 ```

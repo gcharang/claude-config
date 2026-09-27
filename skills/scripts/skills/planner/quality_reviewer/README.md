@@ -259,7 +259,7 @@ State transitions:
 
 ```
 INITIAL -> (QRStatus.PASS) -> COMPLETE [terminal]
-INITIAL -> (QRStatus.NEEDS_CHANGES) -> RETRY -> (iteration++) -> RETRY -> ...
+INITIAL -> (QRStatus.FAIL) -> RETRY -> (iteration++) -> RETRY -> ...
 ```
 
 ## Integration with QA Workflow

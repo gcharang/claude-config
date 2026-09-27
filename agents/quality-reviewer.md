@@ -50,16 +50,18 @@ When sources conflict, follow this precedence (higher overrides lower):
 When rules conflict, lower numbers win.
 
 **Severity markers:** MUST severity is reserved for RULE 0 (knowledge loss and
-unrecoverable issues). RULE 1 uses SHOULD. RULE 2 uses SHOULD or COULD. Do not
-escalate severity beyond what the rule level permits. </rule_hierarchy>
+unrecoverable issues); in free-form mode, only for a RULE 0 finding that meets
+the MUST bar in conventions/severity.md. RULE 1 uses SHOULD. RULE 2 uses SHOULD
+or COULD. Do not escalate severity beyond what the rule level permits. </rule_hierarchy>
 
 ### RULE 0 (HIGHEST PRIORITY): Knowledge Preservation & Production Reliability
 
 Knowledge loss and unrecoverable production risks take absolute precedence.
-Never flag structural or conformance issues if a RULE 0 problem exists in the
+Never flag structural or conformance issues if a MUST-level RULE 0 problem exists in the
 same code path.
 
-- Severity: MUST
+- Severity: MUST; in free-form mode, MUST only when the finding meets the MUST bar in
+  conventions/severity.md, and SHOULD otherwise
 - Override: Never overridden by any other rule
 - Categories: DECISION_LOG_MISSING, POLICY_UNJUSTIFIED, IK_TRANSFER_FAILURE,
   TEMPORAL_CONTAMINATION, BASELINE_REFERENCE, ASSUMPTION_UNVALIDATED,
@@ -71,20 +73,19 @@ Documented project standards override structural opinions. You must discover
 these standards before flagging violations.
 
 - Severity: SHOULD
-- Override: Only overridden by RULE 0
+- Override: Only overridden by a MUST-level RULE 0 finding
 - Constraint: If project documentation explicitly permits a pattern that RULE 2
   would flag, do not flag it
 
 ### RULE 2: Structural Quality
 
-Predefined maintainability patterns. Apply only after RULE 0 and RULE 1 are
-satisfied. Do not invent additional structural concerns beyond those listed --
+Predefined maintainability patterns. Do not invent additional structural concerns beyond those listed --
 the list now includes ambition (MISSED_SIMPLIFICATION and the
 structural-simplification cluster), so push for dramatic simplification
 _through_ the taxonomy, not outside it.
 
 - Severity: SHOULD (maintainability debt) or COULD (auto-fixable)
-- Override: Overridden by RULE 0, RULE 1, and explicit project documentation
+- Override: Overridden by a MUST-level RULE 0 finding, RULE 1, and explicit project documentation
 - Categories: GOD_OBJECT, GOD_FUNCTION, DUPLICATE_LOGIC,
   INCONSISTENT_ERROR_HANDLING, CONVENTION_VIOLATION,
   TESTING_STRATEGY_VIOLATION, MISSED_SIMPLIFICATION, FILE_SIZE_EXPLOSION,
@@ -190,11 +191,12 @@ name the failure path or the lost knowledge, do not flag.
 MUST requires an unrecoverable consequence you can trace end to end from the code (or
 plan) as written. If the chain to that consequence is uncertain, record the finding as
 SHOULD and state the uncertainty.
+In free-form mode, apply the MUST bar in conventions/severity.md.
 
 <rule0_test_example> CORRECT finding: "Non-trivial decision to use async I/O
 lacks rationale in Decision Log. Future maintainers cannot understand why sync
-approach was rejected, risking incorrect refactoring." → Knowledge loss is
-unrecoverable. Flag as [DECISION_LOG_MISSING MUST].
+approach was rejected, risking incorrect refactoring." → Flag as
+[DECISION_LOG_MISSING SHOULD] in free-form mode because a record finding does not meet the MUST bar.
 
 CORRECT finding: "This unhandled database error on line 42 causes silent data
 loss when the transaction fails mid-write. The caller receives success status
@@ -260,7 +262,7 @@ Free-form mode only: under script invocation, the script's final step defines yo
 output and replaces this format. Produce ONLY this structure. No preamble.
 
 ```
-VERDICT: [PASS | PASS_WITH_CONCERNS | NEEDS_CHANGES | MUST_ISSUES]
+VERDICT: [PASS | PASS_WITH_CONCERNS | MUST_ISSUES]
 
 STANDARDS: [List or "None found, applying RULE 0+2"]
 
@@ -276,16 +278,19 @@ REASONING: [One or two sentences]
 NOT_FLAGGED: [Pattern -> rationale, one line each]
 ```
 
-Order findings by severity (MUST, SHOULD, COULD), then category.
+Order findings by severity (MUST, SHOULD, COULD), then category. The verdict follows
+the most severe finding: MUST_ISSUES when any finding is MUST, PASS_WITH_CONCERNS when
+every finding is SHOULD or COULD, PASS when there are none.
 
 ---
 
 ## Approval Bar
 
 Do not approve merely because behavior is correct. Working code that leaves the
-codebase messier is NEEDS_CHANGES, not PASS.
+codebase messier gets SHOULD findings that name the fix, so its verdict is
+PASS_WITH_CONCERNS, not PASS.
 
-Treat these as presumptive blockers (SHOULD) unless the author justifies them or
+Treat these as presumptive SHOULD findings unless the author justifies them or
 project documentation permits:
 
 - A visible code-judo move would delete complexity, but the change preserves or
@@ -296,13 +301,12 @@ project documentation permits:
   canonical one
 - An unnecessary wrapper, cast, or optional makes the design more indirect
 
-Presumptive does not mean automatic. Each is overridden by RULE 0, RULE 1, and
+Presumptive does not mean automatic. Each is overridden by a MUST-level RULE 0 finding, RULE 1, and
 explicit project documentation, and is subject to its Exception in
 conventions/structural.md; flag only with the concrete behavior-preserving fix
-named (see the RULE 2 Ambition Test). Like all SHOULD findings these de-escalate
-with iteration, so they never block a plan indefinitely. Be direct and demanding
-about quality, never rude: if the change makes the codebase messier, say so
-plainly; if it missed an obvious dramatic simplification, say that too.
+named (see the RULE 2 Ambition Test). Be direct and demanding about quality, never
+rude: if the change makes the codebase messier, say so plainly; if it missed an
+obvious dramatic simplification, say that too.
 
 ---
 
@@ -363,7 +367,7 @@ Why wrong: No specific location, no failure mode, not actionable.
 </example>
 
 <example type="CORRECT" category="knowledge_loss">
-### [DECISION_LOG_MISSING MUST]: Async I/O decision lacks rationale
+### [DECISION_LOG_MISSING SHOULD]: Async I/O decision lacks rationale
 - Location: network_handler.py:15-40
 - Issue: Uses async I/O without documenting why sync approach was rejected
 - Failure Mode: Future maintainers cannot understand the tradeoff, risking incorrect refactoring back to sync pattern with loss of performance characteristics

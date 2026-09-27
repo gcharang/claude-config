@@ -34,11 +34,10 @@ The repository uses distinct forms because different callers evaluate the comman
 | Form                                                                                              | Used in                                                     | Why                                                                                                                                 |
 | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `<invoke working-dir=".claude/skills/scripts" cmd="uv run python -m skills.X" />`                 | `SKILL.md` entry points, EXCEPT any that need the caller's cwd | Claude Code resolves `working-dir` against the active `.claude/` dir — user-global (`~/.claude/`) or project-local (`<repo>/.claude/`). `uv run` auto-discovers the pyproject from that cwd. One form covers both install layouts. The cost of that resolution is the cwd: the script starts in the skill tree, so a script that must know which PROJECT invoked it cannot use this form (see below). |
-| `uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.X`       | Raw bash blocks in `INTENT.md`, SKIP-invoked `## Run` blocks that are NOT project-anchored | Plain bash doesn't get `working-dir` resolution. The env-var arm selects a project-local install where `CLAUDE_PROJECT_DIR` is set — which Claude Code does not do for a Bash-tool subprocess, so only a user's own export reaches it; see form 2b. |
-| `uv run --project <scripts> python -m skills.X` (**2b**) | `skills/planner/SKILL.md` — entry points that must locate the caller's project | Same as form 2, but the session selects the install layout from the project rather than from an env var Claude Code does not set for these subprocesses, and writes `<scripts>` as a literal absolute path: `<project>/.claude/skills/scripts` when that directory exists, the user-global `~/.claude/skills/scripts` otherwise. Covers both layouts with no per-project configuration. The selection stays out of the command because Claude Code's permission check treats a `$( … )` substitution as too complex to match an allow rule and asks for approval outside bypass mode. |
+| `uv run --project "<scripts>" python -m skills.X` (**2b**) | Plain-bash commands | `<scripts>` is written as a literal absolute path: for a test or lint command, the install being worked on; for an entry point, the install selected from the project, as the `skills/planner/SKILL.md` paragraph below describes. The selection stays out of the command because Claude Code's permission check treats a command substitution as too complex to match an allow rule and asks for approval outside bypass mode. |
 | `uv run python -m skills.X`                                                                       | Python `next_cmd` strings fed to `format_step()`            | `pin_cwd()` adds `--directory '<SKILLS_DIR>'`; the command just needs uv's env activation. Adding `--project` here would hardcode the install path `pin_cwd()` already resolved. |
 
-When constructing commands for a new caller context, pick the form whose caller evaluates the string — if the caller gets Claude Code `<invoke>` resolution, use form 1; if it runs in plain bash with no wrapper, form 2 — or 2b when the script must locate the caller's project; if it passes through `format_step()`, form 3.
+When constructing commands for a new caller context, pick the form whose caller evaluates the string — if the caller gets Claude Code `<invoke>` resolution, use form 1; if it runs in plain bash with no wrapper, form 2b; if it passes through `format_step()`, form 3.
 
 **Exception — entry points that must locate the user's project.** `skills/planner/SKILL.md`
 invokes planner and executor step 1 with form 2b, not form 1. Step 1 mints the run's state
@@ -58,18 +57,10 @@ cwd.
 
 `skills/planner/SKILL.md` therefore does not use the bare env-var form. The session checks the project for `.claude/skills/scripts` and writes the chosen install's absolute path into the command, so the layout is selected from the project the entry point already depends on, with no per-project configuration. Prefer that shape for any new launcher that must work under both layouts.
 
-Where the bare form is still used, setting `CLAUDE_PROJECT_DIR` is what selects a
-project-local install — but only when the skills really are at
-`<project>/.claude/skills/scripts`. Pointed at a path with no install, `uv` emits
-`warning: Project directory … does not exist. This will become an error in a future
-release` and proceeds, and the run then dies on `ModuleNotFoundError: No module named
-'skills'` — so the failure surfaces from Python, not from `uv`, and that will change when
-`uv` promotes the warning. Do **not** set it in user-scope `~/.claude/settings.json`: that pins one
-absolute path for every project, which breaks this launcher wherever that path has no
-install, and — because `resolve_project_root` reads the same variable to choose the
-project — sends state, the `.gitignore` append, and approved plans into that one repo from
-everywhere else. Form 1 covers both layouts transparently; these entry points give that up in
-exchange for an anchor that names the user's project rather than the scripts' own repo.
+Do **not** set `CLAUDE_PROJECT_DIR` in user-scope `~/.claude/settings.json`:
+`resolve_project_root` reads it to choose the project, so one absolute path there
+sends state, the `.gitignore` append, and approved plans into that one repo from
+everywhere else.
 
 Steps 2+ are unaffected — they receive `--state-dir` and read the project root recorded
 there.

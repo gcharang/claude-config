@@ -11,7 +11,9 @@ Step-based incoherence detection workflow (22 steps) with detection, resolution,
 
 ## Run
 
+`<scripts>` is the absolute path of the `skills/scripts` install you are working on.
+
 ```bash
-uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.incoherence.incoherence --step-number 1
-uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.incoherence.incoherence --step-number 2 --thoughts "dim=A, findings=..."
+uv run --project "<scripts>" python -m skills.incoherence.incoherence --step-number 1
+uv run --project "<scripts>" python -m skills.incoherence.incoherence --step-number 2 --thoughts "dim=A, findings=..."
 ```

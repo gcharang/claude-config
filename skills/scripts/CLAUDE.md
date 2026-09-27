@@ -19,15 +19,15 @@ Python package root for skill implementations. uv-managed; `pyproject.toml` decl
 
 ## Test
 
+`<scripts>` is the absolute path of the `skills/scripts` install you are working on.
+
 ```bash
-SCRIPTS="${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts"
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS" -v
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>" -v
 ```
 
 ## Lint / Type-check
 
 ```bash
-SCRIPTS="${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts"
-uv run --project "$SCRIPTS" --extra dev python -m ruff check "$SCRIPTS"
-uv run --project "$SCRIPTS" --extra dev python -m pyright "$SCRIPTS"
+uv run --project "<scripts>" --extra dev python -m ruff check "<scripts>"
+uv run --project "<scripts>" --extra dev python -m pyright --project "<scripts>/pyproject.toml"
 ```

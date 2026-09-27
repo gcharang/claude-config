@@ -11,9 +11,10 @@ sources (doc/ directories, wikis, external documentation). If knowledge exists
 in an authoritative source, it must be summarized locally. Duplication is
 acceptable; the maintenance burden is the cost of locality.
 
-**CLAUDE.md = pure index**: CLAUDE.md files are navigation aids only. They
-contain WHAT is in the directory and WHEN to read each file. All explanatory
-content (architecture, decisions, invariants) belongs in README.md.
+**CLAUDE.md = pure index**: CLAUDE.md files are navigation aids only. They list
+the directory's subdirectories and its entry-point files -- WHAT each is and
+WHEN to read it -- never every file. All explanatory content (architecture,
+decisions, invariants) belongs in README.md.
 
 **README.md = invisible knowledge**: README.md files capture knowledge NOT
 visible from reading source code. If ANY invisible knowledge exists for a
@@ -40,6 +41,11 @@ Use tabular format with What and When columns:
 | `config/`   | Runtime configuration loading | Adding config options, modifying defaults |
 | `handlers/` | HTTP request handlers         | Adding endpoints, modifying request flow  |
 ```
+
+List a file only when a reader starts there: the directory's README.md, a
+module's public surface, a script or config a task runs or edits directly, or a
+path that must not be edited (see Generated and Vendored Code). A file reached
+from an entry point stays out, so adding one leaves the index unchanged.
 
 ### Column Guidelines
 
@@ -123,7 +129,7 @@ See also: conventions/code-quality/05-documentation-and-tests.md "Generated and 
 **Critical constraint:** CLAUDE.md files are navigation aids, not explanatory
 documents. They contain:
 
-- File/directory index (REQUIRED): tabular format with What/When columns
+- Index of subdirectories and entry-point files (REQUIRED): tabular format with What/When columns
 - One-sentence overview (OPTIONAL): what this directory is
 - Operational sections (OPTIONAL): Build, Test, Regenerate, Deploy, or similar
   commands specific to this directory's artifacts
@@ -134,9 +140,13 @@ They do NOT contain:
 - Design decisions or rationale (-> README.md)
 - Invariants or constraints (-> README.md)
 - Multi-paragraph prose (-> README.md)
+- A row for every file in the directory
 
 Operational sections must be copy-pasteable commands with minimal context, not
 explanatory prose about why the build works a certain way.
+
+Do not add a test that compares an index with its directory listing: an index is
+selective by design, and a file without a row is not drift.
 
 ## README.md Specification
 
@@ -297,23 +307,14 @@ When a decision log entry exists, reference it: `# DL-003: Polling over webhooks
 
 ### Tier 2: Function-Level Explanation Blocks
 
-Near the top of non-trivial functions (after signature, before body logic).
-Required when a function has >3 distinct transformation steps, coordinates
-multiple subsystems, or implements a non-obvious algorithm.
-
-Content: what the function does, how it does it, how it fits in the overall
-architecture, what problem it solves.
+Near the top of a function whose approach the code does not show -- a
+non-obvious algorithm, or coordination across subsystems -- say in one or two
+sentences why it works this way and what it relies on.
 
 ```python
 def reconcile_state(local, remote):
-    # Reconciles local state against remote source of truth. Operates in
-    # three phases:
-    # 1. Diff local vs remote to find divergent keys
-    # 2. For each divergence, apply conflict resolution (remote wins)
-    # 3. Write merged state back to local store
-    #
-    # Called by the sync loop after each heartbeat. Remote state is
-    # authoritative -- local is a cache that may lag behind.
+    # Remote state is authoritative and local is a cache that may lag behind,
+    # so every divergence resolves to remote.
     ...
 ```
 

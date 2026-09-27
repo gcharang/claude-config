@@ -279,14 +279,13 @@ For sub-agent scripts that may ask questions, include `SUB_AGENT_QUESTION_FORMAT
 
 ## Testing
 
-All tests use pytest. Run via uv. Set `SCRIPTS="${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts"` so the commands work against both the user-global install and a project-local `.claude/`:
+All tests use pytest. Run via uv. `<scripts>` is the absolute path of the `skills/scripts` install you are working on.
 
 ```bash
-SCRIPTS="${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts"
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS" -v                                          # everything
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS" -k deepthink -v                             # one workflow
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS/tests/test_workflow_import.py" -v            # imports only
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS/tests/test_workflow_structure.py" -v         # structure validation
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS/tests/test_workflow_steps.py" -v             # exhaustive step invocability
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS/tests/test_domain_types.py" -v               # domain type units
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>" -v                                          # everything
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>" -k deepthink -v                             # one workflow
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>/tests/test_workflow_import.py" -v            # imports only
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>/tests/test_workflow_structure.py" -v         # structure validation
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>/tests/test_workflow_steps.py" -v             # exhaustive step invocability
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>/tests/test_domain_types.py" -v               # domain type units
 ```

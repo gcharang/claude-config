@@ -3038,14 +3038,14 @@ def test_skill_md_step_1_does_not_discard_the_caller_cwd():
     # Literal arguments: a `$( … )` or `${ … }` in the command makes Claude Code ask for
     # approval outside bypass mode, so the session selects the install and writes its path.
     for row in rows:
-        assert "uv run --project <scripts> " in row, row
+        assert 'uv run --project "<scripts>" ' in row, row
         assert "$" not in row, row
     # Both install layouts reachable, keyed on the project rather than on
     # CLAUDE_PROJECT_DIR, which a Bash-tool subprocess does not have.
     definitions = [line for line in body.splitlines() if "`<scripts>` is" in line]
     assert len(definitions) == 1, definitions
     assert "`<project>/.claude/skills/scripts`" in definitions[0], definitions
-    assert "`~/.claude/skills/scripts`" in definitions[0], definitions
+    assert "`<home>/.claude/skills/scripts`" in definitions[0], definitions
 
 
 def test_planner_step_1_records_the_project_on_the_temp_branch(

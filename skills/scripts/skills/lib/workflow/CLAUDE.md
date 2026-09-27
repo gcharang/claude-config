@@ -35,8 +35,9 @@ main() -> format_output() -> print() -> LLM reads -> follows <invoke_after>
 
 ## Test
 
+`<scripts>` is the absolute path of the `skills/scripts` install you are working on.
+
 ```bash
-SCRIPTS="${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts"
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS" -v
-uv run --project "$SCRIPTS" --extra dev python -m pytest "$SCRIPTS" -k deepthink -v
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>" -v
+uv run --project "<scripts>" --extra dev python -m pytest "<scripts>" -k deepthink -v
 ```
