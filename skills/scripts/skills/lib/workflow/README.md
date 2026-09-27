@@ -63,13 +63,7 @@ Discovery uses `importlib.import_module` + `pkgutil.walk_packages` to find `WORK
 
 ## Invocation Pattern
 
-Distinct invocation forms are used across the repository, chosen by caller context:
-
-- `<invoke working-dir=".claude/skills/scripts" cmd="uv run python -m skills.X" />` — Claude Code `<invoke>` tags; `working-dir` resolves against the active `.claude/` dir.
-- `uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.X` — raw bash in code blocks; no `working-dir` resolution available.
-- `uv run python -m skills.X` — Python `next_cmd` strings fed to `format_step()`; `pin_cwd()` supplies cwd as `uv run --directory <SKILLS_DIR>`.
-
-Full rationale and the working-directory invariant are in `prompts/README.md`.
+The invocation forms, chosen by caller context, and the working-directory invariant are in `prompts/README.md` (`## Invocation Forms`).
 
 ## Core Types
 
@@ -210,7 +204,7 @@ workflow._step_order   Constant                    generate_inputs(workflow)
 
 ### Domain Types (in `types.py`)
 
-All three are frozen dataclasses implementing `__iter__` for use with `itertools.product`. `frozen=True` enables hashability for pytest param caching.
+Each is a frozen dataclass implementing `__iter__` for use with `itertools.product`. `frozen=True` enables hashability for pytest param caching.
 
 | Type         | Shape                | Example                                           |
 | ------------ | -------------------- | ------------------------------------------------- |

@@ -158,8 +158,7 @@ class TestSeverityCoercion:
 
     def test_blocker_blocks_after_de_escalation(self):
         # BLOCKER/CRITICAL canonicalize to MUST, so they keep blocking at the
-        # iteration-4 ceiling where only MUST blocks (the guarded regression mapped
-        # them to SHOULD).
+        # iteration-4 ceiling where only MUST blocks.
         pred = by_blocking_severity(4)  # blocking == {MUST}
         assert pred({"severity": "BLOCKER"}) is True
         assert pred({"severity": "critical"}) is True
@@ -446,8 +445,7 @@ class TestSeverityCoercion:
 
     def test_list_items_sanitizes_finding_on_both_paths(self, tmp_path: Path, capsys):
         # finding is free text neutralized by _fix_field_safe: a line break is kept but
-        # its continuation indented so it cannot forge a column-0 instruction line. The
-        # RPC twin returned raw findings -- a divergence from the CLI list path.
+        # its continuation indented so it cannot forge a column-0 instruction line.
         _write_qr(
             tmp_path, "impl-code", 1,
             [{"id": "q1", "scope": "*", "check": "x", "status": "FAIL",
@@ -1739,10 +1737,8 @@ class TestGateFailsClosedOnMissingState:
 # --- F1: every CLI/RPC file site normalizes the path and STORES the result ---
 class TestRelpathNormalizedAndStored:
     def test_rpc_set_intent_create_strips_leading_space(self, tmp_path: Path):
-        # set_intent was the genuinely store-raw site: it .strip()'d only for the
-        # check, then persisted the unstripped value, so ' src/a.py' never matched
-        # 'src/a.py' in validate_refs' normpath overlap guard. It must store the
-        # normalized form.
+        # set_intent must store the normalized form, not only check it: an unstripped
+        # ' src/a.py' never matches 'src/a.py' in validate_refs' normpath overlap guard.
         ctx = _init_plan(tmp_path)
         plan_commands.set_milestone(ctx, name="Code", files="a.py")
         plan_commands.set_intent(ctx, milestone="M-001", file=" src/a.py", behavior="b")
@@ -1759,7 +1755,7 @@ class TestRelpathNormalizedAndStored:
 
     def test_rpc_set_intent_rejects_embedded_dotdot(self, tmp_path: Path):
         # 'a/../../shared.py' has no leading '..' yet normpath collapses it to the
-        # out-of-tree '../shared.py' -- an evasion the strip-only guard missed.
+        # out-of-tree '../shared.py', so a check for a leading '..' alone misses it.
         ctx = _init_plan(tmp_path)
         plan_commands.set_milestone(ctx, name="Code", files="a.py")
         with pytest.raises(ValueError, match="Parent-relative"):
@@ -2366,9 +2362,8 @@ class TestCsvParsingShared:
         assert reqs == ["do X", "do Y"]
 
     def test_cli_and_rpc_tokenize_files_identically(self, tmp_path: Path, monkeypatch):
-        # Guarded drift: plan.py kept empty tokens ('a,,b' -> ['a','','b']) while the
-        # RPC's parse_csv dropped them. A doubled comma must yield the same files list on
-        # each path.
+        # A doubled comma ('a,,b') must yield the same files list on the CLI and the RPC
+        # path, with the empty token dropped.
         #
         # The RPC side submits an array, not a comma string: parse_csv rejects a
         # comma-bearing string on the RPC/batch surface (a caller mistake there always

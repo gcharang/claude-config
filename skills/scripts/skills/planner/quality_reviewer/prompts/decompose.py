@@ -6,8 +6,8 @@ WHY "truly-generic": the shared prompts apply identical logic regardless of phas
 Phase-specific prompts (what to absorb, what concerns to brainstorm, what severity
 categories) differ fundamentally per phase.
 
-WHY functions not class: Composition without coupling. Each phase script imports
-only required utilities. No forced inheritance hierarchy.
+WHY functions not class: Composition without coupling. A caller imports only the
+utilities it needs. No forced inheritance hierarchy.
 
 CRITICAL INVARIANT - Phase-Severity Alignment:
 Each phase uses severity categories matching agent capabilities:
@@ -17,8 +17,8 @@ Each phase uses severity categories matching agent capabilities:
 Violating this causes unrecoverable QR loops.
 
 ORCHESTRATOR CONTRACT:
-All decompose scripts MUST implement get_step_guidance(step, module_path, **kwargs)
-returning {title: str, actions: list[str], next: str}.
+The decompose runner's get_step_guidance(step, module_path, **kwargs) returns
+dispatch_step's {title: str, actions: list[str], next: str}.
 """
 
 import json
@@ -232,12 +232,12 @@ def dispatch_step(
 ) -> dict:
     """Route step to appropriate handler.
 
-    WHY this function: Eliminates duplicate if-elif control flow across the phase scripts.
-    Each script provides phase-specific content (phase_prompts, grouping_config),
-    this function handles the common routing logic.
+    WHY this function: The phases share one owner for the routing control flow. The
+    caller supplies phase-specific content (phase_prompts, grouping_config); this
+    function handles the common routing logic.
 
     Args:
-        step: Current step number (1-13)
+        step: Current step number
         phase: Phase name
         module_path: Module path for next step command
         phase_prompts: Dict mapping step numbers to phase-specific prompt strings

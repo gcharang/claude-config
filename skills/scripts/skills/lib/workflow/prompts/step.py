@@ -3,7 +3,7 @@
 import shlex
 from pathlib import Path
 
-# .parent x5 traverses prompts/ -> workflow/ -> lib/ -> skills/ -> scripts/
+# The uv project root (the directory holding pyproject.toml) above this package.
 SKILLS_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
 _SKILLS_DIR_Q = shlex.quote(str(SKILLS_DIR))
 _UV_RUN = "uv run "
@@ -18,8 +18,8 @@ def pin_cwd(command: str) -> str:
     the agent never has to ``cd`` in a command that also does something else;
     ``--project`` alone would leave the working directory where it is.
 
-    Raises ValueError for a command that does not start with ``uv run``: no other
-    command carries its own working-directory option here.
+    Raises ValueError for a command that does not start with ``uv run``, since the
+    working directory is pinned through uv's own ``--directory`` option.
     """
     if not command.startswith(_UV_RUN):
         raise ValueError(f"pin_cwd needs a `uv run` command, got {command!r}")

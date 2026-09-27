@@ -1,7 +1,4 @@
-"""Renderer for converting AST to string output.
-
-Simplified renderer handling only the core node types: TextNode, CodeNode, ElementNode.
-"""
+"""Renderer for converting AST to string output."""
 
 import re
 from typing import Protocol

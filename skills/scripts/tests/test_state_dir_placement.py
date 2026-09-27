@@ -1630,7 +1630,7 @@ def test_the_ignore_probe_is_bounded_by_a_timeout(tmp_path, monkeypatch):
     """The bound stands between a wedged `git` and a step 1 that never returns.
 
     Read off a REAL call rather than by wedging a `git` shim and waiting: the wait is the
-    bound itself, ten seconds. A weak pin, but the alternative to it is no pin.
+    bound itself. A weak pin, but the alternative to it is no pin.
     """
     root = _git_repo(tmp_path / "repo")
     real_run = resources.subprocess.run
@@ -2432,6 +2432,25 @@ def test_resolve_state_dir_survives_an_unsearchable_anchor(tmp_path, temp_root, 
         blocked.chmod(0o755)
 
 
+@requires_unprivileged
+def test_an_unsearchable_agent_state_is_not_reported_missing(repo, temp_root):
+    """A mode-000 `.agent-state/` hides whether `_runs/<kind>` exists; that is not missing.
+
+    `Path.exists()` raises PermissionError there on some Pythons and answers False on
+    others: the first aborts step 1 with a traceback, the second hands the take-back
+    directories this run cannot see.
+    """
+    agent_state = repo / AGENT_STATE_DIRNAME
+    agent_state.mkdir()
+    agent_state.chmod(0o000)
+    try:
+        assert resources._created_ancestors(_runs_parent(repo, "planner"), repo) == []
+        state_dir = Path(resolve_state_dir("planner"))
+        assert temp_root in state_dir.parents
+    finally:
+        agent_state.chmod(0o700)
+
+
 # --- retention: _reap_old_runs -----------------------------------------------------
 
 
@@ -3016,13 +3035,17 @@ def test_skill_md_step_1_does_not_discard_the_caller_cwd():
     # lets one of them start probing a different directory and stay green.
     assert rows[0].replace("planner --step", "executor --step") == rows[1], rows
 
-    # Self-contained: shell state does not persist between Bash-tool calls, so a command
-    # that depends on an assignment made on an earlier line runs with --project empty.
-    # Both install layouts reachable, and the selection keyed on something that survives a
-    # Bash-tool subprocess: CLAUDE_PROJECT_DIR is not set in one.
+    # Literal arguments: a `$( … )` or `${ … }` in the command makes Claude Code ask for
+    # approval outside bypass mode, so the session selects the install and writes its path.
     for row in rows:
-        assert "$PWD" in row, row
-        assert "$HOME/.claude/skills/scripts" in row, row
+        assert "uv run --project <scripts> " in row, row
+        assert "$" not in row, row
+    # Both install layouts reachable, keyed on the project rather than on
+    # CLAUDE_PROJECT_DIR, which a Bash-tool subprocess does not have.
+    definitions = [line for line in body.splitlines() if "`<scripts>` is" in line]
+    assert len(definitions) == 1, definitions
+    assert "`<project>/.claude/skills/scripts`" in definitions[0], definitions
+    assert "`~/.claude/skills/scripts`" in definitions[0], definitions
 
 
 def test_planner_step_1_records_the_project_on_the_temp_branch(
@@ -3096,6 +3119,65 @@ def test_step_1_rejects_an_unusable_state_dir(tmp_path, temp_root, monkeypatch, 
     with pytest.raises(SystemExit) as excinfo:
         main()
     assert "is missing or not a directory" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("orchestrator", ["planner", "executor"])
+def test_step_1_echoes_a_relative_state_dir_as_absolute(
+    tmp_path, temp_root, monkeypatch, capsys, orchestrator
+):
+    """The printed step-2 command runs under `uv run --directory <SKILLS_DIR>`, so a
+    relative --state-dir echoed as given names a directory under the scripts.
+    """
+    root = _git_repo(tmp_path / "repo")
+    (root / "resume").mkdir()
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
+    monkeypatch.chdir(root)
+    absolute = str(Path.cwd() / "resume")
+
+    module = f"skills.planner.orchestrator.{orchestrator}"
+    main = __import__(module, fromlist=["main"]).main
+    monkeypatch.setattr(sys, "argv", [orchestrator, "--step", "1", "--state-dir", "resume"])
+    main()
+    out = capsys.readouterr().out
+
+    assert f"--state-dir {shlex.quote(absolute)}" in out, out
+    assert "--state-dir resume" not in out, out
+
+
+@pytest.mark.parametrize("orchestrator", ["planner", "executor"])
+def test_step_1_preserves_symlink_parent_in_relative_state_dir(
+    tmp_path, temp_root, monkeypatch, capsys, orchestrator
+):
+    root = _git_repo(tmp_path / "repo")
+    child = tmp_path / "other" / "child"
+    child.mkdir(parents=True)
+    target = child.parent / "resume"
+    target.mkdir()
+    decoy = root / "resume"
+    decoy.mkdir()
+    (root / "link").symlink_to(child, target_is_directory=True)
+    (target / "verify.json").write_text("target", encoding="utf-8")
+    (decoy / "verify.json").write_text("decoy", encoding="utf-8")
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
+    monkeypatch.chdir(root)
+    supplied = "link/../resume"
+    absolute = os.path.join(os.getcwd(), supplied)
+
+    module = f"skills.planner.orchestrator.{orchestrator}"
+    main = __import__(module, fromlist=["main"]).main
+    monkeypatch.setattr(sys, "argv", [orchestrator, "--step", "1", "--state-dir", supplied])
+    main()
+    out = capsys.readouterr().out
+
+    assert f"--state-dir {shlex.quote(absolute)}" in out, out
+    assert load_project_root(str(target)) == (root, "")
+    assert not (decoy / PROJECT_ROOT_FILE).exists()
+    assert (decoy / "verify.json").read_text(encoding="utf-8") == "decoy"
+    if orchestrator == "executor":
+        assert not (target / "verify.json").exists()
+    else:
+        assert (target / "verify.json").read_text(encoding="utf-8") == "target"
+        assert (target / "plan.json").exists()
 
 
 @pytest.mark.parametrize("orchestrator", ["planner", "executor"])

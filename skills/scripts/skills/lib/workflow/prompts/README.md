@@ -6,7 +6,7 @@ Skill authors write `next_cmd = "uv run python -m skills.X"` without tracking cw
 
 ## The Working-Directory Invariant
 
-Every command a session is told to run carries its working directory as uv's own option and never as a `cd … &&` prefix: a command that changes directory must do nothing else. `uv run --directory` changes into `SKILLS_DIR` before it resolves the project and runs the command, so `python -m skills.X` resolves from wherever the agent stands; `--project` alone would leave the working directory where it is. `format_step()` emits `NEXT STEP` blocks shaped like:
+Every command `format_step()` or `pin_cwd()` emits carries its working directory as uv's own option and never as a `cd … &&` prefix: a command that changes directory must do nothing else. `uv run --directory` changes into `SKILLS_DIR` before it resolves the project and runs the command, so `python -m skills.X` resolves from wherever the agent stands; `--project` alone would leave the working directory where it is. `format_step()` emits `NEXT STEP` blocks shaped like:
 
 ```
 NEXT STEP:
@@ -16,18 +16,18 @@ NEXT STEP:
 Execute this command now.
 ```
 
-Two consequences follow:
+Consequences:
 
-1. **Any command built outside `format_step()` goes through `pin_cwd()` itself.** A new dispatch path or a custom formatter that skips `format_step()` inherits responsibility for cwd. `pin_cwd()` raises `ValueError` for a command that does not start with `uv run`, since no other command here carries its own working-directory option.
+1. **Any command built outside `format_step()` goes through `pin_cwd()` itself.** A new dispatch path or a custom formatter that skips `format_step()` inherits responsibility for cwd. `pin_cwd()` raises `ValueError` for a command that does not start with `uv run`, since it pins the working directory through uv's own `--directory` option.
 2. **Do not double-wrap.** Adding `--directory`, `--project <path>` or a `cd …` inside the Python string conflicts with the option `pin_cwd()` adds. The bare `uv run python -m skills.X` form is deliberate.
 
 ## SKILLS_DIR Resolution
 
-`SKILLS_DIR` is computed at import time in `step.py` as `Path(__file__).resolve().parent.parent.parent.parent.parent`. The five-level traversal walks `prompts/ -> workflow/ -> lib/ -> skills/ -> scripts/` to land at the pyproject root. The path is `shlex.quote`d before emission so spaces or shell metacharacters in user home paths survive the shell.
+`SKILLS_DIR` is computed at import time in `step.py` by walking up from `step.py`'s own path to the pyproject root. The path is `shlex.quote`d before emission so spaces or shell metacharacters in user home paths survive the shell.
 
-This traversal count is brittle: moving `step.py` (or any intermediate package) up or down one level silently changes the resolved dir, and skills will run in the wrong place. Re-verify the count after any restructure.
+This traversal is brittle: moving `step.py` (or any intermediate package) up or down one level silently changes the resolved dir, and skills will run in the wrong place. Re-verify it after any restructure.
 
-## Three Invocation Forms
+## Invocation Forms
 
 The repository uses distinct forms because different callers evaluate the command string:
 
@@ -35,7 +35,7 @@ The repository uses distinct forms because different callers evaluate the comman
 | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `<invoke working-dir=".claude/skills/scripts" cmd="uv run python -m skills.X" />`                 | `SKILL.md` entry points, EXCEPT any that need the caller's cwd | Claude Code resolves `working-dir` against the active `.claude/` dir — user-global (`~/.claude/`) or project-local (`<repo>/.claude/`). `uv run` auto-discovers the pyproject from that cwd. One form covers both install layouts. The cost of that resolution is the cwd: the script starts in the skill tree, so a script that must know which PROJECT invoked it cannot use this form (see below). |
 | `uv run --project "${CLAUDE_PROJECT_DIR:-$HOME}/.claude/skills/scripts" python -m skills.X`       | Raw bash blocks in `INTENT.md`, SKIP-invoked `## Run` blocks that are NOT project-anchored | Plain bash doesn't get `working-dir` resolution. The env-var arm selects a project-local install where `CLAUDE_PROJECT_DIR` is set — which Claude Code does not do for a Bash-tool subprocess, so only a user's own export reaches it; see form 2b. |
-| `uv run --project "$(d="${CLAUDE_PROJECT_DIR:-$PWD}"; [ -d "$d/.claude/skills/scripts" ] && echo "$d/.claude/skills/scripts" \|\| echo "$HOME/.claude/skills/scripts")" python -m skills.X` (**2b**) | `skills/planner/SKILL.md` — entry points that must locate the caller's project | Same as form 2, but the install layout is probed from the working directory rather than from an env var Claude Code does not set for these subprocesses. Covers both layouts with no per-project configuration. |
+| `uv run --project <scripts> python -m skills.X` (**2b**) | `skills/planner/SKILL.md` — entry points that must locate the caller's project | Same as form 2, but the session selects the install layout from the project rather than from an env var Claude Code does not set for these subprocesses, and writes `<scripts>` as a literal absolute path: `<project>/.claude/skills/scripts` when that directory exists, the user-global `~/.claude/skills/scripts` otherwise. Covers both layouts with no per-project configuration. The selection stays out of the command because Claude Code's permission check treats a `$( … )` substitution as too complex to match an allow rule and asks for approval outside bypass mode. |
 | `uv run python -m skills.X`                                                                       | Python `next_cmd` strings fed to `format_step()`            | `pin_cwd()` adds `--directory '<SKILLS_DIR>'`; the command just needs uv's env activation. Adding `--project` here would hardcode the install path `pin_cwd()` already resolved. |
 
 When constructing commands for a new caller context, pick the form whose caller evaluates the string — if the caller gets Claude Code `<invoke>` resolution, use form 1; if it runs in plain bash with no wrapper, form 2 — or 2b when the script must locate the caller's project; if it passes through `format_step()`, form 3.
@@ -56,10 +56,7 @@ resolves to the user-global install — a project-local `<repo>/.claude/` instal
 never reached, and where both exist the global scripts run silently against the project's
 cwd.
 
-`skills/planner/SKILL.md` therefore does not use the bare env-var form. It falls back to
-`$PWD` rather than `$HOME` and probes for `<dir>/.claude/skills/scripts`, so the layout is
-selected from the working directory the entry point already depends on, with no per-project
-configuration. Prefer that shape for any new launcher that must work under both layouts.
+`skills/planner/SKILL.md` therefore does not use the bare env-var form. The session checks the project for `.claude/skills/scripts` and writes the chosen install's absolute path into the command, so the layout is selected from the project the entry point already depends on, with no per-project configuration. Prefer that shape for any new launcher that must work under both layouts.
 
 Where the bare form is still used, setting `CLAUDE_PROJECT_DIR` is what selects a
 project-local install — but only when the skills really are at
@@ -71,7 +68,7 @@ release` and proceeds, and the run then dies on `ModuleNotFoundError: No module 
 absolute path for every project, which breaks this launcher wherever that path has no
 install, and — because `resolve_project_root` reads the same variable to choose the
 project — sends state, the `.gitignore` append, and approved plans into that one repo from
-everywhere else. Form 1 covers both layouts transparently; these two entry points give that up in
+everywhere else. Form 1 covers both layouts transparently; these entry points give that up in
 exchange for an anchor that names the user's project rather than the scripts' own repo.
 
 Steps 2+ are unaffected — they receive `--state-dir` and read the project root recorded

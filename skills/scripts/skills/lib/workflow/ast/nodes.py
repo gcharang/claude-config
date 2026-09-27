@@ -1,21 +1,7 @@
 """AST node types for workflow output representation.
 
-Simplified AST with generic and specialized nodes:
-
-Generic (composed via W.el()):
-- TextNode: Plain text content
-- CodeNode: Code blocks with optional language
-- ElementNode: Generic XML element
-
-Specialized (dedicated renderers for structured attributes):
-- FileContentNode: File content with CDATA wrapping
-- StepHeaderNode: <step_header> with script/step/category/mode/total
-- CurrentActionNode: <current_action> from a list of action strings
-- InvokeAfterNode: <invoke_after> with single command or pass/fail branching
-
-Legacy nodes removed (use W.el("tag_name", ...) for these):
-HeaderNode, ActionsNode, RawNode, CommandNode, GuidanceNode, RoutingNode,
-TextOutputNode.
+Generic nodes compose through W.el(), which covers any tag without a node of its own;
+specialized nodes carry structured attributes that a dedicated renderer formats.
 """
 
 from dataclasses import dataclass
@@ -141,7 +127,7 @@ class InvokeAfterNode:
             raise ValueError("InvokeAfterNode requires either cmd or both if_pass and if_fail")
 
 
-# Type union for all AST nodes
+# Type union of the AST nodes
 # Enables type checking in _render_node match statement
 # New node types MUST be added here to be recognized by the renderer
 Node = (

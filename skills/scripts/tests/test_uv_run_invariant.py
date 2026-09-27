@@ -1,4 +1,4 @@
-"""Guard the invariant documented in skills/lib/workflow/prompts/README.md, 'Three Invocation Forms'.
+"""Guard the invariant documented in skills/lib/workflow/prompts/README.md, 'Invocation Forms'.
 
 Every command string rendered to the LLM must be prefixed with `uv run`. The
 modern-python@trailofbits plugin installs a PreToolUse:Bash hook that denies
@@ -6,9 +6,9 @@ any Bash invocation starting with bare `python` / `python3` / `pip`, so a bare
 `python3 -m skills.X ...` emitted in step output gets blocked when the LLM
 tries to run it.
 
-Previous migration sweeps landed the correct form in entry-point docs but
-missed f-string / XML-invoke sites in renderer code; this test catches the
-pattern by grepping the skills source tree.
+Renderer code emits commands from f-string and XML-invoke sites, outside the
+entry-point docs; this test catches the pattern by grepping the skills source
+tree.
 """
 
 from __future__ import annotations
@@ -49,6 +49,6 @@ def test_no_bare_python_invocation_in_rendered_output() -> None:
                     break
     assert not violations, (
         "Bare `python3 -m` / `python -m` in rendered-output sites "
-        "(see skills/lib/workflow/prompts/README.md, 'Three Invocation Forms' — must be `uv run python -m`; "
+        "(see skills/lib/workflow/prompts/README.md, 'Invocation Forms' — must be `uv run python -m`; "
         "the modern-python PreToolUse hook blocks the bare form):\n  " + "\n  ".join(violations)
     )

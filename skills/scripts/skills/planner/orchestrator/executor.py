@@ -12,6 +12,7 @@ QR Block Pattern (per phase):
 """
 
 import argparse
+import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -686,7 +687,13 @@ def main():
     # Write, step 2 fails closed ("plan.json not found").
     state_dir = args.state_dir
     if args.step == 1:
-        if not state_dir:
+        # Echo an absolute path for the next step's different cwd, preserving
+        # symlink/.. components -- see planner.py::_begin_run.
+        if state_dir:
+            state_dir = (
+                state_dir if os.path.isabs(state_dir) else os.path.join(os.getcwd(), state_dir)
+            )
+        else:
             state_dir = resolve_state_dir("executor")
         # Without this guard a supplied --state-dir that is missing or is a file gets
         # reported as "State directory created: <path>" and the agent is told to Write
@@ -762,17 +769,16 @@ def main():
         if errors:
             sys.exit("Plan completeness failed: " + "; ".join(errors))
 
-        # Structural backstop for the format_step_1 instruction above: nothing in the
-        # executor ever reads rejected_alternatives/constraints/risks/diagram_graphs,
-        # so non-empty here is unambiguous evidence the orchestrator hand-transcribed
-        # fields it was told to omit -- hand-retyping a
-        # schema whose fields the transcriber never reads reliably drops required
-        # fields and fails validation. A prompt instruction is advisory; this makes
-        # the omission enforced, not requested. planning_context.decisions carries
-        # one exception: a code_intent.decision_refs is the durable contract shown to developer
-        # sub-agents, so decisions are allowed through when at least one code_intent
-        # actually references one. Decisions present with no code_intent referencing
-        # any of them is still the same hand-transcription mistake and stays rejected.
+        # Structural backstop for the format_step_1 instruction above, which tells the
+        # orchestrator to omit rejected_alternatives/constraints/risks/diagram_graphs:
+        # non-empty here is evidence it hand-transcribed them anyway, and hand-retyping a
+        # schema whose fields the transcriber never reads reliably drops required fields
+        # and fails validation. A prompt instruction is advisory; this makes the omission
+        # enforced, not requested. planning_context.decisions is allowed through when at
+        # least one code_intent references one, because code_intent.decision_refs is the
+        # durable contract shown to developer sub-agents. Decisions present with no
+        # code_intent referencing any of them is still the same hand-transcription mistake
+        # and stays rejected.
         pc = plan.planning_context
         has_decision_refs = any(
             ci.decision_refs for ms in plan.milestones for ci in ms.code_intents

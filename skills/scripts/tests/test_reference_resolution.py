@@ -6,17 +6,16 @@ output-styles skills …)`` 1:1 into ``$HOME/.claude``), so **``.claude/`` ≡ r
 root** and **``.claude/skills/scripts`` ≡ ``<repo>/skills/scripts``**. Skills are
 invoked from ``~/.claude/skills/scripts`` via ``uv run python -m skills.X.Y`` and
 embed files via ``<file working-dir=".claude" uri="…"/>``. The reference-form
-semantics are documented in ``skills/lib/workflow/prompts/README.md`` ("Three
-Invocation Forms").
+semantics are documented in ``skills/lib/workflow/prompts/README.md`` ("Invocation
+Forms").
 
-Nothing else validates the *authored markdown* reference layer:
 ``test_uv_run_invariant.py`` guards the Python renderer's *emitted* strings, not
-SKILL.md / agents / INTENT.md. A renamed skill dir, moved module, deleted
-convention file, or ``working-dir`` typo would dangle silently and only break at
-runtime after deploy. This test fails at CI time instead (the CI ``paths:``
-filter in ``.github/workflows/skills-test.yml`` covers every tree scanned here).
+the *authored markdown* reference layer of SKILL.md / agents / INTENT.md. A
+renamed skill dir, moved module, deleted convention file, or ``working-dir`` typo
+would dangle silently and only break at runtime after deploy. This test fails at
+CI time instead.
 
-Five invariants (R1-R5), each collecting file:line violations like
+Invariants, each collecting file:line violations like
 ``test_uv_run_invariant.py``:
   R1  every ``python -m skills.A.B.C`` maps to a ``-m``-runnable module
   R2  every ``<file … uri="U">`` target is a real file under the deploy root
@@ -25,12 +24,10 @@ Five invariants (R1-R5), each collecting file:line violations like
   R5  each skill's dir ↔ SKILL.md ``name:`` ↔ its invoke package stay consistent
 
 Scope (``_reference_docs``): the docs whose ``<invoke>``/``<file>`` are *executed*
-references — ``agents/*.md``, ``skills/*/SKILL.md``, ``skills/*/INTENT.md``.
-Deliberately excluded: README / ``CLAUDE.md`` indexes (they carry *illustrative*
+references. Deliberately excluded: README / ``CLAUDE.md`` indexes (they carry *illustrative*
 module examples — e.g. ``skills.<skill_name>.<module>`` — not deployed
-references) and ``skills/*/resources/*.md`` (prompt *content*, not entry docs;
-the only resource injected at runtime, ``plan-json-schema.md``, carries no
-reference tags). Scanning either would risk false-failing on an illustrative
+references) and ``skills/*/resources/*.md`` (prompt *content*, not entry docs).
+Scanning either would risk false-failing on an illustrative
 example.
 
 Assumptions (revisit if they change): the ``skills`` tree uses **regular**

@@ -1,8 +1,6 @@
 """Phase-specific QR content for the parameterized decompose/verify runners.
 
-The per-phase content lives in this one module rather than in a near-identical file
-per phase and runner. The `qr_decompose.py` / `qr_verify.py` runners select by
-`--phase`:
+The `qr_decompose.py` / `qr_verify.py` runners select by `--phase`:
 
 - DECOMPOSE: phase-specific cognitive prompts + grouping examples, registered in
   DECOMPOSE_CONTENT. The control flow stays in prompts/decompose.dispatch_step;
@@ -55,7 +53,7 @@ def get_shared_scope_guidance(
 
     Each phase emits a structurally identical MILESTONE block and an identical SCOPED
     fallback block; only the per-phase wording differs. One owner for the structure;
-    each caller passes its own lead-in / follow-up / read-target text so no line is lost.
+    each caller passes its own lead-in / follow-up / read-target text.
     Lives here (not qr_verify_base) because it depends on _jq_select_by_id.
     """
     if kind == "milestone":

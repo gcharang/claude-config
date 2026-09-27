@@ -1071,13 +1071,7 @@ Present the report directly to the user. The report should be immediately action
 
 
 def format_step_1_output(n: int, info: dict, mode_filter: str, scope: str | None = None) -> str:
-    """Format Step 1: Mode selection output.
-
-    Three outputs from this step:
-    1. MODE: design | code | both | custom
-    2. PROBLEM_STATEMENT: (custom only) User's problem description
-    3. SCOPE: (optional) Filesystem constraint
-    """
+    """Format Step 1: Mode selection output."""
     parts = []
 
     parts.append(render_step_header(StepHeaderNode(title=info["title"], script="refactor", step=1)))

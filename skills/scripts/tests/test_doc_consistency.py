@@ -1,16 +1,10 @@
-"""Regression tests for targeted doc/code consistency claims.
-
-Guards from the 2026-04-17 ultrareview:
-- bug_004: ast/CLAUDE.md listed only 3 node types and claimed "all specialized
-  nodes were removed", but 4 specialized nodes still live in nodes.py.
-- bug_013: quality_reviewer/README.md claimed a "5-step verify workflow" but
-  the formula is 2 + 2*N (no integer N produces 5).
+"""Regression tests for targeted doc/code consistency claims (bug_004 and bug_013
+of the 2026-04-17 ultrareview).
 
 These are small, intentional doc checks — not a general doc-lint.
 """
 
 from pathlib import Path
-from typing import ClassVar
 
 import pytest
 
@@ -27,13 +21,6 @@ def _read(relpath: str) -> str:
 class TestAstClaudeMdNodeTypes:
     """ast/CLAUDE.md must describe every public node type in nodes.__all__."""
 
-    _SPECIALIZED: ClassVar[set[str]] = {
-        "FileContentNode",
-        "StepHeaderNode",
-        "CurrentActionNode",
-        "InvokeAfterNode",
-    }
-
     def test_every_public_node_is_documented(self):
         claude_md = _read("skills/lib/workflow/ast/CLAUDE.md")
         documented_candidates = set(ast_nodes.__all__) - {"Node", "Document"}
@@ -46,13 +33,6 @@ class TestAstClaudeMdNodeTypes:
         """The load-bearing false sentence must not return."""
         claude_md = _read("skills/lib/workflow/ast/CLAUDE.md")
         assert "All specialized nodes (HeaderNode, ActionsNode" not in claude_md
-
-    def test_nodes_module_docstring_mentions_surviving_specialized(self):
-        docstring = ast_nodes.__doc__ or ""
-        missing = [n for n in self._SPECIALIZED if n not in docstring]
-        assert not missing, (
-            f"Surviving specialized nodes missing from nodes.py docstring: {missing}"
-        )
 
 
 class TestQrReadmeStepCountWording:

@@ -1,11 +1,6 @@
 """Plain-text dispatch prompt building blocks.
 
 Composition via f-strings. No XML, no AST.
-
-Three dispatch patterns:
-- subagent_dispatch: Single agent, optional prompt, mandatory invoke command
-- template_dispatch: Parallel agents, template with $var substitution per agent
-- roster_dispatch: Parallel agents, shared context + unique tasks, fixed command
 """
 
 from collections.abc import Sequence

@@ -16,6 +16,7 @@ QR Block Pattern (per phase):
 """
 
 import argparse
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -200,7 +201,7 @@ def _begin_run(supplied: str | None) -> str:
     """Mint (or adopt) step 1's state dir: placement, then usability, then identity.
 
     Lives in the entry point rather than in init_step's handler because the first of
-    these three can APPEND to the user's .gitignore and create directories in their tree.
+    these can APPEND to the user's .gitignore and create directories in their tree.
     Reaching that through get_step_guidance would make RENDERING a step mutate the
     caller's repository -- and this codebase inspects modules by sweeping every step
     through get_step_guidance() (see tests/test_newa_cwd_pinning.py), so a side-effecting
@@ -213,7 +214,12 @@ def _begin_run(supplied: str | None) -> str:
     planner's copy of a sequence the executor's main() repeats inline; consolidating the
     two is recorded in DEFERRED.md, not done here.
     """
-    state_dir = supplied or resolve_state_dir("planner")
+    # Echo an absolute path for the next step's different cwd, preserving components
+    # such as link/.. so the kernel follows the same directory.
+    if supplied:
+        state_dir = supplied if os.path.isabs(supplied) else os.path.join(os.getcwd(), supplied)
+    else:
+        state_dir = resolve_state_dir("planner")
     require_usable_state_dir(state_dir)
     # Identity, not placement: every route through step 1, including a supplied
     # --state-dir that skipped resolve_state_dir entirely, must leave the terminal

@@ -1,12 +1,11 @@
 """Invariants for the "rigid diffs" redesign (audit §1).
 
-Code Intent is the durable contract; plan-time unified diffs are gone. The
-planner collapses to a single plan-design QR phase (6 steps, terminal at 6);
-execution implements Code Intent JIT and impl-code QR is the sole code review;
-exec-docs authors all documentation; the architect builds AND renders diagrams.
+Code Intent is the durable contract, with no plan-time unified diffs. The
+planner runs a single plan-design QR phase; execution implements Code Intent JIT
+and impl-code QR is the sole code review; exec-docs authors all documentation;
+the architect builds AND renders diagrams.
 
-Each test pins one structural guarantee so the old diff-centric model cannot
-silently return.
+Each test pins one structural guarantee of that model.
 """
 
 from __future__ import annotations
@@ -1022,9 +1021,8 @@ def test_iteration_limit_escalation_emits_runnable_accept_command(tmp_path):
     result = format_output(6, "fail", str(tmp_path))
     assert isinstance(result, GateResult)
     out = result.output
-    # The bug was a prose-only Accept with no command (nothing saved). The escalation
-    # must carry a runnable, cwd-pinned --accept-findings command, and not finalize on
-    # its own.
+    # The escalation must carry a runnable, cwd-pinned --accept-findings command (a
+    # prose-only Accept saves nothing), and not finalize on its own.
     from skills.lib.workflow.prompts.step import _SKILLS_DIR_Q
 
     assert "--accept-findings" in out

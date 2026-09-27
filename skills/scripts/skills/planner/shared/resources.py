@@ -928,10 +928,17 @@ def _created_ancestors(leaf: Path, stop: Path) -> list[Path]:
     missing = []
     current = leaf
     while current != stop and current != current.parent:
-        if current.exists():
+        try:
+            os.stat(current)
+        except (FileNotFoundError, NotADirectoryError):
+            missing.append(current)
+            current = current.parent
+        except OSError:
+            # Unexaminable (an unsearchable ancestor) is not missing: claiming it would let
+            # the take-back reach a directory this run cannot see.
             break
-        missing.append(current)
-        current = current.parent
+        else:
+            break
     return missing
 
 
@@ -1078,7 +1085,7 @@ def _fallback(kind: StateDirKind, reason: str) -> str:
 def resolve_state_dir(kind: StateDirKind) -> str:
     """Create and return a state directory for `kind`.
 
-    THREE SIDE EFFECTS beyond creating the directory, all on the project-local path:
+    SIDE EFFECTS beyond creating the directory, on the project-local path:
     it may append `/.agent-state/` to the project's existing .gitignore (announced on
     stderr; see ensure_agent_state_ignored); it creates `.agent-state/_runs/<kind>/`
     before that gate runs and takes it back with _prune_empty if the gate then declines;
@@ -1112,9 +1119,9 @@ def resolve_state_dir(kind: StateDirKind) -> str:
     parent = repo_root / AGENT_STATE_DIRNAME / RUNS_NAMESPACE / kind
     relative_parent = f"{AGENT_STATE_DIRNAME}/{RUNS_NAMESPACE}/{kind}"
 
-    # EVERY decline past this point routes through here, so "a tree that was never going
-    # to hold state keeps nothing" holds by construction rather than by remembering to
-    # undo at each exit.
+    # A decline past this point prunes what this call created, so "a tree that was never
+    # going to hold state keeps nothing" holds by construction rather than by remembering
+    # to undo at each exit.
     created = _created_ancestors(parent, repo_root)
 
     def decline(why: str) -> str:
