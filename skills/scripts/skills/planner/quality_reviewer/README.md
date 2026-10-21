@@ -52,19 +52,7 @@ Status overview is computed on-demand by the executor when it runs. It's not sto
 
 ### Response Formats
 
-**DECOMPOSE Mode**: Returns QA item IDs and instructions for verification.
-
-```
-DECOMPOSE COMPLETE
-
-Items created: 7
-- plan-001: Verify milestone definitions (scope: *)
-- plan-002: Check acceptance criteria (scope: milestone:M1)
-- plan-003: Validate diff syntax (scope: file:planner/qa/verify.py)
-...
-
-NEXT: Invoke verifiers for each item.
-```
+**DECOMPOSE Mode**: writes `qr-{phase}.json` (every item `status: TODO`) through `prompts/decompose.py`; its final response is `PASS`. The orchestrator reads the file, not the response.
 
 **VERIFY Mode**: the agent's entire final response is one bare word.
 
@@ -82,30 +70,15 @@ Per-item verdicts and findings reach qr-{phase}.json through the runner's
 `--result PASS|FAIL --finding <text>` flag, never through the returned text; the
 orchestrator tallies the single word to pick `--qr-status pass|fail`.
 
-**FIX_GUIDANCE Mode**: Returns specific instructions for fixing failures.
-
-```
-FIX GUIDANCE
-
-Item plan-002: Acceptance criteria missing for M1
-Scope: milestone:M1
-Fix: Add acceptance criteria to milestone M1 definition. Include:
-  - Success conditions
-  - Verification steps
-  - Exit criteria
-
-Item plan-005: Diff has merge conflict markers
-Scope: file:planner/qa/verify.py:45-52
-Fix: Remove conflict markers (<<<<<<, ======, >>>>>>) and resolve merge conflicts.
-```
+**FIX Mode**: `exec_qr_fix.py --phase <phase>` (`prompts/fix.py`) runs inside the work phase's own agent (architect, developer, or technical writer): load the blocking FAIL items, apply targeted fixes, validate. Its final response is a bare `PASS`.
 
 ### Three Modes
 
 **DECOMPOSE**: Break artifact into verifiable QA items. Sub-agent reads artifact, identifies quality dimensions, emits items with id/scope/check/status/finding fields. Items start with status=TODO.
 
-**VERIFY**: Execute verification for each item. Macro items (scope=`*`) run sequentially, micro items (scope=specific path) run in parallel. Each verifier updates item status to PASS/FAIL with finding explanation.
+**VERIFY**: Execute verification for each item. The orchestrator re-bins the items into at most `VERIFY_MAX_PARALLEL` balanced groups (`shared/qr/utils.py::balance_verify_groups`) and dispatches every group in parallel; each verifier records PASS or FAIL per item with `--result`/`--finding`.
 
-**FIX_GUIDANCE**: Generate specific fix instructions for failed items. Sub-agent reads failed items and produces actionable instructions for each failure.
+**FIX**: `exec_qr_fix.py --phase <phase>` repairs the blocking FAIL items inside the work phase's own agent (see FIX Mode above).
 
 ### State File Schema (qr-{phase}.json)
 
@@ -143,87 +116,11 @@ Fix: Remove conflict markers (<<<<<<, ======, >>>>>>) and resolve merge conflict
 
 **iteration**: QR cycle counter (starts at 1); drives severity de-escalation.
 
-**items**: Array of QA items with exactly 5 fields each:
+**items**: `QRItem` records (`shared/schema.py`): `id` (`qa-NNN`; split children `qa-NNNa`), `scope`, `check`, `status` (TODO/PASS/FAIL), `severity` (MUST/SHOULD/COULD), `finding` (set on FAIL), `parent_id`, `group_id`, `version`.
 
-- **id**: Correlation key for parallel dispatch (pattern: `{phase}-{seq:03d}`)
-- **scope**: Content target AND parallelization hint (`*` for macro, specific path for micro)
-- **check**: Freeform verification instruction
-- **status**: One of TODO/PASS/FAIL
-- **finding**: Explanation when not PASS (null for TODO/PASS)
+### Orchestrator Loop
 
-### Main Agent Flow (Dumb Router)
-
-```
-User request
-     |
-     v
-Step 1: plan-init
-Create state directory
-     |
-     v
-Step 2: plan-structure-execute
-Main agent dispatches planner sub-agent
-     |
-     v
-Step 3: plan-structure-qr
-Main agent invokes QA decompose
-     |
-     v
-Decompose sub-agent returns: "Items created: 7"
-     |
-     v
-Main agent reads response, sees "NEXT: Invoke verifiers"
-     |
-     v
-Main agent invokes verify (macro items sequential, micro parallel)
-     |
-     v
-Verify sub-agent returns: "FAIL" (its per-item findings already recorded)
-     |
-     v
-Step 4: plan-structure-qr-gate
-Main agent reads the gate's response, sees "NEXT: Invoke fixer"
-     |
-     v
-Step 2 (with --qr-fail): plan-structure-execute
-Main agent invokes fixer
-     |
-     v
-Fixer returns: "PASS" (its terminal step returns the bare word)
-     |
-     v
-Main agent loops back to Step 3: plan-structure-qr
-```
-
-No status checking, no JSON parsing. Main agent reads text and follows instructions.
-
-### Executor Flow (Just-In-Time Prompting)
-
-```
-Executor invoked by main agent
-     |
-     v
-Read qr-{phase}.json from STATE_DIR
-     |
-     v
-Compute status overview (3 PASS, 2 FAIL)
-     |
-     v
-Generate prompts with failure details:
-  - "Item plan-002 failed: Acceptance criteria missing"
-  - "Item plan-005 failed: Diff has conflict markers"
-     |
-     v
-Execute fixes
-     |
-     v
-Update qr-{phase}.json with new statuses
-     |
-     v
-Return response: "PASS" (fix runner's terminal step returns the bare word)
-```
-
-Status overview computed on-demand. Not stored in qr-{phase}.json. Main agent never sees it.
+The orchestrator loop (work -> decompose -> verify -> gate) is specified in `skills/planner/INTENT.md`; gate routing is in `shared/gates.py`.
 
 ### Why JSON
 
@@ -261,17 +158,3 @@ State transitions:
 INITIAL -> (QRStatus.PASS) -> COMPLETE [terminal]
 INITIAL -> (QRStatus.FAIL) -> RETRY -> (iteration++) -> RETRY -> ...
 ```
-
-## Integration with QA Workflow
-
-QR gates invoke QA decomposition before performing reviews:
-
-1. QR gate triggered (e.g., plan_completeness)
-2. Invoke qa/decompose.py to generate verification items
-3. Spawn verifiers (parallel for micro, sequential for macro)
-4. Aggregate results into qr-{phase}.json
-5. Route on aggregation result:
-   - PASS: proceed to next workflow step
-   - FAIL: invoke fixer, loop back to verification
-
-This integration provides structured, parallelizable verification with explicit failure tracking and automated retry logic.

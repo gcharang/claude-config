@@ -69,9 +69,8 @@ def format_step(
             f"    Working directory: {SKILLS_DIR}\n"
             f"    ALL agents returned PASS  ->  {pin_cwd(if_pass)}\n"
             f"    ANY agent returned FAIL   ->  {pin_cwd(if_fail)}\n\n"
-            f"This is a mechanical routing decision. Do not interpret, summarize, "
-            f"or assess the results.\n"
-            f"Count PASS vs FAIL, then execute the matching command."
+            "This is a mechanical routing decision: do not re-assess the verdicts.\n"
+            "Count PASS vs FAIL, tell the user the tally in one line, then execute the matching command."
         )
         return f"{body}\n\n{invoke}"
 

@@ -1,6 +1,6 @@
 # decision-critic/
 
-Decision stress-testing skill. IMMEDIATELY invoke the script -- do NOT analyze first.
+Decision stress-testing skill.
 
 ## Files
 
@@ -8,4 +8,4 @@ Decision stress-testing skill. IMMEDIATELY invoke the script -- do NOT analyze f
 | ---------------------------- | ----------------- | -------------------- |
 | `SKILL.md`                   | Skill invocation  | Using this skill     |
 | `README.md`                  | Architecture      | Understanding design |
-| `scripts/decision-critic.py` | Complete workflow | Debugging behavior   |
+| `../scripts/skills/decision_critic/decision_critic.py` | Complete workflow | Debugging behavior |

@@ -11,9 +11,9 @@ ORCHESTRATOR_CONSTRAINT = (
 ORCHESTRATOR_CONSTRAINT_EXTENDED = (
     ORCHESTRATOR_CONSTRAINT + "\n"
     "\n"
-    "SCRIPT-MODE DISPATCH: Pass ONLY the invoke command and context var values.\n"
-    "DO NOT add task descriptions, goals, or any other text.\n"
-    "The script provides all instructions to the sub-agent."
+    "SCRIPT-MODE DISPATCH: give each sub-agent only what this step prints for it (its Task\n"
+    "line and invoke block), plus the <user_response> when relaying an answer. Add no task\n"
+    "descriptions, goals, or context of your own: the script gives the sub-agent its instructions."
 )
 
 

@@ -57,10 +57,10 @@ referenced elsewhere.
 
 **Handoff minimalism:**
 
-Sub-agent receives ONLY: arxiv_id. It doesn't know:
+Sub-agent receives the arXiv ID, plus the destination path in PDF-folder sync
+mode. It doesn't know:
 
 - How many papers are being processed
 - What the orchestrator will do with the output
-- Where the final file will be placed
 
 This keeps sub-agent focused and prevents coupling.

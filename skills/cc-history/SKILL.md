@@ -1,6 +1,6 @@
 ---
 name: cc-history
-description: Reference documentation for analyzing Claude Code conversation history files
+description: Query Claude Code conversation history (JSONL transcripts under ~/.claude/projects/) with shell and jq. Use when the user asks about past sessions - finding a conversation, token usage, tool calls, skill invocations, subagent activity, or one branch of a conversation.
 ---
 
 # Claude Code History Analysis
@@ -163,8 +163,8 @@ ls "<session dir>/subagents/"
 # Get subagent task description (first user message)
 jq -c 'select(.type=="user") | .message.content' agent-*.jsonl | head -1
 
-# Find Task tool calls in parent (these spawn subagents)
-jq -c 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and .name=="Task") | .input' file.jsonl
+# Find subagent-spawning calls in parent (tool `Agent`; older transcripts record `Task`)
+jq -c 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and (.name=="Agent" or .name=="Task")) | .input' file.jsonl
 ```
 
 ## Conversation Branching
@@ -205,6 +205,8 @@ jq -r 'select(.timestamp | startswith("2026-01-28T11:23")) | .uuid' file.jsonl |
 ```
 
 **Step 2: Extract branch as JSONL stream**
+
+Each Bash tool call starts a fresh shell, so the function is gone in the next call: put the definition and its uses in one command, or save the definition to a script file and run that.
 
 ```bash
 # Outputs one message per line (JSONL), oldest first
@@ -261,8 +263,8 @@ extract_branch "<target>" "<file>" | jq 'select(.type=="user") | .message.conten
 
 ## Correlation
 
-Subagent files (`agent-{hash}.jsonl`) don't link directly to parent Task calls. To correlate:
+Subagent files (`agent-{hash}.jsonl`) don't link directly to parent Agent (or Task) tool_use blocks. To correlate:
 
 1. List all subagent files under `{session}/subagents/`
 2. Read first user message of each for task description
-3. Match description to Task tool_use blocks in parent conversation
+3. Match description to Agent (or Task) tool_use blocks in parent conversation

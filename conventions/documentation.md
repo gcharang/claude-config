@@ -16,9 +16,9 @@ the directory's subdirectories and its entry-point files -- WHAT each is and
 WHEN to read it -- never every file. All explanatory content (architecture,
 decisions, invariants) belongs in README.md.
 
-**README.md = invisible knowledge**: README.md files capture knowledge NOT
-visible from reading source code. If ANY invisible knowledge exists for a
-directory, README.md is required.
+**README.md = invisible knowledge**: README.md files capture knowledge a reader
+cannot get from the source code. A directory that holds such knowledge gets a
+README.md.
 
 ## CLAUDE.md Format Specification
 
@@ -152,8 +152,8 @@ selective by design, and a file without a row is not drift.
 
 ### Creation Criteria (Invisible Knowledge Test)
 
-Create README.md when the directory contains ANY invisible knowledge --
-knowledge NOT visible from reading the code:
+Create README.md when the directory holds invisible knowledge -- knowledge a
+reader cannot get from the code:
 
 - Planning decisions (from Decision Log during implementation)
 - Business context (why the product works this way)
@@ -167,10 +167,10 @@ knowledge NOT visible from reading the code:
 - Failure modes or edge cases aren't apparent from reading individual files
 - "Rules" developers must follow that aren't enforced by compiler/linter
 
-**README.md is required if ANY of the above exist.** The trigger is semantic
-(presence of invisible knowledge), not structural (file count, complexity).
+The trigger is semantic (presence of invisible knowledge), not structural (file
+count, complexity).
 
-**DO NOT create README.md when:**
+Do not create README.md when:
 
 - The directory is purely organizational with no decisions behind its structure
 - All knowledge is visible from reading source code

@@ -61,7 +61,9 @@ fixed examples because analogies are problem-specific.
 
 LLMs that view their own synthesis when verifying tend to justify existing
 conclusions rather than check them. Generating verification questions, then
-answering them WITHOUT viewing the synthesis, produces accurate verification.
+answering each from a cited evidence source rather than from the synthesis's
+wording, counters that. The draft stays in the same context, so this is an
+approximation of factored verification, which answers in a separate context.
 Short-form questions are more accurately answered than long-form queries.
 
 ### Why Actionable Feedback
@@ -82,11 +84,11 @@ Sub-agent design benefits from explicit critique. Coverage gaps, unnecessary
 overlap, and inappropriate divisions are caught before expensive parallel
 execution.
 
-### Why Confidence Thresholds Not Self-Report
+### Why Confidence Gates the Loop
 
-LLMs have no calibrated introspective access to their own certainty. Asking "how
-confident are you?" produces unreliable answers. Confidence must be derived from
-factual criteria about the analysis, not introspection.
+Step 13 asks for a confidence level with a written justification; the script
+reads that level to decide between another iteration and formatting, and the
+iteration cap ends the loop when the level never reaches the exit.
 
 ### Why Iteration Cap
 
@@ -122,7 +124,6 @@ Final output adapts to question type (determined in Step 3):
 
 ## Implementation Notes
 
-The workflow uses `skills.lib.workflow.formatters.text` for output formatting.
-Step 5 generates different invoke_after based on mode (quick vs full). Step 13
-uses `--iteration` parameter computed by the script, with MAX_ITERATIONS=5
-hardcoded.
+Each step is rendered by `skills.lib.workflow.prompts.format_step`. Step 5's next
+command follows the MODE chosen in Step 3. Step 13 carries `--iteration`, which
+the script increments up to `MAX_ITERATIONS`.

@@ -14,6 +14,11 @@ parsing, or when complex reasoning benefits from explicit step organization.
 like `|step|subquestion|process|result|` to organize reasoning in 2D grid
 format.
 
+**Model applicability**: Tab-CoT is a written chain of thought in table form,
+measured on models without built-in thinking. For a model that thinks before
+answering, use a table only where the reader needs the per-step results in the
+output; the reasoning itself belongs in thinking.
+
 **When to use:**
 
 - Multi-step arithmetic or symbolic reasoning
@@ -138,6 +143,12 @@ define HOW to think rather than content examples showing WHAT to think.
 **Mechanism:** Prefill the assistant response with the start of the expected
 output format to bypass preamble and enforce structure.
 
+**Model applicability:** Claude Opus and Sonnet models from 4.6 on, Claude Haiku 5.5
+and the Claude Fable models reject a request that ends with an assistant turn (HTTP
+400). For them, get JSON from structured outputs (`output_config.format` with a JSON
+schema), and remove preamble with an instruction that says what the response begins
+with. Use prefill only with a model whose API accepts a trailing assistant turn.
+
 **When to use:**
 
 - Need strict JSON/XML output without "Here's my analysis:" preamble
@@ -163,7 +174,7 @@ has no opportunity to add preamble because the response is already started.
 
 - (+) Eliminates preamble tokens entirely
 - (+) Forces consistent format without explicit instruction
-- (+) Works with any model supporting assistant prefill (Claude, GPT-4)
+- (-) Rejected by current Claude models (see Model applicability)
 - (-) Requires API-level access to prefill (not available in all interfaces)
 - (-) Model may struggle if prefill conflicts with natural response
 
@@ -333,7 +344,8 @@ free to ignore irrelevant information given in the questions."
 - No code execution -> Tab-CoT or Table as Thought
 - Need programmatic verification -> Table as Thought (auto-check) or PoT
 - Labeled data available -> Directional Stimulus Prompting
-- Must eliminate preamble -> Prefill technique
+- Must eliminate preamble -> Structured outputs or a format instruction; Prefill only
+  where the API accepts it
 
 **Composability:**
 
@@ -342,7 +354,8 @@ free to ignore irrelevant information given in the questions."
 - Meta Prompting + PoT: Structured schema that specifies code generation slots
 - Table as Thought + Auto-check: Schema enables external constraint validation
 - Any technique + Contextual Calibration: Apply calibration as post-processing
-- Prefill + Any format technique: Prefill enforces format, technique structures content
+- Structured outputs (or Prefill, where accepted) + Any format technique: the schema
+  enforces format, the technique structures content
 
 ---
 

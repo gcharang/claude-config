@@ -619,13 +619,12 @@ Step 4: plan-design-qr-decompose
   Agent: quality-reviewer
   Script: quality_reviewer/qr_decompose.py --phase plan-design
   Output: qr-plan-design.json with items (status: TODO)
-  Output: parallel_dispatch block listing all --qr-item IDs
   Next: Step 5
 
 Step 5: plan-design-qr-verify
   Agent: quality-reviewer (N parallel instances)
   Script: quality_reviewer/qr_verify.py --phase plan-design --qr-item {id}
-  Input: Orchestrator script parses parallel_dispatch from step 4, batches items by group
+  Input: Orchestrator script reads qr-plan-design.json and re-bins items into balanced groups
   Output: Each agent verifies its batch, updates items in qr-plan-design.json to PASS/FAIL
   Next: Step 6
 
@@ -657,7 +656,6 @@ Step 3: impl-code-qr-decompose
   Agent: quality-reviewer
   Script: quality_reviewer/qr_decompose.py --phase impl-code
   Output: qr-impl-code.json with items (status: TODO)
-  Output: parallel_dispatch block listing all --qr-item IDs
   Next: Step 4
 
 Step 4: impl-code-qr-verify
@@ -683,7 +681,6 @@ Step 7: impl-docs-qr-decompose
   Agent: quality-reviewer
   Script: quality_reviewer/qr_decompose.py --phase impl-docs
   Output: qr-impl-docs.json with items (status: TODO)
-  Output: parallel_dispatch block listing all --qr-item IDs
   Next: Step 8
 
 Step 8: impl-docs-qr-verify
@@ -829,31 +826,13 @@ This applies to both execute and fix workflows. After the architect writes plan.
 
 **No distributed QR state**. All QR state lives in qr-{phase}.json. CLI flags for QR fail path (--qr-fail) and iteration count (--qr-iteration) MUST NOT exist. The decompose step reads/increments iteration from file; routers compute qr file path from state_dir + phase. Only --qr-status (orchestrator's aggregated verdict) and --qr-item (verify agent's assigned item) are valid QR-related CLI args.
 
-**Adaptive item generation**. Decomposition creates as many items as the content requires. No fixed counts or caps. The 8-step workflow naturally terminates when structural enumeration is exhausted and coverage is validated. Item count varies by plan complexity.
+**Adaptive item generation**. Decomposition creates as many items as the content requires. No fixed counts or caps. Steps 1-8 of the decompose workflow terminate naturally when structural enumeration is exhausted and coverage is validated. Item count varies by plan complexity.
 
 **Call-site enumeration for pass-through helpers**. When a Code Intent modifies a pass-through, transform, filter, or gate function, the architect must enumerate every call site in the plan before the plan-design QR phase. A pass-through helper is any function where the same defect pattern at one call site replicates at others (URL rewriters, auth checks, validators, allowlist primitives, data mappers, sanitizers). QR decompose must verify completeness; missing call sites are MUST-severity findings.
 
 **Blast-radius claims verified against gating primitives**. When a plan claims that certain code paths or actors are unaffected ("all production writers are safe", "only affects X"), the claim must be anchored to the actual gating function and its allowlist/guard logic — not assumed. A claim about what passes through a gate is unverifiable without quoting the gate. QR verify must treat unverified blast-radius claims as MUST-severity findings.
 
-**QR decompose output contract**. Decompose scripts MUST output a `<parallel_dispatch>` block that orchestrator parses to launch N verify agents. Dispatch blocks are generated via the AST module at `lib/workflow/ast/` using three node types:
-
-- `SubagentDispatchNode`: Single agent dispatch (sequential workflows)
-- `TemplateDispatchNode`: Parallel dispatch with parameterized template (SIMD pattern)
-- `RosterDispatchNode`: Parallel dispatch with unique prompts (MIMD pattern)
-
-Rendered format:
-
-```xml
-<parallel_dispatch agent="quality-reviewer" count="N">
-  <groups>
-    <group id="component-auth" items="qa-001,qa-002,qa-003">Auth component checks</group>
-    <group id="umbrella" items="qa-010,qa-011">Cross-cutting checks</group>
-  </groups>
-  <template>
-    <invoke working-dir=".claude/skills/scripts" cmd="uv run python -m skills.planner.quality_reviewer.qr_verify --step 1 --phase {phase} --state-dir {state_dir} $qr_item_flags" />
-  </template>
-</parallel_dispatch>
-```
+**QR verify dispatch**. The decompose workflow writes qr-{phase}.json with a `group_id` on each item. The orchestrator script reads that file and builds the verify fan-out itself (`build_qr_verify_dispatch` in `shared/builders.py`, rendered by `template_dispatch` from `skills.lib.workflow.prompts`), re-binning items into balanced groups with `group_id` as an affinity hint and passing each agent its items as repeated `--qr-item` flags.
 
 **QR file lifecycle**. qr-{phase}.json is created by decompose step, updated by verify agents, deleted by route step on PASS. The file's existence signals "QR in progress"; its absence signals "no QR done yet" or "QR passed and cleaned up".
 
@@ -869,9 +848,9 @@ Each QR block consists of 4 orchestrator steps:
 uv run --directory '<SKILLS_DIR>' python -m skills.planner.quality_reviewer.qr_decompose --step 1 --phase <phase> --state-dir {state_dir}
 ```
 
-Sub-agent explores the artifact being reviewed using an 8-step cognitive workflow, generates verification items adaptively (quantity determined by content, not preset bounds), writes qr-{phase}.json with all items status: TODO. Outputs parallel_dispatch block for orchestrator to parse.
+Sub-agent explores the artifact being reviewed using the 13-step decompose workflow, generates verification items adaptively (quantity determined by content, not preset bounds), writes qr-{phase}.json with all items status: TODO, then assigns each item a `group_id` for dispatch.
 
-### 8-Step Decomposition Workflow
+### Decomposition Workflow
 
 The decomposition follows a top-down-then-bottom-up approach to generate verification items. Holistic brainstorming captures cross-cutting concerns that structural enumeration misses (overall approach validity, implicit requirements, integration risks). Structural enumeration then serves as completeness validation, not the generative source.
 
@@ -908,13 +887,16 @@ When splitting: create specific items AND keep the umbrella.
 Use Step 3 enumeration as checklist. For each element: at least one covering item? For each concern: at least one addressing item? If uncertain, ADD an item. Overlap is preferred over gaps.
 
 **Step 8: Finalize and Write**
-Write qr-{phase}.json with final items. Output parallel_dispatch block. Item count is whatever emerged from the process -- no targets, no caps. Content determines quantity.
+Write qr-{phase}.json with final items. Item count is whatever emerged from the process -- no targets, no caps. Content determines quantity.
+
+**Steps 9-13: Grouping and Final Validation**
+Assign each item a `group_id` (structural, component, concern and affinity grouping), then validate the grouping. The orchestrator re-bins items for verify dispatch using these groups as affinity hints.
 
 ### Adaptive Item Generation
 
 The workflow produces variable item counts based on plan complexity. Simple phases with few decisions and straightforward code_intents yield fewer items. Complex phases with many architectural decisions, cross-cutting concerns, and intricate code patterns yield more items.
 
-The 8-step workflow provides natural termination without artificial bounds:
+Steps 1-8 provide natural termination without artificial bounds:
 
 - Step 3 bounds items to what actually exists in the plan
 - Step 7 terminates when the checklist is complete
@@ -957,7 +939,7 @@ If failures exist: loop back to work step. The work step's router will detect qr
 When orchestrator loops back to work step (e.g., step 3), the router script:
 
 1. Checks for qr-{phase}.json
-2. If exists with FAIL items -> dispatch to {phase}\_qr_fix.py
+2. If exists with FAIL items -> dispatch to quality_reviewer/exec_qr_fix.py --phase {phase}
 3. Fix script loads failed items, guides agent to fix issues
 4. Agent validates state file after fixes (same self-validation requirement as execute workflow)
 5. After fixes and validation, workflow continues to decompose step (fresh QR)

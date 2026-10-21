@@ -31,7 +31,6 @@ main() -> format_output() -> print() -> LLM reads -> follows <invoke_after>
 | ------------- | ---------------------------------------------------------- | ------------------------------ |
 | `ast/`        | AST nodes, builder, renderer for XML step output           | XML generation for step output |
 | `prompts/`    | Plain-text prompt builders (step, subagent dispatch, file) | Writing step formatters        |
-| `formatters/` | Re-exports from `ast/` for backwards compat                | Use `ast/` directly instead    |
 
 ## Test
 

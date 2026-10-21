@@ -5,10 +5,8 @@ description: Invoke IMMEDIATELY via script when user requests structured reasoni
 
 # DeepThink
 
-When this skill activates, IMMEDIATELY invoke the script. The script IS the workflow.
+Run the script before exploring and follow its output; it runs the reasoning workflow.
 
 Invoke:
 
 <invoke working-dir=".claude/skills/scripts" cmd="uv run python -m skills.deepthink.think --step 1" />
-
-Do NOT explore or analyze first. Run the script and follow its output.

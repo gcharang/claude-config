@@ -268,7 +268,7 @@ SEVERITY ASSIGNMENT (per conventions/severity.md, impl-code scope):
     - TESTING_STRATEGY_VIOLATION: tests don't follow confirmed strategy
     - INCONSISTENT_ERROR_HANDLING: mixed exceptions/codes
 
-  SHOULD (iterations 1-3) - STRUCTURAL SIMPLIFICATION (flag only with a concrete, behavior-preserving fix named):
+  SHOULD (iterations 1-3) - STRUCTURAL SIMPLIFICATION (one check per candidate; its verifier FAILs it only with a concrete, behavior-preserving fix named):
     - MISSED_SIMPLIFICATION: restructuring would delete branches/helpers/layers
     - FILE_SIZE_EXPLOSION: diff grows a file past 1000 lines without decomposition
     - SPAGHETTI_CONDITIONAL: ad-hoc special-case branch bolted onto an existing/shared flow
@@ -778,9 +778,9 @@ class ImplDocsVerify(VerifyBase):
                 lambda c: "claude.md" in c and "tabular" in c,
                 [
                     "CLAUDE.MD FORMAT CHECK:",
-                    "  Must use tabular index format:",
-                    "  | File | Contents (WHAT) | Read When (WHEN) |",
-                    "  | ---- | --------------- | ---------------- |",
+                    "  Must use the tabular index of conventions/documentation.md: '## Files' and",
+                    "  '## Subdirectories' tables with columns | File | What | When to read |",
+                    "  (Directory for subdirectories), listing subdirectories and entry-point files only.",
                     "  - FAIL if prose instead of table",
                     "  - FAIL if overview >1 sentence",
                     "",

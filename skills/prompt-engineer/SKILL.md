@@ -5,7 +5,7 @@ description: Invoke IMMEDIATELY via script when user requests prompt optimizatio
 
 # Prompt Engineer
 
-When this skill activates, IMMEDIATELY invoke the script. The script IS the
+Run the script before analyzing and follow its output; it runs the optimization
 workflow.
 
 ## Invocation
@@ -18,10 +18,10 @@ Then continue with determined scope:
 
 <invoke working-dir=".claude/skills/scripts" cmd="uv run python -m skills.prompt_engineer.optimize --step 2 --scope <scope>" />
 
-| Argument  | Required | Description                                   |
-| --------- | -------- | --------------------------------------------- |
-| `--step`  | Yes      | Current step (1 = triage, 2-6 = workflow)     |
-| `--scope` | For 2+   | Required for steps 2-6. Determined by step 1. |
+| Argument  | Required | Description                                      |
+| --------- | -------- | ------------------------------------------------ |
+| `--step`  | Yes      | Current step (1 = triage, 2 onward = workflow)   |
+| `--scope` | For 2+   | Required from step 2 on. Determined by step 1.   |
 
 ### Scopes
 
@@ -29,5 +29,3 @@ Then continue with determined scope:
 - **ecosystem**: Multiple related prompts that interact
 - **greenfield**: No existing prompt, designing from requirements
 - **problem**: Existing prompt(s) with specific issue to fix
-
-Do NOT analyze or explore first. Run the script and follow its output.

@@ -32,18 +32,19 @@ MODULE_PATH = "skills.decision_critic.decision_critic"
 # --- STEP 1: EXTRACT_STRUCTURE ----------------------------------------------
 
 EXTRACT_STRUCTURE_INSTRUCTIONS = (
-    "Extract and assign stable IDs (persist through ALL steps):\n"
+    "Extract every claim, assumption, constraint and judgment the decision rests on,\n"
+    "and assign stable IDs (persist through ALL steps):\n"
     "\n"
-    "CLAIMS [C1, C2, ...] - Factual assertions (3-7)\n"
+    "CLAIMS [C1, C2, ...] - Factual assertions\n"
     "  What facts/cause-effect relationships are assumed?\n"
     "\n"
-    "ASSUMPTIONS [A1, A2, ...] - Unstated beliefs (2-5)\n"
+    "ASSUMPTIONS [A1, A2, ...] - Unstated beliefs\n"
     "  What is implied but not stated?\n"
     "\n"
-    "CONSTRAINTS [K1, K2, ...] - Hard boundaries (1-4)\n"
+    "CONSTRAINTS [K1, K2, ...] - Hard boundaries\n"
     "  Technical/organizational limitations?\n"
     "\n"
-    "JUDGMENTS [J1, J2, ...] - Subjective tradeoffs (1-3)\n"
+    "JUDGMENTS [J1, J2, ...] - Subjective tradeoffs\n"
     "  Where are values weighed against each other?\n"
     "\n"
     "FORMAT: C1: <claim> | A1: <assumption> | K1: <constraint>"
@@ -115,7 +116,7 @@ CONTRARIAN_PERSPECTIVE_INSTRUCTIONS = (
     "\n"
     "OUTPUT:\n"
     "  CONTRARIAN POSITION: <one sentence>\n"
-    "  ARGUMENT: <2-3 paragraphs>\n"
+    "  ARGUMENT: <the case against the decision>\n"
     "  KEY RISKS: <bullet list>"
 )
 

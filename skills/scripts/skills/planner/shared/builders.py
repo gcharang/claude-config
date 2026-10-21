@@ -5,26 +5,6 @@ Constants for static text, functions for parameterized output.
 
 import shlex
 
-PEDANTIC_ENFORCEMENT = (
-    "QR exists to catch problems BEFORE they reach production.\n"
-    "ALL issues must be fixed before proceeding."
-)
-
-SCRIPT_MODE_RULES = (
-    "SCRIPT-MODE DISPATCH RULES:\n"
-    "\n"
-    "Your Task prompt contains ONLY the exact invoke command.\n"
-    "\n"
-    "FORBIDDEN in Task prompt:\n"
-    "  - Task descriptions or summaries\n"
-    "  - Goals or objectives\n"
-    "  - Context from conversation\n"
-    "  - Explanations of what the sub-agent should do\n"
-    "  - Environment variables or STATE_DIR values\n"
-    "\n"
-    "The script tells the sub-agent what to do. You just invoke it."
-)
-
 # The QR-verify AGGREGATE-step forbidden items. The plan-state lines restate the
 # orchestrator's standing Read/Edit/Write prohibition, so they are behavior-safe in
 # every phase.

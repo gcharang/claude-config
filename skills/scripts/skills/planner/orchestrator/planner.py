@@ -21,10 +21,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from skills.lib.workflow.constants import (
-    QUESTION_RELAY_HANDLER,
-    SUB_AGENT_QUESTION_FORMAT,
-)
+from skills.lib.workflow.constants import QUESTION_RELAY_HANDLER
 from skills.lib.workflow.prompts import subagent_dispatch
 from skills.lib.workflow.prompts.step import format_step
 from skills.lib.workflow.types import AgentRole
@@ -159,9 +156,6 @@ def _save_plan_to_docs(state_dir: str) -> "Path | None":
         return None
 
 
-QUESTION_RELAY_INSTRUCTION = SUB_AGENT_QUESTION_FORMAT
-
-
 def _build_fix_mode_output(title, agent, script, qr, ctx):
     """Build output for execute step in fix mode."""
     state_dir = ctx["state_dir"]
@@ -179,6 +173,7 @@ def _build_fix_mode_output(title, agent, script, qr, ctx):
         follow_up=(
             f"{agent.title()} reads QR report and fixes issues.",
             "After fixes complete, re-run QR for fresh verification.",
+            QUESTION_RELAY_HANDLER,
         ),
     )
 
@@ -486,7 +481,7 @@ STEPS = {
             "",
             "FORMAT: High signal-to-noise. File refs over content. No ASCII diagrams.",
             "",
-            "Mentally organize this context; you will write it to context.json in step 2.",
+            "Step 2 writes these categories to STATE_DIR/context.json.",
         ],
     ),
     2: verify_step(
@@ -508,15 +503,12 @@ STEPS = {
             "",
             "ACTION: Use Write tool to create STATE_DIR/context.json with populated values.",
             "",
-            "SELF-VERIFICATION (all must pass before proceeding to step 3):",
-            "[ ] 1. Subject (what plan is ABOUT) statable in one sentence",
-            "[ ] 2. At least one out-of-scope item explicit",
-            "[ ] 3. At least one constraint OR explicit 'none confirmed'",
-            "[ ] 4. Entry points identified OR 'greenfield'",
-            "[ ] 5. Someone unfamiliar would understand why we're building this",
-            "[ ] 6. Reference documentation paths captured or explicit 'none'",
+            "context.json is complete when it states the subject (what the plan is ABOUT) in",
+            "one sentence, names at least one out-of-scope item, lists at least one constraint",
+            "or 'none confirmed', names entry points or 'greenfield', lists reference docs or",
+            "'none', and explains to a reader new to the project why this is being built.",
             "",
-            f"IF ANY CHECK FAILS: gather missing context via {ESCALATE_HANDLER} or exploration.",
+            f"Where any of these is missing, gather it via {ESCALATE_HANDLER} or exploration before step 3.",
         ],
     ),
     # Plan-design phase (steps 3-6)

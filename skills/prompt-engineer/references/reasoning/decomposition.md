@@ -20,6 +20,15 @@ traces, and allows modular debugging of sub-components.
 reasoning chains correlate with more robust multi-step reasoning—when selecting
 examples or sampling solutions, favor complexity over brevity.
 
+**Model applicability**: Multi-call decomposition, where the harness sends each
+sub-problem as its own request, applies to any model. The single-prompt variants that
+have the model write its plan or sub-questions into the response (Plan-and-Solve and
+PS+, Self-Ask) and the preference for long written reasoning chains in examples were
+measured on models without built-in thinking. A model that thinks before answering (a
+Claude model with adaptive thinking) plans without being told, and plan-first trigger
+phrases make it over-plan; use `effort` for reasoning depth and keep examples to the
+shape of the output.
+
 ---
 
 ## Techniques
@@ -415,8 +424,8 @@ each function.
 
 ## Decision Guidance
 
-**Start simple:** Use Plan-and-Solve or Self-Ask for zero-shot scenarios where
-you lack few-shot examples.
+**Start simple:** On a model that reasons in its response, use Plan-and-Solve or
+Self-Ask for zero-shot scenarios where you lack few-shot examples.
 
 **Sequential dependencies:** Use Least-to-Most or Successive Prompting when
 later subproblems depend on earlier solutions.

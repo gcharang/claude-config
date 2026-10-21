@@ -103,7 +103,6 @@ CONTEXT_CLARIFICATION_INSTRUCTIONS = (
 
 ABSTRACTION_INSTRUCTIONS = (
     "Before diving into specifics, step back and identify high-level context.\n"
-    "Work through this thoroughly. Avoid shortcuts. Show reasoning step by step.\n"
     "\n"
     "PART A - DOMAIN:\n"
     "  What field or domain does this question primarily belong to?\n"
@@ -219,14 +218,15 @@ CHARACTERIZATION_INSTRUCTIONS = (
     "\n"
     "MODE: [FULL | QUICK]\n"
     "RATIONALE: [why this mode]\n"
-    "```"
+    "```\n"
+    "\n"
+    "Pass the MODE you chose, in lower case, as --mode in the next command."
 )
 
 # --- STEP 4: ANALOGICAL_RECALL ----------------------------------------------
 
 ANALOGICAL_RECALL_INSTRUCTIONS = (
     "Recall similar problems that might inform this analysis.\n"
-    "Work through thoroughly. Consider multiple analogies before selecting.\n"
     "\n"
     "PART A - DIRECT ANALOGIES:\n"
     "  What similar problems in the same domain have been addressed?\n"
@@ -392,12 +392,6 @@ SUBAGENT_DESIGN_INSTRUCTIONS = (
     "  By Hypothesis\n"
     "    Assign sub-agents to steelman competing hypotheses.\n"
     "\n"
-    "  By Facet\n"
-    "    Identify independent aspects analyzable without depending on\n"
-    "    each other's conclusions.\n"
-    "\n"
-    "You may combine strategies.\n"
-    "\n"
     "For each sub-agent, specify:\n"
     "  1. NAME: Short descriptive name\n"
     "  2. DIVISION STRATEGY: Which strategy this represents\n"
@@ -529,14 +523,11 @@ DISPATCH_CONTEXT = (
     "- Name: [agent name from Step 8]\n"
     "- Strategy: [strategy from Step 8]\n"
     "- Task: [task description from Step 8]\n"
-    "- Sub-Questions: [assigned questions from Step 8]"
+    "- Sub-Questions: [assigned questions from Step 8]\n"
+    "- Unique Value: [unique value from Step 8]"
 )
 
-DISPATCH_AGENTS = [
-    "[Agent 1: Fill from FINAL SUB-AGENT DEFINITIONS in Step 8]",
-    "[Agent 2: Fill from FINAL SUB-AGENT DEFINITIONS in Step 8]",
-    "[Agent N: Fill from FINAL SUB-AGENT DEFINITIONS in Step 8]",
-]
+DISPATCH_INSTRUCTION = "Launch one sub-agent per entry in FINAL SUB-AGENT DEFINITIONS (Step 8)."
 
 # --- STEP 10: QUALITY_GATE --------------------------------------------------
 
@@ -599,7 +590,7 @@ AGGREGATION_INSTRUCTIONS = (
     "  Why might others have missed this?\n"
     "\n"
     "PART D - INTERMEDIATE INSIGHTS:\n"
-    "  Review reasoning chains of ALL sub-agents (including PARTIAL).\n"
+    "  Review the Evidence sections of ALL sub-agents (including PARTIAL).\n"
     "  Extract intermediate observations valuable independent of conclusions.\n"
     "  These inform synthesis even if overall analysis not adopted.\n"
     "\n"
@@ -641,7 +632,6 @@ AGGREGATION_INSTRUCTIONS = (
 SYNTHESIS_FULL_INSTRUCTIONS = (
     "Integrate aggregated findings into a coherent response.\n"
     "Hint: Prioritize aspects matching the EVALUATION CRITERIA from Step 3.\n"
-    "Work through thoroughly. Avoid shortcuts. Show reasoning step by step.\n"
     "\n"
     "SYNTHESIS GUIDELINES:\n"
     "  1. Use evaluation criteria from Step 3 to guide integration\n"
@@ -698,15 +688,12 @@ SYNTHESIS_FULL_INSTRUCTIONS = (
     "- [limitation]\n"
     "\n"
     "CONFIDENCE: [overall assessment]\n"
-    "```\n"
-    "\n"
-    "This synthesis will be evaluated in Step 13. Expect to refine it."
+    "```"
 )
 
 SYNTHESIS_QUICK_INSTRUCTIONS = (
     "Based on abstraction (Step 2) and analogies (Step 4), synthesize response.\n"
     "Hint: Prioritize aspects matching the EVALUATION CRITERIA from Step 3.\n"
-    "Work through thoroughly. Avoid shortcuts. Show reasoning step by step.\n"
     "\n"
     "PART A - CORE ANSWER:\n"
     "  What is your response to the original question?\n"
@@ -739,9 +726,7 @@ SYNTHESIS_QUICK_INSTRUCTIONS = (
     "- [limitation]\n"
     "\n"
     "CONFIDENCE: [overall assessment]\n"
-    "```\n"
-    "\n"
-    "This synthesis will be evaluated in Step 13."
+    "```"
 )
 
 # --- STEP 13: ITERATIVE_REFINEMENT ------------------------------------------
@@ -749,11 +734,7 @@ SYNTHESIS_QUICK_INSTRUCTIONS = (
 REFINEMENT_INSTRUCTIONS = (
     "ITERATION {iteration} OF {max_iter}\n"
     "\n"
-    "RULE 0 (MANDATORY): Follow the invoke_after command. Do NOT skip\n"
-    "to step 14 unless confidence is CERTAIN or this is iteration 5.\n"
-    "\n"
     "Critically evaluate the current synthesis.\n"
-    "Work through thoroughly -- avoid quick 'looks good' assessments.\n"
     "\n"
     "PART A - VERIFICATION QUESTION GENERATION:\n"
     "  Generate 3-5 verification questions that would test correctness.\n"
@@ -772,8 +753,8 @@ REFINEMENT_INSTRUCTIONS = (
     "  - Analogies from Step 4\n"
     "  - Aggregated evidence from Step 11 (if Full mode)\n"
     "\n"
-    "  CRITICAL: Do NOT look at the synthesis while answering.\n"
-    "  Answer based on evidence, not what the synthesis claims.\n"
+    "  Cite the source each answer rests on; an answer that restates the\n"
+    "  synthesis's claim does not test it.\n"
     "\n"
     "  EXPLORATION OPTION:\n"
     "  If a verification question cannot be answered with existing evidence:\n"
@@ -814,18 +795,8 @@ REFINEMENT_INSTRUCTIONS = (
     "  - HIGH: Strong answer, minor refinements possible\n"
     "  - CERTAIN: As good as it can get with available information\n"
     "\n"
-    "  Provide specific justification for confidence level.\n"
-    "\n"
-    "<iteration_gate>\n"
-    "CRITICAL: You MUST follow the invoke_after command exactly.\n"
-    "\n"
-    "EXIT CONDITIONS (both required to proceed to step 14):\n"
-    "  1. Confidence = CERTAIN, OR\n"
-    "  2. This is iteration 5 (final iteration)\n"
-    "\n"
-    "If NEITHER condition is met, STOP.\n"
-    "Do NOT proceed to step 14. Continue to the next iteration.\n"
-    "</iteration_gate>\n"
+    "  Provide specific justification for confidence level, and pass the level\n"
+    "  as --confidence in the next command.\n"
     "\n"
     "OUTPUT FORMAT:\n"
     "```\n"
@@ -833,7 +804,7 @@ REFINEMENT_INSTRUCTIONS = (
     "1. [question]\n"
     "\n"
     "INDEPENDENT ANSWERS:\n"
-    "1. [answer without looking at synthesis]\n"
+    "1. [answer] (source)\n"
     "\n"
     "DISCREPANCIES:\n"
     "- [where synthesis differs from verification]\n"
@@ -875,17 +846,21 @@ FORMATTING_INSTRUCTIONS = (
 # ============================================================================
 
 
-def build_dispatch_body() -> str:
+def build_dispatch_body(agent_count: int) -> str:
     """Build DISPATCH instructions with roster_dispatch()."""
     invoke_cmd = f"uv run python -m {SUBAGENT_MODULE_PATH} --step 1"
+    agents = [
+        f"[Agent {i}: entry {i} of FINAL SUB-AGENT DEFINITIONS in Step 8]"
+        for i in range(1, agent_count + 1)
+    ]
 
     dispatch_text = roster_dispatch(
         agent_type="general-purpose",
-        agents=DISPATCH_AGENTS,
+        agents=agents,
         command=invoke_cmd,
         shared_context=DISPATCH_CONTEXT,
         model="sonnet",
-        instruction="Launch ALL sub-agents from FINAL SUB-AGENT DEFINITIONS (Step 8). Use a SINGLE message with multiple Task tool calls.",
+        instruction=DISPATCH_INSTRUCTION,
     )
 
     return dispatch_text
@@ -900,17 +875,19 @@ def build_next_command(step: int, mode: str, confidence: str, iteration: int) ->
     elif step == 2:
         return f"{base} --step 3"
     elif step == 3:
-        return f"{base} --step 4"
+        return f"{base} --step 4 --mode <full_or_quick>"
     elif step == 4:
-        return f"{base} --step 5"
+        return f"{base} --step 5 --mode {mode}"
     elif step == 5:
-        return f"If FULL: {base} --step 6 --mode full\nIf QUICK: {base} --step 12 --mode quick"
+        if mode == "quick":
+            return f"{base} --step 12 --mode quick"
+        return f"{base} --step 6 --mode full"
     elif step == 6:
         return f"{base} --step 7 --mode {mode}"
     elif step == 7:
         return f"{base} --step 8 --mode {mode}"
     elif step == 8:
-        return f"{base} --step 9 --mode {mode}"
+        return f"{base} --step 9 --mode {mode} --agents <number_of_final_sub_agents>"
     elif step == 9:
         return f"{base} --step 10 --mode {mode}"
     elif step == 10:
@@ -920,10 +897,11 @@ def build_next_command(step: int, mode: str, confidence: str, iteration: int) ->
     elif step == 12:
         return f"{base} --step 13 --confidence <your_confidence> --iteration 1 --mode {mode}"
     elif step == 13:
-        if confidence == "certain" or iteration >= MAX_ITERATIONS:
+        if iteration > 1 and confidence in ("high", "certain"):
             return f"{base} --step 14 --confidence {confidence} --mode {mode}"
-        else:
-            return f"{base} --step 13 --confidence <your_confidence> --iteration {iteration + 1} --mode {mode}"
+        if iteration >= MAX_ITERATIONS:
+            return f"{base} --step 14 --confidence <your_confidence> --mode {mode}"
+        return f"{base} --step 13 --confidence <your_confidence> --iteration {iteration + 1} --mode {mode}"
     elif step == 14:
         return None
 
@@ -949,26 +927,34 @@ STATIC_STEPS = {
 }
 
 
-def _format_step_9(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
+def _format_step_9(mode: str, confidence: str, iteration: int, agents: int) -> tuple[str, str]:
     """Step 9: Dispatch - builds dispatch body via roster_dispatch()."""
-    return ("Dispatch", build_dispatch_body())
+    return ("Dispatch", build_dispatch_body(agents))
 
 
-def _format_step_12(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
+def _format_step_12(mode: str, confidence: str, iteration: int, agents: int) -> tuple[str, str]:
     """Step 12: Initial Synthesis - selects instructions based on mode."""
     body = SYNTHESIS_FULL_INSTRUCTIONS if mode == "full" else SYNTHESIS_QUICK_INSTRUCTIONS
     return ("Initial Synthesis", body)
 
 
-def _format_step_13(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
-    """Step 13: Iterative Refinement - parameterized title and body."""
-    suffix = " -> Complete" if confidence == "certain" or iteration >= MAX_ITERATIONS else ""
-    title = f"Iterative Refinement (Iteration {iteration}){suffix}"
+def _format_step_13(mode: str, confidence: str, iteration: int, agents: int) -> tuple[str, str]:
+    """Step 13: Iterative Refinement - parameterized title and body.
+
+    --confidence carries the previous iteration's verdict, so an exit-level verdict
+    ends the loop here instead of running the refinement body once more.
+    """
+    if iteration > 1 and confidence in ("high", "certain"):
+        return (
+            "Iterative Refinement Complete",
+            f"The previous iteration reached {confidence.upper()} confidence. Proceed to formatting.",
+        )
+    title = f"Iterative Refinement (Iteration {iteration} of {MAX_ITERATIONS})"
     body = REFINEMENT_INSTRUCTIONS.format(iteration=iteration, max_iter=MAX_ITERATIONS)
     return (title, body)
 
 
-def _format_step_14(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
+def _format_step_14(mode: str, confidence: str, iteration: int, agents: int) -> tuple[str, str]:
     """Step 14: Formatting & Output - parameterized with confidence guidance."""
     confidence_upper = confidence.upper()
     if confidence == "certain":
@@ -994,7 +980,7 @@ DYNAMIC_STEPS = {
 # ============================================================================
 
 
-def format_output(step: int, mode: str, confidence: str, iteration: int) -> str:
+def format_output(step: int, mode: str, confidence: str, iteration: int, agents: int = 0) -> str:
     """Format output for the given step.
 
     Uses callable dispatch: static steps lookup (title, instructions) from
@@ -1004,7 +990,7 @@ def format_output(step: int, mode: str, confidence: str, iteration: int) -> str:
         title, instructions = STATIC_STEPS[step]
     elif step in DYNAMIC_STEPS:
         formatter = DYNAMIC_STEPS[step]
-        title, instructions = formatter(mode, confidence, iteration)
+        title, instructions = formatter(mode, confidence, iteration, agents)
     else:
         return f"ERROR: Invalid step {step}"
 
@@ -1044,12 +1030,19 @@ def main():
         default="full",
         help="Analysis mode (set in Step 3)",
     )
+    parser.add_argument(
+        "--agents",
+        type=int,
+        help="Number of FINAL SUB-AGENT DEFINITIONS (Step 9)",
+    )
     args = parser.parse_args()
 
     if args.step < 1 or args.step > 14:
         sys.exit("ERROR: --step must be 1-14")
+    if args.step == 9 and (args.agents is None or args.agents < 1):
+        sys.exit("ERROR: --agents (at least 1) required for step 9")
 
-    print(format_output(args.step, args.mode, args.confidence, args.iteration))
+    print(format_output(args.step, args.mode, args.confidence, args.iteration, args.agents or 0))
 
 
 if __name__ == "__main__":

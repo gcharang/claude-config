@@ -139,25 +139,14 @@ INVESTIGATE_INSTRUCTIONS = (
     "  - CONTRADICTED: Evidence rules this out\n"
     "  - OPEN: Not yet examined or inconclusive\n"
     "\n"
-    "ANSWER READINESS QUESTIONS:\n"
+    "READINESS:\n"
+    "  Q1 EVIDENCE: Can you cite specific code/config/docs supporting the root cause? [YES / PARTIAL / NO]\n"
+    "  Q2 ALTERNATIVES: Did you examine evidence for at least one alternative? [YES / PARTIAL / NO]\n"
+    "  Q3 EXPLANATION: Does the root cause fully explain the symptom? [YES / PARTIAL / NO]\n"
+    "  Q4 FRAMING: Is the root cause a positive condition (not an absence)? [YES / NO]\n"
     "\n"
-    "Q1 EVIDENCE: Can you cite specific code/config/docs supporting root cause?\n"
-    "   [YES / PARTIAL / NO]\n"
-    "\n"
-    "Q2 ALTERNATIVES: Did you examine evidence for at least one alternative?\n"
-    "   [YES / PARTIAL / NO]\n"
-    "\n"
-    "Q3 EXPLANATION: Does root cause fully explain the symptom?\n"
-    "   [YES / PARTIAL / NO]\n"
-    "\n"
-    "Q4 FRAMING: Is root cause a positive condition (not absence)?\n"
-    "   [YES / NO]\n"
-    "\n"
-    "COMPUTE CONFIDENCE:\n"
-    "  - 4 points = HIGH (ready to proceed)\n"
-    "  - 3-3.5 = MEDIUM\n"
-    "  - 2-2.5 = LOW\n"
-    "  - <2 = INSUFFICIENT (keep investigating)\n"
+    "CONFIDENCE: high when all four answers are YES; otherwise medium or low by how\n"
+    "much evidence is still missing. Only high ends the investigation before the cap.\n"
     "\n"
     "OUTPUT FORMAT:\n"
     "```\n"
@@ -178,7 +167,7 @@ INVESTIGATE_INSTRUCTIONS = (
     "- Q3 Explanation: [YES/PARTIAL/NO]\n"
     "- Q4 Framing: [YES/NO]\n"
     "\n"
-    "CONFIDENCE: [exploring/low/medium/high/certain]\n"
+    "CONFIDENCE: [low/medium/high]\n"
     "```"
 )
 
@@ -273,7 +262,7 @@ OUTPUT_INSTRUCTIONS = (
     "\n"
     "--------------------------------------------------------------------------------\n"
     "\n"
-    "CONFIDENCE: [HIGH / MEDIUM / LOW / INSUFFICIENT]\n"
+    "CONFIDENCE: [HIGH / MEDIUM / LOW]\n"
     "\n"
     "  Evidence (specific citations exist):      [YES / PARTIAL / NO]\n"
     "  Alternatives (others considered):         [YES / PARTIAL / NO]\n"
@@ -314,7 +303,7 @@ def build_next_command(step: int, confidence: str, iteration: int) -> str | None
     if step == 3:
         if confidence in ("high", "certain") or iteration >= MAX_ITERATIONS:
             return f"{base} --step 4"
-        return f"{base} --step 3 --confidence {{exploring|low|medium|high|certain}} --iteration {iteration + 1}"
+        return f"{base} --step 3 --confidence <your_confidence> --iteration {iteration + 1}"
     if step == 4:
         return f"{base} --step 5"
     return None
@@ -338,13 +327,6 @@ def _format_step_3(confidence: str, iteration: int) -> tuple[str, str]:
         return (
             "Investigate Complete",
             "Investigation reached HIGH confidence. Proceeding to root cause formulation.\n\n"
-            "Review accumulated findings from iterations above, then proceed.",
-        )
-    if iteration >= MAX_ITERATIONS:
-        return (
-            "Investigate Complete",
-            f"Investigation reached iteration cap ({MAX_ITERATIONS}). "
-            f"Proceeding with current findings. Final confidence: {confidence}\n\n"
             "Review accumulated findings from iterations above, then proceed.",
         )
     return (f"Investigate (Iteration {iteration} of {MAX_ITERATIONS})", INVESTIGATE_INSTRUCTIONS)

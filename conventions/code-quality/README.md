@@ -2,16 +2,16 @@
 
 Prompts for LLM agents detecting code smells. Organized by cognitive mode:
 
-| File                               | Cognitive Mode                       | Categories |
-| ---------------------------------- | ------------------------------------ | ---------- |
-| `01-naming-and-types.md`           | "Do names and types express intent?" | 5          |
-| `02-structure-and-composition.md`  | "Is this well-structured?"           | 5          |
-| `03-patterns-and-idioms.md`        | "Is this idiomatic?"                 | 5          |
-| `04-repetition-and-consistency.md` | "Is this DRY and consistent?"        | 5          |
-| `05-documentation-and-tests.md`    | "Is this documented and tested?"     | 4          |
-| `06-module-and-dependencies.md`    | "Are boundaries clean?"              | 2          |
-| `07-cross-file-consistency.md`     | "Is this consistent across files?"   | 4          |
-| `08-codebase-patterns.md`          | "What patterns are emerging?"        | 3          |
+| File                               | Cognitive Mode                       |
+| ---------------------------------- | ------------------------------------ |
+| `01-naming-and-types.md`           | "Do names and types express intent?" |
+| `02-structure-and-composition.md`  | "Is this well-structured?"           |
+| `03-patterns-and-idioms.md`        | "Is this idiomatic?"                 |
+| `04-repetition-and-consistency.md` | "Is this DRY and consistent?"        |
+| `05-documentation-and-tests.md`    | "Is this documented and tested?"     |
+| `06-module-and-dependencies.md`    | "Are boundaries clean?"              |
+| `07-cross-file-consistency.md`     | "Is this consistent across files?"   |
+| `08-codebase-patterns.md`          | "What patterns are emerging?"        |
 
 ## Applicability Matrix
 
@@ -39,15 +39,11 @@ Prompts for LLM agents detecting code smells. Organized by cognitive mode:
 Each document has a primer followed by numbered categories:
 
 ```markdown
+<!-- applicable_phases: design_review, diff_review, ... -->
+
 # [Group Name]
 
-[PRIMER: 2-3 paragraphs grounding the cognitive mode]
-
-## Applicability
-
-[Table showing which phases this document applies to]
-
-## Evaluation Modes
+[PRIMER: core question, what to look for, threshold]
 
 <design-mode>...</design-mode>
 <code-mode>...</code-mode>
@@ -130,16 +126,9 @@ This triggers domain-specific recall, enabling transfer beyond listed examples.
 These documents are organized by **cognitive mode** -- what the evaluator is
 looking at and how they reason about it. This enables:
 
-1. **Focused agents**: Refactor agents receive ONE category from a document.
-   The document primer establishes cognitive mode; the category provides focus.
+1. **Focused agents**: the refactor skill gives each explore sub-agent one category: the lines from its `## N.` heading to the next heading. The primer and mode blocks are not part of that slice.
 
-2. **Comprehensive QR**: QR agents receive an ENTIRE document. All categories
-   in a document use the same cognitive mode, so checking multiple categories
-   in one pass is efficient.
-
-3. **Progressive disclosure**: Python scripts inject role/context first, then
-   the document primer grounds the cognitive mode, then categories provide
-   specifics.
+2. **Whole-document review**: agents whose Convention References name `code-quality/CLAUDE.md` read whole documents, choosing them by its applicability table.
 
 ### Why Split Categories?
 
@@ -170,21 +159,11 @@ Each document has two evaluation modes:
 - **Code-mode**: For evaluating actual code at Diff Review, Codebase Review,
   or Refactor. Checks whether the implementation exhibits the smell.
 
-Groups 03, 05 have no design facet (require actual code). Groups 01, 02, 06, 07
-have both facets. Groups 04, 08 have partial design facets.
+Groups 03, 04, 05 and 08 have no design facet. Groups 01, 02, 06 and 07 have both facets.
 
 ### Which Agents Use Which Documents?
 
-| Phase           | Documents      | Mode   | Agent Model                                  |
-| --------------- | -------------- | ------ | -------------------------------------------- |
-| Design Review   | 01, 02, 06, 07 | design | 4 parallel QR agents (one per doc)           |
-| Diff Review     | 01-05          | code   | 5 parallel QR agents (one per doc)           |
-| Codebase Review | 01-08          | code   | 8 parallel QR agents (one per doc)           |
-| Refactor Design | 01, 02, 06, 07 | design | N parallel Explore agents (one per category) |
-| Refactor Code   | 01-08          | code   | N parallel Explore agents (one per category) |
-
-Each QR agent receives ONE full document and checks all categories within it.
-Each Refactor agent receives ONE category (random sampling from documents).
+Consumers: `skills/scripts/skills/refactor/refactor.py` (one category per sub-agent) and the agents whose Convention References name `code-quality/CLAUDE.md` (whole documents).
 
 ### Machine-Parseable Metadata
 
@@ -203,48 +182,7 @@ This approach was chosen for several reasons:
    structure, keeping the primer as the first visible content.
 
 3. **Single source of truth**: The evaluation mode (design vs code) is derived
-   from the phase. If a phase maps to design mode, the extraction function
-   uses `<design-mode>` content; if it maps to code mode, it uses `<code-mode>`
-   content.
+   from the phase: a design-mode phase reads `<design-mode>` content, a
+   code-mode phase reads `<code-mode>` content.
 
-The extraction function (`lib/workflow/quality_docs.py`) works as follows:
-
-```python
-def extract_content(doc_path: Path, phase: Phase) -> ExtractedContent | None:
-    """Extract phase-appropriate content from code quality document.
-
-    Returns None if document doesn't apply to this phase.
-    Returns ExtractedContent with primer, mode guidance, and categories otherwise.
-    """
-    content = doc_path.read_text()
-
-    # Parse applicability from HTML comment
-    phases = _extract_applicable_phases(content)
-    if phase.value not in phases:
-        return None
-
-    # Derive mode from phase
-    mode = PHASE_TO_MODE[phase]
-
-    # Extract sections
-    primer = _extract_primer(content)
-    mode_guidance = _extract_mode_content(content, mode)
-    categories = _extract_categories(content)
-
-    return ExtractedContent(primer, mode_guidance, categories)
-```
-
-The `PHASE_TO_MODE` mapping ensures mode is always derived consistently:
-
-```python
-PHASE_TO_MODE = {
-    Phase.DESIGN_REVIEW: Mode.DESIGN,
-    Phase.DIFF_REVIEW: Mode.CODE,
-    Phase.CODEBASE_REVIEW: Mode.CODE,
-    Phase.REFACTOR_DESIGN: Mode.DESIGN,
-    Phase.REFACTOR_CODE: Mode.CODE,
-}
-```
-
-This design makes it impossible for mode and phase to become inconsistent,
-since mode is computed from phase rather than stored separately.
+`skills/scripts/skills/refactor/refactor.py` (`parse_documents`) reads this comment.

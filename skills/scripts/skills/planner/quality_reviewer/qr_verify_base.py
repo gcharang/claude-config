@@ -326,10 +326,10 @@ class VerifyBase(ABC):
                 "TASK:",
                 "1. Read relevant files/sections based on scope",
                 "2. Apply the verification check",
-                "3. Form preliminary conclusion: PASS or FAIL?",
-                "4. If FAIL, note specific evidence",
+                "3. Decide PASS or FAIL; for FAIL, note the evidence (file:line or plan.json path)",
+                "   your --finding will cite.",
                 "",
-                "DO NOT update qr state yet. Proceed to CONFIRM step.",
+                "The next step records the verdict.",
             ],
             "next": f"uv run python -m {module_path} --step {current_step + 1}{phase_arg}{state_dir_arg} {item_flags}",
         }

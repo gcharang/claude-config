@@ -90,15 +90,11 @@ MODE2_DISCOVERY_INSTRUCTIONS = (
     "\n"
     "MODE 2 DISCOVERY (PDF folder sync):\n"
     "\n"
-    "FORBIDDEN - NEVER read PDF files. Resolve arXiv IDs by searching online for paper title.\n"
+    "Resolve each arXiv ID with WebSearch on the paper title from the PDF's filename;\n"
+    "the filename carries the title, so the PDFs themselves are not opened.\n"
     "\n"
-    "CRITICAL - CHECK EXISTING FILES FIRST:\n"
-    "\n"
-    "Most files WILL already exist. Skipping is the common case.\n"
-    "Before dispatching ANY sub-agent, check if output already exists.\n"
-    "\n"
-    "If a PDF already has a matching .md file, STOP. Do NOT dispatch.\n"
-    "Skip that PDF entirely.\n"
+    "Most PDFs already have a converted .md, so check the destination before\n"
+    "dispatching: a PDF with a matching .md is skipped.\n"
     "\n"
     "FILE NAMING CONVENTION:\n"
     "  PDFs:     YYYY-MM-DD <title>.pdf\n"
@@ -120,7 +116,6 @@ MODE2_DISCOVERY_INSTRUCTIONS = (
     "4. RESOLVE ARXIV IDs from unmatched PDFs:\n"
     "   - Extract paper title from PDF filename (after YYYY-MM-DD prefix)\n"
     "   - Use WebSearch to find arXiv ID for that paper title\n"
-    "   - DO NOT read the PDF file\n"
     "\n"
     "5. DETERMINE DESTINATION FILENAMES:\n"
     "   For each unmatched PDF with resolved arXiv ID:\n"
@@ -263,7 +258,7 @@ def build_mode1_dispatch() -> str:
         targets=[{"ARXIV_ID": "EXAMPLE"}],
         command=f"uv run python -m {SUBAGENT_MODULE_PATH} --step 1 --arxiv-id $ARXIV_ID",
         model="opus",
-        instruction="Launch one sub-agent per arXiv ID.\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
+        instruction="Launch one sub-agent per arXiv ID, replacing EXAMPLE with that paper's arXiv ID in both its task and its command; copy the rest of the invoke block verbatim.\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
     )
 
 
@@ -275,7 +270,7 @@ def build_mode2_dispatch() -> str:
         targets=[{"ARXIV_ID": "EXAMPLE", "DEST_FILE": "EXAMPLE"}],
         command=f"uv run python -m {SUBAGENT_MODULE_PATH} --step 1 --arxiv-id $ARXIV_ID --dest-file '$DEST_FILE'",
         model="opus",
-        instruction="Launch one sub-agent per arXiv ID.\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
+        instruction="Launch one sub-agent per arXiv ID, replacing the two EXAMPLE values with that paper's arXiv ID and destination file in both its task and its command; copy the rest of the invoke block verbatim.\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
     )
 
 

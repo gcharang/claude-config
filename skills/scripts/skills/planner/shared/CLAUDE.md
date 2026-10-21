@@ -15,7 +15,7 @@ Shared utilities consumed by planner and executor orchestrators plus the develop
 | `routing.py`            | Centralized routing between work phases                     | Modifying phase transitions                         |
 | `schema.py`             | Pydantic schemas + defaults for plan.json / context.json / qr state | Adding fields to state files                        |
 | `temporal_detection.py` | Regex criteria for temporal contamination in comments       | Changing the temporal-contamination rules           |
-| `__init__.py`           | Package marker                                              | Never (empty module)                                |
+| `__init__.py`           | Re-exports of routing, resource and domain helpers          | Changing the package's public exports               |
 
 ## Subdirectories
 

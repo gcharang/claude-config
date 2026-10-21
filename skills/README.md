@@ -367,7 +367,7 @@ def format_output(step: int, confidence: str) -> str:
 
 ```python
 from skills.lib.workflow.prompts import format_step, subagent_dispatch
-from skills.planner.prompts.constants import ORCHESTRATOR_CONSTRAINT
+from skills.planner.shared.constraints import ORCHESTRATOR_CONSTRAINT
 
 def format_dispatch_step(agent_type: str, invoke_cmd: str, state_dir: str) -> str:
     dispatch = subagent_dispatch(agent_type=agent_type, command=invoke_cmd)
@@ -568,7 +568,7 @@ def format_step(body: str, next_cmd: str = "", title: str = "") -> str:
     """
 ```
 
-### file_content.py
+### file.py
 
 ```python
 def format_file_content(path: str, content: str) -> str:

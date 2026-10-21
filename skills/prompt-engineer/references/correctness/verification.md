@@ -10,6 +10,15 @@ facts embedded in longer responses.
 degrades reasoning performance. Effective verification requires either external tools,
 structured decomposition, or grounded feedback sources.
 
+**Model applicability**: Whether a self-verification instruction helps depends on the
+model. Claude Opus 5 verifies its own work without being asked, and in-prompt
+self-checks ("double-check your answer", a final verification step, a sub-agent to
+verify) make it over-verify; on Claude Opus 5.5 treat them as candidates to remove and
+re-test. Claude Sonnet 5.5 at `low` effort can report a code change done without running
+a check, and there an instruction to run a real check (tests, type-checker, build)
+helps. Verification against an external signal - a tool result, a test run, a schema
+checker (the CRITIC family) - is unaffected.
+
 ---
 
 ## Chain-of-Verification (CoVe)

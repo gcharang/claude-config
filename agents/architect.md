@@ -2,7 +2,7 @@
 name: architect
 description: Understands architecture, project conventions, and quality designs
 model: opus
-effort: xhigh
+effort: high
 color: purple
 ---
 
@@ -10,11 +10,11 @@ You are an expert Architect who transforms ambiguous requests into unambiguous e
 
 ## Script Invocation
 
-If your opening prompt includes a script-invocation command (e.g. `uv run … python -m skills.…` or `python3 -m skills.…`):
+If your opening prompt includes a script-invocation command (e.g. `uv run … python -m skills.…`):
 
 1. Execute it immediately as your first action
-2. Read output, follow DO section literally
-3. When NEXT contains a script-invocation command, invoke it after completing DO
+2. Read the output and carry out the step it describes
+3. When the output names a next command (a `NEXT STEP` footer or an `<invoke_after>` block), run it after completing the step
 4. Continue until workflow signals completion
 
 The script orchestrates your work. Follow it literally.
@@ -50,14 +50,6 @@ When a CLAUDE.md "When to read" trigger matches your task, read that file -- the
 Read the convention index and follow "Design Review" applicability.
 
 ## Exploration
-
-| Tool   | Purpose                           |
-| ------ | --------------------------------- |
-| Glob   | Find files by pattern             |
-| Grep   | Search content                    |
-| Read   | Examine files                     |
-| Search | Web search for context            |
-| Bash   | Run commands, inspect environment |
 
 **Always explore**:
 

@@ -10,14 +10,14 @@ Python scripts emit workflow prompts and routing. The LLM operates BETWEEN scrip
 
 1. Script outputs prompt/guidance for current step
 2. LLM reads prompt, performs reasoning/assessment
-3. LLM decides outcome (e.g., QR PASS/FAIL)
+3. LLM records outcomes through CLI commands (e.g., a QR item's PASS/FAIL)
 4. LLM invokes next script based on outcome
 
-QR PASS/FAIL is determined by LLM reading QR output, not Python. Gate routing is LLM's decision based on QR outcome. Python scripts provide structure; LLM provides intelligence.
+Sub-agents make the judgments: each verifier records every item's verdict in `qr-{phase}.json` through the verify runner's `--result`. Python routes the gate from that severity-aware item state (`shared/gates.py::build_gate_output`); the orchestrator's `--qr-status` tally of the verifiers' one-word replies can veto a pass when no FAIL was recorded, never cause one.
 
 ## State Files
 
-All state mutations (except initial context.json) happen via Python CLI commands. The state directory is created by `shared/resources.py::resolve_state_dir()`, anchored on `$CLAUDE_PROJECT_DIR` then the working directory: project-local and git-ignored (`<project>/.agent-state/_runs/{planner,executor}/<UTC-stamp>-<rand>/`) when that resolves to a repo whose `.agent-state` is ignorable, is not already tracked there, and whose minted run directory git confirms as ignored, else a per-session temp path (`<tmpdir>/cc-<session>/{planner,executor}-<rand>/`), with the reason on stderr. Step 1 records the resolved project in the state dir; later steps read it back rather than re-deriving it from a working directory that is no longer the project's. Old run dirs are pruned once they are both surplus and stale. Nothing is created at a top-level `/tmp/{planner,executor}-*` -- that flat namespace is shared by every session on the machine, so one session's cleanup glob deleted another's in-flight plan. See `skills/planner/INTENT.md` for the full contract.
+Agents write `context.json` and the initial `qr-{phase}.json` directly; every later state mutation goes through the Python CLI commands. The state directory is created by `shared/resources.py::resolve_state_dir()`, anchored on `$CLAUDE_PROJECT_DIR` then the working directory: project-local and git-ignored (`<project>/.agent-state/_runs/{planner,executor}/<UTC-stamp>-<rand>/`) when that resolves to a repo whose `.agent-state` is ignorable, is not already tracked there, and whose minted run directory git confirms as ignored, else a per-session temp path (`<tmpdir>/cc-<session>/{planner,executor}-<rand>/`), with the reason on stderr. Step 1 records the resolved project in the state dir; later steps read it back rather than re-deriving it from a working directory that is no longer the project's. Old run dirs are pruned once they are both surplus and stale. Nothing is created at a top-level `/tmp/{planner,executor}-*` -- that flat namespace is shared by every session on the machine, so one session's cleanup glob deleted another's in-flight plan. See `skills/planner/INTENT.md` for the full contract.
 
 | File              | Schema         | Created     | Mutated By     | Lifecycle              |
 | ----------------- | -------------- | ----------- | -------------- | ---------------------- |
@@ -156,17 +156,21 @@ orchestrator/
   executor.py     12-step execution workflow (adds final-verify run + gate)
 
 architect/
-  plan_design.py  Plan creation (exploration, milestones, code_intents, diagram render)
+  plan_design.py          Router: execute or QR fix (shared/routing.py)
+  plan_design_execute.py  Plan creation (exploration, milestones, code_intents, diagram render)
 
 developer/
-  exec_implement.py  Wave-aware implementation (just-in-time from code_intents)
+  exec_implement.py          Router: execute or QR fix (shared/routing.py)
+  exec_implement_execute.py  Wave-aware implementation (just-in-time from code_intents)
 
 technical_writer/
-  exec_docs.py    Post-implementation docs (inline comments, docstrings, CLAUDE.md, README)
+  exec_docs.py          Router: execute or QR fix (shared/routing.py)
+  exec_docs_execute.py  Post-implementation docs (inline comments, docstrings, CLAUDE.md, README)
 
 quality_reviewer/
   qr_decompose.py              QR decompose runner (--phase plan-design|impl-code|impl-docs)
   qr_verify.py                 QR verify runner (--phase ...)
+  exec_qr_fix.py               QR fix runner (--phase ...)
   qr_verify_base.py            VerifyBase ABC + verify_main
   prompts/content.py           Per-phase decompose prompts + verifier classes
   prompts/decompose.py         Shared 13-step decompose flow (dispatch_step)
@@ -232,7 +236,7 @@ STEPS = {
 
 **Convention-based paths**: Sub-agents receive --state-dir, derive file paths via get_context_path(). Changing context.json location requires only updating resources.py.
 
-**LLM-managed state**: State files written by LLM agents reading step guidance, not Python scripts. Leverages LLM capabilities for understanding context and following formats.
+**CLI-mediated state**: after creation, state files change only through the CLI commands step guidance names (`cli/plan.py`, `cli/qr.py`, `cli/verify.py`).
 
 **JSON-IR-First**: plan.json is authoritative; plan.md derived from it.
 

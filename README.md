@@ -53,11 +53,11 @@ Definitions live in `agents/`. Model tiers are configurable per agent.
 
 | Agent            | Role                                                    | Default tier   |
 | ---------------- | ------------------------------------------------------- | -------------- |
-| Architect        | Turns ambiguous requests into unambiguous plans         | opus, xhigh    |
-| Developer        | Implements code intents just-in-time; writes no prose   | sonnet, xhigh  |
-| Quality Reviewer | Decomposes and verifies plans and code for defects      | opus, xhigh    |
+| Architect        | Turns ambiguous requests into unambiguous plans         | opus, high     |
+| Developer        | Implements code intents just-in-time; writes no prose   | sonnet, medium |
+| Quality Reviewer | Decomposes and verifies plans and code for defects      | opus, high     |
 | Technical Writer | Authors documentation after code passes review          | sonnet, medium |
-| Debugger         | Systematic root-cause analysis                          | sonnet, xhigh  |
+| Debugger         | Systematic root-cause analysis                          | sonnet, medium |
 
 ### The gates and loops
 

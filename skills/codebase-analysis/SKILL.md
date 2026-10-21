@@ -7,7 +7,7 @@ description: Invoke IMMEDIATELY via script when user requests codebase understan
 
 Understanding-focused skill that builds foundational comprehension of codebase structure, patterns, flows, decisions, and context. Serves as foundation for downstream analysis skills (problem-analysis, refactor, etc.).
 
-When this skill activates, IMMEDIATELY invoke the script. The script IS the workflow.
+Run the script before exploring and follow its output; it orchestrates the exploration.
 
 Invoke:
 

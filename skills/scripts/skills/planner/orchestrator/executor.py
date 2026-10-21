@@ -187,7 +187,7 @@ def format_step_2(qr: QRState, state_dir: str) -> str:
             agent_type="developer",
             invoke_cmd=invoke_cmd,
             follow_up=(
-                "Developer reads QR report and fixes issues in <milestone> blocks.",
+                "Developer reads the QR findings and fixes them in the code.",
                 "After developer completes, re-run Code QR for fresh verification.",
             ),
         )
@@ -793,9 +793,9 @@ def main():
             sys.exit(
                 "Error: plan.json must not carry planning_context.rejected_alternatives, "
                 "planning_context.constraints, planning_context.risks, or diagram_graphs -- "
-                "the executor never reads them (see format_step_1's instructions). "
-                "planning_context.decisions is permitted only when referenced by a "
-                "code_intent.decision_refs; otherwise re-run step 1 and omit it too. "
+                "the executor never reads them (see step 1's instructions). "
+                "planning_context.decision_log is permitted only when a "
+                "code_intent.decision_refs references its entries; otherwise re-run step 1 and omit it too. "
                 "overview/milestones/waves are all a conforming plan.json needs."
             )
 

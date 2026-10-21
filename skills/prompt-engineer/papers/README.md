@@ -10,14 +10,14 @@ This problem-driven taxonomy reduces overlap to near-zero by classifying papers 
 
 ## Categories
 
-### reasoning/ (41 papers, 32%)
+### reasoning/
 
 **When to use:** Model fails to work through complex problems systematically -- skips steps, can't handle multi-hop questions, or doesn't show its work.
 
 **Subcategories:**
 
-- `decomposition/` (24 papers): Break problems into sub-problems
-- `elicitation/` (17 papers): Draw out step-by-step reasoning
+- `decomposition/`: Break problems into sub-problems
+- `elicitation/`: Draw out step-by-step reasoning
 
 **Representative papers:**
 
@@ -33,15 +33,15 @@ This problem-driven taxonomy reduces overlap to near-zero by classifying papers 
 
 ---
 
-### correctness/ (38 papers, 29%)
+### correctness/
 
 **When to use:** Model produces errors, inconsistent answers, or unverified claims -- the reasoning may look fine but the output is unreliable.
 
 **Subcategories:**
 
-- `sampling/` (17 papers): Generate multiple candidates, aggregate via voting
-- `verification/` (16 papers): Explicit checking steps that catch errors
-- `refinement/` (5 papers): Feedback loops that incrementally improve output
+- `sampling/`: Generate multiple candidates, aggregate via voting
+- `verification/`: Explicit checking steps that catch errors
+- `refinement/`: Feedback loops that incrementally improve output
 
 **Representative papers:**
 
@@ -57,14 +57,14 @@ This problem-driven taxonomy reduces overlap to near-zero by classifying papers 
 
 ---
 
-### context/ (21 papers, 16%)
+### context/
 
 **When to use:** Input context is too long, noisy, missing information, or poorly framed -- the model has capability but isn't using context effectively.
 
 **Subcategories:**
 
-- `reframing/` (18 papers): Restructure or filter context for better attention
-- `augmentation/` (3 papers): Retrieve and inject missing information
+- `reframing/`: Restructure or filter context for better attention
+- `augmentation/`: Retrieve and inject missing information
 
 **Representative papers:**
 
@@ -80,7 +80,7 @@ This problem-driven taxonomy reduces overlap to near-zero by classifying papers 
 
 ---
 
-### efficiency/ (15 papers, 12%)
+### efficiency/
 
 **When to use:** Inference is too slow, too expensive, or outputs are excessively verbose -- need to reduce token usage while maintaining acceptable quality.
 
@@ -98,7 +98,7 @@ This problem-driven taxonomy reduces overlap to near-zero by classifying papers 
 
 ---
 
-### structure/ (13 papers, 10%)
+### structure/
 
 **When to use:** Need output in a specific format -- executable code, tables, JSON schemas, or other constrained structures.
 
@@ -113,14 +113,6 @@ This problem-driven taxonomy reduces overlap to near-zero by classifying papers 
 - Problem is reasoning quality, not format -> use reasoning/
 - Any format is acceptable and you want efficiency -> use efficiency/
 - Need to verify correctness of structured output -> use correctness/
-
----
-
-### references/ (1 paper)
-
-**When to use:** Need survey papers, taxonomies, or meta-analyses rather than specific techniques.
-
-**Note:** This is not a problem-solving category; it contains navigation aids for the taxonomy itself.
 
 ---
 
@@ -161,7 +153,7 @@ START: What is your PRIMARY problem?
 
 ### Step 1: Read the Paper's Core Mechanism
 
-Look at the YAML file's `one_sentence_mechanism` field. This describes what the paper does.
+Read the paper summary's description of its mechanism. This describes what the paper does.
 
 ### Step 2: Identify Primary Problem
 
@@ -173,11 +165,11 @@ Ask: What problem does this technique primarily solve?
 - Output too expensive or verbose -> efficiency/
 - Need specific output format -> structure/
 
-### Step 3: Check intervention.type Mapping
+### Step 3: Map the Intervention Type
 
-The `intervention.type` field in YAML files is the primary classification key:
+The paper's primary intervention type is the classification key:
 
-| intervention.type      | Category                  |
+| Intervention type      | Category                  |
 | ---------------------- | ------------------------- |
 | decomposition          | reasoning/decomposition/  |
 | reasoning_elicitation  | reasoning/elicitation/    |
@@ -188,7 +180,6 @@ The `intervention.type` field in YAML files is the primary classification key:
 | retrieval_augmentation | context/augmentation/     |
 | compression            | efficiency/               |
 | output_constraint      | structure/                |
-| routing                | references/               |
 
 ### Step 4: Apply Tie-Breaker Rules
 
@@ -205,18 +196,8 @@ When a problem spans multiple categories:
 
 If still unclear after tie-breakers:
 
-1. Choose based on the primary mechanism described in `one_sentence_mechanism`
-2. Add `also_useful_for` tag in YAML metadata for secondary classifications
-3. Document the decision rationale in commit message
-
-Example YAML metadata for multi-category papers:
-
-```yaml
-metadata:
-  execution_complexity: single_call | multi_sample | adaptive_iterative
-  integration_requirements: prompt_only | needs_orchestration | needs_human
-  also_useful_for: [reasoning, correctness, context, efficiency, structure]
-```
+1. Choose based on the paper's primary mechanism
+2. Document the decision rationale in the commit message
 
 ## Historical Context
 

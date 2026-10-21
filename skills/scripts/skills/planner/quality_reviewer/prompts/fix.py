@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from skills.lib.conventions import get_convention
+from skills.lib.workflow.constants import SUB_AGENT_QUESTION_FORMAT
 from skills.lib.workflow.prompts.step import pin_cwd
 from skills.planner.shared.builders import shell_quote
 from skills.planner.shared.constraints import format_state_banner
@@ -193,10 +194,13 @@ def _plan_design_apply(state_dir: str) -> list[str]:
         "  - If decision is missing: add it first, then update ref",
         "",
         "Policy default without backing:",
-        "  - Add decision_log entry explaining user confirmation",
-        "  - Or use <needs_user_input> to get confirmation NOW",
+        "  - If context.json or the decision log records the user's confirmation,",
+        "    add a decision_log entry citing it",
+        "  - Otherwise ask with <needs_user_input> (protocol below) before recording it",
         "",
         "CONSTRAINT: Fix ONLY the failing items. Don't refactor passing items.",
+        "",
+        SUB_AGENT_QUESTION_FORMAT,
     ]
 
 
@@ -208,13 +212,10 @@ def _plan_design_validate(state_dir: str) -> list[str]:
         "Run structural validation:",
         f"  {pin_cwd(f'uv run python -m skills.planner.cli.plan --state-dir {shell_quote(state_dir)} validate --phase plan-design')}",
         "",
-        "SELF-CHECK each fixed item:",
-        "  For each FAIL item you addressed:",
-        "    - Does the fix address the specific finding?",
-        "    - Does the fix introduce new issues?",
-        "    - Is the reasoning chain multi-step (not single assertion)?",
+        "Each decision_log entry you added or changed carries a multi-step reasoning chain",
+        "(premise -> implication -> conclusion), not a single assertion.",
         "",
-        "If validation fails or self-check fails:",
+        "If validation fails:",
         "  - Apply additional fixes",
         "  - Re-run validation",
         "",
@@ -362,7 +363,6 @@ def fix_dispatch_step(
             "For EACH failed item:",
             "  1. Read the 'finding' field to understand the issue",
             f"  2. Identify what {content['change_target']} needs to change",
-            "  3. Note the fix approach for step 2",
             "",
         ]
         if content["common_issues"]:

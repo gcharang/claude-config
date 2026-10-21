@@ -12,29 +12,18 @@ items.
 ## Workflow
 
 ```
-refactor.py                          explore.py (x10 parallel)
-===========                          =========================
-
-Step 1: Dispatch -----------------> Step 1: Domain Context
-        (launch 10 explore agents)  Step 2: Principle + Violations
-                                    Step 3: Pattern Generation
-                                    Step 4: Search
-                                    Step 5: Synthesis
-                                           |
-        <------------------------------<---+
-        (collect smell_reports)
-
-Step 2: Triage
-        (structure findings with IDs)
-
-Step 3: Cluster
-        (group by shared root cause)
-
-Step 4: Contextualize
-        (extract user intent, prioritize)
-
-Step 5: Synthesize
-        (generate work items)
+refactor.py                                      explore.py (x N parallel, haiku)
+===========                                      ================================
+Step 1: Mode selection (design | code | both | custom)
+Step 2: design/code/both: dispatch N agents ---> Steps 1-5 per category
+        custom: select categories
+Step 3: custom: verify the selection
+Step 4: custom: dispatch agents ---------------> Steps 1-5 per category
+        design/code/both: triage
+Step 5: custom: triage
+Step 6: Cluster
+Step 7: Contextualize
+Step 8: Synthesize
 ```
 
 | Phase         | Question                 | Output                     |
@@ -99,13 +88,7 @@ language-agnostic examples. Using these literally in a Go codebase would miss
 Solution: Treat grep-hints as abstract exemplars that must be translated to
 project-specific equivalents based on domain context.
 
-### 5. Self-Generated Examples in Synthesis
-
-The synthesis step requires the model to generate a project-specific example
-work item before producing the full list. This calibrates output specificity to
-the actual project rather than assuming a particular language/framework.
-
-### 6. "Illustrative, Not Exhaustive" Framing
+### 5. "Illustrative, Not Exhaustive" Framing
 
 LLMs tend to interpret lists as complete. Without explicit framing, the model
 searches only for listed patterns and misses analogous violations.

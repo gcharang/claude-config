@@ -1,6 +1,6 @@
 # doc-sync/
 
-Cross-repository documentation synchronization skill.
+Synchronizes one repository's CLAUDE.md/README.md hierarchy.
 
 ## Files
 

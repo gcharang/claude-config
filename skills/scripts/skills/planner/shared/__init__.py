@@ -21,7 +21,6 @@ This pattern is applied consistently across:
 # Re-export from domain (planner-specific guidance types)
 from .domain import GuidanceResult
 from .resources import (
-    get_exhaustiveness_prompt,
     get_mode_script_path,
     get_resource,
 )
@@ -39,7 +38,6 @@ __all__ = [
     # Domain types (planner-specific)
     "GuidanceResult",
     "detect_qr_state",
-    "get_exhaustiveness_prompt",
     "get_mode_script_path",
     # Resources
     "get_resource",

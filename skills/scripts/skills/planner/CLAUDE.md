@@ -8,18 +8,6 @@ Planning and execution workflows with QR gates, TW passes, and Dev execution. St
 | ----------- | --------------------------------------------------- | ------------------------------------------------ |
 | `README.md` | Architecture, data flow, QR gates, design decisions | Understanding planner architecture, QR workflows |
 
-## Shared Files
-
-| File                    | What                                           | When to read                         |
-| ----------------------- | ---------------------------------------------- | ------------------------------------ |
-| `shared/schema.py`      | Pydantic schemas (context, plan, qr) and       | Understanding state file schemas,    |
-|                         | validate_state() function                      | modifying schema definitions         |
-| `shared/constraints.py` | Orchestrator constraint AST builders               | Building planner/executor prompts,   |
-|                         | (`build_orchestrator_constraint`,                  | composing reusable constraint blocks |
-|                         | `build_step_header`, `build_state_banner`)         |                                      |
-| `shared/gates.py`       | Unified gate output builder                    | Understanding QR gate logic,         |
-|                         | (`build_gate_output`)                          | modifying gate behavior              |
-
 ## Subdirectories
 
 | Directory           | What                                   | When to read                               |

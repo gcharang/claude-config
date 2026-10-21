@@ -35,7 +35,6 @@ __all__ = [
     "ensure_project_root_recorded",
     "find_repo_root",
     "get_context_path",
-    "get_exhaustiveness_prompt",
     "get_mode_script_path",
     "get_resource",
     "load_project_root",
@@ -1240,31 +1239,6 @@ def get_mode_script_path(script_name: str) -> str:
     # Convert path to module: "quality_reviewer/qr_decompose.py" -> "quality_reviewer.qr_decompose"
     module = script_name.replace("/", ".").replace("-", "_").removesuffix(".py")
     return f"skills.planner.{module}"
-
-
-def get_exhaustiveness_prompt() -> list[str]:
-    """Return exhaustiveness verification prompt for QR steps.
-
-    Research shows models satisfice (stop after finding "enough" issues)
-    unless explicitly prompted to find more. This prompt counters that
-    tendency by forcing adversarial self-examination.
-
-    Returns:
-        List of prompt lines for exhaustiveness verification
-    """
-    return [
-        "<exhaustiveness_check>",
-        "STOP. Before reporting your findings, perform adversarial self-examination:",
-        "",
-        "1. What categories of issues have you NOT yet checked?",
-        "2. What assumptions are you making that could hide problems?",
-        "3. Re-read each milestone -- what could go wrong that you missed?",
-        "4. What would a hostile reviewer find that you overlooked?",
-        "",
-        "List any additional issues discovered. Only report PASS if this",
-        "second examination finds nothing new.",
-        "</exhaustiveness_check>",
-    ]
 
 
 def render_context_file(context_file: str | Path, *, missing_ok: bool = False) -> str:

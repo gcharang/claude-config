@@ -80,25 +80,13 @@ REFINE_INSTRUCTIONS = (
     "\n"
     "UPDATE proposals based on verification.\n"
     "\n"
-    "META-CONSTRAINT VERIFICATION:\n"
-    "  For EACH proposed change:\n"
-    "  Q: Does this change modify PROMPT TEXT STRUCTURE or add OUTPUT INSTRUCTIONS?\n"
-    "  A: [Classify: quote the change and state which]\n"
-    "\n"
-    "  PROMPT TEXT STRUCTURE changes include:\n"
-    "    - Shortening/compressing existing prompt text\n"
-    "    - Removing sections or examples from prompt\n"
-    "    - Refactoring code structure (extracting to variables, etc.)\n"
-    "\n"
-    "  OUTPUT INSTRUCTIONS changes include:\n"
-    "    - Adding response format constraints\n"
-    "    - Adding per-step word limits\n"
-    "    - Adding output structure requirements\n"
-    "\n"
-    "  If ANY changes modify prompt text structure:\n"
-    "    -> VIOLATION of meta-constraint\n"
-    "    -> REMOVE these changes\n"
-    "    -> REVISE to add output instructions instead\n"
+    "LENGTH IS NOT A REASON:\n"
+    "  For EACH proposed change that shortens or removes prompt text, quote why\n"
+    "  the text should go: a stale fact, a contradiction, a technique its\n"
+    "  reference notes does not apply to the target model, or an instruction the\n"
+    "  target model already follows without being told. A change whose only\n"
+    "  justification is fewer tokens -> REMOVE it. Context the model cannot get\n"
+    "  elsewhere stays.\n"
     "\n"
     "CONTEXT-CORRECTNESS VERIFICATION (for greenfield/problem scopes):\n"
     "  If execution context was identified (STANDALONE/SKILL/SUB-AGENT/COMPONENT):\n"
@@ -113,6 +101,16 @@ REFINE_INSTRUCTIONS = (
     "  A: STANDALONE -> yes. SKILL/SUB-AGENT/COMPONENT -> no.\n"
     "\n"
     "  If INCONSISTENT: flag for revision before Approve step."
+)
+
+ANTI_PATTERN_CHECKLIST = (
+    "  [ ] Hedging Spiral: Does it encourage hesitation?\n"
+    "  [ ] Everything-Is-Critical: Are emphasis markers overused?\n"
+    "  [ ] Implicit Category Trap: Are categories explicit?\n"
+    "  [ ] Negative Instruction Trap: Are directives affirmative?\n"
+    "  [ ] Model fit: Does added text apply a technique its reference notes\n"
+    "      does not apply to the target model?\n"
+    "  [ ] Any anti-pattern in an Anti-Patterns section of the references read"
 )
 
 APPROVE_INSTRUCTIONS = (
@@ -131,14 +129,13 @@ APPROVE_INSTRUCTIONS = (
     "  - Changes revised: M\n"
     "  - Changes removed: K\n"
     "\n"
-    "ANTI-PATTERNS CHECKED:\n"
-    "  From Anti-Patterns section of each reference read:\n"
-    "  - List each by name\n"
-    "  - For each: [OK] or [FOUND: description]\n"
+    "ANTI-PATTERNS CHECKED ([OK] or [FOUND: description] for each):\n"
+    + ANTI_PATTERN_CHECKLIST
+    + "\n"
     "\n"
     "\n"
-    "CRITICAL: STOP. Do NOT proceed to Execute step.\n"
-    "Wait for explicit user approval before continuing."
+    "Then stop and wait for the user's explicit approval. Run the NEXT STEP\n"
+    "command below only after they approve: the Execute step edits their files."
 )
 
 CONTEXT_GATHERING = (
@@ -166,11 +163,12 @@ CONTEXT_GATHERING = (
     "\n"
     "<observed_issues>\n"
     "  Map current/anticipated issues to categories:\n"
-    "  - Reasoning: [skips steps, wrong decomposition, no visible trace]\n"
+    "  - Reasoning: [skips steps, wrong decomposition]\n"
     "  - Consistency: [different outputs each run]\n"
     "  - Accuracy: [wrong facts, hallucinations]\n"
     "  - Context: [ignores input, distracted by noise]\n"
     "  - Format: [wrong structure, unparseable]\n"
+    "  - Cost: [output too verbose, latency or token cost too high]\n"
     "  State 'None observed' for categories without issues.\n"
     "</observed_issues>\n"
     "\n"
@@ -180,6 +178,20 @@ CONTEXT_GATHERING = (
     "  - If success criteria are ambiguous\n"
     "  Use AskUserQuestion when genuinely uncertain -- not for standard patterns.\n"
     "  Better to confirm than to optimize the wrong thing."
+)
+
+TARGET_MODEL_CONTEXT = (
+    "TARGET MODEL: Name the model that runs this prompt and whether it thinks\n"
+    "before answering (adaptive thinking with an effort setting). Take it from\n"
+    "the request, an agent definition's model field, or the calling code; ask\n"
+    "the user when none of them says. Technique fit depends on it."
+)
+
+MODEL_FIT_RULE = (
+    "MODEL FIT: A technique whose reference notes that it does not apply to\n"
+    "the target model is NOT APPLICABLE; quote the note. List text already in\n"
+    "the target prompt that applies such a technique, and propose removing or\n"
+    "replacing it."
 )
 
 UNDERSTAND_SIMPLE_INSTRUCTIONS = (
@@ -203,11 +215,10 @@ UNDERSTAND_SIMPLE_INSTRUCTIONS = (
 
 TECHNIQUE_REVIEW = (
     "SYSTEMATIC TECHNIQUE REVIEW:\n"
-    "  For each technique in the Technique Selection Guide:\n"
-    "  1. QUOTE the trigger condition from the table\n"
+    "  For each technique in the references read:\n"
+    "  1. QUOTE its trigger (its Triggers or When to use entry, or the Trigger Condition column)\n"
     "  2. QUOTE text from the target prompt that matches (or state 'No match')\n"
-    "  3. Verdict: APPLICABLE (with both quotes) or NOT APPLICABLE\n"
-    "  - Pay attention to 'Any task' triggers (foundational techniques)"
+    "  3. Verdict: APPLICABLE (with both quotes) or NOT APPLICABLE"
 )
 
 TECHNIQUE_REVIEW_ECOSYSTEM = (
@@ -252,14 +263,7 @@ CHANGE_PRESENTATION = (
 )
 
 ANTI_PATTERN_AUDIT = (
-    "ANTI-PATTERN FINAL AUDIT against modified prompt:\n"
-    "\n"
-    "Check each anti-pattern from the reference (including but not limited to):\n"
-    "  [ ] Hedging Spiral: Does it encourage hesitation?\n"
-    "  [ ] Everything-Is-Critical: Are emphasis markers overused?\n"
-    "  [ ] Implicit Category Trap: Are categories explicit?\n"
-    "  [ ] Negative Instruction Trap: Are directives affirmative?\n"
-    "  [ ] (other anti-patterns from reference as applicable)"
+    "ANTI-PATTERN FINAL AUDIT against modified prompt:\n\n" + ANTI_PATTERN_CHECKLIST
 )
 
 ANTI_PATTERN_AUDIT_NONSTANDALONE = (
@@ -280,20 +284,18 @@ CATEGORY_SELECTION_INSTRUCTIONS = (
     "  - Accuracy issues -> correctness/verification, correctness/refinement\n"
     "  - Context issues -> context/reframing, context/augmentation\n"
     "  - Format issues -> structure\n"
+    "  - Cost issues -> efficiency\n"
     "\n"
     "If you have unresolved uncertainty about the goal or issues,\n"
     "use AskUserQuestion before proceeding.\n"
     "\n"
     "Available categories:\n"
     "\n"
-    "  MANDATORY:\n"
-    "    efficiency -- Output compression (applies to ALL prompts)\n"
-    "\n"
-    "  INCLUDE ALL THAT APPLY (minimum 3 total):\n"
+    "  INCLUDE EACH THAT APPLIES:\n"
     "\n"
     "    Reasoning quality:\n"
     "      reasoning/decomposition -- Multi-step, compositional problems\n"
-    "      reasoning/elicitation -- Model skips steps, no visible trace\n"
+    "      reasoning/elicitation -- Model skips steps\n"
     "\n"
     "    Output correctness:\n"
     "      correctness/sampling -- Inconsistent outputs across runs\n"
@@ -307,23 +309,19 @@ CATEGORY_SELECTION_INSTRUCTIONS = (
     "    Output format:\n"
     "      structure -- Needs specific format (code, JSON, tables)\n"
     "\n"
-    "SELECTION RULES:\n"
-    "  1. Start with efficiency (mandatory)\n"
-    "  2. For EACH category, ask: 'Could this help?' not 'Is this the main problem?'\n"
-    "  3. Minimum 3 categories total (more is fine)\n"
-    "  4. Justify exclusions, not inclusions\n"
+    "    Cost:\n"
+    "      efficiency -- Output too verbose, latency or token cost too high\n"
     "\n"
-    "SELF-REFINEMENT:\n"
-    "  For EACH category you DID NOT select:\n"
-    "    - State the category\n"
-    "    - Quote evidence from the prompt that this category cannot help\n"
-    "  If you cannot quote evidence, include the category.\n"
+    "SELECTION RULES:\n"
+    "  1. Select a category when an issue in <observed_issues> maps to it, or\n"
+    "     when its trigger matches the task on the target model.\n"
+    "  2. For EACH category you leave out, state in one line why it does not apply.\n"
     "\n"
     "OUTPUT FORMAT:\n"
-    "  SELECTED: efficiency,reasoning/decomposition,correctness/verification,...\n"
-    "  EXCLUDED with evidence:\n"
-    "    - context/augmentation: '[quoted text]' shows complete domain context\n"
-    "    - structure: '[quoted text]' shows free-form output is acceptable"
+    "  SELECTED: reasoning/decomposition,correctness/verification,...\n"
+    "  EXCLUDED:\n"
+    "    - context/augmentation: [why it does not apply]\n"
+    "    - structure: [why it does not apply]"
 )
 
 TECHNIQUE_AUDIT_INSTRUCTIONS = (
@@ -340,7 +338,8 @@ TECHNIQUE_AUDIT_INSTRUCTIONS = (
     "  - If Applicable=YES: quote evidence from target prompt\n"
     "  - If Applicable=NO: state why trigger doesn't match\n"
     "\n"
-    "This ensures systematic evaluation, not salience-driven selection."
+    "This ensures systematic evaluation, not salience-driven selection.\n"
+    "\n" + MODEL_FIT_RULE
 )
 
 
@@ -382,13 +381,12 @@ INJECTION_STEP = {
 READ_GUIDE_VARIANTS = {
     "single-prompt": {
         "heading": "READ BASED ON DIAGNOSED PROBLEM:",
-        "efficiency_note": "Output compression techniques apply to all prompts",
         "selection_intro": "THEN select based on problem type identified in Assess:",
         "categories": (
             "\n"
             "  Model can't reason through problem?\n"
             "    -> references/reasoning/decomposition.md (multi-step complexity)\n"
-            "    -> references/reasoning/elicitation.md (skips steps, no trace)\n"
+            "    -> references/reasoning/elicitation.md (skips steps)\n"
             "\n"
             "  Model reasons but gives wrong answers?\n"
             "    -> references/correctness/sampling.md (inconsistent outputs)\n"
@@ -403,13 +401,12 @@ READ_GUIDE_VARIANTS = {
             "    -> references/structure.md (code, JSON, tables)"
         ),
         "footer": (
-            "Extract: Technique Selection Guide from each reference read.\n"
-            "For each technique: note Trigger Condition and Tradeoffs."
+            "Extract each technique's trigger (Triggers, When to use, or Trigger\n"
+            "Condition) and its tradeoffs from each reference read."
         ),
     },
     "ecosystem": {
         "heading": "READ BASED ON DIAGNOSED PROBLEMS:",
-        "efficiency_note": "Output compression techniques apply to all prompts",
         "selection_intro": "FOR EACH PROMPT, select based on its diagnosed problem:",
         "categories": (
             "\n"
@@ -430,13 +427,12 @@ READ_GUIDE_VARIANTS = {
             "    -> references/structure.md"
         ),
         "footer": (
-            "Extract: Technique Selection Guide from each reference.\n"
+            "Extract each technique's trigger and tradeoffs from each reference.\n"
             "Note which techniques apply to multiple prompts in ecosystem."
         ),
     },
     "greenfield": {
         "heading": "READ BASED ON REQUIREMENTS:",
-        "efficiency_note": "Output compression techniques apply to all prompts",
         "selection_intro": "SELECT based on task requirements from Assess:",
         "categories": (
             "\n"
@@ -456,13 +452,12 @@ READ_GUIDE_VARIANTS = {
             "    -> references/structure.md"
         ),
         "footer": (
-            "Extract: Technique Selection Guide from each reference.\n"
+            "Extract each technique's trigger and tradeoffs from each reference.\n"
             "Match techniques to requirements and execution context."
         ),
     },
     "problem": {
         "heading": "READ BASED ON DIAGNOSED FAILURE:",
-        "efficiency_note": "Output compression often relevant to problem fixes",
         "selection_intro": "SELECT based on problem class from Diagnose step:",
         "categories": (
             "\n"
@@ -507,7 +502,8 @@ ASSESS_SINGLE_INSTRUCTIONS = (
     "Document OPERATING CONTEXT:\n"
     "  - Interaction: single-shot or conversational?\n"
     "  - Agent type: tool-use, coding, analysis, general?\n"
-    "  - Failure modes: what goes wrong when this fails?"
+    "  - Failure modes: what goes wrong when this fails?\n"
+    "\n" + TARGET_MODEL_CONTEXT
 )
 
 ASSESS_ECOSYSTEM_INSTRUCTIONS = (
@@ -533,7 +529,8 @@ ASSESS_ECOSYSTEM_INSTRUCTIONS = (
     "For EACH prompt, document:\n"
     "  - Purpose and role in the ecosystem\n"
     "  - What it receives from / passes to other prompts\n"
-    "  - Complexity classification"
+    "  - Complexity classification\n"
+    "\n" + TARGET_MODEL_CONTEXT
 )
 
 ASSESS_GREENFIELD_INSTRUCTIONS = (
@@ -546,7 +543,7 @@ ASSESS_GREENFIELD_INSTRUCTIONS = (
     "  - What outputs should it produce?\n"
     "  - What constraints exist? (length, format, tone)\n"
     "\n"
-    "DETERMINE execution context (CRITICAL - affects scaffold):\n"
+    "DETERMINE execution context (it decides the scaffold):\n"
     "  STANDALONE: Full system prompt with complete control\n"
     "    -> Prompt IS the system message, can define identity/role\n"
     "  SKILL: Injected into existing agent (e.g., Claude Code skill)\n"
@@ -562,13 +559,15 @@ ASSESS_GREENFIELD_INSTRUCTIONS = (
     "  SINGLE-TURN when: discrete task, one input -> one output\n"
     "  MULTI-TURN when: refinement loops, verification, context accumulation\n"
     "\n"
-    "  NEVER suggest subagents or HITL unless user explicitly requests.\n"
+    "  Propose sub-agents or human-in-the-loop steps only when the user asks for\n"
+    "  them: each adds cost and coordination the user has not chosen.\n"
     "  State architecture choice with rationale.\n"
     "\n"
     "IDENTIFY edge cases (examples to consider):\n"
     "  - What happens with ambiguous input?\n"
     "  - What errors are expected?\n"
-    "  - What should NOT happen?"
+    "  - What should NOT happen?\n"
+    "\n" + TARGET_MODEL_CONTEXT
 )
 
 DIAGNOSE_PROBLEM_INSTRUCTIONS = (
@@ -589,8 +588,10 @@ DIAGNOSE_PROBLEM_INSTRUCTIONS = (
     "  EXTERNAL: Problem is in surrounding code, not prompt\n"
     "  (problem may span multiple categories)\n"
     "\n"
-    "If NOT a prompting issue: state clearly and STOP.\n"
-    "If prompting issue: identify lines that may contribute."
+    "If NOT a prompting issue: say so and end the workflow here; do not run\n"
+    "the NEXT STEP command below.\n"
+    "If prompting issue: identify lines that may contribute.\n"
+    "\n" + TARGET_MODEL_CONTEXT
 )
 
 # --- STEP 3: UNDERSTAND ------------------------------------------------------
@@ -783,7 +784,7 @@ DESIGN_GREENFIELD_INSTRUCTIONS = (
 
 TARGET_FIX_PROBLEM_INSTRUCTIONS = (
     "REVERSE LOOKUP - which techniques address this problem class?\n"
-    "  Review Technique Selection Guide for matching triggers\n"
+    "  Review each reference's technique triggers for matches\n"
     "\n"
     "For each candidate technique:\n"
     "  - QUOTE trigger condition\n"
@@ -881,12 +882,14 @@ def build_read_guide(scope: str) -> str:
         "skill directory. NOTE: *NOT* the prompt_engineer scripts directory, but the\n"
         "prompt-engineer skill directory, which also contains the SKILL.md file.\n"
         "\n"
-        "ALWAYS read: references/efficiency.md\n"
-        "  -> " + v["efficiency_note"] + "\n"
+        "Output too verbose, latency or token cost too high?\n"
+        "  -> references/efficiency.md\n"
         "\n" + v["selection_intro"] + "\n" + v["categories"] + "\n"
         "\n" + v["footer"] + "\n"
         "\n"
-        "NEVER read papers/**/* - use references/ only."
+        "Read references/ only: papers/ holds the source papers, too granular for\n"
+        "this workflow.\n"
+        "\n" + MODEL_FIT_RULE
     )
 
 

@@ -6,38 +6,6 @@ formatters can use them without creating a dependency on planner.
 
 
 # =============================================================================
-# HITL Constants
-# =============================================================================
-
-HITL_BATCHING_GUIDANCE = """\
-<hitl_efficiency>
-BATCH RELATED QUESTIONS: When multiple clarifications are needed in the same
-decision domain, combine into ONE AskUserQuestion call with multiple questions.
-
-BATCH when:
-  - Questions are about the same topic (testing, architecture, naming)
-  - User can answer all without needing intermediate results
-  - Questions don't depend on each other's answers
-
-DO NOT BATCH when:
-  - Answer to Q1 determines whether Q2 is needed
-  - Questions span unrelated domains
-
-EXAMPLE (batch these):
-  - Unit test approach?
-  - Integration test approach?
-  - E2E test approach?
-  -> ONE AskUserQuestion with questions array of 3 entries
-
-EXAMPLE (don't batch):
-  - Which database? -> User answers "PostgreSQL"
-  - Which ORM? -> Depends on database choice
-  -> TWO separate AskUserQuestion calls
-</hitl_efficiency>
-"""
-
-
-# =============================================================================
 # State File Constants (JSON migration)
 # =============================================================================
 
@@ -53,8 +21,8 @@ SUB_AGENT_QUESTION_FORMAT = """\
 When you need user clarification to proceed:
 
 BEFORE YIELDING:
-  1. Save ALL current state to plan.json (context, findings, progress)
-  2. State must be sufficient to continue after reinvocation
+  Record any decision you have already settled with the plan CLI (`set-decision`).
+  plan.json keeps only what the CLI writes; the re-invocation sees nothing else from this run.
 
 THEN emit this XML as your ENTIRE response:
 
@@ -108,8 +76,8 @@ WHAT HAPPENS NEXT:
   - STATE_DIR pointing to your saved state
   - Instructions to invoke your script with --step 1
 
-  Your script's step 1 should detect this is a continuation (plan.json exists
-  with your saved progress) and continue from where you left off.
+  Your script starts again at step 1. Read the decisions already in plan.json
+  (`list-decisions`) and build on them instead of re-deciding.
 </question_protocol>
 """
 

@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 from skills.lib.workflow.prompts.step import format_step, pin_cwd
 from skills.planner.shared.builders import (
     ESCALATE_HANDLER,
-    PEDANTIC_ENFORCEMENT,
     format_forbidden,
     format_gate_result,
     shell_quote,
@@ -397,8 +396,6 @@ def build_gate_output(
             )
         )
     else:
-        parts.append(PEDANTIC_ENFORCEMENT)
-        parts.append("")
         target_name = fix_target.value if fix_target else "developer"
         parts.append(
             f"NEXT ACTION:\n"

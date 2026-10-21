@@ -10,22 +10,16 @@ The steps are _format_step_1 and STATIC_STEPS below.
 """
 
 import argparse
+import shlex
 import sys
-from pathlib import Path
 
-from skills.lib.workflow.prompts import format_step
+from skills.lib.workflow.prompts import format_step, pin_cwd
 
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
 
 MODULE_PATH = "skills.arxiv_to_md.sub_agent"
-
-# sub_agent.py -> arxiv_to_md/ -> skills/ -> scripts/
-# Injected below into the Phase 2 bash heredoc so the sub-agent can import
-# skills.arxiv_to_md.tex_utils. repr() handles backslashes (Windows paths)
-# and embedded quotes; manual single-quote wrapping would break on those.
-SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent.parent)
 
 
 # ============================================================================
@@ -92,10 +86,7 @@ FETCH_INSTRUCTIONS = (
 PREPROCESS_INSTRUCTIONS = (
     "Run TeX preprocessing via Bash tool:\n"
     "\n"
-    "```bash\n"
-    "python3 << 'EOF'\n"
-    "import sys\n"
-    "sys.path.insert(0, " + repr(SCRIPTS_DIR) + ")\n"
+    "```bash\n" + pin_cwd("uv run python - <<'EOF'") + "\n"
     "from skills.arxiv_to_md.tex_utils import preprocess_tex\n"
     "\n"
     "result = preprocess_tex('<source_dir>/<main_tex>')\n"
@@ -215,7 +206,7 @@ VERIFY_INSTRUCTIONS = (
     "  - Methods: [PRESENT] N subsections intact\n"
     "  - ... (each [KEEP] section)\n"
     "\n"
-    "content_delta:\n"
+    "content_delta (from: wc -w <source_dir>/raw.md <source_dir>/cleaned.md):\n"
     "  raw_word_count: N\n"
     "  cleaned_word_count: M\n"
     "  ratio: M/N (expect 0.70-0.95)\n"
@@ -233,9 +224,10 @@ VALIDATE_INSTRUCTIONS = (
     "\n"
     "Validate:\n"
     "  1. Markdown structure intact (headings render properly)\n"
-    "  2. Math delimiters balanced ($ and $$ counts should be even)\n"
+    "  2. Math delimiters balanced: the count from\n"
+    "     grep -o '\\$' <source_dir>/cleaned.md | wc -l   is even\n"
     "  3. Section count matches inventory [KEEP] count\n"
-    "  4. No raw LaTeX commands visible (\\section, \\begin, etc.)\n"
+    "  4. No raw LaTeX commands (\\section, \\begin, etc.) outside ```latex blocks\n"
     "  5. Word count sanity (from step 5):\n"
     "     - ratio < 0.70: content may be missing\n"
     "     - ratio > 0.95: removal may have failed\n"
@@ -268,7 +260,7 @@ def build_next_command(step: int, arxiv_id: str, dest_file: str | None) -> str |
 
     cmd_parts = ["uv run python -m", MODULE_PATH, f"--step {step + 1}", f"--arxiv-id {arxiv_id}"]
     if dest_file:
-        cmd_parts.append(f"--dest-file {dest_file}")
+        cmd_parts.append(f"--dest-file {shlex.quote(dest_file)}")
 
     return " ".join(cmd_parts)
 

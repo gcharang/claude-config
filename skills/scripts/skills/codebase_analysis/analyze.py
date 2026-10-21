@@ -14,7 +14,12 @@ Only DEEPEN iterates based on confidence. Other steps execute once and advance.
 import argparse
 import sys
 
-from skills.lib.workflow.prompts import format_step, roster_dispatch
+from skills.lib.workflow.prompts import (
+    format_step,
+    parallel_constraint,
+    sub_agent_invoke,
+    task_tool_instruction,
+)
 
 # ============================================================================
 # CONFIGURATION
@@ -57,41 +62,8 @@ SCOPE_INSTRUCTIONS = (
 
 # --- STEP 2: SURVEY ----------------------------------------------------------
 
-DISPATCH_CONTEXT = (
-    "Analysis goals from SCOPE step:\n"
-    "- User intent and what they want to understand\n"
-    "- Identified focus areas (architecture, components, flows, etc.)\n"
-    "- Defined objectives (1-3 specific goals)"
-)
-
-SURVEY_DISPATCH_AGENTS = [
-    "[Focus area 1: e.g., 'authentication and session management']",
-    "[Focus area 2: e.g., 'database access patterns']",
-    "[Focus area 3: e.g., 'API request routing']",
-    "[Focus area N: based on scope and codebase structure]",
-]
-
-SURVEY_DISPATCH_GUIDANCE = (
-    "DISPATCH GUIDANCE:\n"
-    "\n"
-    "Single codebase, focused scope:\n"
-    "  - One Explore agent with specific focus\n"
-    "\n"
-    "Large/broad scope:\n"
-    "  - Multiple parallel Explore agents by boundary\n"
-    "  - Example: frontend agent + backend agent + data agent\n"
-    "\n"
-    "Multiple repositories:\n"
-    "  - One Explore agent per repository\n"
-    "\n"
-    "Generate focus areas based on:\n"
-    "  1. User's stated understanding goals (from SCOPE)\n"
-    "  2. Codebase structure (from initial observation)\n"
-    "  3. Coverage of different system aspects"
-)
-
 SURVEY_PROCESSING_INSTRUCTIONS = (
-    "WAIT for Explore results.\n"
+    "After the agents return, process their reports:\n"
     "\n"
     "PROCESS findings:\n"
     "\n"
@@ -157,8 +129,8 @@ DEEPEN_INSTRUCTIONS = (
     "  - EXPLORING: Just starting, identifying targets\n"
     "\n"
     "ADVANCE:\n"
-    "  - confidence == certain: Proceed to SYNTHESIZE\n"
-    "  - confidence != certain AND iteration < {max_iter}: Continue DEEPEN\n"
+    "  - SCOPE goals answerable from code you have read (confidence high or certain): Proceed to SYNTHESIZE\n"
+    "  - Otherwise, while iteration < {max_iter}: Continue DEEPEN\n"
     "  - iteration >= {max_iter}: Force proceed to SYNTHESIZE"
 )
 
@@ -198,29 +170,20 @@ SYNTHESIZE_INSTRUCTIONS = (
 
 
 def build_survey_body() -> str:
-    """Build SURVEY instructions with roster_dispatch().
-
-    Orchestrator receives dispatch template. At runtime, orchestrator:
-    1. Analyzes codebase structure (SCOPE)
-    2. Generates 2-5 focus areas
-    3. Dispatches agents in parallel with actual script invocation
-    """
-    invoke_cmd = f"uv run python -m {SUBAGENT_MODULE_PATH} --step 1"
-
-    dispatch_text = roster_dispatch(
-        agent_type="general-purpose",
-        agents=SURVEY_DISPATCH_AGENTS,
-        command=invoke_cmd,
-        shared_context=DISPATCH_CONTEXT,
-        model="haiku",
-        instruction="Determine 2-5 focus areas from SCOPE analysis. "
-        "Each agent's unique task is its focus area description. "
-        "The focus area goes in the agent's prompt text, NOT as a CLI arg. "
-        "The subagent script refers to 'your focus area' -- "
-        "the agent knows it from prompt context.",
+    """Build SURVEY instructions: the orchestrator picks N focus areas at runtime."""
+    invoke = sub_agent_invoke(f"uv run python -m {SUBAGENT_MODULE_PATH} --step 1")
+    return (
+        "DISPATCH EXPLORATION AGENTS\n\n"
+        "Pick N focus areas from the SCOPE goals and the codebase layout: one for a focused\n"
+        "scope in one codebase, one per repository for several repositories, otherwise 2-5\n"
+        "split by system boundary (e.g. frontend, backend, data).\n\n"
+        f"{task_tool_instruction('general-purpose', 'haiku')}\n\n"
+        f"{parallel_constraint('N')}\n\n"
+        "Each agent's prompt: the SCOPE goals, its focus area in prose (the script refers to\n"
+        "'your focus area'; it is not a CLI argument), and this block:\n\n"
+        f"{invoke}\n\n"
+        f"{SURVEY_PROCESSING_INSTRUCTIONS}"
     )
-
-    return f"{dispatch_text}\n\n{SURVEY_DISPATCH_GUIDANCE}\n\n{SURVEY_PROCESSING_INSTRUCTIONS}"
 
 
 def build_deepen_body(iteration: int) -> str:
@@ -241,7 +204,7 @@ def build_next_command(step: int, confidence: str, iteration: int) -> str | None
     if step == 2:
         return f"{base_cmd} --step 3 --iteration 1 --confidence exploring"
     if step == 3:
-        if confidence == "certain" or iteration >= MAX_DEEPEN_ITERATIONS:
+        if confidence in ("high", "certain") or iteration >= MAX_DEEPEN_ITERATIONS:
             return f"{base_cmd} --step 4"
         return f"{base_cmd} --step 3 --iteration {iteration + 1} --confidence {{exploring|low|medium|high|certain}}"
     if step == 4:
@@ -262,7 +225,7 @@ STATIC_STEPS = {
 
 def _format_step_3(confidence: str, iteration: int) -> tuple[str, str]:
     """Dynamic formatter for step 3 (Deepen) -- handles iteration/exit logic."""
-    if confidence == "certain":
+    if confidence in ("high", "certain"):
         return ("Deepen Complete", "Deep understanding achieved.\n\nPROCEED to SYNTHESIZE step.")
     if iteration >= MAX_DEEPEN_ITERATIONS:
         return (

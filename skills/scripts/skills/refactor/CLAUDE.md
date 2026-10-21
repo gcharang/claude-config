@@ -6,7 +6,7 @@ Python workflow scripts for the refactor skill.
 
 | File          | What                                    | When to read                                    |
 | ------------- | --------------------------------------- | ----------------------------------------------- |
-| `refactor.py` | Main 5-step orchestrator                | Debugging dispatch/triage/cluster/contextualize |
+| `refactor.py` | Main orchestrator: mode selection, dispatch, triage, cluster, contextualize, synthesize | Debugging dispatch/triage/cluster/contextualize |
 | `explore.py`  | Per-category 5-step smell detection     | Debugging domain context/pattern/search steps   |
 
 ## Related

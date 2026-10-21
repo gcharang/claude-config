@@ -83,11 +83,11 @@ The `3?` makes the digit optional, so `python -m` (uv form) and `python3 -m` (le
 
 ### Subagent Correlation Challenge
 
-Subagent files are named `agent-{hash}.jsonl` but the hash is not stored in the parent conversation's Task tool call. Correlation requires:
+Subagent files are named `agent-{hash}.jsonl` but the hash is not stored in the parent conversation's Agent (or Task) tool call. Correlation requires:
 
 1. List all subagent files for the session
 2. Read each subagent's first user message (contains task description)
-3. Match description text to Task tool_use inputs in parent
+3. Match description text to Agent (or Task) tool_use inputs in parent
 
 This is mildly inconvenient but not worth building tooling for -- it's a rare operation.
 
@@ -100,7 +100,7 @@ The `usage` object in assistant messages contains:
 - `cache_read_input_tokens`: Tokens read from cache
 - `cache_creation_input_tokens`: Tokens written to cache
 
-Total billable input = `input_tokens + cache_creation_input_tokens` (cache reads are cheaper).
+All three input fields are billed: `cache_creation_input_tokens` at the cache-write rate and `cache_read_input_tokens` at the lower cache-read rate.
 
 ## Example Usage
 

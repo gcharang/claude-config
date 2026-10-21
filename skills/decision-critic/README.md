@@ -48,12 +48,12 @@ So what happens? The skill:
 
 ## The Anti-Sycophancy Design
 
-I grounded this skill in three techniques:
+I grounded this skill in two techniques:
 
 - **Chain-of-Verification** -- factored verification prevents confirmation bias
   by answering questions independently
-- **Self-Consistency** -- multiple reasoning paths reveal disagreement
-- **Multi-Expert Prompting** -- diverse perspectives catch blind spots
+- **Adversarial challenge** -- a steel-manned case against the decision and a
+  reframing of the problem itself catch blind spots
 
 The structure forces the LLM through adversarial phases rather than allowing it
 to immediately agree with your reasoning. That's the whole point.

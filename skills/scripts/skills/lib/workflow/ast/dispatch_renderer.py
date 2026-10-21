@@ -16,7 +16,7 @@ from skills.lib.workflow.ast.dispatch import (
     TemplateDispatchNode,
 )
 from skills.lib.workflow.prompts.step import pin_cwd
-from skills.lib.workflow.prompts.subagent import expand_template_pairs
+from skills.lib.workflow.prompts.subagent import expand_template_pairs, parallel_constraint
 
 
 def _expand_template_targets(
@@ -33,24 +33,8 @@ def _expand_template_targets(
 
 
 def _build_execution_constraint(count: int) -> str:
-    """Build MANDATORY_PARALLEL execution constraint XML."""
-    lines = [
-        '  <execution_constraint type="MANDATORY_PARALLEL">',
-        f"    You MUST dispatch ALL {count} agents in ONE assistant message.",
-        "    Your message must contain exactly N Task tool calls, issued together.",
-        "",
-        "    CORRECT (single message, multiple tools):",
-        "      [You send ONE message containing Task call 1, Task call 2, ... Task call N]",
-        "",
-        "    WRONG (sequential):",
-        "      [You send message with Task call 1]",
-        "      [You wait for result]",
-        "      [You send message with Task call 2]",
-        "",
-        "    FORBIDDEN: Waiting for any agent before dispatching the next.",
-        "  </execution_constraint>",
-    ]
-    return "\n".join(lines)
+    """Wrap the shared parallel-dispatch instruction in an execution_constraint element."""
+    return f"  <execution_constraint>\n{parallel_constraint(count)}\n  </execution_constraint>"
 
 
 def _build_model_selection(model: str | None) -> str:
@@ -75,7 +59,7 @@ def _build_model_selection(model: str | None) -> str:
         return "\n".join(lines)
     lines = [
         "  <model_selection>",
-        f"    Use {model.upper()} for all agents.",
+        f"    Set model: {model} on every Task call.",
         "  </model_selection>",
     ]
     return "\n".join(lines)

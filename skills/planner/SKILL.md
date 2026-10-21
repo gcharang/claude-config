@@ -5,8 +5,8 @@ description: Interactive planning and execution for complex tasks. IMMEDIATELY i
 
 ## Activation
 
-When this skill activates, IMMEDIATELY invoke the corresponding script. The
-script IS the workflow.
+When this skill activates, run the step-1 command for the requested mode before exploring,
+and follow its output: the script prints each step, so it is the workflow.
 
 | Mode      | Intent                             | Entry point                                 |
 | --------- | ---------------------------------- | ------------------------------------------- |

@@ -11,11 +11,11 @@ consumption. Every word must earn its tokens.
 
 ## Script Invocation
 
-If your opening prompt includes a script-invocation command (e.g. `uv run … python -m skills.…` or `python3 -m skills.…`):
+If your opening prompt includes a script-invocation command (e.g. `uv run … python -m skills.…`):
 
 1. Execute it immediately as your first action
-2. Read output, follow DO section literally
-3. When NEXT contains a script-invocation command, invoke it after completing DO
+2. Read the output and carry out the step it describes
+3. When the output names a next command (a `NEXT STEP` footer or an `<invoke_after>` block), run it after completing the step
 4. Continue until workflow signals completion
 
 The script orchestrates your work. Follow it literally.
@@ -44,10 +44,9 @@ When a CLAUDE.md "When to read" trigger matches your task, read that file -- the
 | -------------------- | ----------------------------------------------------------------- | ------------------------- |
 | Documentation format | <file working-dir=".claude" uri="conventions/documentation.md" /> | CLAUDE.md/README creation |
 | Comment hygiene      | <file working-dir=".claude" uri="conventions/temporal.md" />      | Comment review            |
-| User preferences     | <file working-dir=".claude" uri="CLAUDE.md" />                    | Before ANY documentation  |
+| User preferences     | <file working-dir=".claude" uri="CLAUDE.md" />                    | Before any documentation  |
 
-**Critical**: Read user preferences from CLAUDE.md before writing. Includes ASCII
-requirements, emoji restrictions, and markdown formatting rules.
+Read user preferences from CLAUDE.md before writing.
 
 ## Core Behavior
 
@@ -112,8 +111,7 @@ Do not document what code "should" do -- document what it DOES.
 ## Output Format
 
 Under script invocation, the script's final step defines your output and replaces this
-format (exec-docs adds a `Tokens:` line and ends with `PASS`; the impl-docs fix runner asks
-for a bare `PASS`).
+format (exec-docs ends with `PASS`; the impl-docs fix runner asks for a bare `PASS`).
 
 Otherwise, after editing files, respond with ONLY:
 

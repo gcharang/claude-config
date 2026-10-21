@@ -14,9 +14,8 @@ plan-writing step (`architect/plan_design_execute.py`, step 6) and injects it
 into the prompt, so the agent emits schema-conformant JSON without an embedded
 copy that could drift from the schema.
 
-`plan-format.md` (human-readable plan-structure reference) and
-`explore-output-format.md` (XML schema for exploration output) are NOT injected
-— they are reference docs, read when editing the plan or exploration structure.
+`plan-format.md` (human-readable plan-structure reference) is NOT injected
+— it is a reference doc, read when editing the plan structure.
 
 `get_resource(name)` is the single loader for runtime-injected resources; it
 resolves `<deploy-root>/skills/planner/resources/<name>` (the repo tree under

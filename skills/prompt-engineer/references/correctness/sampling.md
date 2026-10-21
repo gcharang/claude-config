@@ -21,6 +21,12 @@ prompt-order and input-rationale ensembles underperform output sampling
 regardless of how inputs vary. This means temperature-based sampling alone
 captures most ensemble gains; prompt variation adds smaller incremental value.
 
+**Model applicability**: Claude Opus models from 4.7 on, Claude Sonnet models from 5
+on, and Claude Haiku 5.5 return a 400 for a non-default `temperature`, `top_p` or
+`top_k`. On them, run the multi-sample techniques below with those parameters omitted,
+and treat the temperature-0 (greedy) variants and baselines as unavailable; temperature
+0 never guaranteed identical outputs.
+
 ---
 
 ## Techniques

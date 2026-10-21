@@ -24,7 +24,7 @@ from skills.lib.workflow.core import (
     StepDef,
     Workflow,
 )
-from skills.lib.workflow.prompts import pin_cwd
+from skills.lib.workflow.prompts import parallel_constraint, pin_cwd
 
 MODULE_PATH = "skills.incoherence.incoherence"
 
@@ -171,10 +171,8 @@ def format_incoherence_output(step, phase, agent_type, guidance, thoughts=""):
 
     if step == 1:
         parts.append("""<xml_format_mandate>
-CRITICAL: All script outputs use XML format. You MUST:
-1. Execute the action in <current_action>
-2. When complete, invoke the exact command in <invoke_after>
-3. DO NOT modify commands. DO NOT skip steps.
+Do the action in <current_action>, then run the <invoke_after> command with
+<ACCUMULATED_CONTEXT> replaced by what the step tells you to carry forward.
 </xml_format_mandate>""")
         parts.append("")
 
@@ -192,8 +190,11 @@ CRITICAL: All script outputs use XML format. You MUST:
     elif is_subagent_terminal:
         parts.append("SUB-AGENT TASK COMPLETE - Return results to parent agent.")
     else:
-        next_cmd = f'uv run python -m skills.incoherence.incoherence --step-number {step + 1} --thoughts "<ACCUMULATED_CONTEXT>"'
+        target = guidance.get("next_step") or step + 1
+        next_cmd = f'uv run python -m skills.incoherence.incoherence --step-number {target} --thoughts "<ACCUMULATED_CONTEXT>"'
         parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
+        if next_text:
+            parts.append(f"NEXT: {next_text}")
 
     return "\n".join(parts)
 
@@ -231,13 +232,15 @@ STEPS = {
         "actions": [
             "EXPLORATION DISPATCH",
             "",
-            "Launch one haiku Explore agent per dimension (ALL in SINGLE message).",
+            "Launch one agent per dimension (subagent_type='Explore', model='haiku').",
+            parallel_constraint("N"),
             "",
             "AGENT PROMPT:",
             "  DIMENSION: {letter} - {name}. DESCRIPTION: {from_catalog}",
             _invoke_line(f'uv run python -m {MODULE_PATH} --step-number 4 --thoughts \\"Dimension: {{{{letter}}}}\\"'),
         ],
         "next": "After all agents complete, invoke step 8 with combined findings",
+        "next_step": 8,
     },
     4: {
         "title": "BROAD SWEEP [SUB-AGENT]",
@@ -301,10 +304,10 @@ STEPS = {
         "actions": [
             "SYNTHESIZE CANDIDATES",
             "",
-            "1. Score each (0-10): Impact + Confidence + Specificity + Fixability",
-            "2. Output: C1, C2... with location, summary, score, dimension",
+            "1. Merge candidates that cite the same pair of locations (same A and B).",
+            "2. Output: C1, C2... with location, summary, dimension",
             "",
-            "Pass ALL candidates (no limits). Deduplication after Sonnet verification.",
+            "Pass every remaining candidate to step 9; do not drop any for low confidence.",
         ],
         "next": "Invoke step 9 with all candidates in --thoughts",
     },
@@ -313,8 +316,9 @@ STEPS = {
         "actions": [
             "DEEP-DIVE DISPATCH",
             "",
-            "Launch sonnet agents (subagent_type='general-purpose', model='sonnet').",
-            "Launch ALL in SINGLE message (no self-limiting).",
+            "Launch one agent per candidate (subagent_type='general-purpose', model='sonnet').",
+            "With more than 20 candidates, dispatch them in batches of at most 20, each batch after the previous one returns; N below is the size of the current batch.",
+            parallel_constraint("N"),
             "",
             "AGENT PROMPT:",
             "  CANDIDATE: {id} at {location} | DIMENSION: {letter} - {name}",
@@ -323,6 +327,7 @@ STEPS = {
             _invoke_line(f'uv run python -m {MODULE_PATH} --step-number 10 --thoughts \\"Verifying: {{{{id}}}}\\"'),
         ],
         "next": "After all agents complete, invoke step 12 with all verdicts",
+        "next_step": 12,
     },
     10: {
         "title": "DEEP-DIVE EXPLORATION [SUB-AGENT]",
@@ -466,9 +471,10 @@ STEPS = {
             "  Workflow: step 18 (apply) -> step 19 (format)",
             _invoke_line(f'uv run python -m {MODULE_PATH} --step-number 18 --thoughts \\"FILE: {{{{file}}}}\\"'),
             "",
-            "Launch ALL wave agents in SINGLE message.",
+            parallel_constraint("N"),
         ],
         "next": "After all wave agents complete, invoke step 20 with results",
+        "next_step": 20,
     },
     18: {
         "title": "RECONCILE APPLY [SUB-AGENT]",
@@ -520,7 +526,11 @@ STEPS = {
 
 def generic_step_handler(step_info, **kwargs):
     """Generic handler for standard steps."""
-    return {"actions": step_info.get("actions", []), "next": step_info.get("next", "")}
+    return {
+        "actions": step_info.get("actions", []),
+        "next": step_info.get("next", ""),
+        "next_step": step_info.get("next_step"),
+    }
 
 
 STEP_HANDLERS = {i: generic_step_handler for i in range(1, 22)}

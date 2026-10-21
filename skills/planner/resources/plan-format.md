@@ -1,6 +1,6 @@
 # Plan Format
 
-Write your plan using this structure:
+plan.md, rendered from plan.json by `cli/plan.py::translate_to_markdown`, has this structure:
 
 ```markdown
 # [Plan Title]
@@ -298,9 +298,9 @@ exist.
 ## Execution Waves
 
 Milestones execute in ordered waves: every milestone in a wave runs in parallel
-(one developer agent each), and the waves run strictly in sequence. There is no
-separate dependency block -- the executor transcribes these waves verbatim into
-`plan.json.waves` and never infers them from a diagram.
+(one developer agent each), and the waves run strictly in sequence. The executor
+transcribes these waves verbatim into `plan.json.waves` and never infers them from a
+diagram.
 
 - W-001: M-001
 - W-002: M-002, M-003

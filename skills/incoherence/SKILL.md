@@ -5,8 +5,8 @@ description: Detect and resolve incoherence in documentation, code, specs vs imp
 
 # Incoherence Detector
 
-When this skill activates, IMMEDIATELY invoke the script. The script IS the
-workflow.
+Run the script before exploring and follow its output; it runs detection,
+resolution and application.
 
 ## Invocation
 
@@ -16,8 +16,6 @@ workflow.
 | --------------- | -------- | ----------------------------------------- |
 | `--step-number` | Yes      | Current step (starts at 1)                |
 | `--thoughts`    | Yes      | Accumulated state from all previous steps |
-
-Do NOT explore or detect first. Run the script and follow its output.
 
 ## Workflow Phases
 

@@ -39,21 +39,13 @@ union of `parse_csv(<Name>)` call-site arg names across all of them.
 
 ---
 
-## B — `id` guard accepts `bool`/`float`; `batch()` dedup collides `1` / `true` / `1.0` (LOW, pre-existing, fails safe)
+## B — `batch()` dedup collides `1` / `1.0` (LOW, pre-existing, fails safe)
 
 **Location:** `cli/dispatch.py` — `read_batch_requests` id check (~L380) and
 `batch()` duplicate-id scan (~L192, `if rid in seen_ids`).
 
-`read_batch_requests` accepts an `id` of type `str | int | float | bool` (it rejects
-only unhashable `list`/`dict`). Because `True == 1 == 1.0` in Python with equal
-hashes, the duplicate-id scan treats textually-distinct ids as the same:
-
-```
-echo '[{"method":"set-decision","params":{"decision":"d","reasoning":"r"},"id":1},
-       {"method":"set-decision","params":{"decision":"d2","reasoning":"r2"},"id":true}]' \
-  | uv run python -m skills.planner.cli.plan --state-dir <dir> batch
-# -> <validation_error> Duplicate request id(s) in batch: [True]
-```
+`bool` ids are rejected in both `read_batch_requests` and `batch()`. An integral
+`float` id still equals the `int` id with the same value in the dedup scan.
 
 **Why it's low / non-blocking:** the `id` field was entirely unguarded before
 `3547cc9`, so these values already flowed identically into `seen_ids` — this is
@@ -61,9 +53,8 @@ pre-existing, not introduced by the fix. It **fails safe** (clean `validation_er
 frame, exit 1, no partial write) and is only reachable via exotic JSON-RPC ids no
 agent authors (JSON-RPC ids are expected to be `str | number | null`).
 
-**Proposed fix (optional):** reject `bool` (and arguably non-integral `float`) in the
-`read_batch_requests` id check, e.g. treat `isinstance(rid, bool)` as invalid so the
-accepted set is `str | int | None`.
+**Proposed fix (optional):** reject non-integral-typed `float` ids so the accepted set
+is `str | int | None`.
 
 ---
 

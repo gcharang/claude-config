@@ -31,6 +31,7 @@ from skills.lib.workflow.core import (
     Workflow,
 )
 from skills.lib.workflow.prompts.step import pin_cwd
+from skills.lib.workflow.prompts.subagent import parallel_constraint
 
 
 class DocumentAvailability(Enum):
@@ -357,7 +358,7 @@ STEPS = {
             '      "occurrences": {',
             '        "count": N,',
             '        "verification": "grep command to reproduce count",',
-            '        "locations": ["file:line", "file:line", "..."]',
+            '        "locations": ["file:line examples from the report; may be fewer than count"]',
             "      }",
             "    }",
             "  ],",
@@ -383,11 +384,10 @@ STEPS = {
             "  Before including a smell, verify:",
             "  1. evidence.code is actual quoted code (not description)",
             "  2. impact explains consequence (not just restates issue)",
-            "  3. occurrences.count matches locations array length",
+            "  3. occurrences.count is the Grep count the explore agent reported",
             "  4. occurrences.verification is executable command",
             "",
             "  REJECT findings that lack concrete evidence.",
-            "  Quality over quantity.",
             "",
             "PRESERVE the user's original prompt exactly - it will be used for intent extraction.",
             "",
@@ -479,117 +479,16 @@ Given the smells from the previous step, identify which ones share root causes a
 Use the smells JSON from Step 2 output above.
 </input>
 
-# WHY evidence quality gate is at Cluster step rather than Triage or Synthesize:
-#
-# Cluster is the LAST step that sees individual smell details.
-# After Cluster, smells are hidden inside issue.smell_ids arrays.
-#
-# Quality gate placement options:
-#   - Triage: Can validate format but not quality (too early to assess impact)
-#   - Cluster: Can assess quality AND reject before evidence is lost
-#   - Contextualize: Can assess quality but smells already clustered (too late)
-#   - Synthesize: Only sees issue IDs, cannot access smell evidence
-#
-# At Cluster, the agent has:
-#   - Full smell objects with evidence (not just IDs)
-#   - Cross-smell context for impact assessment
-#   - Ability to reject AND exclude from clustering (clean propagation)
-#
-# This is the last chance to make evidence-based rejection decisions.
-<evidence_quality_gate>
-BEFORE clustering, validate evidence quality for each smell:
-
-REQUIRED (reject smell if missing):
-  - evidence.code: Actual quoted code (not description)
-  - impact: States consequence (Blocks/Degrades/Risks X)
-  - occurrences.count: Numeric count from Grep
-  - occurrences.verification: Executable command
-
-Move smells failing validation to 'rejected_smells' array with reason.
-These will not be clustered or synthesized into work items.
-</evidence_quality_gate>
-
-<adaptive_analysis>
-Check smell_count from the input:
-- If <= 5: Quick relationship check, present as flat list unless obvious groupings emerge.
-- If 6-20: Group by type + location proximity. Semantic analysis only for ambiguous cases.
-- If > 20: Full multi-dimensional analysis.
-</adaptive_analysis>
-
-<analysis_process>
-Walk through the smells systematically:
-
-1. Categorize each smell by type and abstraction level.
-   These levels are illustrative, not exhaustive -- use judgment for unlisted patterns:
-   - structural: Architecture issues (e.g., circular deps, layering violations, god classes)
-   - implementation: Code organization (e.g., long methods, duplication, feature envy)
-   - surface: Cosmetic (e.g., naming, formatting, dead code, magic numbers)
-
-   DOMAIN TRANSLATION: Before categorizing, consider how each level manifests in THIS project.
-   What are the architectural patterns here? What code organization issues are common?
-   Translate the abstract levels to project-specific concerns.
-
-2. Identify groupings by shared characteristics
-
-3. For each group, articulate the root cause - what underlying issue do these smells indicate?
-
-4. Detect cross-cutting patterns: same theme across 3+ distinct locations
-
-5. Handle overlaps: if a smell fits multiple groups, assign primary (highest confidence), mark others as related
-</analysis_process>
+<analysis>
+Group smells that share a root cause. Classify each group's abstraction level
+(structural, implementation, surface -- illustrative; name the project-specific form),
+mark cross-cutting patterns (same theme in 3+ locations), and give a smell that fits
+several groups one primary group, listing the others as related.
+</analysis>
 
 <output_format>
 Output JSON:
 ```json
-# WHY representative_evidence selection uses severity then occurrence count:
-#
-# When clustering smell-1, smell-2, smell-3 into issue-1, which evidence to keep?
-#
-# Options evaluated:
-#   - First smell: Arbitrary, depends on JSON order
-#   - Longest code snippet: Favors verbose over impactful
-#   - Random: Non-deterministic, breaks reproducibility
-#   - Highest severity, then count: Deterministic and prioritizes impact
-#
-# Severity-first rule ensures:
-#   - High-severity evidence surfaces even if rare (count=1 but critical)
-#   - Tie-breaking by count prefers widespread issues over isolated cases
-#   - Selection is deterministic (same smells -> same representative)
-#
-# Example:
-#   smell-A: severity=medium, count=47
-#   smell-B: severity=high, count=3
-#   Representative: smell-B (severity trumps count)
-#
-# WHY total_occurrences is sum across constituent smells:
-#
-# Clustering merges N smells into 1 issue. Options for occurrence count:
-#   - Max: 47 occurrences (largest individual smell)
-#   - Avg: 22 occurrences (mean of constituent smells)
-#   - Sum: 98 occurrences (total across all smells)
-#
-# Sum is correct because:
-#   - Clustered smells represent different manifestations of the SAME root cause
-#   - Fixing the root cause affects ALL occurrences of ALL constituent smells
-#   - Work item scope should reflect total impact, not single-smell impact
-#
-# Example:
-#   smell-A: Missing error handling in HTTP layer (23 occurrences)
-#   smell-B: Missing error handling in DB layer (31 occurrences)
-#   -> Cluster: "Missing error handling" (54 occurrences total)
-#
-# WHY from_smell field stores the source smell ID:
-#
-# When evidence is later questioned, need to trace back to original finding.
-# Without from_smell:
-#   - "Where did this code snippet come from?" -> Cannot answer
-#   - "What was the original severity?" -> Lost after selection
-#   - "Which agent found this?" -> Cannot attribute
-#
-# Storing from_smell enables:
-#   - Auditing evidence selection decisions
-#   - Retrieving full smell details if needed
-#   - Attributing findings to specific exploration modes
 {
   "issues": [
     {
@@ -619,12 +518,7 @@ EVIDENCE SELECTION FOR CLUSTERED ISSUES:
   When N smells cluster into 1 issue:
   - representative_evidence: From highest-severity smell
   - Tie-breaker: Highest occurrence count
-  - total_occurrences: Sum across constituent smells
-
-REJECTION FEEDBACK:
-  Include rejected_smells array in output:
-  'rejected_smells': [{'smell_id': 'smell-X', 'reason': 'missing impact statement'}]
-  This enables Contextualize to surface rejection count in checkpoint message.
+  - total_occurrences: Sum across constituent smells (they share one root cause, so the fix clears all of them)
 </output_format>
 
 <edge_cases>
@@ -722,30 +616,6 @@ USE: "Based on 'quick fixes': 7 items match (low complexity - single-file mechan
 <output_format>
 Output JSON:
 ```json
-# WHY representative_evidence is preserved in prioritized_issues:
-#
-# Contextualize makes prioritization decisions (primary/deferred/appendix).
-# Without evidence in output:
-#   - Synthesize step cannot explain WHY issue-1 is primary
-#   - Work items lack justification for their priority
-#   - Reviewers cannot verify that prioritization was evidence-based
-#
-# Preservation means:
-#   - Evidence flows to final work items (no reconstruction needed)
-#   - Prioritization rationale can reference concrete code
-#   - Primary issues can show high-impact evidence inline
-#
-# This is passthrough, not transformation -- evidence shape unchanged.
-#
-# WHY evidence is NOT filtered based on priority status:
-#
-# Tempting to strip evidence from deferred/appendix issues to save tokens.
-# But:
-#   - Deferred issues may become primary if dependencies change
-#   - Appendix issues need evidence for "nice-to-have" justification
-#   - Token cost is low (already paid during Cluster)
-#
-# Premature evidence stripping forces Synthesize to operate without justification.
 {
   "intent": {
     "scope": "...",
@@ -807,40 +677,13 @@ Use the relationships from each issue.
 </input>
 
 <dependency_resolution>
-BEFORE generating work items, resolve the relationship graph into recommendations.
-
-Step 1 - Build relationship graph:
-  List all relationships from prioritized_issues.
-  Format: subject --[type]--> object (reason)
-
-Step 2 - Identify supersession chains:
-  If A obsoletes B: B should NOT become a work item (A covers it).
-  If A obsoletes B AND B obsoletes C: completing A makes both B and C unnecessary.
-  Mark superseded items with reason.
-
-Step 3 - Identify required groups:
-  If A requires B: B must be done first (or together).
-  If A requires B AND B requires A: they form a "must-do-together" atomic group.
-
-Step 4 - Resolve conflicts:
-  If A conflicts_with B: only one can be done.
-  Choose based on: higher value (obsoletes more items), fewer dependencies, lower complexity.
-  Mark excluded item with reason.
-
-Step 5 - Synthesize recommendations:
-  RECOMMEND items that:
-  - Obsolete other items (consolidate work - prefer comprehensive refactors over small fixes)
-  - Have no unresolved dependencies blocking them
-  - Are not superseded or excluded
-
-  The goal is FEWER, HIGHER-IMPACT work items. Prefer one comprehensive refactor
-  over multiple small fixes when the comprehensive approach obsoletes the small ones.
-
-After resolution, track:
-- recommended: Items to present as work items
-- superseded: Items made unnecessary (note which item supersedes them)
-- excluded: Items excluded due to conflicts (note the resolution rationale)
-- groups: Sets of items that must be done together
+Resolve relationships before writing work items:
+- An issue that a recommended item obsoletes, directly or through a chain, is not a
+  work item; list it under Superseded Items with the item that covers it.
+- For A conflicts_with B, recommend one (more items obsoleted, fewer dependencies,
+  lower complexity) and record the excluded one with the reason.
+- A requires B puts B first; mutual requires makes an atomic group.
+Prefer one comprehensive refactor over several small fixes when it obsoletes them.
 </dependency_resolution>
 
 <step_generation>
@@ -877,70 +720,6 @@ Each work item needs:
       Examples: extract method with caller updates, move function between modules
     - high: Architectural scope, design decisions required, module boundary changes
       Examples: introduce abstraction layer, restructure data flow, change API contract
-# WHY evidence_summary is inlined in work items rather than referenced:
-#
-# Current output: "Obsoletes: smell-4, smell-5"
-# Problem: Reviewer must cross-reference smell IDs in JSON to see evidence
-#
-# Inline alternative:
-#   - Evidence appears directly in work item markdown
-#   - No JSON lookup required
-#   - Reviewers see justification immediately
-#
-# This is "denormalization" -- deliberately duplicating data for readability.
-#
-# WHY before_after is required for abstractions but not all changes:
-#
-# Change types requiring before/after:
-#   - Abstractions: Extract function, create interface
-#     (Need: current inline code vs. abstracted form)
-#   - Signature changes: Rename parameters, reorder arguments
-#     (Need: current call sites vs. proposed signatures)
-#   - Code movement: Move to different module, restructure
-#     (Need: current location vs. proposed location)
-#
-# Change types NOT requiring before/after:
-#   - Bug fixes: Add null checks, fix off-by-one
-#     (Evidence code snippet already shows bug)
-#   - Additions: Add missing method, add test coverage
-#     (No "before" code - it does not exist)
-#
-# Before/after is mandatory when the FIX is as important as the PROBLEM.
-# For abstractions, the proposed structure IS the contribution.
-#
-# WHY delta field is required alongside before/after:
-#
-# Showing before/after without explanation:
-#   - Forces reviewer to spot-the-difference
-#   - Leaves intent ambiguous (why THIS refactoring?)
-#   - Hides non-obvious improvements
-#
-# Delta field states:
-#   - What structural change is happening
-#   - Why this change improves on before
-#   - What properties are gained/lost
-#
-# Example:
-#   Before: Inline SQL string in controller
-#   After: Repository method wrapping SQL
-#   Delta: Separates data access from business logic, enables testing without DB
-#
-# The delta captures invisible knowledge that diff alone cannot show.
-#
-# WHY verification command is included in every work item:
-#
-# Work items are executed later, often by different engineers.
-# Without verification command:
-#   - "47 occurrences" is an uncheckable assertion
-#   - Cannot detect scope creep (codebase evolved since scan)
-#   - Cannot verify fix completeness (did we catch all 47?)
-#
-# With verification command:
-#   - Engineer runs grep before starting: "Is scope still accurate?"
-#   - After fix, runs grep again: "Did count drop to 0?"
-#   - If count mismatch, can investigate before committing
-#
-# This makes scope falsifiable rather than aspirational.
 - evidence_summary: Inline evidence supporting this work item (REQUIRED)
   Format:
     representative_example:
@@ -954,15 +733,6 @@ Each work item needs:
       after: Proposed code pattern
       delta: What changes and why
 </work_item_requirements>
-
-<example_generation>
-BEFORE generating work items, create ONE example work item for THIS project:
-  - Use actual file paths from the smells you analyzed
-  - Use the project's language and conventions
-  - Show the level of specificity expected
-
-This self-generated example calibrates your output to the project context.
-</example_generation>
 
 <quality_criteria>
 CORRECT work items have:
@@ -1078,16 +848,9 @@ def format_step_1_output(n: int, info: dict, mode_filter: str, scope: str | None
     parts.append("")
 
     xml_mandate_text = """<xml_format_mandate>
-CRITICAL: All script outputs use XML format. You MUST:
-
-1. Execute the action in <current_action>
-2. When complete, invoke the exact command in <invoke_after>
-3. The <next> block re-states the command -- execute it
-4. For branching <invoke_after>, choose based on outcome:
-   - <if_custom>: Use when mode is CUSTOM
-   - <if_not_custom>: Use when mode is design/code/both
-
-DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
+Do the action in <current_action>, then run the command in <invoke_after>: the
+<if_custom> command when your mode is custom, the <if_not_custom> command otherwise,
+with $MODE replaced by your mode (design, code or both). Change nothing else in it.
 </xml_format_mandate>"""
     parts.append(xml_mandate_text)
     parts.append("")
@@ -1187,12 +950,7 @@ def format_step_2_dispatch(n: int, info: dict, mode_filter: str, scope: str | No
     parts.append("")
 
     xml_mandate_text = """<xml_format_mandate>
-CRITICAL: All script outputs use XML format. You MUST:
-
-1. Execute the action in <current_action>
-2. When complete, invoke the exact command in <invoke_after>
-
-DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
+Do the action in <current_action>, then run the <invoke_after> command as printed.
 </xml_format_mandate>"""
     parts.append(xml_mandate_text)
     parts.append("")
@@ -1203,12 +961,12 @@ DO NOT modify commands. DO NOT skip steps. DO NOT interpret.
         "",
         build_explore_dispatch(n, mode_filter, scope),
         "",
-        f"WAIT for all {n} agents to complete before proceeding.",
+        "WAIT for all agents to return before proceeding.",
         "",
         format_expected_output(
             {
                 "Per target": "smell_report with severity (none/low/medium/high) and findings",
-                "Format": "<smell_report> blocks from each Explore agent",
+                "Format": "<smell_report> blocks from each explore agent",
             }
         ),
     ]
@@ -1249,7 +1007,14 @@ def format_step_2_custom(info: dict, scope: str | None = None) -> str:
     )
     parts.append("")
 
-    for md_file in sorted(CONVENTIONS_DIR.glob("*.md")):
+    parts.append("<category_index>")
+    for c in parse_categories():
+        parts.append(f"  {c['file']}:{c['start_line']}-{c['end_line']}  {c['name']}")
+    parts.append("</category_index>")
+    parts.append("")
+
+    for doc in parse_documents():
+        md_file = CONVENTIONS_DIR / doc["file"]
         content = md_file.read_text()
         # Path relative to conventions dir for cleaner display
         rel_path = f"conventions/code-quality/{md_file.name}"
@@ -1266,12 +1031,12 @@ def format_step_2_custom(info: dict, scope: str | None = None) -> str:
         "Using the <problem_statement> from Step 1, select relevant categories.",
         "",
         "FALLBACK: If no <problem_statement> exists in the conversation context,",
-        "select 8-12 categories covering common quality issues (naming, structure,",
+        "select up to 10 categories covering common quality issues (naming, structure,",
         "duplication, patterns). This enables exploratory analysis without a",
         "specific problem focus.",
         "",
         "For each selected category, provide:",
-        "  - Category reference: file:start_line-end_line (e.g., 01-naming-and-types.md:5-42)",
+        "  - Category reference: the ref from <category_index>",
         "  - Relevance: One sentence explaining why this category applies to the problem",
         "",
         "Selection guidelines:",
@@ -1348,9 +1113,9 @@ def format_step_3_verification(info: dict, scope: str | None = None, retry: int 
         "If status is REVISE and this is attempt 1, you'll get one more chance.",
         "If status is PASS or this is attempt 2, proceed to dispatch.",
         "",
-        "IMPORTANT: If you request REVISE but produce IDENTICAL categories to step 2,",
-        "the system will treat this as PASS with warning. A REVISE without actual",
-        "changes indicates uncertainty that cannot be resolved by retry.",
+        "Return REVISE only with a selection that differs from step 2's; an unchanged",
+        "selection is a PASS, because a retry cannot resolve uncertainty that produced",
+        "no change.",
     ]
 
     parts.append(render_current_action(CurrentActionNode(actions)))
@@ -1398,24 +1163,12 @@ def format_step_4_dispatch_custom(info: dict, scope: str | None = None) -> str:
     actions = [
         "DISPATCH explore agents for verified categories.",
         "",
-        "Using the <verified_categories> from Step 3:",
+        "Launch one sub-agent per category in <verified_categories> from Step 3",
+        "(N = number of verified categories): subagent_type general-purpose, model haiku.",
         "",
-        '<parallel_dispatch agent="Explore" count="N">',
-        "  <instruction>",
-        "    Launch one general-purpose sub-agent per verified category.",
-        "  </instruction>",
+        parallel_constraint("N"),
         "",
-        '  <execution_constraint type="MANDATORY_PARALLEL">',
-        "    You MUST dispatch ALL agents in ONE assistant message.",
-        "    FORBIDDEN: Waiting for any agent before dispatching the next.",
-        '    FORBIDDEN: Using "Explore" subagent_type. Use "general-purpose".',
-        "  </execution_constraint>",
-        "",
-        "  <model_selection>",
-        "    Use HAIKU (default) for all agents.",
-        "  </model_selection>",
-        "",
-        "  <template>",
+        "Prompt for each agent, with the category's name and ref substituted:",
         "    Explore the codebase for this code smell.",
         "",
         "    CATEGORY: $CATEGORY_NAME",
@@ -1423,10 +1176,8 @@ def format_step_4_dispatch_custom(info: dict, scope: str | None = None) -> str:
         f"    SCOPE: {scope_display}",
         "",
         f"    Start: {invoke_cmd}",
-        "  </template>",
-        "</parallel_dispatch>",
         "",
-        "WAIT for all agents to complete before proceeding.",
+        "After all agents return, continue with the next step.",
     ]
 
     parts.append(render_current_action(CurrentActionNode(actions)))

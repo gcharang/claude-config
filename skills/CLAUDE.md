@@ -2,27 +2,11 @@
 
 Script-based agent workflows with shared orchestration framework.
 
-## MANDATORY: Read Before Modifying
-
-**STOP. Before editing ANY Python file in `skills/scripts/`, you MUST read `README.md`.**
-
-The README defines:
-
-- File section ordering (SHARED PROMPTS -> CONFIGURATION -> MESSAGE TEMPLATES -> MESSAGE BUILDERS -> STEP DEFINITIONS -> OUTPUT FORMATTING -> ENTRY POINT)
-- Step-delimited prompt organization within MESSAGE TEMPLATES
-- Naming conventions for prompt constants (`[PHASE]_[TYPE]`)
-- Patterns for dispatch prompts (static templates vs builder functions)
-- Anti-patterns to avoid (action factories, forward references)
-
-Failure to follow these patterns creates technical debt and inconsistency across skills. The patterns exist because they solve real problems with prompt readability and maintenance.
-
-**Read `README.md` now if you haven't already.**
-
 ## Files
 
-| File        | What                                                      | When to read                    |
-| ----------- | --------------------------------------------------------- | ------------------------------- |
-| `README.md` | File organization, prompt patterns, naming, anti-patterns | BEFORE modifying any skill code |
+| File        | What                                                      | When to read                                    |
+| ----------- | --------------------------------------------------------- | ----------------------------------------------- |
+| `README.md` | File organization, prompt patterns, naming, anti-patterns | Before editing any Python file under `scripts/` |
 
 ## Subdirectories
 
@@ -37,7 +21,7 @@ Failure to follow these patterns creates technical debt and inconsistency across
 | `codebase-analysis/`  | Systematic codebase exploration           | Repository architecture review           |
 | `prompt-engineer/`    | Prompt optimization and engineering       | Improving agent prompts                  |
 | `incoherence/`        | Consistency detection                     | Finding spec/implementation mismatches   |
-| `doc-sync/`           | Documentation synchronization             | Syncing docs across repos                |
+| `doc-sync/`           | Documentation synchronization             | Syncing a repository's CLAUDE.md/README.md docs |
 | `arxiv-to-md/`        | arXiv paper to markdown conversion        | Converting papers for LLM consumption    |
 | `cc-history/`         | Claude Code conversation history analysis | Querying past conversations, token usage |
 

@@ -5,7 +5,7 @@ description: Invoke IMMEDIATELY via script when user requests refactoring analys
 
 # Refactor
 
-When this skill activates, IMMEDIATELY invoke the script. The script IS the workflow.
+Run the script before exploring and follow its output; it orchestrates the exploration.
 
 ## Invocation
 
@@ -15,8 +15,6 @@ When this skill activates, IMMEDIATELY invoke the script. The script IS the work
 | -------- | -------- | --------------------------------------------- |
 | `--step` | Yes      | Current step (starts at 1)                    |
 | `--n`    | No       | Number of categories to explore (default: 10) |
-
-Do NOT explore or analyze first. Run the script and follow its output.
 
 ## Determining N (category count)
 
@@ -28,4 +26,4 @@ Adjust based on user request scope:
 - MEDIUM (directory, module, standard analysis): N = 10
 - LARGE (entire codebase, "thorough", "comprehensive"): N = 25
 
-The script randomly selects N categories from the 38 available code quality categories defined in conventions/code-quality/.
+Step 1 picks a mode from the request. In design, code, or both mode the script samples N targets at random from the categories in conventions/code-quality/; in custom mode it selects categories from the problem statement and ignores N.

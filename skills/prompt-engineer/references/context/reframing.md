@@ -169,6 +169,8 @@ The process follows 2 steps: (1) Reasoning extraction — the model generates bo
 
 **Tradeoffs:** Minimal overhead (11-50 tokens per stimulus). Single call. May produce overly deterministic language. Models without RLHF training show larger response to emotional stimuli — consider this when selecting models.
 
+**Model applicability**: The stimuli are pressure phrases. Current instruction-tuned models follow a system prompt closely and over-apply emphasis, and the study found weaker effects on RLHF-trained models; do not add them to a prompt for such a model. State the real stakes plainly instead (who uses the output and what an error costs).
+
 ---
 
 ## Code Prompting
@@ -393,7 +395,7 @@ Model: [Generates generic summarization prompt without seeing user's data or pre
 
 **Question clarity issues:** Use Rephrase and Respond first -- zero-shot, training-free, minimal overhead.
 
-**Need implicit reasoning without explicit CoT:** Use Role-Play Prompting with task-advantaged role.
+**Need implicit reasoning without explicit CoT:** On a model that reasons in its response, use Role-Play Prompting with task-advantaged role. A model that thinks before answering needs no reasoning trigger; raise `effort` instead.
 
 **Context being ignored for memorized facts:** Use Context-faithful Prompting (opinion-based reframing) with counterfactual demonstrations.
 
@@ -419,7 +421,7 @@ Model: [Generates generic summarization prompt without seeing user's data or pre
 
 ## Composability Notes
 
-**Rephrase and Respond + CoT:** Explicitly complementary. RaR clarifies the question, CoT handles reasoning. Combine by adding "let's think step by step" to RaR prompt.
+**Rephrase and Respond + CoT:** Complementary on a model that reasons in its response: RaR clarifies the question, CoT handles reasoning. A model that thinks before answering needs only the RaR instruction.
 
 **Role-Play + Self-Consistency:** Can be combined. Role-play acts as implicit CoT trigger; self-consistency samples diverse reasoning paths.
 

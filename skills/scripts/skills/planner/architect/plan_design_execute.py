@@ -85,14 +85,14 @@ def _render_batch_mode_preamble() -> list[str]:
 def _render_batch_pipe_preamble() -> list[str]:
     """The 'write the batch to a file and pipe it' lead-in shared by both prompts.
 
-    Kept beside the mode preamble so the pipe instruction (and its /tmp/changes.json
+    Kept beside the mode preamble so the pipe instruction (and its $STATE_DIR/changes.json
     filename) can't drift between the architect and QR-fix surfaces.
     """
     return [
         "  # Write the batch JSON to a file (Write tool), then pipe it in:",
-        f"  {pin_cwd('uv run python -m skills.planner.cli.plan --state-dir $STATE_DIR batch < /tmp/changes.json')}",
+        f"  {pin_cwd('uv run python -m skills.planner.cli.plan --state-dir $STATE_DIR batch < $STATE_DIR/changes.json')}",
         "",
-        "  # /tmp/changes.json (JSON escapes apostrophes/backslashes/newlines for you):",
+        "  # $STATE_DIR/changes.json (JSON escapes apostrophes/backslashes/newlines for you):",
     ]
 
 
@@ -142,9 +142,10 @@ def get_step_guidance(step: int, module_path: str | None = None, **kwargs) -> di
                 "  6. Milestone Definition & Plan Writing",
                 "",
                 "If you need user input at any step, use <needs_user_input> XML.",
-                "IMPORTANT: Save state to plan.json BEFORE yielding with <needs_user_input>.",
-                "The orchestrator will relay the question and REINVOKE you fresh with the answer.",
-                "When reinvoked, plan.json will contain your saved progress.",
+                "Before yielding with <needs_user_input>, record every settled decision with",
+                "set-decision. The orchestrator will relay the question and REINVOKE you fresh",
+                "with the answer; on re-invocation, read those decisions with list-decisions and",
+                "build on them.",
                 "",
                 "STEP 1: TASK ANALYSIS",
                 "",
@@ -372,7 +373,7 @@ def get_step_guidance(step: int, module_path: str | None = None, **kwargs) -> di
                 + pin_cwd(
                     "uv run python -m skills.planner.cli.plan --state-dir $STATE_DIR set-diagram-render \\"
                 ),
-                "     --diagram DIAG-001 --content-file /tmp/diag-001.txt",
+                "     --diagram DIAG-001 --content-file $STATE_DIR/diag-001.txt",
                 "",
                 "SCOPE VALUES:",
                 "  - overview: Hero diagram, rendered after Overview section",

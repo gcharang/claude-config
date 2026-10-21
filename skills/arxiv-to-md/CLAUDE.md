@@ -1,7 +1,6 @@
 # arxiv-to-md/
 
-Convert arXiv papers to LLM-consumable markdown. IMMEDIATELY invoke the script
-when user provides an arXiv ID or URL. Do NOT explore first.
+Convert arXiv papers to LLM-consumable markdown.
 
 ## Files
 
@@ -10,7 +9,7 @@ when user provides an arXiv ID or URL. Do NOT explore first.
 | `SKILL.md`  | Skill invocation                  | Using this skill             |
 | `README.md` | Architecture, invisible knowledge | Understanding design choices |
 
-Python code in `scripts/skills/arxiv_to_md/`:
+Python code in `../scripts/skills/arxiv_to_md/`:
 
 | File           | What                              |
 | -------------- | --------------------------------- |

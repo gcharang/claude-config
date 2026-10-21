@@ -11,7 +11,7 @@ course.
 
 - A sub-agent definition that misbehaves (agents/developer.md)
 - A Python script with embedded prompts that underperform
-  (skills/planner/scripts/planner.py)
+  (skills/scripts/skills/planner/orchestrator/planner.py)
 - A multi-prompt workflow that produces inconsistent results
 - Any prompt that does not do what you intended
 
@@ -40,7 +40,7 @@ the following claude code sub-agent: agents/developer.md
 Optimize a multi-prompt workflow:
 
 ```
-Consider @skills/planner/scripts/planner.py. Identify all prompts,
+Consider @skills/scripts/skills/planner/orchestrator/planner.py. Identify all prompts,
 understand how they interact, then use your prompt engineer skill
 to optimize each.
 ```

@@ -12,6 +12,18 @@ are strong indicators that CoT will help. For non-symbolic tasks (commonsense
 reasoning, factual QA), gains are minimal and CoT can even hurt performance.
 Apply selectively based on task type.
 
+**Model applicability**: These techniques make the model write its reasoning into the
+response, and the gains above were measured on models that reason only that way. A
+model that thinks before answering (a Claude model with adaptive thinking) reasons in
+thinking blocks, with depth set by `effort`: a CoT trigger phrase is redundant there, a
+response without a written reasoning trace is expected rather than a defect, and on
+current Claude models an instruction to write the reasoning out as a substitute for
+thinking may be declined as reasoning extraction. For such a model, raise `effort` when
+it skips steps, and ask for a short explanation of the answer where a reader needs one.
+The AlignedCoT probe below ends the request with an assistant turn
+(`Assistant: Let's think step by step.`), which current Claude models reject with
+HTTP 400; see the Prefill model applicability note in `../structure.md`.
+
 ---
 
 ## Techniques

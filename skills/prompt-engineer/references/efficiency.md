@@ -9,6 +9,16 @@ reasoning elaboration, or when operating at scale where per-request costs compou
 
 ## Output Compression Techniques
 
+**Model applicability**: These techniques compress a chain of thought the model writes
+into its response, and were measured on models that reason that way. They do not apply
+to a model that thinks before answering, such as a Claude model with adaptive thinking:
+its reasoning goes into thinking blocks whose depth the `effort` setting controls, so a
+prompt line that caps or reshapes reasoning (a length limit on "think step by step",
+words per step, a token budget, arrow or symbol shorthand) does not reduce it, and in the
+visible response it produces fragments and arrow chains instead of sentences. For such a
+model, lower `effort` to cut reasoning cost and latency, and keep the visible answer
+short by saying what it should include.
+
 ### Concise Chain-of-Thought (CCoT)
 
 **Mechanism**: Append "Be concise" to standard CoT prompt; optionally provide concise
@@ -295,9 +305,9 @@ by explaining *why* certain problems have higher intrinsic complexity.
 
 **Problem: Output too verbose, simple tasks**
 
-- Start with CCoT ("be concise") -- zero implementation cost
-- If still verbose, try Chain of Draft with few-shot examples
-- For math/arithmetic: Chunked Symbolism from SoT
+- Model that thinks before answering: lower `effort`; say what the answer should include
+- Model that reasons in its response: start with CCoT ("be concise"); if still verbose,
+  Chain of Draft with few-shot examples; for math, Chunked Symbolism from SoT
 
 **Problem: Variable difficulty, want adaptive compression**
 

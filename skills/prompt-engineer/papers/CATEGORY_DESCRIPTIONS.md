@@ -471,39 +471,6 @@ Avoid structure techniques if:
 
 ---
 
-## 6. references/ (Navigation and Meta-Analysis)
-
-### PROBLEM ADDRESSED
-
-**Observable symptoms:**
-
-- Need survey papers or taxonomies rather than specific techniques
-- Looking for meta-analysis across multiple prompting methods
-- Searching for navigation aids within the taxonomy
-
-**When you observe:** "I need orientation within the taxonomy, not a specific technique."
-
-### INCLUDES
-
-- Survey papers reviewing multiple prompt engineering techniques
-- Taxonomies and classification frameworks
-- Meta-analyses comparing technique families
-- Navigation aids for the taxonomy itself
-
-### EXCLUDES
-
-All problem-solving categories -> **reasoning/**, **correctness/**, **context/**, **efficiency/**, **structure/**
-
-### USE WHEN
-
-Looking for overview, comparison, or navigation rather than specific technique to apply.
-
-### DO NOT USE WHEN
-
-Need specific technique to solve a problem (use appropriate problem-solving category instead).
-
----
-
 ## Classification Workflow
 
 ### Step 1: Identify Primary Problem

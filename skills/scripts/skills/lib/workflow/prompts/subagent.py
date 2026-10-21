@@ -144,7 +144,7 @@ def sub_agent_invoke(cmd: str) -> str:
     return SUB_AGENT_INVOKE.format(cmd=pin_cwd(cmd))
 
 
-def parallel_constraint(count: int) -> str:
+def parallel_constraint(count: int | str) -> str:
     """Render the parallel-dispatch instruction for N agents."""
     return PARALLEL_CONSTRAINT.format(count=count)
 

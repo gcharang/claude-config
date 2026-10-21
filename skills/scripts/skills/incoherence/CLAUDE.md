@@ -1,12 +1,12 @@
 # incoherence/
 
-Step-based incoherence detection workflow (22 steps) with detection, resolution, and application phases.
+Step-based incoherence detection workflow with detection, resolution, and application phases.
 
 ## Files
 
 | File             | What                                                | When to read                                           |
 | ---------------- | --------------------------------------------------- | ------------------------------------------------------ |
-| `incoherence.py` | 22-step workflow, parent/sub-agent routing, CLI     | Debugging step behavior, changing phase assignments, adding dimensions |
+| `incoherence.py` | Step workflow, parent/sub-agent routing, CLI        | Debugging step behavior, changing phase assignments, adding dimensions |
 | `__init__.py`    | Package marker                                      | Never (empty module)                                   |
 
 ## Run

@@ -11,17 +11,16 @@ Five-step workflow per category:
 """
 
 import argparse
+import re
 import shlex
 import sys
 from pathlib import Path
+from xml.sax.saxutils import quoteattr
 
 from skills.lib.workflow.ast import (
     CurrentActionNode,
     InvokeAfterNode,
     StepHeaderNode,
-    W,
-    XMLRenderer,
-    render,
     render_current_action,
     render_invoke_after,
     render_step_header,
@@ -140,8 +139,6 @@ def format_step_1(category_ref: str, mode: str = "code", scope: str | None = Non
                 title="Domain Context", script="explore", step=1, category=category_ref, mode=mode
             )
         ),
-        "",
-        render(W.el("xml_mandate").build(), XMLRenderer()),
         "",
         render_current_action(CurrentActionNode(actions)),
         "",
@@ -355,7 +352,7 @@ def format_step_4(category_ref: str, mode: str = "code", scope: str | None = Non
         "CALIBRATION:",
         "",
         "  - Finding zero issues is a valid outcome. Do not force findings.",
-        "  - Flag only when evidence is clear. Ambiguous cases are not findings.",
+        "  - Report a borderline case at severity low rather than dropping it; triage filters.",
         "  - Apply the <threshold> from Step 2 - if exception applies, don't flag.",
         "",
         "OUTPUT (required):",
@@ -395,47 +392,18 @@ def format_step_4(category_ref: str, mode: str = "code", scope: str | None = Non
 
 def format_step_5(category_ref: str, mode: str = "code", scope: str | None = None) -> str:
     """Step 5: Synthesize findings into smell report."""
+    category_name = re.sub(
+        r"^##\s*\d+\.\s*", "", load_category_block(category_ref, mode).splitlines()[0]
+    )
     actions = [
         "SYNTHESIZE findings from Step 4 into final report.",
         "",
         "OUTPUT FORMAT (strict):",
         "",
-        # WHY token budget increased from 50 to 100 tokens per finding:
-        #
-        # Minimum viable evidence requires:
-        #   - Code snippet (2-5 lines): 45-75 tokens with indentation
-        #   - Impact statement: 25-40 tokens for "Blocks X because Y"
-        #   - Occurrences metadata: 15-25 tokens (count + verification)
-        #   Total: 85-140 tokens for complete evidence
-        #
-        # At 50 tokens, agents were forced to choose between:
-        #   - Code OR impact (incomplete evidence)
-        #   - Truncated code (not compilable/verifiable)
-        #   - Generic impact (not specific to this codebase)
-        #
-        # 100 tokens is the minimum that fits all 4 evidence components without truncation.
-        #
-        # WHY max 8 findings instead of unlimited with 50-token budget:
-        #
-        # Previous model: 500 tokens / 50 per finding = 10 findings (but all truncated)
-        # New model: 1200 tokens / 100 per finding = 12 findings (but capped at 8)
-        #
-        # The 8-finding cap forces prioritization BEFORE writing:
-        #   - Agents must rank by severity, not report exhaustively
-        #   - Cross-file evidence gets priority (more impactful than single-file)
-        #   - Low-severity findings get filtered at source, not downstream
-        #
-        # This is better than post-hoc filtering because:
-        #   - Agents have full search context (Cluster step does not)
-        #   - Severity judgment happens closest to the code
-        #   - Token budget concentrates on high-value findings
-        "TOKEN BUDGET (ENFORCED):",
-        "  - Total return: MAX 1200 tokens",
-        "  - Finding count limit: MAX 8 findings",
-        "  - Per finding: MIN 100 tokens (evidence must be verifiable)",
-        "  - Budget breakdown: 75 tokens code (5 lines) + 40 impact + 25 occurrence = 140 typical",
-        "  - If > 8 findings, keep highest severity with cross-file evidence priority",
-        "  - If budget pressure, prefer 3-line code snippets over dropping findings",
+        "REPORT SIZE:",
+        "  Report every finding that meets the evidence requirements below, most severe",
+        "  first. Quote 2-5 lines of code per finding and keep each finding to the fields",
+        "  shown; the orchestrator merges the reports from every category.",
         "",
         # WHY impact tag requires "Blocks/Degrades/Risks" structure:
         #
@@ -450,7 +418,7 @@ def format_step_5(category_ref: str, mode: str = "code", scope: str | None = Non
         #   - "Risks X" -> names a failure mode
         #
         # This makes impact falsifiable: reviewers can verify whether X is actually affected.
-        '<smell_report category="$CATEGORY_NAME" mode="$MODE" severity="high|medium|low|none" count="N">',
+        f'<smell_report category={quoteattr(category_name)} mode={quoteattr(mode)} severity="high|medium|low|none" count="N">',
         '  <finding location="file:line-range" severity="high|medium|low">',
         '    <evidence lines="N">',
         "      quoted code (2-5 lines, preserve exact indentation)",
@@ -480,9 +448,6 @@ def format_step_5(category_ref: str, mode: str = "code", scope: str | None = Non
         "  MEDIUM: Causes friction, localized impact",
         "  LOW: Minor annoyance, cosmetic",
         "  NONE: No issues found (empty findings)",
-        "",
-        "Extract $CATEGORY_NAME from the ## heading in the category block.",
-        f"Use MODE: {mode}",
         "",
         "OUTPUT your smell_report now.",
     ]

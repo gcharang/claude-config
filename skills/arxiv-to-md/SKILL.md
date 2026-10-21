@@ -11,4 +11,4 @@ Convert arXiv papers (TeX source) to clean markdown for LLM consumption.
 
 <invoke working-dir=".claude/skills/scripts" cmd="uv run python -m skills.arxiv_to_md.main --step 1" />
 
-Do NOT explore or analyze first. Run the script and follow its output.
+Run the script before exploring and follow its output.

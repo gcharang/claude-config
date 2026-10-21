@@ -53,7 +53,7 @@ Specialized nodes with dedicated renderers:
 | `CurrentActionNode` | Render `<current_action>` from a list of action strings              |
 | `InvokeAfterNode`   | Render `<invoke_after>` with command or pass/fail branching          |
 
-Legacy nodes removed in the simplification pass: `HeaderNode`, `ActionsNode`, `RawNode`, `CommandNode`, `GuidanceNode`, `RoutingNode`, `TextOutputNode`. Skills add new generic tags via `W.el("tag_name", ...)`; the specialized nodes above remain because they carry structured attributes the generic builder cannot express cleanly.
+Skills add new generic tags via `W.el("tag_name", ...)`; the specialized nodes above carry structured attributes the generic builder cannot express cleanly.
 
 ## Dispatch Node Types
 

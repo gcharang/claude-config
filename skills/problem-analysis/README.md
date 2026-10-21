@@ -1,8 +1,8 @@
 # Problem Analysis
 
 Root cause identification skill. This skill identifies WHY a problem occurs. It
-explicitly does NOT propose solutions -- that is a downstream concern for a
-separate skill (solution-discovery).
+explicitly does NOT propose solutions -- that is a downstream concern outside
+this skill.
 
 ## When to Use
 
@@ -32,13 +32,6 @@ Do NOT use this for:
 ## Invisible Knowledge
 
 This section captures design decisions that cannot be inferred from code.
-
-### Why the Original Skill Was Wrong
-
-The original skill was titled "problem-analysis" but was actually a solution
-evaluation workflow. Its very first phase instructed the LLM to "GENERATE 2-4
-DISTINCT solutions." This violates the fundamental purpose of root cause
-analysis, which must understand the problem before considering solutions.
 
 ### The Problem/Solution Boundary
 
@@ -118,13 +111,9 @@ Confidence is derived from four factual questions about the analysis:
 | Explanation  | Does the root cause fully explain the symptom?           |
 | Framing      | Is root cause a positive condition (not absence)?        |
 
-Scoring:
-
-- YES = 1 point, PARTIAL = 0.5 points, NO = 0 points
-- 4 points = HIGH (ready to proceed)
-- 3-3.5 = MEDIUM
-- 2-2.5 = LOW
-- <2 = INSUFFICIENT
+Confidence is HIGH only when all four answers are YES, and only HIGH ends the
+investigation before the iteration cap. Below that, MEDIUM or LOW is a judgment
+about how much evidence is still missing; no arithmetic is involved.
 
 Question 4 (Framing) has no partial credit. If framing is wrong, it must be
 fixed before proceeding.
@@ -146,6 +135,6 @@ The skill will:
 
 ## Implementation Notes
 
-The workflow uses `skills.lib.workflow.formatters.text` for output formatting.
-Phase 3 uses `build_invoke_command()` with dynamic `--iteration` parameter
-computed by the script.
+Each step is rendered by `skills.lib.workflow.prompts.format_step`. Phase 3's next
+command, from `build_next_command()`, carries the `--iteration` count the script
+increments.

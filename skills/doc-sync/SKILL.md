@@ -6,8 +6,8 @@ description: Synchronizes docs across a repository. Use when user asks to sync d
 # Doc Sync
 
 Maintains the CLAUDE.md navigation hierarchy and README.md invisible knowledge
-docs across a repository. This skill is self-contained and performs all
-documentation work directly.
+docs across a repository. The skill has no script: you do the documentation
+work directly, against the format specification below.
 
 ## Documentation Conventions
 
@@ -36,9 +36,11 @@ For REPOSITORY-WIDE scope, perform a full audit. For narrower scopes, operate on
 Map directories requiring CLAUDE.md verification:
 
 ```bash
-# Find all directories (excluding .git, node_modules, __pycache__, etc.)
-find . -type d \( -name .git -o -name node_modules -o -name __pycache__ -o -name .venv -o -name target -o -name dist -o -name build \) -prune -o -type d -print
+# Directories holding tracked or new non-ignored files, with every ancestor
+git ls-files --cached --others --exclude-standard | awk -F/ '{p="."; for (i=1;i<NF;i++) {p=p"/"$i; print p}} END {print "."}' | sort -u
 ```
+
+Outside a git repository, use `find . -type d` with the prune list in Exclusions.
 
 For each directory in scope, record:
 
@@ -66,33 +68,10 @@ README.md warranted: [YES/NO] (invisible knowledge present?)
 
 ### Phase 3: Content Migration
 
-**Critical:** If CLAUDE.md contains content that does NOT belong there, migrate it:
+CLAUDE.md holds navigation and operational commands; README.md holds explanation. For each block in a CLAUDE.md, ask whether it explains WHY or tells HOW:
 
-Content that MUST be moved from CLAUDE.md to README.md:
-
-- Architecture explanations or diagrams
-- Design decision documentation
-- Component interaction descriptions
-- Overview sections with prose (beyond one sentence)
-- Invariants or rules documentation
-- Any "why" explanations beyond simple triggers
-- Key Invariants sections
-- Dependencies sections (explanatory -- index can note dependencies exist)
-- Constraints sections
-- Purpose sections with prose (beyond one sentence)
-- Any bullet-point lists explaining rationale
-
-Content that MAY stay in CLAUDE.md (operational sections):
-
-- Build commands specific to this directory
-- Test commands specific to this directory
-- Regeneration/sync commands (e.g., protobuf regeneration)
-- Deploy commands
-- Other copy-pasteable procedural commands
-
-**Test:** Ask "is this explaining WHY or telling HOW?" Explanatory content
-(architecture, decisions, rationale) goes to README.md. Operational content
-(commands, procedures) stays in CLAUDE.md.
+- Explanatory content - architecture, component interactions, design decisions, invariants and constraints, rationale, and any overview or purpose prose longer than one sentence - moves to README.md.
+- Operational content - copy-pasteable build, test, regenerate or deploy commands for this directory - stays in CLAUDE.md.
 
 Migration process:
 

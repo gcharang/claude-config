@@ -18,9 +18,9 @@ failure was runtime path resolution, not a broken reference.
 **Why it happens.** Nothing resolves the tag — `grep -rn 'working-dir'
 skills/scripts --include='*.py'` finds no parser; it is a convention the LLM must
 interpret by hand. doc-sync compounds it: `skills/scripts/skills/doc_sync/` is an
-empty package (only `__init__.py`), so no script reads and injects the file, yet
-`skills/doc-sync/SKILL.md` claims the skill is "self-contained" while depending on
-this external reference.
+empty package (only `__init__.py`), so no script reads and injects the file, and
+`skills/doc-sync/SKILL.md` takes its whole format specification from this external
+reference.
 
 **Not covered by CI.** The reference-resolution guard
 (`skills/scripts/tests/test_reference_resolution.py`) is a *static* check that the
@@ -33,8 +33,7 @@ catch a runtime misresolution of an already-valid reference.
   explicit instruction, e.g. *"Read the format spec from
   `~/.claude/conventions/documentation.md` (or
   `$CLAUDE_PROJECT_DIR/.claude/conventions/documentation.md` for a project-local
-  install)."* — or inline the spec so the skill is genuinely self-contained as it
-  claims.
+  install)."* — or inline the spec so the skill is self-contained.
 - Apply the same disambiguation to the agents that use the identical tag:
   `agents/technical-writer.md`, `agents/architect.md`, `agents/developer.md`,
   `agents/quality-reviewer.md` (all reference `conventions/…` and root `CLAUDE.md`
@@ -45,35 +44,6 @@ catch a runtime misresolution of an already-valid reference.
 its resolution rule once where every executor reads it, (b) switch to explicit
 absolute-path instructions per reference, or (c) give doc-sync a real script that
 reads + injects the convention (like the Python skills' `format_file_content`).
-
-## Normalize the duplicated parallel-dispatch instruction
-
-**Status:** deferred · **Surfaced:** 2026-08-18 (prompt audit of the planner workflow;
-flagged independently by the architecture and clean-code review lanes)
-
-**Problem.** One instruction ("dispatch all N agents in a single message; do not wait for
-one before dispatching the next") has three owners, and the audit rewrote only the one in
-the planner's path, so they now differ in force:
-
-- `skills/scripts/skills/lib/workflow/prompts/subagent.py` `PARALLEL_CONSTRAINT` — rewritten
-  to normal register. Consumers: the planner's QR fan-out (`planner/shared/builders.py`),
-  `arxiv_to_md/main.py`, `codebase_analysis/analyze.py`, `deepthink/think.py`.
-- `skills/scripts/skills/lib/workflow/ast/dispatch_renderer.py` `_build_execution_constraint`
-  — still `You MUST dispatch ALL {count} agents`, CORRECT/WRONG blocks, `FORBIDDEN: Waiting`.
-  Consumer: `refactor` (via `TemplateDispatchNode`).
-- `skills/scripts/skills/refactor/refactor.py` (~L1427) — a third, hand-rolled copy of the
-  same wording inside a literal `<parallel_dispatch>` block.
-
-**Why it was not fixed.** The audit's scope was narrowed by the user to the planner
-workflow; the other two copies are reached only by `refactor` / `incoherence`. Both review
-lanes recommended recording the divergence rather than widening scope, because the risk is
-that the next reader treats the shouty XML copy as the intended phrasing.
-
-**Fix (when scheduled).** Decide one owner for the instruction text, then either have
-`_build_execution_constraint` render from `PARALLEL_CONSTRAINT` (XML-wrapping it) or accept
-two renderings with identical wording. Delete the hand-rolled copy in `refactor.py` in the
-same pass. Re-run the refactor skill's step 2 before/after to confirm the rendered dispatch
-is still well-formed XML.
 
 ## Persist the executor's reduced `plan.json` at plan approval (audit finding S4)
 

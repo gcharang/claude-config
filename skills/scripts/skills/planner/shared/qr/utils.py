@@ -378,10 +378,6 @@ def format_qr_item_for_verification(item: dict) -> str:
         # fields), while the remaining plaintext sinks use _fix_field_safe.
         f"  <check>{escape(''.join('⏎' if ord(c) in LINE_FORGING_ORDS else c for c in str(item.get('check', QA_ITEM_DEFAULTS['check']))))}</check>",
         "</qr_item_to_verify>",
-        "",
-        "VERIFY this specific item. Return exactly:",
-        "  PASS - if check passes",
-        "  FAIL - if check fails, with finding explaining why",
     ]
     return "\n".join(lines)
 
