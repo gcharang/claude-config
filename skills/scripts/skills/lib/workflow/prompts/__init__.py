@@ -11,7 +11,6 @@ from skills.lib.workflow.prompts.file import format_file_content
 from skills.lib.workflow.prompts.step import format_step, pin_cwd
 from skills.lib.workflow.prompts.subagent import (
     parallel_constraint,
-    roster_dispatch,
     sub_agent_invoke,
     # Dispatch templates
     subagent_dispatch,
@@ -27,7 +26,6 @@ __all__ = [
     "format_step",
     "parallel_constraint",
     "pin_cwd",
-    "roster_dispatch",
     "sub_agent_invoke",
     # Dispatch templates
     "subagent_dispatch",

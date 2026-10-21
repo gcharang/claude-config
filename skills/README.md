@@ -82,11 +82,6 @@ Analysis goals from SCOPE step:
 - User intent and what they want to understand
 - Identified focus areas"""
 
-SURVEY_DISPATCH_AGENTS = [
-    "[Exploration focus 1: e.g., 'Explore authentication flow']",
-    "[Exploration focus 2: e.g., 'Explore database schema']",
-]
-
 SURVEY_DISPATCH_GUIDANCE = """\
 DISPATCH GUIDANCE:
 ...
@@ -107,59 +102,17 @@ SYNTHESIZE_EXPLORING_INSTRUCTIONS = """..."""
 
 Step divider format: `# --- STEP N: PHASE_NAME ` followed by dashes to column 76.
 
-Within a step section, order constants by execution flow. Dispatch-related constants (context, agents, guidance) come before instruction constants.
+Within a step section, order constants by execution flow. Dispatch-related constants (context, guidance) come before instruction constants.
 
 ### Dispatch Prompts: Templates vs Builders
 
-Dispatch prompts combine static templates with dynamic composition. Split them:
+Dispatch prompts combine static text with the dispatch building blocks in `skills.lib.workflow.prompts` (`task_tool_instruction`, `parallel_constraint`, `sub_agent_invoke`). Split them:
 
-**Static parts -> MESSAGE TEMPLATES** (constants):
+**Static parts -> MESSAGE TEMPLATES** (constants). A dispatch with no runtime inputs is a constant even though it calls the building blocks: see `DISPATCH_INSTRUCTIONS` in `deepthink/think.py` (step 9) and `SURVEY_INSTRUCTIONS` in `codebase_analysis/analyze.py` (step 2).
 
-```python
-# --- STEP 2: SURVEY ----------------------------------------------------------
+When the orchestrator decides the number of agents at runtime, as in both, write the count as `N`, pass `parallel_constraint("N")`, and say what N is. A placeholder list passed to `template_dispatch()` prints its own length as the agent count, which contradicts the real one.
 
-SURVEY_DISPATCH_CONTEXT = """\
-Analysis goals from SCOPE step:
-- User intent and what they want to understand
-- Identified focus areas (architecture, components, flows, etc.)"""
-
-SURVEY_DISPATCH_AGENTS = [
-    "[Exploration focus 1: e.g., 'Explore authentication flow']",
-    "[Exploration focus 2: e.g., 'Explore database schema']",
-]
-
-SURVEY_DISPATCH_GUIDANCE = """\
-DISPATCH GUIDANCE:
-
-Single codebase, focused scope:
-  - One Explore agent with specific focus
-
-Large/broad scope:
-  - Multiple parallel Explore agents by boundary
-
-WAIT for Explore results before re-invoking this step.
-
-ADVANCE: After results received, re-invoke with --confidence low."""
-```
-
-**Composition -> MESSAGE BUILDERS** (functions that call `roster_dispatch()` etc.):
-
-```python
-# ============================================================================
-# MESSAGE BUILDERS
-# ============================================================================
-
-def build_survey_exploring_body() -> str:
-    """Build SURVEY exploring instructions with dispatch."""
-    dispatch_text = roster_dispatch(
-        agent_type="Explore",
-        agents=SURVEY_DISPATCH_AGENTS,
-        command="Use Task tool with subagent_type='Explore'",
-        shared_context=SURVEY_DISPATCH_CONTEXT,
-        model="haiku",
-    )
-    return f"DISPATCH Explore agent(s):\n\n{dispatch_text}\n\n{SURVEY_DISPATCH_GUIDANCE}"
-```
+**Composition -> MESSAGE BUILDERS** (functions), for a dispatch built from values the script computes when it runs. `build_explore_dispatch` in `refactor/refactor.py` renders one entry per category it selected, so its agent count is exact.
 
 This separation ensures:
 
@@ -174,7 +127,7 @@ This separation ensures:
 ```
 
 PHASE is the workflow phase: `SCOPE`, `SURVEY`, `DEEPEN`, `SYNTHESIZE`, `DISCOVERY`, `IDEATION`.
-TYPE is its role: `INSTRUCTIONS`, `DISPATCH_CONTEXT`, `DISPATCH_AGENTS`, `DISPATCH_GUIDANCE`, `FORMAT`, `FEEDBACK`.
+TYPE is its role: `INSTRUCTIONS`, `DISPATCH_CONTEXT`, `DISPATCH_GUIDANCE`, `FORMAT`, `FEEDBACK`.
 
 Confidence variants use suffixes: `_LOW`, `_MEDIUM`, `_HIGH`, `_EXPLORING`, `_CERTAIN`.
 
@@ -184,7 +137,6 @@ Examples:
 EVALUATION_CRITERIA              # shared (used by 2+ steps)
 SCOPE_INSTRUCTIONS               # step 1
 SURVEY_DISPATCH_CONTEXT          # step 2, dispatch context
-SURVEY_DISPATCH_AGENTS           # step 2, dispatch agent list
 SURVEY_LOW_INSTRUCTIONS          # step 2, low confidence variant
 DEEPEN_HIGH_INSTRUCTIONS         # step 3, high confidence variant
 SYNTHESIZE_FORMAT                # step 4, output format
@@ -271,97 +223,27 @@ No "action factories". No inversion of control. Just strings.
 
 ### Pattern 1: Static Steps (deepthink subagent)
 
-All-static workflows use separate `STEP_TITLES` and `STEP_INSTRUCTIONS` dicts:
+All-static workflows use one `STATIC_STEPS` dict of (title, instructions) tuples:
 
 ```python
-STEP_TITLES = {
-    1: "Context Grounding",
-    2: "Analogical Generation",
-    3: "Planning",
-    # ...
-}
-
-STEP_INSTRUCTIONS = {
-    1: CONTEXT_GROUNDING_INSTRUCTIONS,
-    2: ANALOGICAL_GENERATION_INSTRUCTIONS,
-    3: PLANNING_INSTRUCTIONS,
+STATIC_STEPS = {
+    1: ("Context Grounding", CONTEXT_GROUNDING_INSTRUCTIONS),
+    2: ("Analogical Generation", ANALOGICAL_GENERATION_INSTRUCTIONS),
+    3: ("Planning", PLANNING_INSTRUCTIONS),
     # ...
 }
 
 def format_output(step: int) -> str:
-    if step not in STEP_TITLES:
+    if step not in STATIC_STEPS:
         return f"ERROR: Invalid step {step}"
-    title = STEP_TITLES[step]
-    instructions = STEP_INSTRUCTIONS[step]
+    title, instructions = STATIC_STEPS[step]
     next_cmd = build_next_command(step)
     return format_step(instructions, next_cmd or "", title=f"WORKFLOW - {title}")
 ```
 
 ### Pattern 2: Parameterized Steps (codebase-analysis)
 
-Templates and builders are separated. Templates are constants defined in MESSAGE TEMPLATES (step-delimited). Builders compose templates into complete messages.
-
-```python
-# ============================================================================
-# MESSAGE TEMPLATES
-# ============================================================================
-
-# --- STEP 2: SURVEY ----------------------------------------------------------
-
-SURVEY_DISPATCH_CONTEXT = (
-    "Analysis goals from SCOPE step:\n"
-    "- User intent and what they want to understand"
-)
-
-SURVEY_DISPATCH_AGENTS = [
-    "[Exploration focus 1: e.g., 'Explore authentication flow']",
-    "[Exploration focus 2: e.g., 'Explore database schema']",
-]
-
-SURVEY_DISPATCH_GUIDANCE = (
-    "DISPATCH GUIDANCE:\n"
-    "...\n"
-    "ADVANCE: After results received, re-invoke with --confidence low."
-)
-
-SURVEY_LOW_INSTRUCTIONS = (
-    "EXTRACT findings from Explore output:\n"
-    "..."
-)
-
-# ============================================================================
-# MESSAGE BUILDERS
-# ============================================================================
-
-def build_survey_exploring_body() -> str:
-    dispatch_text = roster_dispatch(
-        agent_type="Explore",
-        agents=SURVEY_DISPATCH_AGENTS,
-        command="Use Task tool with subagent_type='Explore'",
-        shared_context=SURVEY_DISPATCH_CONTEXT,
-        model="haiku",
-    )
-    return (
-        "DISPATCH Explore agent(s):\n"
-        "\n"
-        + dispatch_text + "\n"
-        "\n"
-        + SURVEY_DISPATCH_GUIDANCE
-    )
-
-def get_survey_body(confidence: str) -> str:
-    if confidence == "exploring":
-        return build_survey_exploring_body()
-    elif confidence == "low":
-        return "SURVEY - Low Confidence\n\n" + SURVEY_LOW_INSTRUCTIONS
-    # ...
-
-def format_output(step: int, confidence: str) -> str:
-    bodies = {1: get_scope_body, 2: get_survey_body, ...}
-    body = bodies[step](confidence)
-    next_cmd = build_next_command(step, confidence)
-    return format_step(body, next_cmd)
-```
+A step whose title or body depends on CLI parameters such as `--confidence` and `--iteration` gets a dynamic formatter. The step's instructions stay in MESSAGE TEMPLATES constants; the formatter chooses and formats them, and may return a short completion body of its own. In `codebase_analysis/analyze.py`, `_format_step_3` renders the DEEPEN body for the current iteration, or a completion body once the previous iteration reached the exit confidence. The module layout is Pattern 5's.
 
 ### Pattern 3: Dispatch Steps (planner orchestrator)
 
@@ -407,19 +289,25 @@ def format_technique_step(categories: list[str]) -> str:
     return format_step(body, "uv run python -m skills.prompt_engineer.optimize --step 5")
 ```
 
-### Pattern 5: Hybrid Static/Dynamic Steps (deepthink)
+### Pattern 5: Hybrid Static/Dynamic Steps
 
-Workflows with mostly static steps and few parameterized steps benefit from a hybrid approach:
+Workflows with mostly static steps and few parameterized steps benefit from a hybrid approach. The skeleton below is illustrative; `deepthink/think.py` is the live example:
 
 ```python
 # ============================================================================
 # MESSAGE BUILDERS
 # ============================================================================
 
-def build_dispatch_body() -> str:
-    """Builder functions that dynamic formatters may call."""
-    # ... implementation
-    return dispatch_text
+def _refinement_done(confidence: str, iteration: int) -> bool:
+    return iteration > 1 and confidence in ("high", "certain")
+
+
+def build_next_command(step: int, mode: str, confidence: str, iteration: int) -> str | None:
+    # ...
+    elif step == 13:
+        if _refinement_done(confidence, iteration):
+            return f"{base} --step 14 --confidence {confidence} --mode {mode}"
+        # ...
 
 
 # ============================================================================
@@ -435,22 +323,27 @@ STATIC_STEPS = {
 
 
 # Dynamic formatter functions - defined BEFORE DYNAMIC_STEPS dict
-def _format_step_9(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
-    """Dynamic step that calls a builder function."""
-    return ("Dispatch", build_dispatch_body())
+def _format_step_12(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
+    """Dynamic step whose body depends on a parameter."""
+    body = SYNTHESIS_FULL_INSTRUCTIONS if mode == "full" else SYNTHESIS_QUICK_INSTRUCTIONS
+    return ("Initial Synthesis", body)
 
 
 def _format_step_13(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
-    """Dynamic step with parameterized title and body."""
-    suffix = " -> Complete" if confidence == "certain" else ""
-    title = f"Iterative Refinement (Iteration {iteration}){suffix}"
-    body = INSTRUCTIONS.format(iteration=iteration, max_iter=MAX_ITERATIONS)
+    """Dynamic step with parameterized title and body, and a completion body at loop exit."""
+    if _refinement_done(confidence, iteration):
+        return (
+            "Iterative Refinement Complete",
+            f"The previous iteration reached {confidence.upper()} confidence. Proceed to formatting.",
+        )
+    title = f"Iterative Refinement (Iteration {iteration} of {MAX_ITERATIONS})"
+    body = REFINEMENT_INSTRUCTIONS.format(iteration=iteration, max_iter=MAX_ITERATIONS)
     return (title, body)
 
 
 # Dynamic steps dict - references functions defined above
 DYNAMIC_STEPS = {
-    9: _format_step_9,
+    12: _format_step_12,
     13: _format_step_13,
 }
 
@@ -473,6 +366,8 @@ def format_output(step: int, mode: str, confidence: str, iteration: int) -> str:
 ```
 
 **Ordering constraint (book pattern)**: Dynamic formatter functions that call MESSAGE BUILDERS must appear AFTER MESSAGE BUILDERS. The DYNAMIC*STEPS dictionary must appear AFTER all `\_format_step*\*` functions it references.
+
+**Loop exit**: write a loop's exit test once, as a function that both `build_next_command` and the step's formatter call, so the printed body and the next command cannot disagree.
 
 Use this pattern when:
 
@@ -540,11 +435,10 @@ prompts/
 
 ### subagent.py
 
-Three dispatch patterns for spawning sub-agents via the Task tool:
+Dispatch patterns for spawning sub-agents via the Task tool:
 
 - `subagent_dispatch(agent_type, command, prompt="", model=None)` -- single sequential dispatch
 - `template_dispatch(agent_type, template, targets, command, ...)` -- parallel SIMD (same template, N targets with $var substitution)
-- `roster_dispatch(agent_type, agents, command, shared_context="", ...)` -- parallel MIMD (shared context + unique tasks)
 
 Building blocks (also exported):
 

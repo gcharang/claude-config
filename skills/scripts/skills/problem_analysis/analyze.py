@@ -293,6 +293,10 @@ OUTPUT_INSTRUCTIONS = (
 # ============================================================================
 
 
+def _investigation_done(confidence: str) -> bool:
+    return confidence == "high"
+
+
 def build_next_command(step: int, confidence: str, iteration: int) -> str | None:
     """Build invoke command for next step."""
     base = f"uv run python -m {MODULE_PATH}"
@@ -301,7 +305,7 @@ def build_next_command(step: int, confidence: str, iteration: int) -> str | None
     if step == 2:
         return f"{base} --step 3 --confidence exploring --iteration 1"
     if step == 3:
-        if confidence in ("high", "certain") or iteration >= MAX_ITERATIONS:
+        if _investigation_done(confidence) or iteration >= MAX_ITERATIONS:
             return f"{base} --step 4"
         return f"{base} --step 3 --confidence <your_confidence> --iteration {iteration + 1}"
     if step == 4:
@@ -323,7 +327,7 @@ STATIC_STEPS = {
 
 def _format_step_3(confidence: str, iteration: int) -> tuple[str, str]:
     """Dynamic formatter for step 3 (Investigate) -- handles iteration/exit logic."""
-    if confidence in ("high", "certain"):
+    if _investigation_done(confidence):
         return (
             "Investigate Complete",
             "Investigation reached HIGH confidence. Proceeding to root cause formulation.\n\n"
@@ -369,7 +373,7 @@ def main():
     parser.add_argument(
         "--confidence",
         type=str,
-        choices=["exploring", "low", "medium", "high", "certain"],
+        choices=["exploring", "low", "medium", "high"],
         default="exploring",
         help="Confidence level from previous iteration (Step 3 only)",
     )

@@ -156,7 +156,7 @@ def _save_plan_to_docs(state_dir: str) -> "Path | None":
         return None
 
 
-def _build_fix_mode_output(title, agent, script, qr, ctx):
+def _build_fix_mode_output(title, agent, script, qr, ctx, post_dispatch: list[str] | None = None):
     """Build output for execute step in fix mode."""
     state_dir = ctx["state_dir"]
 
@@ -173,7 +173,7 @@ def _build_fix_mode_output(title, agent, script, qr, ctx):
         follow_up=(
             f"{agent.title()} reads QR report and fixes issues.",
             "After fixes complete, re-run QR for fresh verification.",
-            QUESTION_RELAY_HANDLER,
+            *(post_dispatch or ()),
         ),
     )
 
@@ -294,7 +294,7 @@ def execute_dispatch_step(title, agent, script, post_dispatch=None, phase=None):
         step = ctx["step"]
 
         if qr.state == LoopState.RETRY:
-            return _build_fix_mode_output(title, agent, script, qr, ctx)
+            return _build_fix_mode_output(title, agent, script, qr, ctx, post_dispatch)
 
         action_children = []
 

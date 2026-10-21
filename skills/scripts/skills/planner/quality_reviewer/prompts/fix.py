@@ -104,7 +104,7 @@ def _impl_docs_apply(state_dir: str) -> list[str]:
         "IK proximity failures:",
         "  - Move knowledge to README.md in SAME directory as code",
         "  - Add inline comments at enforcement points",
-        "  - Remove references to external doc/ directories",
+        "  - Drop any pointer to the old location of knowledge you moved",
         "",
         "Temporal contamination:",
         "  - Rewrite comments to remove change-relative language",
@@ -138,7 +138,7 @@ IMPL_DOCS_VALIDATE: list[str] = [
     "  Do not add summaries, explanations, or any other text.",
 ]
 
-# pin_cwd pins a fixed SKILLS_DIR, and these commands carry a literal $STATE_DIR
+# pin_cwd pins a fixed SKILLS_DIR, and the example commands carry a literal $STATE_DIR
 # placeholder (the agent substitutes it). The BATCH-MODE preamble and the pipe lead-in
 # are shared with plan_design_execute so the architect and QR-fix surfaces teach one
 # batch contract.
@@ -194,9 +194,15 @@ def _plan_design_apply(state_dir: str) -> list[str]:
         "  - If decision is missing: add it first, then update ref",
         "",
         "Policy default without backing:",
-        "  - If context.json or the decision log records the user's confirmation,",
-        "    add a decision_log entry citing it",
+        "  - If context.json, the decision log or a <user_response> you were given records",
+        "    the user's confirmation, add a decision_log entry citing it",
         "  - Otherwise ask with <needs_user_input> (protocol below) before recording it",
+        "",
+        "On re-invocation after a question, read what plan.json already holds and update an",
+        "entry by its id instead of adding a duplicate: the decisions, and the intents of",
+        "each milestone you touched.",
+        f"  {pin_cwd(f'uv run python -m skills.planner.cli.plan --state-dir {shell_quote(state_dir)} list-decisions')}",
+        f"  {pin_cwd(f'uv run python -m skills.planner.cli.plan --state-dir {shell_quote(state_dir)} list-intents <milestone-id>')}",
         "",
         "CONSTRAINT: Fix ONLY the failing items. Don't refactor passing items.",
         "",

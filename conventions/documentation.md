@@ -5,11 +5,12 @@ documentation (CLAUDE.md, README.md) must follow these principles.
 
 ## Core Principles
 
-**Self-contained documentation**: All code-adjacent documentation (CLAUDE.md,
-README.md) must be self-contained. Do NOT reference external authoritative
-sources (doc/ directories, wikis, external documentation). If knowledge exists
-in an authoritative source, it must be summarized locally. Duplication is
-acceptable; the maintenance burden is the cost of locality.
+**Self-contained documentation**: A reader of code-adjacent documentation
+(CLAUDE.md, README.md) needs nothing from outside the repository. Summarize
+locally any knowledge whose source lives outside it (wikis, external
+documentation). When a file in the repository already holds the knowledge (a
+doc/ directory, another README.md, a schema), point at that file instead of
+restating it; a restated copy goes stale without anyone noticing.
 
 **CLAUDE.md = pure index**: CLAUDE.md files are navigation aids only. They list
 the directory's subdirectories and its entry-point files -- WHAT each is and

@@ -34,6 +34,9 @@ CONVENTIONS_DIR = (
     Path(__file__).resolve().parent.parent.parent.parent.parent / "conventions" / "code-quality"
 )
 
+# Category heading in conventions/code-quality/*.md; group 1 is the category name.
+CATEGORY_HEADING_RE = re.compile(r"^## \d+\. (.+)$")
+
 
 # =============================================================================
 # Category Loader
@@ -76,6 +79,18 @@ def load_category_block(category_ref: str, mode: str = "code") -> str:
         category_block = category_block.replace(tag, "")
 
     return category_block
+
+
+def load_category_name(category_ref: str) -> str:
+    """Return the name in the category heading that category_ref starts at.
+
+    Exits when the ref starts anywhere else, including past the end of the file, so
+    a mis-copied ref fails instead of reporting findings under a wrong category.
+    """
+    first_line = load_category_block(category_ref).partition("\n")[0]
+    if heading := CATEGORY_HEADING_RE.match(first_line):
+        return heading.group(1)
+    sys.exit(f"ERROR: --category {category_ref} does not start at a '## N. Name' category heading")
 
 
 # =============================================================================
@@ -392,9 +407,7 @@ def format_step_4(category_ref: str, mode: str = "code", scope: str | None = Non
 
 def format_step_5(category_ref: str, mode: str = "code", scope: str | None = None) -> str:
     """Step 5: Synthesize findings into smell report."""
-    category_name = re.sub(
-        r"^##\s*\d+\.\s*", "", load_category_block(category_ref, mode).splitlines()[0]
-    )
+    category_name = load_category_name(category_ref)
     actions = [
         "SYNTHESIZE findings from Step 4 into final report.",
         "",
@@ -528,6 +541,8 @@ def main():
 
     if ":" not in args.category or "-" not in args.category.split(":")[1]:
         sys.exit("ERROR: --category must be in format file.md:start-end")
+    # Checked at every step so a bad ref fails at step 1, not after the agent's search.
+    load_category_name(args.category)
 
     print(format_output(args.step, args.category, args.mode, args.scope))
 

@@ -33,7 +33,6 @@ TemplateDispatchNode: Parallel dispatch with parameterized template
 RosterDispatchNode: Parallel dispatch with unique prompts
     Each agent has a fundamentally different task (MIMD pattern).
     Shared context + unique prompts, fixed command.
-    Examples: deepthink (dynamically designed tasks), codebase-analysis
 
     Example:
         node = RosterDispatchNode(

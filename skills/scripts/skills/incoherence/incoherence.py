@@ -12,10 +12,12 @@ import argparse
 
 from skills.lib.workflow.ast.nodes import (
     CurrentActionNode,
+    ElementNode,
     InvokeAfterNode,
     StepHeaderNode,
 )
 from skills.lib.workflow.ast.renderer import (
+    XMLRenderer,
     render_current_action,
     render_invoke_after,
     render_step_header,
@@ -39,6 +41,34 @@ def _invoke_line(cmd: str) -> str:
     \\"...\\" / {{var}} placeholders must survive unescaped.
     """
     return f'  Start: <invoke cmd="{pin_cwd(cmd)}" />'
+
+
+def _next_step_cmd(target: int) -> str:
+    return (
+        f'uv run python -m {MODULE_PATH} --step-number {target} --thoughts "<ACCUMULATED_CONTEXT>"'
+    )
+
+
+def _render_branches(branches: list[tuple[str, int]]) -> str:
+    """Render an <invoke_after> holding one <branch when="..."> command per condition.
+
+    Built from ElementNode because InvokeAfterNode's two branches are labelled
+    if_pass/if_fail, which name a QR verdict rather than these loop conditions.
+    """
+    return XMLRenderer().render_element(
+        ElementNode(
+            "invoke_after",
+            {},
+            [
+                ElementNode(
+                    "branch",
+                    {"when": condition},
+                    [ElementNode("invoke", {"cmd": pin_cwd(_next_step_cmd(target))}, [])],
+                )
+                for condition, target in branches
+            ],
+        )
+    )
 
 
 DIMENSION_CATALOG = """
@@ -172,7 +202,9 @@ def format_incoherence_output(step, phase, agent_type, guidance, thoughts=""):
     if step == 1:
         parts.append("""<xml_format_mandate>
 Do the action in <current_action>, then run the <invoke_after> command with
-<ACCUMULATED_CONTEXT> replaced by what the step tells you to carry forward.
+<ACCUMULATED_CONTEXT> replaced by what the step tells you to carry forward. When
+<invoke_after> holds <branch> elements, run the command of the branch whose
+"when" condition holds.
 </xml_format_mandate>""")
         parts.append("")
 
@@ -189,10 +221,11 @@ Do the action in <current_action>, then run the <invoke_after> command with
         parts.append("WORKFLOW COMPLETE - Present report to user.")
     elif is_subagent_terminal:
         parts.append("SUB-AGENT TASK COMPLETE - Return results to parent agent.")
+    elif branches := guidance.get("branches"):
+        parts.append(_render_branches(branches))
     else:
         target = guidance.get("next_step") or step + 1
-        next_cmd = f'uv run python -m skills.incoherence.incoherence --step-number {target} --thoughts "<ACCUMULATED_CONTEXT>"'
-        parts.append(render_invoke_after(InvokeAfterNode(cmd=next_cmd)))
+        parts.append(render_invoke_after(InvokeAfterNode(cmd=_next_step_cmd(target))))
         if next_text:
             parts.append(f"NEXT: {next_text}")
 
@@ -239,7 +272,7 @@ STEPS = {
             "  DIMENSION: {letter} - {name}. DESCRIPTION: {from_catalog}",
             _invoke_line(f'uv run python -m {MODULE_PATH} --step-number 4 --thoughts \\"Dimension: {{{{letter}}}}\\"'),
         ],
-        "next": "After all agents complete, invoke step 8 with combined findings",
+        "next": "After all agents complete, run the <invoke_after> command with their combined findings",
         "next_step": 8,
     },
     4: {
@@ -326,7 +359,7 @@ STEPS = {
             "  Workflow: step 10 (explore) -> step 11 (format)",
             _invoke_line(f'uv run python -m {MODULE_PATH} --step-number 10 --thoughts \\"Verifying: {{{{id}}}}\\"'),
         ],
-        "next": "After all agents complete, invoke step 12 with all verdicts",
+        "next": "After all agents complete, run the <invoke_after> command with all their verdicts",
         "next_step": 12,
     },
     10: {
@@ -424,22 +457,16 @@ STEPS = {
             "Early exit: if ALL resolutions are NO_RESOLUTION, output 'No issues selected' and stop.",
             "",
             "Process response:",
-            "  G{n} response: unified -> record for all; 'individually' -> step 14 MODE=individual;",
+            "  G{n} response: unified -> record for all; 'individually' -> set MODE=individual;",
             "                 'skip all' -> NO_RESOLUTION for all; 'other' -> record custom for all",
             "  I{n} responses: record each resolution or NO_RESOLUTION",
             "",
-            "Loop decision:",
-            "  1. 'Resolve individually' -> step 14 with MODE=individual",
-            "  2. More batches -> step 14 with next batch",
-            "  3. All complete -> step 16 with all resolutions",
-            "",
             "Include in --thoughts: collected resolutions, remaining batches, MODE flag if applicable.",
         ],
-        "next": (
-            "If 'Resolve individually' selected: invoke step 14 with MODE=individual\n"
-            "If more batches remain: invoke step 14 with next batch\n"
-            "If all batches complete: invoke step 16 with all resolutions"
-        ),
+        "branches": [
+            ("'Resolve individually' was selected, or more batches remain", 14),
+            ("all batches are complete", 16),
+        ],
     },
     16: {
         "title": "PLAN DISPATCH",
@@ -473,7 +500,7 @@ STEPS = {
             "",
             parallel_constraint("N"),
         ],
-        "next": "After all wave agents complete, invoke step 20 with results",
+        "next": "After all wave agents complete, run the <invoke_after> command with their results",
         "next_step": 20,
     },
     18: {
@@ -504,9 +531,12 @@ STEPS = {
             "RECONCILE COLLECT",
             "",
             "Collect wave results: per agent, issues handled, status, change/reason.",
-            "Check dispatch plan: more waves -> step 17, all complete -> step 21.",
+            "Check the dispatch plan for remaining waves.",
         ],
-        "next": "If more waves: invoke step 17. Otherwise: invoke step 21.",
+        "branches": [
+            ("the dispatch plan has more waves", 17),
+            ("all waves are complete", 21),
+        ],
     },
     21: {
         "title": "PRESENT REPORT",
@@ -530,6 +560,7 @@ def generic_step_handler(step_info, **kwargs):
         "actions": step_info.get("actions", []),
         "next": step_info.get("next", ""),
         "next_step": step_info.get("next_step"),
+        "branches": step_info.get("branches"),
     }
 
 

@@ -21,8 +21,8 @@ SUB_AGENT_QUESTION_FORMAT = """\
 When you need user clarification to proceed:
 
 BEFORE YIELDING:
-  Record any decision you have already settled with the plan CLI (`set-decision`).
-  plan.json keeps only what the CLI writes; the re-invocation sees nothing else from this run.
+  Record everything you have already settled with your workflow's own state commands.
+  The re-invocation sees only what those commands recorded, nothing else from this run.
 
 THEN emit this XML as your ENTIRE response:
 
@@ -69,15 +69,15 @@ WHAT HAPPENS NEXT:
   After emitting this XML, STOP. The orchestrator will:
   1. Relay the question to the user
   2. REINVOKE you fresh (NOT resume) with the user's answer
-  3. Pass the STATE_DIR so you can read plan.json
+  3. Pass the same STATE_DIR, which holds what you recorded
 
   When reinvoked, you will receive:
   - <user_response> with answers to your questions
   - STATE_DIR pointing to your saved state
   - Instructions to invoke your script with --step 1
 
-  Your script starts again at step 1. Read the decisions already in plan.json
-  (`list-decisions`) and build on them instead of re-deciding.
+  Your script starts again at step 1. Read back what you recorded and build on it
+  instead of re-deciding or re-creating it.
 </question_protocol>
 """
 
@@ -87,6 +87,6 @@ QUESTION_RELAY_HANDLER = """\
 If sub-agent output contains <needs_user_input>:
   1. Parse XML and call AskUserQuestion with extracted fields
   2. Reinvoke sub-agent FRESH (not resume) with <user_response> and same STATE_DIR
-     Sub-agent reads plan.json to restore state; invoke script --step 1
+     Sub-agent restores its recorded state from STATE_DIR; invoke script --step 1
 </question_relay_handler>
 """

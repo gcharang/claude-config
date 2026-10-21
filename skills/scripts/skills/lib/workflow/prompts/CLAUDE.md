@@ -8,6 +8,6 @@ Plain-text prompt building blocks for workflow output — step assembly, sub-age
 | -------------- | --------------------------------------------------------------- | ------------------------------------------------------------------- |
 | `README.md`    | Working-directory invariant, invocation forms, SKILLS_DIR rationale | Adding skill commands, understanding why emitted strings are bare |
 | `step.py`      | `format_step()` — title + body + NEXT STEP / branching invoke; `pin_cwd()` | Adding a step formatter, changing how commands carry their directory |
-| `subagent.py`  | `subagent_dispatch`, `template_dispatch`, `roster_dispatch`     | Orchestrating sub-agents, adjusting parallel constraints            |
+| `subagent.py`  | Sub-agent dispatch builders and their building blocks           | Orchestrating sub-agents, adjusting parallel constraints            |
 | `file.py`      | File content embedding helpers for prompts                      | Embedding reference files in step output                            |
 | `__init__.py`  | Public API re-exports (`format_step`, dispatch builders)        | Importing prompt helpers                                            |

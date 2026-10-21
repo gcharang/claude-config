@@ -24,7 +24,12 @@ Two modes: Full (all steps) and Quick (skips 6-11).
 import argparse
 import sys
 
-from skills.lib.workflow.prompts import format_step, roster_dispatch
+from skills.lib.workflow.prompts import (
+    format_step,
+    parallel_constraint,
+    sub_agent_invoke,
+    task_tool_instruction,
+)
 
 # ============================================================================
 # CONFIGURATION
@@ -527,7 +532,18 @@ DISPATCH_CONTEXT = (
     "- Unique Value: [unique value from Step 8]"
 )
 
-DISPATCH_INSTRUCTION = "Launch one sub-agent per entry in FINAL SUB-AGENT DEFINITIONS (Step 8)."
+DISPATCH_INSTRUCTIONS = (
+    "Launch one sub-agent per entry in FINAL SUB-AGENT DEFINITIONS (Step 8); N is the\n"
+    "number of entries.\n"
+    "\n" + task_tool_instruction("general-purpose", "sonnet") + "\n"
+    "\n" + parallel_constraint("N") + "\n"
+    "\n" + DISPATCH_CONTEXT + "\n"
+    "\n"
+    "End each agent's prompt with this block:\n"
+    "\n" + sub_agent_invoke(f"uv run python -m {SUBAGENT_MODULE_PATH} --step 1") + "\n"
+    "\n"
+    "After all N agents return, continue with the next workflow step."
+)
 
 # --- STEP 10: QUALITY_GATE --------------------------------------------------
 
@@ -846,24 +862,9 @@ FORMATTING_INSTRUCTIONS = (
 # ============================================================================
 
 
-def build_dispatch_body(agent_count: int) -> str:
-    """Build DISPATCH instructions with roster_dispatch()."""
-    invoke_cmd = f"uv run python -m {SUBAGENT_MODULE_PATH} --step 1"
-    agents = [
-        f"[Agent {i}: entry {i} of FINAL SUB-AGENT DEFINITIONS in Step 8]"
-        for i in range(1, agent_count + 1)
-    ]
-
-    dispatch_text = roster_dispatch(
-        agent_type="general-purpose",
-        agents=agents,
-        command=invoke_cmd,
-        shared_context=DISPATCH_CONTEXT,
-        model="sonnet",
-        instruction=DISPATCH_INSTRUCTION,
-    )
-
-    return dispatch_text
+def _refinement_done(confidence: str, iteration: int) -> bool:
+    """Iteration 1 always refines: its --confidence is the synthesis's, not a refinement verdict."""
+    return iteration > 1 and confidence in ("high", "certain")
 
 
 def build_next_command(step: int, mode: str, confidence: str, iteration: int) -> str | None:
@@ -887,7 +888,7 @@ def build_next_command(step: int, mode: str, confidence: str, iteration: int) ->
     elif step == 7:
         return f"{base} --step 8 --mode {mode}"
     elif step == 8:
-        return f"{base} --step 9 --mode {mode} --agents <number_of_final_sub_agents>"
+        return f"{base} --step 9 --mode {mode}"
     elif step == 9:
         return f"{base} --step 10 --mode {mode}"
     elif step == 10:
@@ -897,7 +898,7 @@ def build_next_command(step: int, mode: str, confidence: str, iteration: int) ->
     elif step == 12:
         return f"{base} --step 13 --confidence <your_confidence> --iteration 1 --mode {mode}"
     elif step == 13:
-        if iteration > 1 and confidence in ("high", "certain"):
+        if _refinement_done(confidence, iteration):
             return f"{base} --step 14 --confidence {confidence} --mode {mode}"
         if iteration >= MAX_ITERATIONS:
             return f"{base} --step 14 --confidence <your_confidence> --mode {mode}"
@@ -922,29 +923,25 @@ STATIC_STEPS = {
     6: ("Sub-Agent Design", SUBAGENT_DESIGN_INSTRUCTIONS),
     7: ("Design Critique", DESIGN_CRITIQUE_INSTRUCTIONS),
     8: ("Design Revision", DESIGN_REVISION_INSTRUCTIONS),
+    9: ("Dispatch", DISPATCH_INSTRUCTIONS),
     10: ("Quality Gate", QUALITY_GATE_INSTRUCTIONS),
     11: ("Aggregation", AGGREGATION_INSTRUCTIONS),
 }
 
 
-def _format_step_9(mode: str, confidence: str, iteration: int, agents: int) -> tuple[str, str]:
-    """Step 9: Dispatch - builds dispatch body via roster_dispatch()."""
-    return ("Dispatch", build_dispatch_body(agents))
-
-
-def _format_step_12(mode: str, confidence: str, iteration: int, agents: int) -> tuple[str, str]:
+def _format_step_12(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
     """Step 12: Initial Synthesis - selects instructions based on mode."""
     body = SYNTHESIS_FULL_INSTRUCTIONS if mode == "full" else SYNTHESIS_QUICK_INSTRUCTIONS
     return ("Initial Synthesis", body)
 
 
-def _format_step_13(mode: str, confidence: str, iteration: int, agents: int) -> tuple[str, str]:
+def _format_step_13(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
     """Step 13: Iterative Refinement - parameterized title and body.
 
     --confidence carries the previous iteration's verdict, so an exit-level verdict
     ends the loop here instead of running the refinement body once more.
     """
-    if iteration > 1 and confidence in ("high", "certain"):
+    if _refinement_done(confidence, iteration):
         return (
             "Iterative Refinement Complete",
             f"The previous iteration reached {confidence.upper()} confidence. Proceed to formatting.",
@@ -954,7 +951,7 @@ def _format_step_13(mode: str, confidence: str, iteration: int, agents: int) -> 
     return (title, body)
 
 
-def _format_step_14(mode: str, confidence: str, iteration: int, agents: int) -> tuple[str, str]:
+def _format_step_14(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
     """Step 14: Formatting & Output - parameterized with confidence guidance."""
     confidence_upper = confidence.upper()
     if confidence == "certain":
@@ -968,7 +965,6 @@ def _format_step_14(mode: str, confidence: str, iteration: int, agents: int) -> 
 # Dynamic steps: functions that compute (title, instructions) based on parameters
 # Functions must be defined BEFORE this dictionary (book pattern)
 DYNAMIC_STEPS = {
-    9: _format_step_9,
     12: _format_step_12,
     13: _format_step_13,
     14: _format_step_14,
@@ -980,7 +976,7 @@ DYNAMIC_STEPS = {
 # ============================================================================
 
 
-def format_output(step: int, mode: str, confidence: str, iteration: int, agents: int = 0) -> str:
+def format_output(step: int, mode: str, confidence: str, iteration: int) -> str:
     """Format output for the given step.
 
     Uses callable dispatch: static steps lookup (title, instructions) from
@@ -990,7 +986,7 @@ def format_output(step: int, mode: str, confidence: str, iteration: int, agents:
         title, instructions = STATIC_STEPS[step]
     elif step in DYNAMIC_STEPS:
         formatter = DYNAMIC_STEPS[step]
-        title, instructions = formatter(mode, confidence, iteration, agents)
+        title, instructions = formatter(mode, confidence, iteration)
     else:
         return f"ERROR: Invalid step {step}"
 
@@ -1030,19 +1026,12 @@ def main():
         default="full",
         help="Analysis mode (set in Step 3)",
     )
-    parser.add_argument(
-        "--agents",
-        type=int,
-        help="Number of FINAL SUB-AGENT DEFINITIONS (Step 9)",
-    )
     args = parser.parse_args()
 
     if args.step < 1 or args.step > 14:
         sys.exit("ERROR: --step must be 1-14")
-    if args.step == 9 and (args.agents is None or args.agents < 1):
-        sys.exit("ERROR: --agents (at least 1) required for step 9")
 
-    print(format_output(args.step, args.mode, args.confidence, args.iteration, args.agents or 0))
+    print(format_output(args.step, args.mode, args.confidence, args.iteration))
 
 
 if __name__ == "__main__":

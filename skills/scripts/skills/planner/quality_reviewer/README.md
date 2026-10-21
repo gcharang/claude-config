@@ -39,8 +39,8 @@ verify agent returns `PASS` or `FAIL`, and the main agent tallies those to pick 
 `--qr-status`. The detail behind a FAIL lives in qr-{phase}.json, written by the verify
 runner's `--result/--finding` flags and read by the script, never lifted out of the response
 text. A fix agent returns a bare `PASS` when done, which routes the orchestrator back into a
-fresh QR pass rather than into a status tally; decompose returns its item summary as text
-(see Response Formats below).
+fresh QR pass rather than into a status tally; decompose also returns a bare `PASS`, and its
+items reach the orchestrator through qr-{phase}.json (see Response Formats below).
 
 This eliminates an entire class of bugs: parsing errors, schema mismatches, JSON escaping issues.
 
@@ -74,7 +74,7 @@ orchestrator tallies the single word to pick `--qr-status pass|fail`.
 
 ### Three Modes
 
-**DECOMPOSE**: Break artifact into verifiable QA items. Sub-agent reads artifact, identifies quality dimensions, emits items with id/scope/check/status/finding fields. Items start with status=TODO.
+**DECOMPOSE**: Break artifact into verifiable QA items. Sub-agent reads artifact, identifies quality dimensions, and writes the items to qr-{phase}.json. Items start with status=TODO.
 
 **VERIFY**: Execute verification for each item. The orchestrator re-bins the items into at most `VERIFY_MAX_PARALLEL` balanced groups (`shared/qr/utils.py::balance_verify_groups`) and dispatches every group in parallel; each verifier records PASS or FAIL per item with `--result`/`--finding`.
 
@@ -88,24 +88,27 @@ orchestrator tallies the single word to pick `--qr-status pass|fail`.
   "iteration": 1,
   "items": [
     {
-      "id": "plan-001",
+      "id": "qa-001",
       "scope": "*",
       "check": "Verify milestone definitions are complete with acceptance criteria",
       "status": "PASS",
+      "severity": "SHOULD",
       "finding": null
     },
     {
-      "id": "plan-002",
-      "scope": "milestone:M1",
-      "check": "Validate acceptance criteria for milestone M1",
+      "id": "qa-002",
+      "scope": "milestone:M-001",
+      "check": "Validate acceptance criteria for milestone M-001",
       "status": "FAIL",
+      "severity": "MUST",
       "finding": "Acceptance criteria missing. Need success conditions and verification steps."
     },
     {
-      "id": "plan-003",
-      "scope": "file:planner/qa/verify.py",
-      "check": "Check diff syntax and formatting",
+      "id": "qa-003",
+      "scope": "milestone:M-002",
+      "check": "Verify every code_intent in M-002 cites a decision for its thresholds",
       "status": "TODO",
+      "severity": "SHOULD",
       "finding": null
     }
   ]
@@ -116,7 +119,7 @@ orchestrator tallies the single word to pick `--qr-status pass|fail`.
 
 **iteration**: QR cycle counter (starts at 1); drives severity de-escalation.
 
-**items**: `QRItem` records (`shared/schema.py`): `id` (`qa-NNN`; split children `qa-NNNa`), `scope`, `check`, `status` (TODO/PASS/FAIL), `severity` (MUST/SHOULD/COULD), `finding` (set on FAIL), `parent_id`, `group_id`, `version`.
+**items**: `QRItem` records; `shared/schema.py::QRItem` defines their fields.
 
 ### Orchestrator Loop
 

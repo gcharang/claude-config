@@ -234,7 +234,7 @@ Sub-agents can request user clarification via the main agent. The protocol is pu
 
 ### Design Decisions
 
-**Reinvocation over resume**: When a sub-agent yields with questions, the orchestrator REINVOKES it fresh (new Task, no resume parameter) after getting user answers. Before yielding, the sub-agent records its settled decisions with the plan CLI (`set-decision`); after reinvocation it starts again at step 1 and reads them back (`list-decisions`). This was chosen over resume because:
+**Reinvocation over resume**: When a sub-agent yields with questions, the orchestrator REINVOKES it fresh (new Task, no resume parameter) after getting user answers. Before yielding, the sub-agent records what it has settled through its workflow's own state commands; after reinvocation it starts again at step 1, reads that state back and builds on it. This was chosen over resume because:
 
 - Resume semantics are unreliable (0-token / 0-tool-use failures observed in the field).
 - State file reading is explicit and auditable.
@@ -246,15 +246,15 @@ Sub-agents can request user clarification via the main agent. The protocol is pu
 
 **Max 3 questions, 2–3 options each**: Matches the `AskUserQuestion` tool schema. Batching reduces round-trips. Options must be distinct and actionable.
 
-**State saving before yield**: Before emitting `<needs_user_input>`, a sub-agent records each settled decision with the plan CLI (`set-decision`); `plan.json` keeps only what the CLI writes. The reinvoked instance has no in-memory continuity, starts at step 1 and reads those decisions back (`list-decisions`).
+**State saving before yield**: Before emitting `<needs_user_input>`, a sub-agent records what it has settled through its workflow's state commands. The reinvoked instance has no in-memory continuity, starts at step 1 and sees only what was recorded. The planner's architect, for example, records decisions with the plan CLI's `set-decision` and reads back what `plan.json` holds (`skills/planner/architect/plan_design_execute.py`, step 1).
 
 ### Flow
 
-1. Sub-agent records its settled decisions in `plan.json` with the plan CLI (`set-decision`).
+1. Sub-agent records what it has settled through its workflow's state commands.
 2. Sub-agent emits `<needs_user_input>` XML as its entire response.
 3. Main agent extracts questions, calls `AskUserQuestion`.
 4. Main agent reinvokes the sub-agent fresh with answers and `STATE_DIR`.
-5. New sub-agent instance starts at step 1, reads the recorded decisions (`list-decisions`) and builds on them.
+5. New sub-agent instance starts at step 1, reads its recorded state back and builds on it.
 
 ### Relevant Constants (`constants.py`)
 
@@ -274,7 +274,7 @@ if step_info.get("supports_questions"):
     actions.append(QUESTION_RELAY_HANDLER)
 ```
 
-For sub-agent scripts that may ask questions, include `SUB_AGENT_QUESTION_FORMAT` in step 1 guidance.
+For sub-agent scripts that may ask questions, include `SUB_AGENT_QUESTION_FORMAT` in step 1 guidance, together with the commands that record and read back the workflow's state.
 
 ## Testing
 

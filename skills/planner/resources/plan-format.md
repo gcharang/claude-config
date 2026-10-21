@@ -90,11 +90,8 @@ the affected code** during post-implementation.
 implementation. README.md files go in the package/directory containing the
 relevant code, not in a separate documentation directory.
 
-**Self-contained principle**: Code-adjacent documentation must be
-self-contained. Do NOT reference external authoritative sources (doc/
-directories, wikis, external documentation). If knowledge exists in an
-authoritative source, it must be summarized in the code-adjacent README.md.
-Duplication is acceptable; maintenance burden is the cost of locality.
+**Self-contained principle**: follow "Self-contained documentation" in
+<file working-dir=".claude" uri="conventions/documentation.md" />.
 
 **The test**: Would a new team member understand this from reading the source
 files? If no, it belongs here.

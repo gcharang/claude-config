@@ -37,10 +37,14 @@ Map directories requiring CLAUDE.md verification:
 
 ```bash
 # Directories holding tracked or new non-ignored files, with every ancestor
-git ls-files --cached --others --exclude-standard | awk -F/ '{p="."; for (i=1;i<NF;i++) {p=p"/"$i; print p}} END {print "."}' | sort -u
+git -c core.quotePath=false ls-files --cached --others --exclude-standard | awk -F/ '{p="."; for (i=1;i<NF;i++) {p=p"/"$i; print p}} END {print "."}' | sort -u
 ```
 
-Outside a git repository, use `find . -type d` with the prune list in Exclusions.
+Outside a git repository:
+
+```bash
+find . -type d \( -name .git -o -name node_modules -o -name vendor -o -name third_party -o -name __pycache__ -o -name .venv -o -name target -o -name dist -o -name build -o -name .idea -o -name .vscode \) -prune -o -type d -print
+```
 
 For each directory in scope, record:
 
@@ -98,7 +102,7 @@ For each directory needing work:
 2. Document architecture, design decisions, invariants, tradeoffs
 3. Apply the content test: remove anything visible from code
 4. Keep as concise as possible while capturing all invisible knowledge
-5. Must be self-contained: do not reference external authoritative sources
+5. Must be self-contained (conventions/documentation.md)
 
 ### Phase 5: Verification
 
@@ -111,7 +115,7 @@ After all updates complete, verify:
 5. README.md files are indexed in their parent CLAUDE.md
 6. CLAUDE.md contains only: one-sentence overview + tabular index + operational sections
 7. README.md exists wherever invisible knowledge was identified
-8. README.md files are self-contained (no external authoritative references)
+8. README.md files are self-contained (outside sources summarized, repository files pointed at)
 
 ## Output Format
 
@@ -134,7 +138,7 @@ After all updates complete, verify:
 - Drift detected: [count] entries fixed
 - Content migrations: [count] (prose moved to README.md)
 - README.md files: [count] (wherever invisible knowledge exists)
-- Self-contained: [YES/NO] (no external authoritative references)
+- Self-contained: [YES/NO] (outside sources summarized, repository files pointed at)
 ```
 
 ## Exclusions

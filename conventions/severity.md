@@ -124,4 +124,6 @@ relevant, but not more"
 | Tradeoffs      | Code comment where decision shows       |
 | Invariants     | Code comment at enforcement point       |
 
-Wrong location = IK_TRANSFER_FAILURE (MUST)
+Wrong location = IK_TRANSFER_FAILURE (MUST). Knowledge that a repository file
+held before the change is at its best location when the best location points
+at that file.

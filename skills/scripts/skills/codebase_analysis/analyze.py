@@ -90,6 +90,19 @@ SURVEY_PROCESSING_INSTRUCTIONS = (
     "ADVANCE: When exploration complete, proceed to DEEPEN."
 )
 
+SURVEY_INSTRUCTIONS = (
+    "DISPATCH EXPLORATION AGENTS\n\n"
+    "Pick N focus areas from the SCOPE goals and the codebase layout: one for a focused\n"
+    "scope in one codebase, one per repository for several repositories, otherwise 2-5\n"
+    "split by system boundary (e.g. frontend, backend, data).\n\n"
+    f"{task_tool_instruction('general-purpose', 'haiku')}\n\n"
+    f"{parallel_constraint('N')}\n\n"
+    "Each agent's prompt: the SCOPE goals, its focus area in prose (the script refers to\n"
+    "'your focus area'; it is not a CLI argument), and this block:\n\n"
+    f"{sub_agent_invoke(f'uv run python -m {SUBAGENT_MODULE_PATH} --step 1')}\n\n"
+    f"{SURVEY_PROCESSING_INSTRUCTIONS}"
+)
+
 # --- STEP 3: DEEPEN ----------------------------------------------------------
 
 DEEPEN_INSTRUCTIONS = (
@@ -169,30 +182,13 @@ SYNTHESIZE_INSTRUCTIONS = (
 # ============================================================================
 
 
-def build_survey_body() -> str:
-    """Build SURVEY instructions: the orchestrator picks N focus areas at runtime."""
-    invoke = sub_agent_invoke(f"uv run python -m {SUBAGENT_MODULE_PATH} --step 1")
-    return (
-        "DISPATCH EXPLORATION AGENTS\n\n"
-        "Pick N focus areas from the SCOPE goals and the codebase layout: one for a focused\n"
-        "scope in one codebase, one per repository for several repositories, otherwise 2-5\n"
-        "split by system boundary (e.g. frontend, backend, data).\n\n"
-        f"{task_tool_instruction('general-purpose', 'haiku')}\n\n"
-        f"{parallel_constraint('N')}\n\n"
-        "Each agent's prompt: the SCOPE goals, its focus area in prose (the script refers to\n"
-        "'your focus area'; it is not a CLI argument), and this block:\n\n"
-        f"{invoke}\n\n"
-        f"{SURVEY_PROCESSING_INSTRUCTIONS}"
-    )
-
-
 def build_deepen_body(iteration: int) -> str:
     """Build DEEPEN instructions with iteration context."""
     return DEEPEN_INSTRUCTIONS.format(max_iter=MAX_DEEPEN_ITERATIONS)
 
 
-# Pre-computed survey body (all inputs are module-level constants)
-_SURVEY_BODY = build_survey_body()
+def _deepen_done(confidence: str) -> bool:
+    return confidence in ("high", "certain")
 
 
 def build_next_command(step: int, confidence: str, iteration: int) -> str | None:
@@ -204,7 +200,7 @@ def build_next_command(step: int, confidence: str, iteration: int) -> str | None
     if step == 2:
         return f"{base_cmd} --step 3 --iteration 1 --confidence exploring"
     if step == 3:
-        if confidence in ("high", "certain") or iteration >= MAX_DEEPEN_ITERATIONS:
+        if _deepen_done(confidence) or iteration >= MAX_DEEPEN_ITERATIONS:
             return f"{base_cmd} --step 4"
         return f"{base_cmd} --step 3 --iteration {iteration + 1} --confidence {{exploring|low|medium|high|certain}}"
     if step == 4:
@@ -218,21 +214,15 @@ def build_next_command(step: int, confidence: str, iteration: int) -> str | None
 
 STATIC_STEPS = {
     1: ("Scope", SCOPE_INSTRUCTIONS),
-    2: ("Survey", _SURVEY_BODY),
+    2: ("Survey", SURVEY_INSTRUCTIONS),
     4: ("Synthesize", SYNTHESIZE_INSTRUCTIONS),
 }
 
 
 def _format_step_3(confidence: str, iteration: int) -> tuple[str, str]:
     """Dynamic formatter for step 3 (Deepen) -- handles iteration/exit logic."""
-    if confidence in ("high", "certain"):
+    if _deepen_done(confidence):
         return ("Deepen Complete", "Deep understanding achieved.\n\nPROCEED to SYNTHESIZE step.")
-    if iteration >= MAX_DEEPEN_ITERATIONS:
-        return (
-            "Deepen Complete",
-            f"Maximum DEEPEN iterations reached ({iteration}/{MAX_DEEPEN_ITERATIONS}).\n\n"
-            "FORCE transition to SYNTHESIZE.",
-        )
     return (
         f"Deepen (Iteration {iteration} of {MAX_DEEPEN_ITERATIONS})",
         build_deepen_body(iteration),

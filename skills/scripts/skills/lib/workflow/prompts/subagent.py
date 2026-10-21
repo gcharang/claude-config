@@ -14,7 +14,7 @@ from skills.lib.workflow.prompts.step import pin_cwd
 # Building block templates used by multiple dispatch patterns
 
 TASK_TOOL_INSTRUCTION = """\
-ACTION: Use the Task tool to spawn this agent.
+ACTION: Use the Task tool to spawn each agent.
 
 Task tool parameters:
   - subagent_type: {agent_type}
@@ -88,35 +88,6 @@ After ALL {count} agents return, continue with the next workflow step."""
 TEMPLATE_AGENT_ENTRY = """\
 --- Agent {index} ---
 Task: {prompt}
-
-{invoke_block}"""
-
-# --- ROSTER DISPATCH (Parallel, Unique Tasks) -------------------------------
-
-ROSTER_DISPATCH_TEMPLATE = """\
-DISPATCH {count} PARALLEL AGENTS
-================================
-
-{parallel_block}
-
-For EACH agent below, use Task tool with:
-  - subagent_type: {agent_type}
-  - model: {model_display}
-  - prompt: Shared context + agent's unique task + MANDATORY INVOKE BLOCK (copy exactly)
-
-PROMPT CONSTRUCTION RULES:
-  - The MANDATORY INVOKE BLOCK must appear VERBATIM in each prompt
-  - DO NOT reduce it to just "Working directory: X / Command: Y"
-  - The subagent needs "FIRST ACTION REQUIRED" to execute the command
-
-{instruction_section}{shared_context_section}AGENTS:
-{agents_section}
-
-After ALL {count} agents return, continue with the next workflow step."""
-
-ROSTER_AGENT_ENTRY = """\
---- Agent {index} ---
-Unique Task: {task}
 
 {invoke_block}"""
 
@@ -277,63 +248,8 @@ def template_dispatch(
     )
 
 
-def roster_dispatch(
-    agent_type: str,
-    agents: list[str],
-    command: str,
-    shared_context: str = "",
-    model: str | None = None,
-    instruction: str | None = None,
-) -> str:
-    """Generate prompt for parallel dispatch with unique tasks per agent.
-
-    Each agent receives shared_context + their unique task + the fixed command.
-    Use when agents have fundamentally different roles (MIMD pattern).
-
-    Args:
-        agent_type: Task tool subagent_type for all agents
-        agents: List of unique task descriptions, one per agent
-        command: Fixed `uv run` command all agents run (same for all)
-        shared_context: Optional context included in every agent's prompt
-        model: Optional model override for all agents
-        instruction: Optional instruction text
-
-    Returns:
-        Complete dispatch prompt with agent entries
-    """
-    count = len(agents)
-    model_display = model if model else "default (omit parameter)"
-    instruction_section = f"NOTE: {instruction}\n\n" if instruction else ""
-    shared_context_section = (
-        f"SHARED CONTEXT (include in every agent's prompt):\n{shared_context}\n\n"
-        if shared_context
-        else ""
-    )
-
-    agents_lines = []
-    for i, task in enumerate(agents, 1):
-        agents_lines.append(
-            ROSTER_AGENT_ENTRY.format(
-                index=i,
-                task=task,
-                invoke_block=sub_agent_invoke(command),
-            )
-        )
-
-    return ROSTER_DISPATCH_TEMPLATE.format(
-        count=count,
-        agent_type=agent_type,
-        model_display=model_display,
-        parallel_block=parallel_constraint(count),
-        instruction_section=instruction_section,
-        shared_context_section=shared_context_section,
-        agents_section="\n\n".join(agents_lines),
-    )
-
-
 __all__ = [
     "parallel_constraint",
-    "roster_dispatch",
     "sub_agent_invoke",
     # Dispatch templates
     "subagent_dispatch",

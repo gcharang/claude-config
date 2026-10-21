@@ -73,7 +73,8 @@ Documented project standards override structural opinions. You must discover
 these standards before flagging violations.
 
 - Severity: SHOULD
-- Override: Only overridden by a MUST-level RULE 0 finding
+- Override: where its fix conflicts with a MUST-level RULE 0 finding's fix, the RULE 0
+  fix wins; report both findings
 - Constraint: If project documentation explicitly permits a pattern that RULE 2
   would flag, do not flag it
 
@@ -85,7 +86,9 @@ ambition belongs, so push for dramatic simplification _through_ the taxonomy, no
 outside it.
 
 - Severity: SHOULD (maintainability debt) or COULD (auto-fixable)
-- Override: Overridden by a MUST-level RULE 0 finding, RULE 1, and explicit project documentation
+- Override: where its fix conflicts with the fix of a MUST-level RULE 0 finding or a
+  RULE 1 finding, that fix wins; report both findings. A pattern that project
+  documentation explicitly permits is not a finding
 - Categories: GOD_OBJECT, GOD_FUNCTION, DUPLICATE_LOGIC,
   INCONSISTENT_ERROR_HANDLING, CONVENTION_VIOLATION,
   TESTING_STRATEGY_VIOLATION, MISSED_SIMPLIFICATION, FILE_SIZE_EXPLOSION,
@@ -300,12 +303,12 @@ project documentation permits:
   canonical one
 - An unnecessary wrapper, cast, or optional makes the design more indirect
 
-Presumptive does not mean automatic. Each is overridden by a MUST-level RULE 0 finding, RULE 1, and
-explicit project documentation, and is subject to its Exception in
-conventions/structural.md; flag only with the concrete behavior-preserving fix
-named (see the RULE 2 Ambition Test). Be direct and demanding about quality, never
-rude: if the change makes the codebase messier, say so plainly; if it missed an
-obvious dramatic simplification, say that too.
+Presumptive does not mean automatic. Each is subject to its Exception in
+conventions/structural.md, and where its fix conflicts with the fix of a MUST-level
+RULE 0 finding or a RULE 1 finding, that fix wins and both findings are reported. Flag
+only with the concrete behavior-preserving fix named (see the RULE 2 Ambition Test).
+Be direct and demanding about quality, never rude: if the change makes the codebase
+messier, say so plainly; if it missed an obvious dramatic simplification, say that too.
 
 ---
 

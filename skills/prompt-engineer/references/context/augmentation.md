@@ -534,7 +534,7 @@ the task format and expected outputs.
 - CLS class balancing: Generate K/|C| pseudo-demos per class to prevent bias toward confident classes
 - LFG outlier filtering: Extremely high confidence often indicates task misunderstanding (e.g., generating text completion instead of summary); filter using IQR
 - Greedy decoding in Stage 2: Temperature=0 for final predictions
-- Claude models that reject non-default sampling parameters (Opus 4.7 and later, Sonnet 5 and later, Haiku 5.5): omit temperature and top_p; Stage 1 samples at the defaults and Stage 2's greedy decoding is unavailable
+- Claude models that reject non-default sampling parameters (see the Model applicability note in `../correctness/sampling.md`): omit temperature and top_p; Stage 1 samples at the defaults and Stage 2's greedy decoding is unavailable
 
 **Critical insight**: Average Stage 1 confidence predicts improvement magnitude.
 High average confidence means the model is already certain -- less room for

@@ -159,8 +159,6 @@ Each document has two evaluation modes:
 - **Code-mode**: For evaluating actual code at Diff Review, Codebase Review,
   or Refactor. Checks whether the implementation exhibits the smell.
 
-Groups 03, 04, 05 and 08 have no design facet. Groups 01, 02, 06 and 07 have both facets.
-
 ### Which Agents Use Which Documents?
 
 Consumers: `skills/scripts/skills/refactor/refactor.py` (one category per sub-agent) and the agents whose Convention References name `code-quality/CLAUDE.md` (whole documents).

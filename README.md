@@ -49,15 +49,15 @@ fix, and the iteration ceiling escalates to you) → `retrospective`.
 
 ### The specialised agents
 
-Definitions live in `agents/`. Model tiers are configurable per agent.
+Definitions live in `agents/`; each file's frontmatter sets that agent's model and effort.
 
-| Agent            | Role                                                    | Default tier   |
-| ---------------- | ------------------------------------------------------- | -------------- |
-| Architect        | Turns ambiguous requests into unambiguous plans         | opus, high     |
-| Developer        | Implements code intents just-in-time; writes no prose   | sonnet, medium |
-| Quality Reviewer | Decomposes and verifies plans and code for defects      | opus, high     |
-| Technical Writer | Authors documentation after code passes review          | sonnet, medium |
-| Debugger         | Systematic root-cause analysis                          | sonnet, medium |
+| Agent            | Role                                                    |
+| ---------------- | ------------------------------------------------------- |
+| Architect        | Turns ambiguous requests into unambiguous plans         |
+| Developer        | Implements code intents just-in-time; writes no prose   |
+| Quality Reviewer | Decomposes and verifies plans and code for defects      |
+| Technical Writer | Authors documentation after code passes review          |
+| Debugger         | Systematic root-cause analysis                          |
 
 ### The gates and loops
 

@@ -23,6 +23,16 @@ import sys
 from skills.lib.workflow.prompts import format_step, template_dispatch
 
 # ============================================================================
+# SHARED PROMPTS
+# ============================================================================
+
+DEST_PATH_QUOTING = (
+    "In a shell command, the destination path goes in single quotes because it contains\n"
+    "spaces. Write each ' in it as '\\'' (Let's -> Let'\\''s) so an apostrophe in a title\n"
+    "does not end the quoted string early."
+)
+
+# ============================================================================
 # CONFIGURATION
 # ============================================================================
 
@@ -181,6 +191,7 @@ WAIT_INSTRUCTIONS = (
 
 FINALIZE_INSTRUCTIONS = (
     "For each SUCCESSFUL conversion:\n"
+    "\n" + DEST_PATH_QUOTING + "\n"
     "\n"
     "MODE 1 (dest_file NOT provided - construct filename from metadata):\n"
     "\n"
@@ -210,7 +221,6 @@ FINALIZE_INSTRUCTIONS = (
     "   ```bash\n"
     "   cp /tmp/arxiv_<id>/cleaned.md './<constructed_filename>'\n"
     "   ```\n"
-    "   Note: Quote the filename - it contains spaces.\n"
     "\n"
     "============================================================\n"
     "\n"
@@ -270,7 +280,9 @@ def build_mode2_dispatch() -> str:
         targets=[{"ARXIV_ID": "EXAMPLE", "DEST_FILE": "EXAMPLE"}],
         command=f"uv run python -m {SUBAGENT_MODULE_PATH} --step 1 --arxiv-id $ARXIV_ID --dest-file '$DEST_FILE'",
         model="opus",
-        instruction="Launch one sub-agent per arXiv ID, replacing the two EXAMPLE values with that paper's arXiv ID and destination file in both its task and its command; copy the rest of the invoke block verbatim.\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
+        instruction="Launch one sub-agent per arXiv ID, replacing the two EXAMPLE values with that paper's arXiv ID and destination file in both its task and its command; copy the rest of the invoke block verbatim.\n"
+        + DEST_PATH_QUOTING
+        + "\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
     )
 
 

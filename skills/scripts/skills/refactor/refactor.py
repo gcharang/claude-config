@@ -11,7 +11,6 @@ import re
 import shlex
 import sys
 from enum import Enum
-from pathlib import Path
 from xml.sax.saxutils import quoteattr
 
 from skills.lib.workflow.ast import (
@@ -32,6 +31,7 @@ from skills.lib.workflow.core import (
 )
 from skills.lib.workflow.prompts.step import pin_cwd
 from skills.lib.workflow.prompts.subagent import parallel_constraint
+from skills.refactor.explore import CATEGORY_HEADING_RE, CONVENTIONS_DIR
 
 
 class DocumentAvailability(Enum):
@@ -65,11 +65,6 @@ def _invoke_tag(cmd: str) -> str:
 
 # Default number of code smell categories to explore per analysis run
 DEFAULT_CATEGORY_COUNT = 10
-
-# Path to conventions/code-quality/ directory
-CONVENTIONS_DIR = (
-    Path(__file__).resolve().parent.parent.parent.parent.parent / "conventions" / "code-quality"
-)
 
 
 # =============================================================================
@@ -113,7 +108,7 @@ def parse_documents() -> list[dict]:
         categories = []
         current_cat = None
         for i, line in enumerate(lines, 1):
-            if match := re.match(r"^## \d+\. (.+)$", line):
+            if match := CATEGORY_HEADING_RE.match(line):
                 if current_cat:
                     current_cat["end_line"] = i - 1
                     categories.append(current_cat)
@@ -136,18 +131,6 @@ def parse_documents() -> list[dict]:
         )
 
     return docs
-
-
-def parse_categories() -> list[dict]:
-    """Parse markdown files, return categories with line ranges.
-
-    Returns:
-        List of dicts with keys: file, name, start_line, end_line
-    """
-    categories = []
-    for doc in parse_documents():
-        categories.extend(doc["categories"])
-    return categories
 
 
 def build_target_pool(mode_filter: str = "both") -> list[dict]:
@@ -182,19 +165,6 @@ def build_target_pool(mode_filter: str = "both") -> list[dict]:
                 targets.append({**cat, "mode": "code"})
 
     return targets
-
-
-def select_categories(n: int = DEFAULT_CATEGORY_COUNT) -> list[dict]:
-    """Randomly select N categories (backward compatibility).
-
-    Args:
-        n: Number of categories to select
-
-    Returns:
-        List of N randomly selected category dicts
-    """
-    all_cats = parse_categories()
-    return random.sample(all_cats, min(n, len(all_cats)))
 
 
 def select_targets(n: int = DEFAULT_CATEGORY_COUNT, mode_filter: str = "both") -> list[dict]:
@@ -681,7 +651,8 @@ Resolve relationships before writing work items:
 - An issue that a recommended item obsoletes, directly or through a chain, is not a
   work item; list it under Superseded Items with the item that covers it.
 - For A conflicts_with B, recommend one (more items obsoleted, fewer dependencies,
-  lower complexity) and record the excluded one with the reason.
+  lower complexity) and list the other under Superseded Items, superseded by the
+  recommended one, with the conflict as the reason.
 - A requires B puts B first; mutual requires makes an atomic group.
 Prefer one comprehensive refactor over several small fixes when it obsoletes them.
 </dependency_resolution>
@@ -847,10 +818,18 @@ def format_step_1_output(n: int, info: dict, mode_filter: str, scope: str | None
     parts.append(render_step_header(StepHeaderNode(title=info["title"], script="refactor", step=1)))
     parts.append("")
 
-    xml_mandate_text = """<xml_format_mandate>
+    if scope:
+        substitution = "with $MODE replaced by your mode (design, code or both)"
+    else:
+        substitution = (
+            "with $MODE replaced by your mode (design, code or both) and $SCOPE by your\n"
+            "<scope> path, shell-quoted; when your scope is null or not a path, delete\n"
+            '" --scope $SCOPE" instead'
+        )
+    xml_mandate_text = f"""<xml_format_mandate>
 Do the action in <current_action>, then run the command in <invoke_after>: the
 <if_custom> command when your mode is custom, the <if_not_custom> command otherwise,
-with $MODE replaced by your mode (design, code or both). Change nothing else in it.
+{substitution}. Change nothing else in it.
 </xml_format_mandate>"""
     parts.append(xml_mandate_text)
     parts.append("")
@@ -922,9 +901,9 @@ with $MODE replaced by your mode (design, code or both). Change nothing else in 
     parts.append("")
 
     # Conditional branching: custom vs non-custom modes have different step 2 invocations
-    # Shell escape scope to prevent injection
-    scope_escaped = shlex.quote(scope) if scope else ""
-    scope_arg = f" --scope {scope_escaped}" if scope else ""
+    # Shell escape scope to prevent injection. Without a CLI scope the command carries a
+    # $SCOPE slot, so the scope STEP B extracts from the request reaches step 2.
+    scope_arg = f" --scope {shlex.quote(scope)}" if scope else " --scope $SCOPE"
 
     invoke_after = f"""<invoke_after>
   <if_custom>
@@ -1007,13 +986,14 @@ def format_step_2_custom(info: dict, scope: str | None = None) -> str:
     )
     parts.append("")
 
+    docs = parse_documents()
     parts.append("<category_index>")
-    for c in parse_categories():
+    for c in (c for doc in docs for c in doc["categories"]):
         parts.append(f"  {c['file']}:{c['start_line']}-{c['end_line']}  {c['name']}")
     parts.append("</category_index>")
     parts.append("")
 
-    for doc in parse_documents():
+    for doc in docs:
         md_file = CONVENTIONS_DIR / doc["file"]
         content = md_file.read_text()
         # Path relative to conventions dir for cleaner display
