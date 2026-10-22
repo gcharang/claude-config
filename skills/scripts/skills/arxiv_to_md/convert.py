@@ -76,7 +76,7 @@ _IMAGE_RE = re.compile(
 )
 _CITATION_RE = re.compile(r"\[(-?@[^\[\]@;]+(?:;\s*-?@[^\[\]@;]+)*)\]")
 _CITATION_MARK_RE = re.compile(r"(^|;\s*)-?@")
-_MASK_RE = re.compile(r"\\[^A-Za-z]|\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|`[^`\n]*`")
+_MASK_TOKEN_RE = re.compile(r"\\[^A-Za-z]|\$\$|\$|`[^`\n]*`")
 _COMMAND_RE = re.compile(r"\\[A-Za-z]")
 _PANDOC_ERROR_RE = re.compile(r"Error at \(line \d+, column \d+\):?")
 _PANDOC_VERSION_RE = re.compile(r"^pandoc\S*\s+(\d+(?:\.\d+)*)")
@@ -428,20 +428,50 @@ def _image_placeholder(m: re.Match[str]) -> str:
     return f"[IMAGE: {label}]"
 
 
+def _unmasked_text(line: str, in_display: bool) -> tuple[str, bool]:
+    """Line text outside math, code spans and Markdown escapes; the display-math state after it."""
+    visible: list[str] = []
+    pos = 0
+    while True:
+        token = _MASK_TOKEN_RE.search(line, pos)
+        if token is None:
+            if not in_display:
+                visible.append(line[pos:])
+            return " ".join(visible), in_display
+        text = token.group(0)
+        if in_display:
+            if text == "$$":
+                in_display = False
+            pos = token.end()
+            continue
+        visible.append(line[pos : token.start()])
+        pos = token.end()
+        if text == "$$":
+            in_display = True
+        elif text == "$":
+            close = line.find("$", pos)
+            if close > pos:
+                pos = close + 1
+            else:
+                visible.append(text)
+
+
 def find_residual_spans(md: str) -> list[tuple[int, str]]:
-    """Lines holding a LaTeX command outside math, code and Markdown escapes."""
+    """Lines holding a LaTeX command outside math, code and Markdown escapes.
+
+    Display math may span lines; indented lines count as code only outside display math.
+    """
     lines = md.split("\n")
     fenced = _fenced_lines(lines)
-    visible = [
-        "" if in_code or line.startswith(("    ", "\t")) else line
-        for line, in_code in zip(lines, fenced, strict=True)
-    ]
-    masked = _MASK_RE.sub(lambda m: "\n" * m.group(0).count("\n"), "\n".join(visible))
-    return [
-        (number, lines[number - 1].strip()[:200])
-        for number, line in enumerate(masked.split("\n"), 1)
-        if _COMMAND_RE.search(line)
-    ]
+    spans = []
+    in_display = False
+    for number, (line, in_code) in enumerate(zip(lines, fenced, strict=True), 1):
+        if in_code or (not in_display and line.startswith(("    ", "\t"))):
+            continue
+        text, in_display = _unmasked_text(line, in_display)
+        if _COMMAND_RE.search(text):
+            spans.append((number, line.strip()[:200]))
+    return spans
 
 
 def build_filename(title: str | None, date: str | None, arxiv_id: str) -> str:

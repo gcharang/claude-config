@@ -1037,6 +1037,25 @@ class TestArxivConvert:
         )
         assert [n for n, _ in find_residual_spans(md)] == [2, 7]
 
+    def test_residual_spans_skip_multiline_display_math(self):
+        from skills.arxiv_to_md.convert import find_residual_spans
+
+        md = (
+            "Intro text\n"
+            "\n"
+            "$$\\begin{aligned}\n"
+            "    FFN(x) = \\max(0, x) \\\\\n"
+            "\\frac{a}{b} &= c\n"
+            "    \\end{aligned}$$\n"
+            "\n"
+            "Then $$\\alpha = 1$$ and again $$\\beta\n"
+            "= \\gamma$$ closes, and $$\\delta$$ reopens $$\\epsilon\n"
+            "\\zeta$$\n"
+            '<img src="\\iftoggle{hq}{a.pdf}{b.jpg}" />\n'
+            "after \\textsc{X}\n"
+        )
+        assert [n for n, _ in find_residual_spans(md)] == [11, 12]
+
     @pytest.mark.parametrize("kind", ["tar.gz", "gz", "pdf"])
     def test_unpack_source_formats(self, tmp_path: Path, kind: str):
         from skills.arxiv_to_md.convert import NoTexSource, find_main_tex, unpack_source
