@@ -7,7 +7,7 @@ Python workflow scripts for the refactor skill.
 | File          | What                                    | When to read                                    |
 | ------------- | --------------------------------------- | ----------------------------------------------- |
 | `refactor.py` | Main orchestrator                       | Debugging an orchestrator step                  |
-| `explore.py`  | Per-category 5-step smell detection     | Debugging domain context/pattern/search steps   |
+| `explore.py`  | Per-category smell detection            | Debugging an explore agent's step               |
 
 ## Related
 

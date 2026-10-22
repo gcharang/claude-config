@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
 """
 Refactor Explore - Category-specific exploration for code smell detection.
-
-Five-step workflow per category:
-  1. Domain Context    - Identify project language/frameworks/structure
-  2. Principle Extract - Step-back to extract principle + generate violation patterns
-  3. Pattern Generate  - Translate abstract hints to project-specific grep patterns
-  4. Search            - Execute patterns, document findings
-  5. Synthesis         - Format findings with severity assessment
 """
 
 import argparse
@@ -27,7 +20,7 @@ from skills.lib.workflow.ast import (
 )
 
 MODULE_PATH = "skills.refactor.explore"
-TOTAL_STEPS = 5
+TOTAL_STEPS = 2
 
 # Path to conventions/code-quality/ directory
 CONVENTIONS_DIR = (
@@ -110,48 +103,47 @@ def format_next_step(
 
 
 # =============================================================================
-# Step 1: Domain Context
+# Step 1: Search
 # =============================================================================
 
 
 def format_step_1(category_ref: str, mode: str = "code", scope: str | None = None) -> str:
-    """Step 1: Identify project domain context."""
-    scope_display = f"SCOPE: {scope}" if scope else "SCOPE: Entire codebase"
+    """Step 1: Search the scope for code that violates the category."""
+    category_block = load_category_block(category_ref, mode)
+    mode_description = "architecture/intent" if mode == "design" else "implementation"
+    scope_display = (
+        f"SCOPE: {scope} (pass it as the path argument of every Glob and Grep call)"
+        if scope
+        else "SCOPE: Entire codebase"
+    )
     actions = [
-        "DOMAIN CONTEXT ANALYSIS:",
+        "<smell_category>",
+        category_block,
+        "</smell_category>",
         "",
+        f"MODE: {mode} ({mode_description})",
         scope_display,
         "",
-        "Before detecting smells, understand the project's technical context.",
-        "This enables translating abstract patterns to project-specific ones.",
+        "Find code in scope that violates this category's <principle>. The listed violations",
+        "and <grep-hints> are illustrative: translate them to this project's language,",
+        "frameworks and naming, and look for unlisted violations of the same principle.",
+        "Apply the category's <threshold> and <exceptions>.",
         "",
-        "IDENTIFY (brief exploration, ~30 seconds):",
+        "Read suspicious matches before reporting them. After finding an issue, Grep other",
+        "files for the same pattern; a pattern in 3+ locations is one systemic finding.",
         "",
-        "  1. LANGUAGE: Primary programming language(s)",
-        "     Check: file extensions, shebang lines",
+        'For each finding, run Grep with output_mode="count" on the pattern that found it,',
+        "and record the count and the pattern so the count can be reproduced.",
         "",
-        "  2. FRAMEWORKS: Key frameworks/libraries",
-        "     Check: package.json, requirements.txt, go.mod, Cargo.toml, pom.xml",
-        "     Note: major frameworks (React, Django, Spring, etc.)",
-        "",
-        "  3. CONVENTIONS: Naming patterns used in this codebase",
-        "     Check: a few source files for naming style",
-        "     Note: camelCase vs snake_case, common suffixes (Service, Handler, etc.)",
-        "",
-        "OUTPUT (required):",
-        "<domain_context>",
-        "  <language>primary language</language>",
-        "  <frameworks>framework1, framework2</frameworks>",
-        "  <conventions>naming patterns observed</conventions>",
-        "</domain_context>",
-        "",
-        "Keep this brief. Accuracy matters more than completeness.",
+        "Finding zero issues is a valid outcome; do not force findings.",
+        "Keep a borderline case as a finding at severity low rather than dropping it;",
+        "the orchestrator filters.",
     ]
 
     parts = [
         render_step_header(
             StepHeaderNode(
-                title="Domain Context", script="explore", step=1, category=category_ref, mode=mode
+                title="Search", script="explore", step=1, category=category_ref, mode=mode
             )
         ),
         "",
@@ -163,253 +155,15 @@ def format_step_1(category_ref: str, mode: str = "code", scope: str | None = Non
 
 
 # =============================================================================
-# Step 2: Principle + Violation Patterns
+# Step 2: Report
 # =============================================================================
 
 
 def format_step_2(category_ref: str, mode: str = "code", scope: str | None = None) -> str:
-    """Step 2: Extract principle and generate violation patterns."""
-    category_block = load_category_block(category_ref, mode)
-
-    mode_description = "architecture/intent" if mode == "design" else "implementation"
-
-    actions = [
-        "<interpretation>",
-        "The violations listed below are ILLUSTRATIVE PATTERNS, not an exhaustive checklist.",
-        "Detect ANY code violating the underlying <principle>, including unlisted patterns.",
-        "</interpretation>",
-        "",
-        f"MODE: {mode} ({mode_description})",
-        "",
-        "<smell_category>",
-        category_block,
-        "</smell_category>",
-        "",
-        "STEP-BACK: PRINCIPLE EXTRACTION",
-        "",
-        "Read the category definition. Extract:",
-        "  - The PRINCIPLE (the 'why' that unifies all violations)",
-        "  - The detection question (what to ask about each code fragment)",
-        "  - The severity threshold (when to flag)",
-        "",
-        "ANALOGICAL GENERATION - VIOLATION PATTERNS:",
-        "",
-        "Using your domain context from Step 1, identify 2-3 ADDITIONAL violation patterns",
-        "that would violate the SAME principle in THIS project's domain:",
-        "",
-        "  - What does this smell look like in [your language/framework]?",
-        "  - What project-specific idioms might violate this principle?",
-        "  - What framework-specific anti-patterns apply?",
-        "",
-        "If no additional patterns emerge, proceed with listed ones.",
-        "",
-        "OUTPUT (required):",
-        "<principle_analysis>",
-        "  <principle>the core principle in one sentence</principle>",
-        "  <detection_question>what to ask about each code fragment</detection_question>",
-        "  <threshold>when to flag vs ignore</threshold>",
-        "  <violation_patterns>",
-        '    <pattern source="listed">pattern from category definition</pattern>',
-        '    <pattern source="generated">project-specific pattern you identified</pattern>',
-        "    <!-- include all patterns: listed + generated -->",
-        "  </violation_patterns>",
-        "</principle_analysis>",
-    ]
-
-    parts = [
-        render_step_header(
-            StepHeaderNode(
-                title="Principle + Violations",
-                script="explore",
-                step=2,
-                category=category_ref,
-                mode=mode,
-            )
-        ),
-        "",
-        render_current_action(CurrentActionNode(actions)),
-        "",
-        format_next_step(3, category_ref, mode, scope),
-    ]
-    return "\n".join(parts)
-
-
-# =============================================================================
-# Step 3: Search Pattern Generation
-# =============================================================================
-
-
-def format_step_3(category_ref: str, mode: str = "code", scope: str | None = None) -> str:
-    """Step 3: Generate project-specific grep patterns."""
-    actions = [
-        "SEARCH PATTERN GENERATION:",
-        "",
-        "The <grep-hints> in the category definition are ABSTRACT EXEMPLARS.",
-        "They represent what to look for in a generic codebase.",
-        "",
-        "TRANSLATE to this project's domain:",
-        "",
-        "For EACH violation pattern (from Step 2), generate grep-able patterns:",
-        "",
-        "  - What would 'Manager' look like here? (Service, Repository, Store, Handler...)",
-        "  - What naming conventions does this project use?",
-        "  - What are the framework-specific equivalents?",
-        "",
-        "Examples of translation:",
-        "  Abstract: 'Manager, Handler, Utils'",
-        "  Python/Flask: 'Service, Repository, Blueprint, helpers'",
-        "  Go: 'Handler, Store, Controller, util'",
-        "  React: 'Container, Provider, HOC, utils'",
-        "",
-        "OUTPUT (required):",
-        "<search_patterns>",
-        '  <pattern reason="why this indicates the smell">regex_or_literal</pattern>',
-        '  <pattern reason="...">...</pattern>',
-        "  <!-- 5-10 patterns, project-specific -->",
-        "</search_patterns>",
-        "",
-        "These patterns will be used for Grep in Step 4.",
-    ]
-
-    parts = [
-        render_step_header(
-            StepHeaderNode(
-                title="Pattern Generation",
-                script="explore",
-                step=3,
-                category=category_ref,
-                mode=mode,
-            )
-        ),
-        "",
-        render_current_action(CurrentActionNode(actions)),
-        "",
-        format_next_step(4, category_ref, mode, scope),
-    ]
-    return "\n".join(parts)
-
-
-# =============================================================================
-# Step 4: Search
-# =============================================================================
-
-
-def format_step_4(category_ref: str, mode: str = "code", scope: str | None = None) -> str:
-    """Step 4: Execute search and document findings.
-
-    If scope is provided, all Glob/Grep operations should be constrained
-    to that path to prevent findings from unrelated parts of the codebase.
-    """
-    # Build scope constraint instructions if scope provided
-    if scope:
-        scope_constraint = [
-            "SCOPE CONSTRAINT:",
-            f"  You are searching within: {scope}",
-            f'  - Glob patterns: Use "{scope}/**/*.py" instead of "**/*.py"',
-            f'  - Grep paths: Pass "{scope}" as the path argument',
-            "  - Do NOT search outside this scope",
-            "",
-        ]
-    else:
-        scope_constraint = [
-            "SCOPE: Entire codebase (no constraint)",
-            "",
-        ]
-
-    actions = [
-        "SEARCH EXECUTION:",
-        "",
-        *scope_constraint,
-        "Using the patterns from Step 3, search the codebase:",
-        "",
-        "  1. Use Glob to find relevant files in scope",
-        "  2. Use Grep with each pattern from <search_patterns>",
-        "  3. Use Read to examine suspicious matches",
-        "  4. Apply the detection question from Step 2 to each match",
-        "",
-        "CROSS-FILE ANALYSIS:",
-        "",
-        "  5. After finding an issue, Grep for similar patterns in OTHER files",
-        "  6. Note when patterns appear in 3+ locations (abstraction candidates)",
-        "",
-        # WHY occurrence counting is mandatory at Step 4 rather than optional or deferred:
-        #
-        # The explore agent has just executed search patterns and has Grep results in context.
-        # At this point, re-running the same pattern with output_mode="count" is trivial.
-        # Deferring to later steps would require:
-        #   - Storing patterns for later replay (fragile - patterns evolve during exploration)
-        #   - Re-executing searches (wasteful - same I/O cost paid twice)
-        #   - Estimating counts from grep output (inaccurate - misses pagination)
-        #
-        # By capturing NOW, we have:
-        #   - Zero marginal search cost (pattern already validated)
-        #   - Exact counts (not estimates)
-        #   - Verification commands that reproduce the search context
-        #
-        # WHY verification_cmd is required alongside count:
-        #
-        # A count like "47 occurrences" is unverifiable without the pattern that produced it.
-        # Storing the grep pattern makes evidence falsifiable:
-        #   - Reviewers can independently verify: grep -r "pattern" path/ | wc -l
-        #   - Future scans can detect count drift (codebase evolution)
-        #   - Work items can include reproducible scope claims
-        #
-        # The alternative (storing counts without patterns) creates uncheckable assertions.
-        "OCCURRENCE COUNTING (MANDATORY):",
-        "",
-        "  For EACH potential finding, run a count query:",
-        '    Grep with output_mode="count" to get total occurrences',
-        "",
-        "  Record:",
-        "    - exact_count: Number returned by Grep count",
-        "    - verification_cmd: The grep pattern used (for independent verification)",
-        "",
-        "CALIBRATION:",
-        "",
-        "  - Finding zero issues is a valid outcome. Do not force findings.",
-        "  - Report a borderline case at severity low rather than dropping it; triage filters.",
-        "  - Apply the <threshold> from Step 2 - if exception applies, don't flag.",
-        "",
-        "OUTPUT (required):",
-        "<findings>",
-        '  <finding location="file:line-range">',
-        '    <evidence lines="N">quoted code (2-5 lines, preserve indentation)</evidence>',
-        "    <issue>what violates the principle</issue>",
-        '    <occurrences count="N" verification="grep pattern to reproduce">',
-        '      file2:line, file3:line OR "unique - single occurrence"',
-        "    </occurrences>",
-        "    <impact>what breaks/degrades if unfixed (one sentence)</impact>",
-        "  </finding>",
-        "  <!-- repeat for each finding -->",
-        "</findings>",
-        "",
-        "Document findings. Do NOT propose solutions yet.",
-    ]
-
-    parts = [
-        render_step_header(
-            StepHeaderNode(
-                title="Search", script="explore", step=4, category=category_ref, mode=mode
-            )
-        ),
-        "",
-        render_current_action(CurrentActionNode(actions)),
-        "",
-        format_next_step(5, category_ref, mode, scope),
-    ]
-    return "\n".join(parts)
-
-
-# =============================================================================
-# Step 5: Synthesis
-# =============================================================================
-
-
-def format_step_5(category_ref: str, mode: str = "code", scope: str | None = None) -> str:
-    """Step 5: Synthesize findings into smell report."""
+    """Step 2: Write the findings as one smell report."""
     category_name = load_category_name(category_ref)
     actions = [
-        "SYNTHESIZE findings from Step 4 into final report.",
+        "REPORT the findings from your search as one smell_report.",
         "",
         "OUTPUT FORMAT (strict):",
         "",
@@ -468,7 +222,7 @@ def format_step_5(category_ref: str, mode: str = "code", scope: str | None = Non
     parts = [
         render_step_header(
             StepHeaderNode(
-                title="Synthesis", script="explore", step=5, category=category_ref, mode=mode
+                title="Report", script="explore", step=2, category=category_ref, mode=mode
             )
         ),
         "",
@@ -491,9 +245,6 @@ def format_output(
     formatters = {
         1: format_step_1,
         2: format_step_2,
-        3: format_step_3,
-        4: format_step_4,
-        5: format_step_5,
     }
     formatter = formatters.get(step)
     if not formatter:
@@ -509,7 +260,6 @@ def format_output(
 def main():
     parser = argparse.ArgumentParser(
         description="Refactor Explore - Category-specific code smell detection",
-        epilog=f"Steps: context -> principle -> patterns -> search -> synthesis ({TOTAL_STEPS} total)",
     )
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument(
@@ -536,8 +286,8 @@ def main():
 
     if args.step < 1:
         sys.exit("ERROR: --step must be >= 1")
-    if args.step > 5:
-        sys.exit("ERROR: --step cannot exceed 5")
+    if args.step > TOTAL_STEPS:
+        sys.exit(f"ERROR: --step cannot exceed {TOTAL_STEPS}")
 
     if ":" not in args.category or "-" not in args.category.split(":")[1]:
         sys.exit("ERROR: --category must be in format file.md:start-end")

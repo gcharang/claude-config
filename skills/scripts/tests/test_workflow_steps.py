@@ -218,7 +218,7 @@ def conventions_dir(monkeypatch, tmp_path):
     return tmp_path
 
 
-@pytest.mark.parametrize("step", [1, 5])
+@pytest.mark.parametrize("step", [1, 2])
 @pytest.mark.parametrize(
     "ref", ["cat.md:1-2", "cat.md:40-45"], ids=["starts-off-heading", "starts-past-end"]
 )
@@ -230,11 +230,25 @@ def test_explore_exits_naming_a_category_ref_that_does_not_start_at_a_heading(
     assert ref in str(exited.value.code)
 
 
-def test_explore_step_5_reports_under_the_category_its_ref_starts_at(
+def test_explore_step_2_reports_under_the_category_its_ref_starts_at(
     monkeypatch, capsys, conventions_dir
 ):
-    out = _render(monkeypatch, capsys, explore, "--step", "5", "--category", "cat.md:6-7")
+    out = _render(monkeypatch, capsys, explore, "--step", "2", "--category", "cat.md:6-7")
     assert 'category="Errors"' in out
+
+
+@pytest.mark.parametrize(
+    "argv,targets",
+    [
+        pytest.param(["--step", "2", "--mode", "code"], [4], id="dispatch-to-synthesize"),
+        pytest.param(["--step", "2", "--mode", "custom"], [3], id="selection-to-custom-dispatch"),
+        pytest.param(["--step", "3", "--mode", "custom"], [4], id="custom-dispatch-to-synthesize"),
+        pytest.param(["--step", "4"], [], id="synthesize-ends"),
+    ],
+)
+def test_refactor_step_routes_to_the_next_step_on_its_path(monkeypatch, capsys, argv, targets):
+    out = _render(monkeypatch, capsys, refactor, *argv)
+    assert _next_steps(out, refactor.MODULE_PATH) == targets
 
 
 def test_refactor_step_1_hands_the_scope_it_extracts_to_step_2(monkeypatch, capsys):

@@ -11,73 +11,39 @@ items.
 
 ## Workflow
 
-```
-refactor.py                                      explore.py (x N parallel, haiku)
-===========                                      ================================
-Step 1: Mode selection (design | code | both | custom)
-Step 2: design/code/both: dispatch N agents ---> Steps 1-5 per category
-        custom: select categories
-Step 3: custom: verify the selection
-Step 4: custom: dispatch agents ---------------> Steps 1-5 per category
-        design/code/both: triage
-Step 5: custom: triage
-Step 6: Cluster
-Step 7: Contextualize
-Step 8: Synthesize
-```
-
-| Phase         | Question                 | Output                     |
-| ------------- | ------------------------ | -------------------------- |
-| Dispatch      | What smells exist?       | Parallel smell_reports     |
-| Triage        | What did we find?        | Structured smells with IDs |
-| Cluster       | Which share root causes? | Grouped issues             |
-| Contextualize | What does the user want? | Prioritized issues         |
-| Synthesize    | What should be done?     | Actionable work items      |
+`../scripts/skills/refactor/refactor.py` defines the steps and routes them by mode
+(`WORKFLOW`, `format_output`, and the next command each step prints). Its dispatch
+steps launch one haiku sub-agent per category, each running
+`../scripts/skills/refactor/explore.py`.
 
 ## Design Decisions
 
-### 1. Five-Step Explore Workflow
+### 1. Search and Report as Separate Explore Steps
 
-The original 2-step explore workflow conflated multiple cognitive tasks in a
-single step. LLMs perform better when each cognitive task gets focused attention.
-
-```
-Step 1: Domain Context    - Understand the project before analyzing it
-Step 2: Principle Extract - Understand the smell before hunting for it
-Step 3: Pattern Generate  - Translate abstract hints to project-specific patterns
-Step 4: Search            - Execute with generated patterns
-Step 5: Synthesis         - Format findings
-```
+Each explore agent searches in one script step and writes its smell_report in the
+next. Splitting the work further (domain context, principle extraction, search
+patterns) has the agent write intermediate artifacts that only it reads, each at
+the cost of a Bash round trip. A separate report step means a haiku agent that
+stops early in one long prompt still runs a command that asks for the report.
 
 ### 2. Domain Context Per-Category (Not Lifted to Parent)
 
-Each explore agent does its own domain context analysis, rather than refactor.py
-doing it once and passing to all agents.
+Each explore agent works out the project's language, frameworks and naming itself,
+rather than refactor.py doing it once and passing it to all agents.
 
 Rationale: Different smell categories need different domain context aspects. A
 "naming precision" category cares about naming conventions; a "module structure"
-category cares about import patterns. The 30-second overhead per agent is
-acceptable for category-specific context.
+category cares about import patterns.
 
 Rejected alternative: Lift domain context to refactor.py Step 1. Rejected
 because it assumes all categories need identical context.
 
-### 3. Violation Patterns Before Grep Patterns (Separate Steps)
+### 3. Synthesis in One Main-Session Step
 
-Pattern generation is split into two steps: first violation patterns (Step 2),
-then grep patterns (Step 3).
-
-Rationale: Analogical prompting works better in phases. The model first
-understands WHAT to look for conceptually (violation patterns matching the
-principle), then translates to HOW to search operationally (grep-able patterns).
-
-```
-Step 2: "What does 'vague naming' look like in a Python/Django project?"
-        -> "Service classes with generic names, Blueprint handlers called 'do_thing'"
-
-Step 3: "How do I grep for those?"
-        -> "class.*Service:", "def handle_", "Blueprint.*utils"
-```
+The explore agents return their smell reports to the main session's context,
+where no script reads them, so one main-session step turns them into work items.
+Separate triage, cluster and contextualize steps would each re-emit the same
+evidence as JSON for the next step to read.
 
 ### 4. Grep-Hints as Exemplars Requiring Translation
 
@@ -98,7 +64,6 @@ Mechanisms used:
 - "Illustrative patterns (not exhaustive -- similar violations exist)"
 - "e.g.," prefix on examples
 - Open-ended escape hatches: "Any X that causes Y"
-- DOMAIN TRANSLATION instruction to translate abstract to project-specific
 
 ## Code Quality Categories
 

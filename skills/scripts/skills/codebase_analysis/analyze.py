@@ -117,7 +117,7 @@ DEEPEN_INSTRUCTIONS = (
     "  - NOVELTY: Unfamiliar patterns, unique approaches\n"
     "  - CENTRALITY: Core to user's goals\n"
     "\n"
-    "SELECT 1-3 targets for this iteration:\n"
+    "SELECT the targets for this iteration:\n"
     "  - Specific component/module\n"
     "  - Particular data flow\n"
     "  - Integration mechanism\n"
