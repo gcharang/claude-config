@@ -9,6 +9,7 @@ No manual file editing required.
 """
 
 import argparse
+import shlex
 
 from skills.lib.workflow.ast.nodes import (
     CurrentActionNode,
@@ -38,20 +39,20 @@ def _invoke_line(cmd: str) -> str:
     drifted still resolves the `skills` package; a relative
     working-dir=".claude/skills/scripts" fails with "No module named 'skills'". No
     quoteattr: render_current_action emits actions verbatim, so the
-    \\"...\\" / {{var}} placeholders must survive unescaped.
+    \\"...\\" / {var} placeholders must survive unescaped.
     """
     return f'  Start: <invoke cmd="{pin_cwd(cmd)}" />'
 
 
-def _next_step_cmd(target: int) -> str:
-    return (
-        f'uv run python -m {MODULE_PATH} --step-number {target} --thoughts "<ACCUMULATED_CONTEXT>"'
-    )
+def _next_step_cmd(target: int, thoughts: str = "") -> str:
+    cmd = f"uv run python -m {MODULE_PATH} --step-number {target}"
+    return f"{cmd} --thoughts {shlex.quote(thoughts)}" if thoughts else cmd
 
 
-def _render_branches(branches: list[tuple[str, int]]) -> str:
+def _render_branches(branches: list[tuple[str, int] | tuple[str, int, str]]) -> str:
     """Render an <invoke_after> holding one <branch when="..."> command per condition.
 
+    A branch's optional third element is the --thoughts value its command passes.
     Built from ElementNode because InvokeAfterNode's two branches are labelled
     if_pass/if_fail, which name a QR verdict rather than these loop conditions.
     """
@@ -63,9 +64,9 @@ def _render_branches(branches: list[tuple[str, int]]) -> str:
                 ElementNode(
                     "branch",
                     {"when": condition},
-                    [ElementNode("invoke", {"cmd": pin_cwd(_next_step_cmd(target))}, [])],
+                    [ElementNode("invoke", {"cmd": pin_cwd(_next_step_cmd(target, *thoughts))}, [])],
                 )
-                for condition, target in branches
+                for condition, target, *thoughts in branches
             ],
         )
     )
@@ -201,8 +202,7 @@ def format_incoherence_output(step, phase, agent_type, guidance, thoughts=""):
 
     if step == 1:
         parts.append("""<xml_format_mandate>
-Do the action in <current_action>, then run the <invoke_after> command with
-<ACCUMULATED_CONTEXT> replaced by what the step tells you to carry forward. When
+Do the action in <current_action>, then run the <invoke_after> command. When
 <invoke_after> holds <branch> elements, run the command of the branch whose
 "when" condition holds.
 </xml_format_mandate>""")
@@ -244,7 +244,6 @@ STEPS = {
             "Identify: codebase type, primary language, doc locations, info source types",
             "(README, API docs, comments, types, configs, schemas, ADRs, style guides, tests)",
         ],
-        "next": "Invoke step 2 with survey results in --thoughts",
     },
     2: {
         "title": "DIMENSION SELECTION",
@@ -258,7 +257,6 @@ STEPS = {
             "",
             "Output: Selected dimensions with one-line rationale each.",
         ],
-        "next": "Invoke step 3 with selected dimensions in --thoughts",
     },
     3: {
         "title": "EXPLORATION DISPATCH",
@@ -270,10 +268,10 @@ STEPS = {
             "",
             "AGENT PROMPT:",
             "  DIMENSION: {letter} - {name}. DESCRIPTION: {from_catalog}",
-            _invoke_line(f'uv run python -m {MODULE_PATH} --step-number 4 --thoughts \\"Dimension: {{{{letter}}}}\\"'),
+            _invoke_line(f'uv run python -m {MODULE_PATH} --step-number 4 --thoughts \\"Dimension: {{letter}}\\"'),
         ],
-        "next": "After all agents complete, run the <invoke_after> command with their combined findings",
-        "next_step": 8,
+        "next": "After all agents complete, run the <invoke_after> command.",
+        "next_step": 7,
     },
     4: {
         "title": "BROAD SWEEP [SUB-AGENT]",
@@ -292,7 +290,6 @@ STEPS = {
             "PER FINDING: Location A, Location B, conflict, confidence (low OK).",
             "Bias: Report more. Track searched locations.",
         ],
-        "next": "Invoke step 5 with your findings and searched locations in --thoughts",
     },
     5: {
         "title": "COVERAGE CHECK [SUB-AGENT]",
@@ -302,37 +299,29 @@ STEPS = {
             "Identify GAPS: unexplored dirs, skipped file types, unchecked modules.",
             "Diversity check: all findings same dir/type? Check both docs AND code.",
             "",
-            "Output: At least 3 gaps + specific files/patterns to search next.",
+            "Output: each gap with the specific files/patterns to search next.",
         ],
-        "next": "Invoke step 6 with identified gaps in --thoughts",
     },
     6: {
         "title": "GAP-FILL EXPLORATION [SUB-AGENT]",
         "actions": [
             "GAP-FILL EXPLORATION [SUB-AGENT]",
             "",
-            "Search at least 3 new locations from gap list.",
+            "Search every location on the gap list.",
             "Try: tests, examples, scripts/, negations ('not', 'deprecated'), TODOs/FIXMEs.",
             "",
             "Record new findings: Location A, Location B, conflict, confidence.",
-        ],
-        "next": "Invoke step 7 with all findings (original + new) in --thoughts",
-    },
-    7: {
-        "title": "FORMAT EXPLORATION FINDINGS [SUB-AGENT]",
-        "actions": [
-            "FORMAT EXPLORATION FINDINGS [SUB-AGENT]",
             "",
             "Output format:",
             "  DIMENSION {letter} | TOTAL: N | AREAS SEARCHED: [list]",
             "  FINDING 1: A=[file:line] B=[file:line] Conflict=[desc] Confidence=[h/m/l]",
             "  ...",
             "",
-            "Include ALL findings. Deduplication happens in step 8.",
+            "Include ALL findings, original and new. The parent deduplicates them.",
         ],
         "next": "Output formatted results. Sub-agent task complete.",
     },
-    8: {
+    7: {
         "title": "SYNTHESIZE CANDIDATES",
         "actions": [
             "SYNTHESIZE CANDIDATES",
@@ -340,11 +329,10 @@ STEPS = {
             "1. Merge candidates that cite the same pair of locations (same A and B).",
             "2. Output: C1, C2... with location, summary, dimension",
             "",
-            "Pass every remaining candidate to step 9; do not drop any for low confidence.",
+            "Pass every remaining candidate to step 8; do not drop any for low confidence.",
         ],
-        "next": "Invoke step 9 with all candidates in --thoughts",
     },
-    9: {
+    8: {
         "title": "DEEP-DIVE DISPATCH",
         "actions": [
             "DEEP-DIVE DISPATCH",
@@ -356,13 +344,12 @@ STEPS = {
             "AGENT PROMPT:",
             "  CANDIDATE: {id} at {location} | DIMENSION: {letter} - {name}",
             "  Claimed: {summary}",
-            "  Workflow: step 10 (explore) -> step 11 (format)",
-            _invoke_line(f'uv run python -m {MODULE_PATH} --step-number 10 --thoughts \\"Verifying: {{{{id}}}}\\"'),
+            _invoke_line(f'uv run python -m {MODULE_PATH} --step-number 9 --thoughts \\"Verifying: {{id}}\\"'),
         ],
-        "next": "After all agents complete, run the <invoke_after> command with all their verdicts",
-        "next_step": 12,
+        "next": "After all agents complete, run the <invoke_after> command.",
+        "next_step": 10,
     },
-    10: {
+    9: {
         "title": "DEEP-DIVE EXPLORATION [SUB-AGENT]",
         "actions": [
             "DEEP-DIVE EXPLORATION [SUB-AGENT]",
@@ -377,13 +364,6 @@ STEPS = {
             "",
             "3. Verdict: TRUE_INCOHERENCE | SIGNIFICANT_AMBIGUITY | DOCUMENTATION_GAP |",
             "   SPECIFICATION_GAP | FALSE_POSITIVE",
-        ],
-        "next": "When done exploring, invoke step 11 with findings in --thoughts",
-    },
-    11: {
-        "title": "FORMAT RESULTS [SUB-AGENT]",
-        "actions": [
-            "FORMAT RESULTS [SUB-AGENT]",
             "",
             "Output format:",
             "  CANDIDATE: {id} | VERDICT: {verdict} | SEVERITY: {c/h/m/l}",
@@ -393,22 +373,20 @@ STEPS = {
         ],
         "next": "Output formatted result. Sub-agent task complete.",
     },
-    12: {
+    10: {
         "title": "VERDICT ANALYSIS",
         "actions": [
             "VERDICT ANALYSIS",
             "",
-            "1. Tally by verdict type and severity",
-            "2. Quality check: each non-FALSE_POSITIVE has exact quotes",
-            "3. Deduplicate: merge identical source pairs, keep richer analysis",
-            "4. Group related issues:",
+            "1. Quality check: each non-FALSE_POSITIVE has exact quotes",
+            "2. Deduplicate: merge identical source pairs, keep richer analysis",
+            "3. Group related issues:",
             "   - SHARED ROOT CAUSE: same file, same outdated doc, same config",
             "   - SHARED THEME: same dimension, same concept, same fix type",
             "   Output: G1, G2... with member issues, relationship, unified resolution",
         ],
-        "next": "Invoke step 13 with confirmed findings and groups",
     },
-    13: {
+    11: {
         "title": "PREPARE RESOLUTION BATCHES",
         "actions": [
             "PREPARE RESOLUTION BATCHES",
@@ -428,52 +406,50 @@ STEPS = {
             "",
             "Suggestions must use ACTUAL values (e.g., 'Update to 60s' not 'match code').",
         ],
-        "next": "Invoke step 14 with batch definitions and issue data in --thoughts",
     },
-    14: {
+    12: {
         "title": "PRESENT RESOLUTION BATCH",
         "actions": [
             "PRESENT RESOLUTION BATCH",
             "",
-            "Use AskUserQuestion. Check --thoughts for 'MODE: individual' flag.",
+            "Use AskUserQuestion. Check <context> for 'MODE: individual'.",
             "Edge cases: empty batch=skip, single-member group=individual, quotes>10 lines=truncate.",
             "",
-            "GROUP BATCH (2+ members, no MODE flag): ask group question only",
+            "GROUP BATCH (2+ members, no 'MODE: individual' in <context>): ask group question only",
             "  header: 'G{n}', options: unified_suggestion | 'Resolve individually' | 'Skip all'",
             "",
-            "NON-GROUP or MODE=individual: ask per-issue questions",
+            "NON-GROUP, or 'MODE: individual' in <context>: ask per-issue questions",
             "  header: 'I{n}', include: file:line, quotes, claims, analysis",
             "  options: suggestion_1 | suggestion_2 | 'Skip'",
             "",
             "Suggestions must use ACTUAL values (e.g., 'Update to 60s' not 'match code').",
         ],
-        "next": "After AskUserQuestion returns, invoke step 15 with responses",
+        "next": "After AskUserQuestion returns, run the <invoke_after> command.",
     },
-    15: {
+    13: {
         "title": "RESOLUTION LOOP CONTROLLER",
         "actions": [
             "RESOLUTION LOOP CONTROLLER",
             "",
-            "Early exit: if ALL resolutions are NO_RESOLUTION, output 'No issues selected' and stop.",
-            "",
             "Process response:",
-            "  G{n} response: unified -> record for all; 'individually' -> set MODE=individual;",
+            "  G{n} response: unified -> record for all; 'individually' -> record none (asked per issue next);",
             "                 'skip all' -> NO_RESOLUTION for all; 'other' -> record custom for all",
             "  I{n} responses: record each resolution or NO_RESOLUTION",
             "",
-            "Include in --thoughts: collected resolutions, remaining batches, MODE flag if applicable.",
+            "After the last batch, if every resolution is NO_RESOLUTION, output 'No issues selected' and stop.",
         ],
         "branches": [
-            ("'Resolve individually' was selected, or more batches remain", 14),
-            ("all batches are complete", 16),
+            ("the responses select 'Resolve individually' for a group", 12, "MODE: individual"),
+            ("no response selects 'Resolve individually' and more batches remain", 12),
+            ("no response selects 'Resolve individually' and all batches are complete", 14),
         ],
     },
-    16: {
+    14: {
         "title": "PLAN DISPATCH",
         "actions": [
             "PLAN DISPATCH",
             "",
-            "From --thoughts: read resolutions, skip NO_RESOLUTION.",
+            "Read the collected resolutions; skip NO_RESOLUTION.",
             "",
             "1. Target files: use Source A/B as hints, resolution may specify",
             "2. Agent types: .md/.rst/.txt -> technical-writer, code/config -> developer",
@@ -482,28 +458,26 @@ STEPS = {
             "",
             "Output: FILE GROUPS (file, issues, agent) + DISPATCH PLAN (waves)",
         ],
-        "next": "Invoke step 17 with dispatch plan in --thoughts",
     },
-    17: {
+    15: {
         "title": "RECONCILE DISPATCH",
         "actions": [
             "RECONCILE DISPATCH",
             "",
-            "Launch agents for current wave (Wave 1 first time, next wave after step 20).",
+            "Launch agents for current wave (Wave 1 first time, next wave after step 17).",
             "Agent types: developer (code/config) or technical-writer (docs).",
             "",
             "AGENT PROMPT:",
             "  TARGET: {file} | ISSUES: {ids}",
             "  Per issue: type, severity, sources, analysis, resolution_text",
-            "  Workflow: step 18 (apply) -> step 19 (format)",
-            _invoke_line(f'uv run python -m {MODULE_PATH} --step-number 18 --thoughts \\"FILE: {{{{file}}}}\\"'),
+            _invoke_line(f'uv run python -m {MODULE_PATH} --step-number 16 --thoughts \\"FILE: {{file}}\\"'),
             "",
             parallel_constraint("N"),
         ],
-        "next": "After all wave agents complete, run the <invoke_after> command with their results",
-        "next_step": 20,
+        "next": "After all wave agents complete, run the <invoke_after> command.",
+        "next_step": 17,
     },
-    18: {
+    16: {
         "title": "RECONCILE APPLY [SUB-AGENT]",
         "actions": [
             "RECONCILE APPLY [SUB-AGENT]",
@@ -511,21 +485,14 @@ STEPS = {
             "For each resolution: locate target, apply change, verify it addresses the issue.",
             "Batched: apply in order, watch for conflicts.",
             "Bias: apply the resolution, interpret charitably, skip rarely.",
-        ],
-        "next": "When done, invoke step 19 with results in --thoughts",
-    },
-    19: {
-        "title": "RECONCILE FORMAT [SUB-AGENT]",
-        "actions": [
-            "RECONCILE FORMAT [SUB-AGENT]",
             "",
-            "Per issue: ISSUE: {id} | STATUS: RESOLVED|SKIPPED | FILE: {path}",
+            "Output, per issue: ISSUE: {id} | STATUS: RESOLVED|SKIPPED | FILE: {path}",
             "  If RESOLVED: CHANGE: {brief description}",
             "  If SKIPPED: REASON: {why}",
         ],
         "next": "Output formatted result(s). Sub-agent task complete.",
     },
-    20: {
+    17: {
         "title": "RECONCILE COLLECT",
         "actions": [
             "RECONCILE COLLECT",
@@ -534,11 +501,11 @@ STEPS = {
             "Check the dispatch plan for remaining waves.",
         ],
         "branches": [
-            ("the dispatch plan has more waves", 17),
-            ("all waves are complete", 21),
+            ("the dispatch plan has more waves", 15),
+            ("all waves are complete", 18),
         ],
     },
-    21: {
+    18: {
         "title": "PRESENT REPORT",
         "actions": [
             "PRESENT REPORT",
@@ -564,7 +531,7 @@ def generic_step_handler(step_info, **kwargs):
     }
 
 
-STEP_HANDLERS = {i: generic_step_handler for i in range(1, 22)}
+STEP_HANDLERS = dict.fromkeys(STEPS, generic_step_handler)
 
 
 def get_step_guidance(step_number, total_steps):
@@ -578,107 +545,92 @@ WORKFLOW = Workflow(
     StepDef(
         id="survey",
         title="Codebase Survey",
-        actions=get_step_guidance(1, 21)["actions"],
+        actions=get_step_guidance(1, len(STEPS))["actions"],
     ),
     StepDef(
         id="dimension_selection",
         title="Dimension Selection",
-        actions=get_step_guidance(2, 21)["actions"],
+        actions=get_step_guidance(2, len(STEPS))["actions"],
     ),
     StepDef(
         id="exploration_dispatch",
         title="Exploration Dispatch",
-        actions=get_step_guidance(3, 21)["actions"],
+        actions=get_step_guidance(3, len(STEPS))["actions"],
     ),
     StepDef(
         id="broad_sweep",
         title="Broad Sweep [SUB-AGENT]",
-        actions=get_step_guidance(4, 21)["actions"],
+        actions=get_step_guidance(4, len(STEPS))["actions"],
     ),
     StepDef(
         id="coverage_check",
         title="Coverage Check [SUB-AGENT]",
-        actions=get_step_guidance(5, 21)["actions"],
+        actions=get_step_guidance(5, len(STEPS))["actions"],
     ),
     StepDef(
         id="gap_fill",
         title="Gap-Fill Exploration [SUB-AGENT]",
-        actions=get_step_guidance(6, 21)["actions"],
-    ),
-    StepDef(
-        id="format_exploration",
-        title="Format Exploration Findings [SUB-AGENT]",
-        actions=get_step_guidance(7, 21)["actions"],
+        actions=get_step_guidance(6, len(STEPS))["actions"],
     ),
     StepDef(
         id="synthesize_candidates",
         title="Synthesize Candidates",
-        actions=get_step_guidance(8, 21)["actions"],
+        actions=get_step_guidance(7, len(STEPS))["actions"],
     ),
     StepDef(
         id="deep_dive_dispatch",
         title="Deep-Dive Dispatch",
-        actions=get_step_guidance(9, 21)["actions"],
+        actions=get_step_guidance(8, len(STEPS))["actions"],
     ),
     StepDef(
         id="deep_dive_exploration",
         title="Deep-Dive Exploration [SUB-AGENT]",
-        actions=get_step_guidance(10, 21)["actions"],
-    ),
-    StepDef(
-        id="format_results",
-        title="Format Results [SUB-AGENT]",
-        actions=get_step_guidance(11, 21)["actions"],
+        actions=get_step_guidance(9, len(STEPS))["actions"],
     ),
     StepDef(
         id="verdict_analysis",
         title="Verdict Analysis",
-        actions=get_step_guidance(12, 21)["actions"],
+        actions=get_step_guidance(10, len(STEPS))["actions"],
     ),
     StepDef(
         id="prepare_resolution_batches",
         title="Prepare Resolution Batches",
-        actions=get_step_guidance(13, 21)["actions"],
+        actions=get_step_guidance(11, len(STEPS))["actions"],
     ),
     StepDef(
         id="present_batch",
         title="Present Resolution Batch",
-        actions=get_step_guidance(14, 21)["actions"],
+        actions=get_step_guidance(12, len(STEPS))["actions"],
     ),
     StepDef(
         id="resolution_loop",
         title="Resolution Loop Controller",
-        actions=get_step_guidance(15, 21)["actions"],
+        actions=get_step_guidance(13, len(STEPS))["actions"],
     ),
     StepDef(
         id="plan_dispatch",
         title="Plan Dispatch",
-        actions=get_step_guidance(16, 21)["actions"],
+        actions=get_step_guidance(14, len(STEPS))["actions"],
     ),
     StepDef(
         id="reconcile_dispatch",
         title="Reconcile Dispatch",
-        actions=get_step_guidance(17, 21)["actions"],
+        actions=get_step_guidance(15, len(STEPS))["actions"],
     ),
     StepDef(
         id="reconcile_apply",
         title="Reconcile Apply [SUB-AGENT]",
-        actions=get_step_guidance(18, 21)["actions"],
-    ),
-    StepDef(
-        id="reconcile_format",
-        title="Reconcile Format [SUB-AGENT]",
-        actions=get_step_guidance(19, 21)["actions"],
+        actions=get_step_guidance(16, len(STEPS))["actions"],
     ),
     StepDef(
         id="reconcile_collect",
         title="Reconcile Collect",
-        actions=get_step_guidance(20, 21)["actions"],
+        actions=get_step_guidance(17, len(STEPS))["actions"],
     ),
     StepDef(
         id="present_report",
         title="Present Report",
-        actions=get_step_guidance(21, 21)["actions"],
+        actions=get_step_guidance(18, len(STEPS))["actions"],
     ),
     description="Multi-phase incoherence detection and resolution workflow",
     validate=False,
@@ -692,9 +644,9 @@ def main(step_number: int | None = None):
     The annotations are metadata for the testing framework.
     """
     parser = argparse.ArgumentParser(description="Incoherence Detector")
-    parser.add_argument("--step-number", type=int, required=True)
+    parser.add_argument("--step-number", type=int, required=True, choices=range(1, len(STEPS) + 1))
     parser.add_argument(
-        "--thoughts", type=str, default="", help="Accumulated context from previous steps"
+        "--thoughts", type=str, default="", help="Routing value from a printed dispatch or loop command"
     )
     args = parser.parse_args()
 
@@ -702,19 +654,19 @@ def main(step_number: int | None = None):
 
     # Determine agent type and phase
     # Detection sub-agents: exploration and deep-dive
-    if args.step_number in [4, 5, 6, 7, 10, 11]:
+    if args.step_number in [4, 5, 6, 9]:
         agent_type = "SUB-AGENT"
         phase = "DETECTION"
     # Application sub-agents: apply resolution
-    elif args.step_number in [18, 19]:
+    elif args.step_number == 16:
         agent_type = "SUB-AGENT"
         phase = "APPLICATION"
     # Detection parent
-    elif args.step_number <= 12:
+    elif args.step_number <= 10:
         agent_type = "PARENT"
         phase = "DETECTION"
     # Resolution parent
-    elif args.step_number <= 15:
+    elif args.step_number <= 13:
         agent_type = "PARENT"
         phase = "RESOLUTION"
     # Application parent

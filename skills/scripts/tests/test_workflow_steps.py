@@ -149,11 +149,11 @@ def test_deepthink_walk_from_step_1_visits_each_step_once_in_order(
 @pytest.mark.parametrize(
     "step,targets",
     [
-        pytest.param(3, [8], id="exploration-dispatch"),
-        pytest.param(9, [12], id="deep-dive-dispatch"),
-        pytest.param(17, [20], id="reconcile-dispatch"),
-        pytest.param(15, [14, 16], id="resolution-loop"),
-        pytest.param(20, [17, 21], id="reconcile-collect"),
+        pytest.param(3, [7], id="exploration-dispatch"),
+        pytest.param(8, [10], id="deep-dive-dispatch"),
+        pytest.param(15, [17], id="reconcile-dispatch"),
+        pytest.param(13, [12, 12, 14], id="resolution-loop"),
+        pytest.param(17, [15, 18], id="reconcile-collect"),
     ],
 )
 def test_incoherence_invoke_after_targets(monkeypatch, capsys, step, targets):
@@ -162,6 +162,26 @@ def test_incoherence_invoke_after_targets(monkeypatch, capsys, step, targets):
     assert invoke_after is not None
     steps = _next_steps(invoke_after.group(), incoherence.MODULE_PATH, "--step-number")
     assert sorted(steps) == targets
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        pytest.param(6, id="exploration-sub-agent"),
+        pytest.param(9, id="deep-dive-sub-agent"),
+        pytest.param(16, id="reconcile-sub-agent"),
+    ],
+)
+def test_incoherence_sub_agent_last_step_prints_no_next_command(monkeypatch, capsys, step):
+    out = _render(monkeypatch, capsys, incoherence, "--step-number", str(step))
+    assert _next_steps(out, incoherence.MODULE_PATH, "--step-number") == []
+
+
+@pytest.mark.parametrize("step", [0, 19])
+def test_incoherence_rejects_step_outside_workflow(monkeypatch, capsys, step):
+    with pytest.raises(SystemExit) as exc:
+        _render(monkeypatch, capsys, incoherence, "--step-number", str(step))
+    assert exc.value.code == 2
 
 
 @pytest.mark.parametrize(

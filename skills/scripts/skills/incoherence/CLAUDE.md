@@ -15,5 +15,5 @@ Step-based incoherence detection workflow with detection, resolution, and applic
 
 ```bash
 uv run --project "<scripts>" python -m skills.incoherence.incoherence --step-number 1
-uv run --project "<scripts>" python -m skills.incoherence.incoherence --step-number 2 --thoughts "dim=A, findings=..."
+uv run --project "<scripts>" python -m skills.incoherence.incoherence --step-number 4 --thoughts "Dimension: A"
 ```

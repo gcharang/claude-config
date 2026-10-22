@@ -966,7 +966,7 @@ class TestCwdPinnedCommands:
         # cwd-fragile relative working-dir.
         from skills.incoherence import incoherence
 
-        for step in (3, 9, 17):
+        for step in (3, 8, 15):
             actions = incoherence.STEPS[step]["actions"]
             line = next(a for a in actions if a.strip().startswith("Start: <invoke"))
             assert f'cmd="uv run --directory {_SKILLS_DIR_Q} ' in line

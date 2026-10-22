@@ -6,8 +6,6 @@ Guards merged_bug_005 from the 2026-04-17 ultrareview:
   so the emitted command is cwd-independent
 - format_step / sub_agent_invoke must embed the shlex-quoted SKILLS_DIR in
   shell strings they tell the LLM to copy verbatim
-- incoherence.py self-chaining uses --thoughts "<ACCUMULATED_CONTEXT>" which
-  must survive XML attribute embedding without malforming the element
 """
 
 from __future__ import annotations
@@ -66,14 +64,10 @@ class TestInvokeAfterEscaping:
         assert 'x --thoughts "ctx"' in cmd
 
     def test_escapes_angle_brackets_in_cmd(self):
-        """The live incoherence.py:198 trigger: --thoughts "<ACCUMULATED_CONTEXT>"."""
-        node = InvokeAfterNode(
-            cmd="uv run python -m skills.incoherence.incoherence --step-number 2 "
-            '--thoughts "<ACCUMULATED_CONTEXT>"'
-        )
+        node = InvokeAfterNode(cmd='uv run x --thoughts "<ctx>"')
         rendered = render_invoke_after(node)
         cmd = _cmd_attr(rendered)
-        assert '"<ACCUMULATED_CONTEXT>"' in cmd
+        assert '"<ctx>"' in cmd
 
     def test_escapes_ampersand_in_cmd(self):
         """&& must survive attribute embedding (produces &amp;amp; in raw XML)."""
@@ -145,29 +139,27 @@ class TestSkillsDirShellQuoting:
 
 
 class TestIncoherenceRoundTrip:
-    """incoherence.format_incoherence_output must emit parseable XML even with
-    the <ACCUMULATED_CONTEXT> placeholder baked into the next_cmd."""
+    """A branch command's quoted --thoughts value must survive XML attribute embedding."""
 
-    def test_step_1_invoke_after_parses(self):
+    def test_individual_mode_value_round_trips_to_step_12(self):
         from skills.incoherence import incoherence
 
-        guidance = incoherence.STEPS[1]
         out = incoherence.format_incoherence_output(
-            step=1,
-            phase="detection",
-            agent_type="parent",
-            guidance=guidance,
+            step=13,
+            phase="RESOLUTION",
+            agent_type="PARENT",
+            guidance=incoherence.STEPS[13],
         )
-        # Step 1 mentions "<invoke_after>" inside the xml_format_mandate prose,
-        # so match the last real element by scanning from the last opening tag.
         start = out.rfind("<invoke_after>")
-        assert start != -1, f"no invoke_after block in output:\n{out}"
         end = out.find("</invoke_after>", start) + len("</invoke_after>")
-        fragment = out[start:end]
-        cmd = _cmd_attr(fragment)
-        # After XML decoding the attribute, the placeholder survives intact.
-        assert '--thoughts "<ACCUMULATED_CONTEXT>"' in cmd
-        assert "--step-number 2" in cmd
+        root = ET.fromstring(out[start:end])
+        commands = [shlex.split(invoke.get("cmd", "")) for invoke in root.iter("invoke")]
+        passed = [
+            (argv[argv.index("--step-number") + 1], argv[argv.index("--thoughts") + 1])
+            for argv in commands
+            if "--thoughts" in argv
+        ]
+        assert passed == [("12", "MODE: individual")]
 
 
 class TestSpecializedNodeEscaping:
