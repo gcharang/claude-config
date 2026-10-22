@@ -3,7 +3,7 @@
 
 One runner for all three QR phases (plan-design, impl-code, impl-docs); --phase
 selects which phase's prompt content (prompts/content.DECOMPOSE_CONTENT) drives
-the shared 13-step dispatch_step. Replaces the three near-identical
+the shared dispatch_step. Replaces the three near-identical
 *_qr_decompose.py files -- the control flow already lived in
 prompts/decompose.dispatch_step, so this file only wires --phase to its content.
 """
@@ -21,7 +21,6 @@ def get_step_guidance(step: int, module_path: str, **kwargs) -> dict:
         phase,
         module_path,
         content["phase_prompts"],
-        content["grouping_config"],
         state_dir,
         scope_provider=content["scope_provider"],
     )

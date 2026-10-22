@@ -50,10 +50,8 @@ from .dispatch import batch as batch_dispatch
 from .dispatch import discover_methods, list_methods, read_batch_requests
 from .output import EntityResult, print_entity_result
 from .qr_common import (
-    assign_group_in_state,
     filtered_items_view,
     find_item,
-    is_valid_group_id,
     load_qr_state_under_lock,
     save_qr_state_atomic,
     status_counts,
@@ -197,59 +195,11 @@ def cmd_summary(state_dir: str, phase: str, args: list[str]):
         print(f"  {status}: {count}")
 
 
-def cmd_assign_group(state_dir: str, phase: str, args: list[str]):
-    """Assign QR item to a group.
-
-    Usage: assign-group <item_id> --group-id <group_id>
-
-    Atomic update with file locking. Group assignment is idempotent.
-    Does not increment version (grouping is metadata, not verification).
-    """
-    if not args:
-        error_exit("Usage: assign-group <item_id> --group-id <group_id>")
-
-    item_id = args[0]
-    group_id = None
-
-    i = 1
-    while i < len(args):
-        if args[i] == "--group-id" and i + 1 < len(args):
-            group_id = args[i + 1]
-            i += 2
-        else:
-            i += 1
-
-    if not group_id:
-        error_exit("--group-id required")
-
-    if not is_valid_group_id(group_id):
-        error_exit(
-            f"Invalid group_id '{group_id}'. Must be 'umbrella' or start with: parent-, component-, concern-, affinity-"
-        )
-
-    qr_path = get_qr_path(state_dir, phase)
-    if not qr_path.exists():
-        error_exit(f"QR state file not found: {qr_path}")
-
-    with qr_write_lock(state_dir, phase):
-        qr_state = load_qr_state_under_lock(qr_path)
-        try:
-            item = assign_group_in_state(qr_state, item_id, group_id)
-        except ValueError as e:
-            error_exit(str(e))
-        save_qr_state_atomic(qr_path, qr_state)
-
-    print_entity_result(
-        EntityResult(id=item_id, version=item.get("version", 1), operation="updated")
-    )
-
-
 COMMANDS = {
     "update-item": cmd_update_item,
     "get-item": cmd_get_item,
     "list-items": cmd_list_items,
     "summary": cmd_summary,
-    "assign-group": cmd_assign_group,
 }
 
 

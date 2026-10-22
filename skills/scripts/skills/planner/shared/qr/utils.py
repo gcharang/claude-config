@@ -18,7 +18,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from skills.planner.shared.qr.types import LoopState, QRState, QRStatus
+from skills.planner.shared.qr.types import LoopState, QRState
 from skills.planner.shared.schema import (
     LINE_FORGING_ORDS,
     QA_ITEM_DEFAULTS,
@@ -93,8 +93,8 @@ def _validate_qr_item_shape(item: object) -> None:
     (validate_state-skipping) consumer. `id` is required+str: it is find_item's lookup
     key, a `{i["id"]}` set member at decompose step 9, and a shlex.quote() arg in
     build_qr_verify_dispatch (absent -> KeyError, unhashable -> TypeError). status/
-    group_id/parent_id are str-or-absent: status keys status_counts' dict and by_status'
-    frozenset; group_id keys decompose's groups dict; parent_id is tested `in item_ids`.
+    parent_id are str-or-absent: status keys status_counts' dict and by_status'
+    frozenset; parent_id is tested `in item_ids`.
     Matches QRItem's str / str|None typing for exactly these fields -- the free-text
     fields (scope/check/finding) are str()-wrapped at their sinks and the numeric fields
     (version/iteration) are _coerce_*'d, so neither is checked here."""
@@ -102,7 +102,7 @@ def _validate_qr_item_shape(item: object) -> None:
         raise ValueError("qr state item is not an object")
     if not isinstance(item.get("id"), str):
         raise ValueError("qr state item id is not a string")
-    for field in ("status", "group_id", "parent_id"):
+    for field in ("status", "parent_id"):
         value = item.get(field)
         if value is not None and not isinstance(value, str):
             raise ValueError(f"qr state item {field} is not a string")
@@ -115,11 +115,11 @@ def parse_qr_dict(content: str) -> dict:
     The shared dict-contract core for the two QR loaders. The orchestrator gates its own
     reads through QRFile/validate_state, but the direct readers -- the CLI (status_counts,
     filtered_items_view), the router (detect_qr_state -> by_status), the fix subprocess
-    (format_failed_items_for_fix), and decompose steps 9/13 ({i["id"] for i in items},
-    groups.setdefault(group_id), parent_id `in` set) -- bypass that gate. They iterate
+    (format_failed_items_for_fix), and decompose step 9 ({i["id"] for i in items},
+    parent_id `in` set) -- bypass that gate. They iterate
     items[] and use the identity fields as dict keys / set members / shlex.quote args, so a
     structurally-malformed-but-top-level-dict file (items not a list, a non-object item, an
-    unhashable/absent id, a list-valued status/group_id/parent_id) would crash them with a
+    unhashable/absent id, a list-valued status/parent_id) would crash them with a
     raw TypeError/KeyError/AttributeError -- a raw traceback instead of the clean
     <qr_cli_error> frame. Validate the shape once here (the single load chokepoint) rather
     than at every consumer, mirroring how _coerce_positive_int hardened the raw int fields
@@ -273,9 +273,7 @@ def _iteration_of(qr_state: dict | None) -> int:
 def _blocking_items_from_state(qr_state: dict | None, *statuses: str) -> list[dict]:
     """Return items at any of *statuses whose severity blocks at the current iteration.
 
-    Operates on a pre-loaded qr_state dict. Backs has_qr_failures_from_state
-    (statuses="FAIL") and the gate's TODO veto (_has_blocking_todo_from_state), so a
-    change to iteration default or severity handling applies to both.
+    Operates on a pre-loaded qr_state dict.
     """
     if not qr_state:
         return []
@@ -326,18 +324,17 @@ def balance_verify_groups(
 ) -> list[list[dict]]:
     """Re-bin verify items into balanced, capped parallel groups.
 
-    The decompose agent's group_id is an affinity hint, not a correctness
-    boundary -- every item carries its own independent check and PASS/FAIL, so
-    which agent verifies an item is free to change. Dispatching one agent per raw
-    group_id leaves two failure modes: a fat group serializes many items while
-    siblings idle, or every item becomes its own agent (N x the fixed per-agent
-    context-load cost).
+    Every item carries its own independent check and PASS/FAIL, so which agent
+    verifies an item is free to change; the order only decides which items share an
+    agent's context. One agent per item pays the fixed per-agent context-load cost N
+    times; one agent for many items serializes them while siblings idle.
 
-    Items are sorted by (group_id or id) -- keeping affinity-clustered items
-    adjacent -- then split into k = min(max_parallel, ceil(n / target_per_group))
-    contiguous near-equal chunks (sizes differ by at most 1). This guarantees both
-    bounds at once: at most max_parallel groups, and a max group size of
-    ceil(n / k); affinity adjacency survives except at chunk seams.
+    Items are sorted by scope, then by parent, so items on one scope stay adjacent and
+    a split child sits beside a parent on the same scope; then they are split into
+    k = min(max_parallel, ceil(n / target_per_group)) contiguous near-equal chunks
+    (sizes differ by at most 1). This guarantees both bounds at once: at most
+    max_parallel groups, and a max group size of ceil(n / k); adjacency survives
+    except at chunk seams.
 
     Returns a list of non-empty item groups ([] when there are no items).
     """
@@ -345,7 +342,14 @@ def balance_verify_groups(
         return []
     per = max(1, target_per_group)
     cap = max(1, max_parallel)
-    ordered = sorted(items, key=lambda it: str(it.get("group_id") or it.get("id") or ""))
+    ordered = sorted(
+        items,
+        key=lambda it: (
+            str(it.get("scope") or ""),
+            str(it.get("parent_id") or it.get("id") or ""),
+            str(it.get("id") or ""),
+        ),
+    )
     n = len(ordered)
     k = min(cap, max(1, math.ceil(n / per)))  # 1 <= k <= n, so no chunk is empty
     base, extra = divmod(n, k)  # the first `extra` chunks take one more item
@@ -450,15 +454,14 @@ def resolve_qr_for_step(
     qr_states: dict | None,
     state_dir: str | None,
     phase: str | None,
-    qr_status: str | None,
 ) -> tuple[dict | None, QRState]:
     """Resolve the QR state dict + QRState for one orchestrator step.
 
     Both orchestrators derive the same per-step QR context: prefer a preloaded
     qr_states model (the batch path, which avoids a second disk load) else read
-    qr-{phase}.json. Iteration and fix-mode come from the state itself; status from
-    the gate flag. The caller passes the resolved phase (executor maps step->phase
-    via EXECUTOR_STEP_PHASES; planner reads it off the step handler).
+    qr-{phase}.json. Iteration and fix-mode come from the state itself. The caller
+    passes the resolved phase (executor maps step->phase via EXECUTOR_STEP_PHASES;
+    planner reads it off the step handler).
     """
     if qr_states is not None:
         qr_model = qr_states.get(phase) if state_dir and phase else None
@@ -466,10 +469,9 @@ def resolve_qr_for_step(
     else:
         qr_state = load_qr_state(state_dir, phase) if state_dir and phase else None
     iteration = get_qr_iteration_from_state(qr_state) if qr_state else 1
-    status = QRStatus(qr_status) if qr_status else None
     fix_mode = bool(qr_state and has_qr_failures_from_state(qr_state))
     state = LoopState.RETRY if fix_mode else LoopState.INITIAL
-    qr = QRState(iteration=iteration, state=state, status=status)
+    qr = QRState(iteration=iteration, state=state)
     return qr_state, qr
 
 
@@ -517,6 +519,26 @@ def _fail_signature(items: list[dict]) -> str | None:
     if not fails:
         return None
     return hashlib.sha256(json.dumps(fails).encode("utf-8")).hexdigest()
+
+
+VERIFY_DISPATCHED_SIG = "verify-dispatched"
+FIX_RAN_SIG = "fix-ran"
+
+
+def mark_iteration_sig(state_dir: str, phase: str, sig: str) -> None:
+    """Persist a round marker in iteration_sig without advancing the iteration.
+
+    The fix step stores FIX_RAN_SIG, so the next verify render differs from the stored
+    FAIL signature and advances even when the FAIL set's (id, version) is unchanged.
+    """
+    from skills.lib.io import atomic_write_text
+
+    path = Path(state_dir) / f"qr-{phase}.json"
+    if not path.exists():
+        return
+    qr_state = json.loads(path.read_text(encoding="utf-8"))
+    qr_state["iteration_sig"] = sig
+    atomic_write_text(path, json.dumps(qr_state, indent=2))
 
 
 def increment_qr_iteration(state_dir: str, phase: str, sig: str) -> int | None:
@@ -585,16 +607,32 @@ def prepare_verify_items(
     if not qr_state or "items" not in qr_state:
         return None, 1
     iteration = _iteration_of(qr_state)
+    items = qr_state.get("items", [])
+    has_todo = any(it.get("status", "TODO") == "TODO" for it in items)
     if qr.state == LoopState.RETRY:
-        # Idempotent bump: advance only when the recorded FAIL set changed since
-        # the last bump (a genuine new fix cycle). A transient verify re-render
-        # with the same FAILs recomputes the same signature and skips -- one fix
-        # cycle counts once. sig is None when nothing is recorded FAIL, so the bump
-        # never fires without one (gate invariant: "iteration advances only on a
-        # recorded blocking FAIL").
-        sig = _fail_signature(qr_state.get("items", []))
+        # Idempotent bump: advance only when the recorded FAIL set changed since the
+        # last bump (a genuine new fix cycle). A transient verify re-render with the
+        # same FAILs recomputes the same signature and skips -- one fix cycle counts
+        # once.
+        sig = _fail_signature(items)
         if sig is not None and qr_state.get("iteration_sig") != sig:
             new_iter = increment_qr_iteration(state_dir, phase, sig)
             if new_iter is not None:
                 iteration = new_iter
-    return query_items(qr_state, by_status("TODO", "FAIL"), by_blocking_severity(iteration)), iteration
+    elif has_todo:
+        # The gate sends a TODO item with no blocking FAIL back here. The first render
+        # only records that a round was dispatched; every later render is a re-verify
+        # round and advances the iteration whether or not the previous round recorded
+        # anything, so a stalled verifier still reaches the ceiling.
+        prior_sig = qr_state.get("iteration_sig")
+        if prior_sig is None:
+            mark_iteration_sig(state_dir, phase, VERIFY_DISPATCHED_SIG)
+        else:
+            new_iter = increment_qr_iteration(state_dir, phase, prior_sig)
+            if new_iter is not None:
+                iteration = new_iter
+    # Every TODO item is dispatched whatever its severity, because the gate sends any
+    # TODO item back here; a FAIL is re-verified only while its severity blocks.
+    blocking = by_blocking_severity(iteration)
+    is_todo, is_fail = by_status("TODO"), by_status("FAIL")
+    return [it for it in query_items(qr_state) if is_todo(it) or (is_fail(it) and blocking(it))], iteration

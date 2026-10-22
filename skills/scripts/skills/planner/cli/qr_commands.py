@@ -12,10 +12,8 @@ from skills.planner.shared.qr.utils import load_qr_state, qr_write_lock
 from skills.planner.shared.schema import canonicalize_severity
 
 from .qr_common import (
-    assign_group_in_state,
     filtered_items_view,
     find_item,
-    is_valid_group_id,
     load_qr_state_under_lock,
     save_qr_state_atomic,
     status_counts,
@@ -163,23 +161,3 @@ def summary(ctx: QRContext) -> dict:
         "total": sum(counts.values()),
         "counts": counts,
     }
-
-
-def assign_group(ctx: QRContext, item_id: str, group_id: str) -> dict:
-    """Assign QR item to a group."""
-    if not is_valid_group_id(group_id):
-        raise ValueError(
-            f"Invalid group_id '{group_id}'. "
-            f"Must be 'umbrella' or start with: parent-, component-, concern-, affinity-"
-        )
-
-    qr_path = ctx.qr_path()
-    if not qr_path.exists():
-        raise FileNotFoundError(f"QR state file not found: {qr_path}")
-
-    with qr_write_lock(ctx.state_dir, ctx.phase):
-        qr_state = ctx.load_qr_state()
-        item = assign_group_in_state(qr_state, item_id, group_id)
-        ctx.save_qr_state(qr_state)
-
-    return {"id": item_id, "version": item.get("version", 1), "operation": "updated"}

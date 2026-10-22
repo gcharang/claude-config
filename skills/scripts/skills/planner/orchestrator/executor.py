@@ -36,13 +36,12 @@ from skills.planner.shared.constraints import (
     ORCHESTRATOR_CONSTRAINT,
 )
 from skills.planner.shared.gates import _render_iteration_limit_banner, build_gate_output
-from skills.planner.shared.qr.cli import add_qr_args
 from skills.planner.shared.qr.constants import QR_ITERATION_LIMIT
 from skills.planner.shared.qr.phases import get_phase_config
 from skills.planner.shared.qr.types import LoopState, QRState
 from skills.planner.shared.qr.utils import (
+    load_validated_qr_state,
     prepare_verify_items,
-    qr_file_exists,
     resolve_qr_for_step,
 )
 from skills.planner.shared.resources import (
@@ -302,8 +301,9 @@ def format_qr_decompose(step: int, phase: str, state_dir: str, qr: QRState) -> s
 
     title = f"{PHASE_QR_NAME.get(phase, 'QR')} Decompose"
 
-    # Skip if already decomposed
-    if qr_file_exists(state_dir, phase):
+    # Skip only when the file loads and validates; a malformed file is rewritten by
+    # decompose instead of looping verify -> decompose.
+    if load_validated_qr_state(state_dir, phase) is not None:
         next_step = step + 1
         body = "\n".join(
             [
@@ -347,28 +347,15 @@ def format_qr_verify(
             f"uv run python -m {MODULE_PATH} --step {decompose_step} --state-dir {shell_quote(state_dir)}"
         )
         return format_step(body, retry_cmd, title=title)
+    next_cmd = f"uv run python -m {MODULE_PATH} --step {step + 1} --state-dir {shell_quote(state_dir)}"
     if not items:
-        next_step = step + 1
-        body = "All items already verified. Proceeding with pass."
-        # No agents dispatched → collapse to single NEXT STEP (pass) so the
-        # prompt doesn't render "Count PASS vs FAIL" for zero agents.
-        next_cmd = f"uv run python -m {MODULE_PATH} --step {next_step} --state-dir {shell_quote(state_dir)} --qr-status pass"
-        return format_step(body, next_cmd=next_cmd, title=title)
+        return format_step("All items already verified.", next_cmd, title=title)
 
     actions = build_qr_verify_dispatch(
         verify_script, phase, state_dir, items, ORCHESTRATOR_CONSTRAINT
     )
 
-    body = "\n".join(actions)
-    next_step = step + 1
-    base_cmd = f"uv run python -m {MODULE_PATH} --step {next_step} --state-dir {shell_quote(state_dir)}"
-
-    return format_step(
-        body,
-        title=title,
-        if_pass=f"{base_cmd} --qr-status pass",
-        if_fail=f"{base_cmd} --qr-status fail",
-    )
+    return format_step("\n".join(actions), next_cmd, title=title)
 
 
 # =============================================================================
@@ -591,7 +578,6 @@ def format_step_12(state_dir: str) -> str:
 def format_output(
     step: int,
     state_dir: str,
-    qr_status: str | None,
     reconciliation_check: bool,
     plan: "Plan | None" = None,
     qr_states: dict | None = None,
@@ -599,15 +585,14 @@ def format_output(
     """Format output for display."""
 
     # Derive QR state from on-disk qr-{phase}.json.
-    # Iteration lives in the state file; the gate does not pass --qr-iteration
-    # or --qr-fail (see skills/planner/shared/qr/cli.py), so CLI-derived fallbacks
-    # would stale-cache iteration=1 forever in fix loops.
+    # Iteration lives in the state file; no orchestrator flag carries it, so a
+    # CLI-derived fallback would stale-cache iteration=1 forever in fix loops.
     # Applies to work step (N), decompose (N+1), verify (N+2), and gate (N+3) —
-    # iteration bumps in verify only fire when state == RETRY, and the gate
+    # iteration bumps in verify depend on the recorded verdicts, and the gate
     # renders different prose on retry. Restricting to N/N+1 would leave
     # verify/gate running as INITIAL even mid-fix-loop.
     phase = EXECUTOR_STEP_PHASES.get(step)
-    qr_state, qr = resolve_qr_for_step(qr_states, state_dir, phase, qr_status)
+    qr_state, qr = resolve_qr_for_step(qr_states, state_dir, phase)
 
     # The non-QR dispatches early-return BEFORE the phase-is-None guard.
     if step == 1:
@@ -633,8 +618,6 @@ def format_output(
         return format_qr_verify(step, phase, state_dir, qr, qr_state)
     if step in EXECUTOR_GATE_CONFIG:
         qr_name, work_step, pass_step, pass_message, fix_target = EXECUTOR_GATE_CONFIG[step]
-        if not qr_status:
-            return f"Error: --qr-status required for step {step} ({qr_name} Gate)"
         return build_gate_output(
             module_path=MODULE_PATH,
             qr_name=qr_name,
@@ -666,7 +649,6 @@ def main():
         help="State directory path. Step 1 creates one when omitted and resumes the "
         "supplied one when given; required for every later step.",
     )
-    add_qr_args(parser)
     parser.add_argument("--reconciliation-check", action="store_true")
 
     args = parser.parse_args()
@@ -799,7 +781,7 @@ def main():
                 "overview/milestones/waves are all a conforming plan.json needs."
             )
 
-    print(format_output(args.step, state_dir, args.qr_status, args.reconciliation_check, plan, qr_states))
+    print(format_output(args.step, state_dir, args.reconciliation_check, plan, qr_states))
 
 
 if __name__ == "__main__":

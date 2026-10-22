@@ -4,7 +4,7 @@ Each class guards one correctness bug from docs/planner-workflow-audit.md §3:
 - #1  qr.py / qr_commands.py lock race (sentinel lock, no lost writes)
 - #2  enforced QR iteration ceiling with user escalation
 - #3  lenient severity ingest (no whole-run abort on "must"/"blocker")
-- #4  gate routes on severity-aware on-disk state, not the --qr-status word
+- #4  gate routes on severity-aware on-disk state
 - #6  Template.safe_substitute (literal "$" in a path does not crash)
 - #10 batch is all-or-nothing and rejects duplicate ids
 
@@ -49,7 +49,7 @@ from skills.planner.cli.dispatch import batch, discover_methods
 from skills.planner.orchestrator import executor as executor_orch
 from skills.planner.orchestrator import planner as planner_orch
 from skills.planner.quality_reviewer.prompts.content import ImplCodeVerify
-from skills.planner.quality_reviewer.prompts.decompose import dispatch_step, format_assign_cmd
+from skills.planner.quality_reviewer.prompts.decompose import dispatch_step
 from skills.planner.quality_reviewer.qr_verify_base import (
     _record_verify_result,
     _resolve_target_item,
@@ -62,7 +62,7 @@ from skills.planner.shared.qr.constants import (
     VERIFY_TARGET_PER_GROUP,
 )
 from skills.planner.shared.qr.phases import is_execution_phase
-from skills.planner.shared.qr.types import LoopState, QRState, QRStatus
+from skills.planner.shared.qr.types import LoopState, QRState
 from skills.planner.shared.qr.utils import (
     balance_verify_groups,
     by_blocking_severity,
@@ -105,12 +105,12 @@ def _gate(tmp_path: Path, qr: QRState, *, phase="impl-code", work_step=2, pass_s
 
 
 def test_build_gate_output_empty_phase_no_crash():
-    # B1: the standalone/test path (no state_dir/phase) hits the verdict else-branch
-    # which leaves `phase` empty; the completeness gate must be skipped, not call
-    # get_phase_config("") which raises ValueError("Unknown QR phase").
+    # B1: with no state_dir/phase the gate fails closed; --accept-findings at the
+    # ceiling is the route to a pass there, and the completeness gate must then be
+    # skipped, not call get_phase_config("") which raises ValueError("Unknown QR phase").
     from skills.planner.shared.gates import GateResult
 
-    qr = QRState(iteration=1, state=LoopState.INITIAL, status=QRStatus.PASS)
+    qr = QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.INITIAL)
     result = build_gate_output(
         module_path="m",
         qr_name="QR",
@@ -122,6 +122,7 @@ def test_build_gate_output_empty_phase_no_crash():
         fix_target=None,
         state_dir="",
         phase="",
+        accept_findings=True,
     )
     assert isinstance(result, GateResult)
     assert result.terminal_pass is True
@@ -535,7 +536,7 @@ class TestTemplateDollarSafety:
 
 # --- Bug #4: gate must route on severity-aware on-disk state -----------------
 class TestGateSourceOfTruth:
-    def test_pass_when_no_blocking_failure_despite_status_fail(self, tmp_path: Path):
+    def test_deescalated_fail_passes(self, tmp_path: Path):
         # iteration 4 blocks only MUST; a SHOULD FAIL is below threshold.
         _write_qr(
             tmp_path,
@@ -543,76 +544,40 @@ class TestGateSourceOfTruth:
             4,
             [{"id": "q1", "scope": "*", "check": "x", "status": "FAIL", "severity": "SHOULD"}],
         )
-        qr = QRState(iteration=4, state=LoopState.INITIAL, status=QRStatus.FAIL)
+        qr = QRState(iteration=4, state=LoopState.INITIAL)
         out = _gate(tmp_path, qr).output
         assert "GATE RESULT: PASS" in out
 
-    def test_deescalation_veto_routes_to_verify_not_reimplement(self, tmp_path: Path):
-        # §5 edge: the de-escalation veto (--qr-status fail + no recorded FAIL on disk
-        # + iteration below ceiling) must route to the verify step, not the work step.
-        # A re-implement run would re-execute the implement step with no fix context,
-        # wasting a round; re-verify re-dispatches the stuck TODO item.
+    def test_todo_item_routes_to_verify_not_work_step(self, tmp_path: Path):
+        # A TODO item with no recorded blocking FAIL routes to the verify step, which
+        # re-dispatches it, not to the work step.
         _write_qr(
             tmp_path,
             "impl-code",
             1,
             [{"id": "q1", "scope": "*", "check": "x", "status": "TODO", "severity": "MUST"}],
         )
-        qr = QRState(iteration=1, state=LoopState.RETRY, status=QRStatus.FAIL)
+        qr = QRState(iteration=1, state=LoopState.INITIAL)
         out = _gate(tmp_path, qr).output
         assert "GATE RESULT: FAIL" in out
         assert "--step 4" in out  # routes to re-verify
         assert "--step 2" not in out  # must NOT route to re-implement
 
-    def test_fail_when_blocking_failure_despite_status_pass(self, tmp_path: Path):
+    def test_blocking_fail_routes_to_work_step(self, tmp_path: Path):
         _write_qr(
             tmp_path,
             "impl-code",
             1,
             [{"id": "q1", "scope": "*", "check": "x", "status": "FAIL", "severity": "MUST"}],
         )
-        qr = QRState(iteration=1, state=LoopState.RETRY, status=QRStatus.PASS)
+        qr = QRState(iteration=1, state=LoopState.RETRY)
         out = _gate(tmp_path, qr).output
         assert "GATE RESULT: FAIL" in out
         assert "--step 2" in out  # routes to the fixer (work_step)
 
-    def test_explicit_fail_vetoes_pass_when_no_failure_recorded(self, tmp_path: Path):
-        # Reviewer P1: --qr-status fail with NO recorded FAIL item on disk (a verifier
-        # returned FAIL without persisting its item, or items remain TODO) must NOT be
-        # upgraded to a disk-derived pass -- absent any recorded failure there is no
-        # de-escalation to justify the upgrade, so the explicit failure stands.
-        #
-        # Empty item set isolates THIS veto: no blocking FAIL (passed=True), no recorded
-        # FAIL (explicit-fail veto fires), and no blocking TODO (the blocking-TODO veto,
-        # which a MUST-at-TODO fixture would also trip, stays silent). Deleting the
-        # explicit-fail branch flips this test red.
-        _write_qr(tmp_path, "impl-code", 1, [])
-        qr = QRState(iteration=1, state=LoopState.RETRY, status=QRStatus.FAIL)
-        out = _gate(tmp_path, qr).output
-        assert "GATE RESULT: FAIL" in out
-        assert "--step 4" in out  # routes to re-verify, does not finalize
-
-    def test_explicit_fail_does_not_veto_genuine_deescalated_pass(self, tmp_path: Path):
-        # The veto must not defeat the legitimate de-escalation upgrade: a RECORDED
-        # SHOULD FAIL below the blocking threshold (iteration 4 blocks only MUST) is a
-        # real pass even though the aggregator reports --qr-status fail.
-        _write_qr(
-            tmp_path,
-            "impl-code",
-            4,
-            [{"id": "q1", "scope": "*", "check": "x", "status": "FAIL", "severity": "SHOULD"}],
-        )
-        qr = QRState(iteration=4, state=LoopState.INITIAL, status=QRStatus.FAIL)
-        out = _gate(tmp_path, qr).output
-        assert "GATE RESULT: PASS" in out
-
-    def test_explicit_fail_vetoes_pass_when_blocking_todo_remains(self, tmp_path: Path):
-        # Reviewer P1: a recorded but de-escalated SHOULD FAIL is NOT sufficient to
-        # upgrade --qr-status fail to a pass while a BLOCKING item is still unverified.
-        # iteration 4 blocks only MUST: the SHOULD FAIL de-escalated, yet the MUST item
-        # is TODO (its verifier returned FAIL before persisting). has_qr_failures_from_state reads
-        # False (no blocking FAIL) and a FAIL is on disk, so the severity-blind veto
-        # wrongly passed -- the blocking TODO must keep the gate failing.
+    def test_todo_with_deescalated_fail_routes_to_verify(self, tmp_path: Path):
+        # A recorded but de-escalated SHOULD FAIL (iteration 4 blocks only MUST) has
+        # nothing to fix, so the TODO MUST routes to verify, not to the work step.
         _write_qr(
             tmp_path,
             "impl-code",
@@ -622,37 +587,15 @@ class TestGateSourceOfTruth:
                 {"id": "q2", "scope": "*", "check": "y", "status": "FAIL", "severity": "SHOULD"},
             ],
         )
-        qr = QRState(iteration=4, state=LoopState.RETRY, status=QRStatus.FAIL)
+        qr = QRState(iteration=4, state=LoopState.RETRY)
         out = _gate(tmp_path, qr).output
         assert "GATE RESULT: FAIL" in out
         assert "--step 4" in out  # routes back to re-verify, does not finalize
         assert "--step 2" not in out  # must NOT route to re-implement
 
-    def test_blocking_todo_vetoes_pass_despite_status_pass(self, tmp_path: Path):
-        # Same root cause via the other input: the aggregator is the LLM, which emits
-        # --qr-status pass when no agent returned FAIL. A verifier that crashed before
-        # persisting leaves its MUST at TODO with no FAIL recorded, so the LLM tallies
-        # pass. has_qr_failures_from_state reads False (no blocking FAIL) and the explicit-fail
-        # veto never runs (status is PASS) -- the unverified blocking MUST must still
-        # fail the gate.
-        _write_qr(
-            tmp_path,
-            "impl-code",
-            4,
-            [{"id": "q1", "scope": "*", "check": "x", "status": "TODO", "severity": "MUST"}],
-        )
-        qr = QRState(iteration=4, state=LoopState.INITIAL, status=QRStatus.PASS)
-        out = _gate(tmp_path, qr).output
-        assert "GATE RESULT: FAIL" in out
-        assert "--step 4" in out  # routes back to re-verify, does not finalize
-        assert "--step 2" not in out  # must NOT route to re-implement
-
-    def test_blocking_todo_veto_respects_deescalation_threshold(self, tmp_path: Path):
-        # The veto must use the SAME blocking-severity threshold as the verify dispatch:
-        # at iteration 4 only MUST blocks, so a SHOULD left at TODO (never dispatched for
-        # verification) is not unfinished blocking work and must NOT veto a genuine
-        # de-escalated pass. Guards _has_blocking_todo_from_state against regressing
-        # to a severity-blind TODO match.
+    def test_todo_item_fails_gate_at_any_severity(self, tmp_path: Path):
+        # An item still TODO is unverified work whatever its severity: iteration 4
+        # blocks only MUST, yet a SHOULD left at TODO keeps the gate failing.
         _write_qr(
             tmp_path,
             "impl-code",
@@ -662,9 +605,31 @@ class TestGateSourceOfTruth:
                 {"id": "q2", "scope": "*", "check": "y", "status": "TODO", "severity": "SHOULD"},
             ],
         )
-        qr = QRState(iteration=4, state=LoopState.INITIAL, status=QRStatus.PASS)
+        qr = QRState(iteration=4, state=LoopState.INITIAL)
         out = _gate(tmp_path, qr).output
-        assert "GATE RESULT: PASS" in out
+        assert "GATE RESULT: FAIL" in out
+        assert "--step 4" in out  # routes back to re-verify
+        assert "--step 2" not in out
+
+    def test_verify_dispatches_every_todo_and_only_blocking_fails(self, tmp_path: Path):
+        from skills.planner.shared.qr.utils import prepare_verify_items
+
+        _write_qr(
+            tmp_path,
+            "impl-code",
+            4,
+            [
+                {"id": "q1", "scope": "*", "check": "a", "status": "TODO", "severity": "COULD"},
+                {"id": "q2", "scope": "*", "check": "b", "status": "FAIL", "severity": "COULD", "finding": "f"},
+                {"id": "q3", "scope": "*", "check": "c", "status": "FAIL", "severity": "MUST", "finding": "f"},
+                {"id": "q4", "scope": "*", "check": "d", "status": "PASS", "severity": "SHOULD"},
+            ],
+        )
+        items, _ = prepare_verify_items(
+            str(tmp_path), "impl-code", QRState(iteration=4, state=LoopState.INITIAL)
+        )
+        assert items is not None
+        assert [i["id"] for i in items] == ["q1", "q3"]
 
 
 # --- Bug #2: enforced iteration ceiling with user escalation -----------------
@@ -685,7 +650,7 @@ class TestGateIterationCap:
                 }
             ],
         )
-        qr = QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.RETRY, status=QRStatus.FAIL)
+        qr = QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.RETRY)
         res = _gate(tmp_path, qr)
         assert "ITERATION LIMIT" in res.output
         assert "AskUserQuestion" in res.output
@@ -700,25 +665,24 @@ class TestGateIterationCap:
             QR_ITERATION_LIMIT - 1,
             [{"id": "q1", "scope": "*", "check": "x", "status": "FAIL", "severity": "MUST"}],
         )
-        qr = QRState(iteration=QR_ITERATION_LIMIT - 1, state=LoopState.RETRY, status=QRStatus.FAIL)
+        qr = QRState(iteration=QR_ITERATION_LIMIT - 1, state=LoopState.RETRY)
         out = _gate(tmp_path, qr).output
         assert "ITERATION LIMIT" not in out
         assert "--step 2" in out  # still loops to the fixer
 
     def test_blocking_todo_escalates_at_iteration_limit(self, tmp_path: Path):
-        # A blocking MUST stuck at TODO at the ceiling must escalate to the user, not
-        # auto-loop -- the blocking-TODO veto flips passed=False and the ceiling check
-        # takes over, same as an unfixable MUST FAIL. Reached via --qr-status pass (the
-        # LLM tally emits pass when no agent returned FAIL).
+        # A MUST stuck at TODO at the ceiling must escalate to the user, not auto-loop,
+        # same as an unfixable MUST FAIL, and the banner names the unverified item.
         _write_qr(
             tmp_path,
             "impl-code",
             QR_ITERATION_LIMIT,
             [{"id": "q1", "scope": "*", "check": "x", "status": "TODO", "severity": "MUST"}],
         )
-        qr = QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.INITIAL, status=QRStatus.PASS)
+        qr = QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.INITIAL)
         res = _gate(tmp_path, qr)
         assert "ITERATION LIMIT" in res.output
+        assert "not verified: q1" in res.output
         assert "--step 2" not in res.output  # escalates, does not auto-loop to the fixer
         assert res.terminal_pass is False
 
@@ -943,7 +907,7 @@ class TestCwdPinnedCommands:
             1,
             [{"id": "qa-001", "scope": "*", "check": "c", "status": "TODO", "severity": "MUST"}],
         )
-        out = executor_orch.format_output(4, str(tmp_path), None, False)
+        out = executor_orch.format_output(4, str(tmp_path), False)
         assert f"Start: uv run --directory {_SKILLS_DIR_Q} python -m" in out
 
     def test_planner_verify_start_line_is_pinned(self, tmp_path: Path):
@@ -953,13 +917,9 @@ class TestCwdPinnedCommands:
             1,
             [{"id": "qa-001", "scope": "*", "check": "c", "status": "TODO", "severity": "MUST"}],
         )
-        out = planner_orch.format_output(5, None, str(tmp_path))
+        out = planner_orch.format_output(5, str(tmp_path))
         assert isinstance(out, str)  # verify step returns str, not a GateResult
         assert f"Start: uv run --directory {_SKILLS_DIR_Q} python -m" in out
-
-    def test_decompose_grouping_cli_prose_is_pinned(self):
-        out = format_assign_cmd("/tmp/sd", "impl-code", "component-")
-        assert f"uv run --directory {_SKILLS_DIR_Q} python -m skills.planner.cli.qr" in out
 
     def test_incoherence_dispatch_lines_are_pinned(self):
         # The hand-built AGENT PROMPT invoke lines route through pin_cwd and carry no
@@ -1003,7 +963,7 @@ class TestChecksSummaryHardening:
                 }
             ],
         )
-        out = executor_orch.format_output(4, str(tmp_path), None, False)
+        out = executor_orch.format_output(4, str(tmp_path), False)
         checks_line = next(ln for ln in out.splitlines() if ln.startswith("Checks:"))
         # Whitespace collapsed: the check's newline did not survive, so the forged
         # delimiter is embedded mid-line and cannot start a fake agent block.
@@ -1032,7 +992,7 @@ class TestChecksSummaryHardening:
                 }
             ],
         )
-        out = executor_orch.format_output(4, str(tmp_path), None, False)
+        out = executor_orch.format_output(4, str(tmp_path), False)
         checks_line = next(ln for ln in out.splitlines() if ln.startswith("Checks:"))
         summary = checks_line[len("Checks: "):]
         assert len(summary) <= 40
@@ -1060,12 +1020,12 @@ class TestExecContextOptional:
         assert is_execution_phase("nonsense") is False  # unknown -> strict default
 
     def test_exec_decompose_step1_without_context_does_not_raise(self, tmp_path: Path):
-        guidance = dispatch_step(1, "impl-code", "m", {1: "ABSORB"}, {}, state_dir=str(tmp_path))
+        guidance = dispatch_step(1, "impl-code", "m", {1: "ABSORB"}, state_dir=str(tmp_path))
         assert "No planning context.json" in "\n".join(guidance["actions"])
 
     def test_plan_decompose_step1_without_context_still_raises(self, tmp_path: Path):
         with pytest.raises(FileNotFoundError, match="Context file not found"):
-            dispatch_step(1, "plan-design", "m", {1: "ABSORB"}, {}, state_dir=str(tmp_path))
+            dispatch_step(1, "plan-design", "m", {1: "ABSORB"}, state_dir=str(tmp_path))
 
     def test_exec_verify_context_step_without_context_does_not_raise(self, tmp_path: Path):
         _write_qr(
@@ -1195,19 +1155,19 @@ class TestVerifyResultRecording:
 
 @st.composite
 def _verify_item_lists(draw):
-    """Item lists with unique ids and varied (incl. None / shared) group_ids."""
+    """Item lists with unique ids and varied (incl. None / shared) scopes and parent_ids."""
     n = draw(st.integers(min_value=0, max_value=120))
-    gids = draw(
+    scopes = draw(
         st.lists(
-            st.one_of(
-                st.none(),
-                st.sampled_from(["umbrella", "component-a", "component-b", "concern-x", "parent-1"]),
-            ),
+            st.one_of(st.none(), st.sampled_from(["*", "milestone:M-001", "file:a.py"])),
             min_size=n,
             max_size=n,
         )
     )
-    return [{"id": f"q{i}", "group_id": gids[i]} for i in range(n)]
+    parents = draw(
+        st.lists(st.one_of(st.none(), st.sampled_from(["q0", "q1"])), min_size=n, max_size=n)
+    )
+    return [{"id": f"q{i}", "scope": scopes[i], "parent_id": parents[i]} for i in range(n)]
 
 
 # --- audit §2 leak 2: verify items re-binned into balanced, capped groups -----
@@ -1244,35 +1204,36 @@ class TestVerifyGroupBalancing:
         assert balance_verify_groups([{"id": "a"}], max_parallel=8, target_per_group=3) == [
             [{"id": "a"}]
         ]
-        # Missing/None group_id and a missing id key must not raise.
+        # Missing/None scope and parent_id, and a missing id key, must not raise.
         mixed = balance_verify_groups(
-            [{"id": "a", "group_id": None}, {"group_id": "x"}], max_parallel=8, target_per_group=3
+            [{"id": "a", "scope": None, "parent_id": None}, {"scope": "*"}],
+            max_parallel=8,
+            target_per_group=3,
         )
         assert sum(len(g) for g in mixed) == 2
-        # all-same group_id, n=10 -> min(8, ceil(10/3)=4)=4 groups, sizes [3,3,2,2].
-        items = [{"id": f"q{i}", "group_id": "umbrella"} for i in range(10)]
+        # all-same scope, n=10 -> min(8, ceil(10/3)=4)=4 groups, sizes [3,3,2,2].
+        items = [{"id": f"q{i}", "scope": "*"} for i in range(10)]
         groups = balance_verify_groups(items, max_parallel=8, target_per_group=3)
         assert len(groups) == 4
         assert sorted((len(g) for g in groups), reverse=True) == [3, 3, 2, 2]
 
-    def test_balance_preserves_affinity_adjacency(self):
-        # Members of a multi-item group_id stay contiguous after the group_id sort.
+    def test_balance_keeps_scope_and_parent_adjacency(self):
         items = [
-            {"id": "a", "group_id": "affinity-x"},
-            {"id": "b", "group_id": "zzz"},
-            {"id": "c", "group_id": "affinity-x"},
-            {"id": "d", "group_id": "yyy"},
-            {"id": "e", "group_id": "affinity-x"},
+            {"id": "qa-005", "scope": "milestone:M-1"},
+            {"id": "qa-006", "scope": "*"},
+            {"id": "qa-007", "scope": "milestone:M-1"},
+            {"id": "qa-009", "scope": "milestone:M-1", "parent_id": "qa-005"},
         ]
         groups = balance_verify_groups(items, max_parallel=8, target_per_group=10)
         assert len(groups) == 1
         ids = [it["id"] for it in groups[0]]
-        pos = sorted(ids.index(x) for x in ("a", "c", "e"))
-        assert pos[-1] - pos[0] == 2  # contiguous: no foreign item between them
+        pos = sorted(ids.index(x) for x in ("qa-005", "qa-007", "qa-009"))
+        assert pos[-1] - pos[0] == 2  # the three M-1 items are contiguous
+        assert ids.index("qa-009") == ids.index("qa-005") + 1  # a child sits beside its parent
 
     @staticmethod
     def _fat_umbrella(n=30):
-        # One umbrella of n MUST items: without rebalancing it serializes to 1 agent.
+        # n MUST items on one scope: one agent per scope would serialize them.
         return [
             {
                 "id": f"qa-{i:03d}",
@@ -1280,14 +1241,13 @@ class TestVerifyGroupBalancing:
                 "check": f"c{i}",
                 "status": "TODO",
                 "severity": "MUST",
-                "group_id": "umbrella",
             }
             for i in range(n)
         ]
 
     def test_planner_verify_caps_groups_and_conserves_items(self, tmp_path: Path):
         _write_qr(tmp_path, "plan-design", 1, self._fat_umbrella(30))
-        out = planner_orch.format_output(5, None, str(tmp_path))
+        out = planner_orch.format_output(5, str(tmp_path))
         assert isinstance(out, str)
         assert out.count("Verify QR group:") == VERIFY_MAX_PARALLEL  # 30 -> 8 capped agents
         assert "Verify 8 groups (30 items)" in out
@@ -1297,7 +1257,7 @@ class TestVerifyGroupBalancing:
 
     def test_executor_verify_caps_groups_and_conserves_items(self, tmp_path: Path):
         _write_qr(tmp_path, "impl-code", 1, self._fat_umbrella(30))
-        out = executor_orch.format_output(4, str(tmp_path), None, False)
+        out = executor_orch.format_output(4, str(tmp_path), False)
         assert out.count("Verify QR group:") == VERIFY_MAX_PARALLEL
         assert "Verify 8 groups (30 items)" in out
         assert "(8 items)" not in out
@@ -1305,21 +1265,20 @@ class TestVerifyGroupBalancing:
             assert f"--qr-item qa-{i:03d}" in out
 
     def test_verify_caps_singleton_explosion(self, tmp_path: Path):
-        # The OTHER failure mode: 30 DISTINCT group_ids must not fan out to 30 agents
+        # The OTHER failure mode: 30 DISTINCT scopes must not fan out to 30 agents
         # (each paying the per-agent context-load cost). The cap merges them to 8.
         items = [
             {
                 "id": f"qa-{i:03d}",
-                "scope": "*",
+                "scope": f"file:f{i}.py",
                 "check": f"c{i}",
                 "status": "TODO",
                 "severity": "MUST",
-                "group_id": f"component-{i}",
             }
             for i in range(30)
         ]
         _write_qr(tmp_path, "plan-design", 1, items)
-        out = planner_orch.format_output(5, None, str(tmp_path))
+        out = planner_orch.format_output(5, str(tmp_path))
         assert isinstance(out, str)  # verify step returns str, not a GateResult
         assert out.count("Verify QR group:") == VERIFY_MAX_PARALLEL  # 30 distinct -> 8, not 30
         for i in range(30):
@@ -1366,24 +1325,8 @@ class TestExploreScopeDollarSafety:
         assert "--scope 'src/$mode'" in out
 
 
-# --- #3: dead state_dir gate helpers removed; escalation still works ----------
-class TestGatesDeadHelpersRemoved:
-    def test_state_dir_helper_variants_are_gone(self):
-        import skills.planner.shared.gates as g
-
-        for dead in (
-            "_unresolved_blocking_findings",
-            "_has_recorded_failure",
-            "_has_blocking_todo",
-        ):
-            assert not hasattr(g, dead), f"{dead} should be deleted (dead code)"
-        for kept in (
-            "_unresolved_blocking_findings_from_state",
-            "_has_recorded_failure_from_state",
-            "_has_blocking_todo_from_state",
-        ):
-            assert hasattr(g, kept), f"{kept} must remain (the live pre-loaded path)"
-
+# --- #3: escalation surfaces the recorded findings ---
+class TestGateEscalationFindings:
     def test_escalation_surfaces_findings_via_from_state_path(self, tmp_path: Path):
         _write_qr(
             tmp_path,
@@ -1400,7 +1343,7 @@ class TestGatesDeadHelpersRemoved:
                 }
             ],
         )
-        qr = QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.RETRY, status=QRStatus.FAIL)
+        qr = QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.RETRY)
         res = _gate(tmp_path, qr)
         assert "ITERATION LIMIT" in res.output
         assert "still-broken" in res.output  # _unresolved_blocking_findings_from_state path
@@ -1417,8 +1360,6 @@ class TestQrCommonExtraction:
         assert qr_commands.save_qr_state_atomic is qr_common.save_qr_state_atomic
         assert qr_cli.update_item_in_state is qr_common.update_item_in_state
         assert qr_commands.update_item_in_state is qr_common.update_item_in_state
-        assert qr_cli.assign_group_in_state is qr_common.assign_group_in_state
-        assert qr_commands.assign_group_in_state is qr_common.assign_group_in_state
 
     def test_load_qr_state_under_lock_rejects_non_dict(self, tmp_path: Path):
         # B2: the write-side loader must fail closed on a valid-JSON non-object
@@ -1449,18 +1390,6 @@ class TestQrCommonExtraction:
             qr_cli.cli(["--state-dir", str(tmp_path), "--qr-phase", "impl-code", "batch"])
         assert "Invalid JSON" in capsys.readouterr().out
 
-    def test_is_valid_group_id(self):
-        from skills.planner.cli.qr_common import is_valid_group_id
-
-        assert is_valid_group_id("umbrella")
-        assert is_valid_group_id("parent-x")
-        assert is_valid_group_id("component-a")
-        assert is_valid_group_id("concern-z")
-        assert is_valid_group_id("affinity-1")
-        assert not is_valid_group_id("bogus")
-        assert not is_valid_group_id("umbrellaX")  # only the bare token, not a prefix
-        assert not is_valid_group_id("")
-
     def test_rmw_round_trip_persists(self, tmp_path: Path):
         from skills.planner.cli.qr import get_qr_path
         from skills.planner.cli.qr_common import (
@@ -1483,20 +1412,6 @@ class TestQrCommonExtraction:
         state["items"][idx] = item
         save_qr_state_atomic(path, state)
         assert load_qr_state_under_lock(path)["items"][0]["status"] == "PASS"
-
-    def test_qr_commands_assign_group_validates_via_shared_predicate(self, tmp_path: Path):
-        _write_qr(
-            tmp_path,
-            "impl-code",
-            1,
-            [{"id": "q1", "scope": "*", "check": "c", "status": "TODO", "severity": "MUST"}],
-        )
-        ctx = qr_commands.QRContext(state_dir=tmp_path, phase="impl-code")
-        with pytest.raises(ValueError, match="Invalid group_id"):
-            qr_commands.assign_group(ctx, "q1", "bogus")
-        qr_commands.assign_group(ctx, "q1", "component-x")  # valid prefix accepted
-        state = json.loads((tmp_path / "qr-impl-code.json").read_text())
-        assert state["items"][0]["group_id"] == "component-x"
 
 
 # --- #6: the three verify steps share one arg-triple builder -----------------
@@ -1633,7 +1548,7 @@ class TestAcceptFindingsWarning:
             1,
             [{"id": "q1", "scope": "*", "check": "x", "status": "FAIL", "severity": "MUST"}],
         )
-        qr = QRState(iteration=1, state=LoopState.RETRY, status=QRStatus.FAIL)
+        qr = QRState(iteration=1, state=LoopState.RETRY)
         self._gate_accept(tmp_path, qr)
         out = capsys.readouterr().out
         assert "--accept-findings ignored" in out
@@ -1655,7 +1570,7 @@ class TestAcceptFindingsWarning:
                 }
             ],
         )
-        qr = QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.RETRY, status=QRStatus.FAIL)
+        qr = QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.RETRY)
         self._gate_accept(tmp_path, qr)
         # The warning prints to stdout (not stderr) — see comment above the
         # print() in gates.py build_gate_output.  At the ceiling, no warning
@@ -1691,28 +1606,19 @@ class TestDocOnlyToggleOffWarning:
 
 # --- F6: a gate with no qr-{phase}.json fails CLOSED -------------------------
 class TestGateFailsClosedOnMissingState:
-    def test_missing_qr_file_with_status_pass_fails_closed(self, tmp_path: Path):
-        # No qr-{phase}.json on disk: the gate cannot confirm QR passed, so it must
-        # fail CLOSED (route to the fixer) rather than finalize on the LLM's
-        # --qr-status pass. _gate omits qr_state -> _UNSET self-load -> None.
-        qr = QRState(iteration=1, state=LoopState.INITIAL, status=QRStatus.PASS)
+    def test_missing_qr_file_fails_closed(self, tmp_path: Path):
+        # No qr-{phase}.json on disk: the gate cannot confirm QR passed, so it fails
+        # CLOSED (routes to the fixer). _gate omits qr_state -> _UNSET self-load -> None.
+        qr = QRState(iteration=1, state=LoopState.INITIAL)
         res = _gate(tmp_path, qr)
         assert "GATE RESULT: FAIL" in res.output
         assert res.terminal_pass is False
         assert "--step 2" in res.output  # routes to work_step
 
-    def test_missing_qr_file_with_status_none_fails_closed(self, tmp_path: Path):
-        # Same fail-closed verdict when no --qr-status word is supplied.
-        qr = QRState(iteration=1, state=LoopState.INITIAL, status=None)
-        res = _gate(tmp_path, qr)
-        assert "GATE RESULT: FAIL" in res.output
-        assert res.terminal_pass is False
-        assert "--step 2" in res.output
-
     def test_missing_qr_file_terminal_gate_does_not_finalize(self, tmp_path: Path):
         # The dangerous case: a TERMINAL gate (pass_step=None, the planner's step 6)
         # must never finalize a plan whose QR cannot be confirmed.
-        qr = QRState(iteration=1, state=LoopState.INITIAL, status=QRStatus.PASS)
+        qr = QRState(iteration=1, state=LoopState.INITIAL)
         res = _gate(tmp_path, qr, phase="plan-design", work_step=3, pass_step=None)
         assert "GATE RESULT: FAIL" in res.output
         assert res.terminal_pass is False
@@ -1728,7 +1634,7 @@ class TestGateFailsClosedOnMissingState:
 
         (tmp_path / "qr-impl-code.json").write_text(json.dumps([{"id": "x"}]))
         assert load_qr_state(str(tmp_path), "impl-code") is None
-        qr = QRState(iteration=1, state=LoopState.INITIAL, status=QRStatus.PASS)
+        qr = QRState(iteration=1, state=LoopState.INITIAL)
         res = _gate(tmp_path, qr)
         assert "GATE RESULT: FAIL" in res.output
         assert res.terminal_pass is False
@@ -2160,6 +2066,56 @@ class TestQrIterationIdempotency:
         _, it2 = prepare_verify_items(str(tmp_path), "impl-code", qr)
         assert it2 == 4
 
+    def test_todo_reverify_advances_after_the_first_round(self, tmp_path: Path):
+        from skills.planner.shared.qr.utils import prepare_verify_items
+
+        _write_qr(tmp_path, "impl-code", 1, [
+            {"id": "qa-001", "scope": "*", "check": "c", "status": "PASS", "version": 1, "severity": "MUST"},
+            {"id": "qa-002", "scope": "*", "check": "c", "status": "TODO", "version": 1, "severity": "COULD"},
+        ])
+        qr = QRState(state=LoopState.INITIAL)
+        assert prepare_verify_items(str(tmp_path), "impl-code", qr)[1] == 1  # first round
+        assert prepare_verify_items(str(tmp_path), "impl-code", qr)[1] == 2  # re-verify
+
+    def test_stalled_reverify_rounds_reach_the_ceiling(self, tmp_path: Path):
+        from skills.planner.shared.qr.utils import prepare_verify_items
+
+        # A verifier that records nothing leaves the TODO set unchanged each round; the
+        # gate -> verify -> gate loop must still escalate within a bounded number of rounds.
+        _write_qr(tmp_path, "impl-code", 1, [
+            {"id": "qa-001", "scope": "*", "check": "c", "status": "PASS", "version": 1, "severity": "MUST"},
+            {"id": "qa-002", "scope": "*", "check": "c", "status": "TODO", "version": 1, "severity": "MUST"},
+        ])
+        qr = QRState(state=LoopState.INITIAL)
+        for _ in range(QR_ITERATION_LIMIT + 1):
+            prepare_verify_items(str(tmp_path), "impl-code", qr)
+            if json.loads((tmp_path / "qr-impl-code.json").read_text())["iteration"] >= QR_ITERATION_LIMIT:
+                break
+        assert json.loads((tmp_path / "qr-impl-code.json").read_text())["iteration"] == QR_ITERATION_LIMIT
+        out = _gate(tmp_path, QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.INITIAL)).output
+        assert "ITERATION LIMIT" in out
+
+    def test_stalled_fix_verify_rounds_reach_the_ceiling(self, tmp_path: Path):
+        from skills.planner.quality_reviewer.prompts.fix import fix_dispatch_step, get_fix_content
+        from skills.planner.shared.qr.utils import prepare_verify_items
+
+        # A blocking FAIL that no verifier re-records keeps its (id, version); each
+        # fix render followed by a verify render must still advance toward the ceiling.
+        _write_qr(tmp_path, "impl-code", 1, [
+            {"id": "qa-001", "scope": "*", "check": "c", "status": "FAIL", "version": 1,
+             "severity": "MUST", "finding": "f"},
+        ])
+        qr = QRState(state=LoopState.RETRY)
+        content = get_fix_content("impl-code")
+        for _ in range(QR_ITERATION_LIMIT + 1):
+            fix_dispatch_step(1, "impl-code", "m", content, str(tmp_path))
+            prepare_verify_items(str(tmp_path), "impl-code", qr)
+            if json.loads((tmp_path / "qr-impl-code.json").read_text())["iteration"] >= QR_ITERATION_LIMIT:
+                break
+        assert json.loads((tmp_path / "qr-impl-code.json").read_text())["iteration"] == QR_ITERATION_LIMIT
+        out = _gate(tmp_path, QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.RETRY)).output
+        assert "ITERATION LIMIT" in out
+
     def test_initial_state_never_increments(self, tmp_path: Path):
         from skills.planner.shared.qr.types import LoopState, QRState
         from skills.planner.shared.qr.utils import prepare_verify_items
@@ -2214,7 +2170,7 @@ class TestQrIterationIdempotency:
         assert it2 == 3
 
 
-# --- F4: the QR-verify PHASE 1/2 block lives in one builder, not two copies ---
+# --- F4: the QR-verify block lives in one builder, not two copies ---
 class TestQrVerifyDispatchBlock:
     def test_builder_owns_full_block_with_pluggable_constraint(self):
         from skills.planner.shared.builders import build_qr_verify_dispatch
@@ -2230,16 +2186,12 @@ class TestQrVerifyDispatchBlock:
 
         # The builder returns the full action block as a list; for identical inputs
         # the ONLY difference between the two orchestrators is the constraint at
-        # element 0 -- everything after (PHASE 1/PHASE 2 prose, dispatch, forbidden)
+        # element 0 -- everything after (dispatch, routing note, forbidden)
         # is byte-identical, which is the duplication F4 removed.
         assert isinstance(base, list) and isinstance(ext, list)
         assert base[0] == ORCHESTRATOR_CONSTRAINT
         assert ext[0] == ORCHESTRATOR_CONSTRAINT_EXTENDED
         assert base[1:] == ext[1:]
-        joined = "\n".join(base)
-        assert "=== PHASE 1: DISPATCH (delegate to sub-agents) ===" in joined
-        assert "=== PHASE 2: AGGREGATE (your action after all agents return) ===" in joined
-        assert "tally results mechanically" in joined
 
 
 # --- F5: the doc-only-wave write-time guard is shared via plan_common --------
@@ -2822,22 +2774,6 @@ class TestCorruptQrState:
         assert "<qr_cli_error>" in captured.out
         assert "is not valid JSON" in captured.out
 
-    def test_corrupt_qr_assign_group_exits_clean(self, tmp_path: Path, capsys):
-        qr_file = tmp_path / "qr-impl-code.json"
-        qr_file.write_text('{"phase": "impl-code", "items": [')
-        with pytest.raises(SystemExit) as exc_info:
-            qr_cli.cli([
-                "--state-dir", str(tmp_path),
-                "--qr-phase", "impl-code",
-                "assign-group",
-                "qa-001",
-                "--group-id", "umbrella",
-            ])
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "<qr_cli_error>" in captured.out
-        assert "is not valid JSON" in captured.out
-
     def test_empty_qr_file_loads_default(self, tmp_path: Path):
         from skills.planner.cli.qr_common import load_qr_state_under_lock
 
@@ -2871,7 +2807,6 @@ class TestQrLoaderShapeContract:
             ('{"items": [{"status": "TODO"}]}', "item id is not a string"),
             ('{"items": [{"id": 1}]}', "item id is not a string"),
             ('{"items": [{"id": "q1", "status": ["FAIL"]}]}', "item status is not a string"),
-            ('{"items": [{"id": "q1", "group_id": ["g"]}]}', "item group_id is not a string"),
             ('{"items": [{"id": "q1", "parent_id": ["p"]}]}', "item parent_id is not a string"),
             ("[1, 2, 3]", "qr state is not a JSON object"),
         ],
@@ -2890,7 +2825,7 @@ class TestQrLoaderShapeContract:
             '{"phase": "impl-code"}',  # items omitted
             '{"items": []}',  # empty list
             '{"items": [{"id": "q1", "scope": "*", "check": "c"}]}',  # status absent
-            '{"items": [{"id": "q1", "status": "PASS", "group_id": "umbrella", "parent_id": "q0"}]}',
+            '{"items": [{"id": "q1", "status": "PASS", "parent_id": "q0"}]}',
         ],
     )
     def test_parse_qr_dict_accepts_well_formed(self, body: str):
@@ -2906,7 +2841,7 @@ class TestQrLoaderShapeContract:
             '{"phase": "impl-code", "items": [1, 2]}',
             '{"phase": "impl-code", "items": [{"id": "q1", "status": ["FAIL"]}]}',
             '{"phase": "impl-code", "items": [{"id": ["x"], "status": "TODO"}]}',
-            '{"phase": "impl-code", "items": [{"id": "q1", "group_id": ["g"]}]}',
+            '{"phase": "impl-code", "items": [{"id": "q1", "parent_id": ["p"]}]}',
         ],
     )
     def test_load_qr_state_none_for_malformed(self, tmp_path: Path, body: str):
@@ -2981,26 +2916,21 @@ class TestQrLoaderShapeContract:
         assert "item status is not a string" in captured.out
         assert "Traceback" not in captured.out + captured.err
 
-    # -- decompose steps 9/13 must not raw-traceback on a bad identity field --
+    # -- decompose step 9 must not raw-traceback on a bad identity field, and blocks on it --
     @pytest.mark.parametrize(
         "body",
         [
             '{"phase": "impl-code", "items": [{"id": ["x"], "status": "TODO"}]}',  # unhashable id
-            '{"phase": "impl-code", "items": [{"id": "q1", "group_id": ["g"]}]}',  # unhashable group_id
             '{"phase": "impl-code", "items": [{"id": "q1", "parent_id": ["p"]}]}',  # unhashable parent_id
         ],
     )
-    def test_decompose_grouping_no_crash_on_malformed(self, tmp_path: Path, body: str):
-        from skills.planner.quality_reviewer.prompts.decompose import (
-            step_9_structural_grouping,
-            step_13_final_validation,
-        )
+    def test_decompose_step_9_blocks_on_malformed_file(self, tmp_path: Path, body: str):
+        from skills.planner.quality_reviewer.prompts.decompose import step_9_validate
 
         self._write(tmp_path, body)
-        mod = "skills.planner.quality_reviewer.qr_decompose"
-        # Malformed file -> load_qr_state None -> items=[] -> grouping proceeds empty.
-        assert isinstance(step_9_structural_grouping(str(tmp_path), "impl-code", mod), dict)
-        assert isinstance(step_13_final_validation(str(tmp_path), "impl-code", mod), dict)
+        g = step_9_validate(str(tmp_path), "impl-code")
+        assert "BLOCKING ERROR" in "\n".join(g["actions"])
+        assert g["next"] == ""
 
     # -- negative control: well-formed files behave exactly as before -------
     def test_well_formed_file_unaffected(self, tmp_path: Path, capsys):
@@ -3028,7 +2958,7 @@ class TestPlannerDecomposeExpectedOutput:
     def test_decompose_expected_output_interpolates_phase(self, tmp_path: Path):
         from skills.planner.orchestrator import planner as planner_orch
 
-        result = planner_orch.format_output(4, None, str(tmp_path))
+        result = planner_orch.format_output(4, str(tmp_path))
         output = result.output if isinstance(result, GateResult) else result
         assert "qr-plan-design.json" in output
         assert "qr-{phase}.json" not in output

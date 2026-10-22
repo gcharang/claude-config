@@ -352,19 +352,6 @@ def test_parse_registry_skips_document_markers():
 
 
 # ---------------------------------------------------------------------------
-# #10 - assign-group validates group-id before file-exists (parity with RPC)
-# ---------------------------------------------------------------------------
-def test_cmd_assign_group_validates_id_before_file_exists(tmp_path, capsys):
-    from skills.planner.cli import qr as qr_cli
-
-    with pytest.raises(SystemExit):
-        qr_cli.cmd_assign_group(str(tmp_path), "impl-code", ["q1", "--group-id", "bogus"])
-    out = capsys.readouterr().out
-    assert "Invalid group_id" in out
-    assert "state file not found" not in out
-
-
-# ---------------------------------------------------------------------------
 # #13 - validate_relpath rejects '..' COMPONENTS, not '..'-prefixed names
 # ---------------------------------------------------------------------------
 def test_validate_relpath_accepts_dotdot_prefixed_filename():

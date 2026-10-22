@@ -38,11 +38,6 @@ _MUST_ITEM = {"id": "qa-001", "scope": "*", "check": "code quality", "status": "
 
 # --- §4.1: forbidden-list SSOT (planner == executor) -------------------------
 class TestForbiddenListSSOT:
-    def test_superset_has_all_six(self):
-        assert len(QR_VERIFY_FORBIDDEN) == 6
-        block = format_forbidden(*QR_VERIFY_FORBIDDEN)
-        assert block.count("\n  - ") == 6
-
     def test_both_orchestrators_emit_the_same_forbidden_block(self, tmp_path: Path):
         """The SSOT block must appear verbatim in both QR-verify dispatches.
 
@@ -54,13 +49,13 @@ class TestForbiddenListSSOT:
         planner_dir = tmp_path / "plan"
         planner_dir.mkdir()
         write_qr(planner_dir, "plan-design", [_MUST_ITEM])
-        planner_out = planner_orch.format_output(5, None, state_dir=str(planner_dir))
+        planner_out = planner_orch.format_output(5, state_dir=str(planner_dir))
         assert isinstance(planner_out, str)  # verify step renders text, not a GateResult
 
         exec_dir = tmp_path / "exec"
         exec_dir.mkdir()
         write_qr(exec_dir, "impl-code", [_MUST_ITEM])
-        executor_out = executor_orch.format_output(4, str(exec_dir), None, False)
+        executor_out = executor_orch.format_output(4, str(exec_dir), False)
 
         assert block in planner_out
         assert block in executor_out
@@ -159,7 +154,9 @@ class TestQrRunnerParametrization:
     def test_decompose_every_step_wellformed_and_threads_phase(self, phase: str, tmp_path: Path):
         # plan-design step 1 strictly requires context.json; provide it.
         (tmp_path / "context.json").write_text(json.dumps({"task_spec": ["x"]}))
-        for step in range(1, 14):
+        write_qr(tmp_path, phase, [_MUST_ITEM])
+        step = 1
+        while True:
             g = decompose_guidance(
                 step,
                 "skills.planner.quality_reviewer.qr_decompose",
@@ -168,8 +165,16 @@ class TestQrRunnerParametrization:
             )
             assert "error" not in g, (phase, step, g)
             assert g["title"]
-            if g.get("next"):
-                assert f"--phase {phase}" in g["next"], (phase, step, g["next"])
+            if not g.get("next"):
+                break
+            assert "skills.planner.quality_reviewer.qr_decompose" in g["next"], (phase, step, g["next"])
+            assert f"--phase {phase}" in g["next"], (phase, step, g["next"])
+            step_match = re.search(r"--step (\d+)", g["next"])
+            assert step_match is not None
+            next_step = int(step_match.group(1))
+            assert next_step == step + 1, (phase, step, g["next"])
+            step = next_step
+        assert "BLOCKING ERROR" not in "\n".join(g["actions"])
 
     @pytest.mark.parametrize("phase", PHASES)
     def test_verify_threads_phase_into_next_and_record(self, phase: str, tmp_path: Path):
@@ -197,11 +202,20 @@ class TestQrRunnerParametrization:
         assert proc.returncode != 0
         assert "invalid choice" in proc.stderr
 
-    def test_decompose_grouping_next_uses_runner_module(self):
-        # The grouping steps' next command must target the parameterized runner
-        # (so --phase round-trips).
-        g = decompose_guidance(
-            9, "skills.planner.quality_reviewer.qr_decompose", phase="impl-code", state_dir="/tmp/x"
+    @pytest.mark.parametrize(
+        ("statuses", "word"),
+        [(["PASS", "PASS"], "PASS"), (["PASS", "FAIL"], "FAIL"), (["PASS", "TODO"], "FAIL")],
+    )
+    def test_verify_summary_word_follows_recorded_verdicts(
+        self, statuses: list[str], word: str, tmp_path: Path
+    ):
+        ids = ["qa-001", "qa-002"]
+        items = [
+            {**_MUST_ITEM, "id": item_id, "status": status, **({"finding": "f"} if status == "FAIL" else {})}
+            for item_id, status in zip(ids, statuses)
+        ]
+        write_qr(tmp_path, "impl-code", items)
+        g = get_verifier("impl-code").get_step_guidance(
+            2 + 2 * len(ids), "m", state_dir=str(tmp_path), qr_item=ids
         )
-        assert "skills.planner.quality_reviewer.qr_decompose" in g["next"]
-        assert re.search(r"--phase impl-code", g["next"])
+        assert f"exactly: {word}" in "\n".join(g["actions"])

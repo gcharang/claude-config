@@ -2,7 +2,7 @@
 
 The `qr_decompose.py` / `qr_verify.py` runners select by `--phase`:
 
-- DECOMPOSE: phase-specific cognitive prompts + grouping examples, registered in
+- DECOMPOSE: phase-specific cognitive prompts and scope providers, registered in
   DECOMPOSE_CONTENT. The control flow stays in prompts/decompose.dispatch_step;
   this module supplies content.
 - VERIFY: one VerifyBase subclass per phase, registered in VERIFIERS. Shared
@@ -181,18 +181,6 @@ SEVERITY ASSIGNMENT (per conventions/severity.md, plan-design scope):
     - Minor inconsistencies in naming"""
 
 
-PLAN_DESIGN_COMPONENT_EXAMPLES = """\
-  - A milestone
-  - A major decision
-  - A constraint category"""
-
-
-PLAN_DESIGN_CONCERN_EXAMPLES = """\
-  - Reasoning chain quality
-  - Reference integrity
-  - Risk coverage"""
-
-
 # --- impl-code --------------------------------------------------------------
 
 IMPL_CODE_STEP_1_ABSORB = """\
@@ -262,8 +250,8 @@ SEVERITY ASSIGNMENT (per conventions/severity.md, impl-code scope):
     - MARKER_INVALID: intent marker without valid explanation
 
   SHOULD (iterations 1-3) - STRUCTURE categories:
-    - GOD_OBJECT: >15 methods OR >10 deps
-    - GOD_FUNCTION: >50 lines OR >3 nesting
+    - GOD_OBJECT: >15 public methods OR >10 dependencies OR mixed concerns
+    - GOD_FUNCTION: >3 nesting levels, mixed abstraction levels, or multiple unrelated responsibilities
     - CONVENTION_VIOLATION: violates documented project convention
     - TESTING_STRATEGY_VIOLATION: tests don't follow confirmed strategy
     - INCONSISTENT_ERROR_HANDLING: mixed exceptions/codes
@@ -283,18 +271,6 @@ SEVERITY ASSIGNMENT (per conventions/severity.md, impl-code scope):
     - DEAD_CODE: unused functions, impossible branches
     - DEAD_PARAMS: function parameters never referenced in the body
     - FORMATTER_FIXABLE: style issues"""
-
-
-IMPL_CODE_COMPONENT_EXAMPLES = """\
-  - A modified file
-  - A milestone's implementation
-  - A cross-cutting concern pattern"""
-
-
-IMPL_CODE_CONCERN_EXAMPLES = """\
-  - Acceptance criteria compliance
-  - Error handling consistency
-  - Code structure quality"""
 
 
 # --- impl-docs --------------------------------------------------------------
@@ -382,18 +358,6 @@ SEVERITY ASSIGNMENT (per conventions/severity.md, impl-docs scope):
     - Documentation style variations"""
 
 
-IMPL_DOCS_COMPONENT_EXAMPLES = """\
-  - A modified directory
-  - A CLAUDE.md file
-  - A README.md file"""
-
-
-IMPL_DOCS_CONCERN_EXAMPLES = """\
-  - IK proximity
-  - Temporal contamination
-  - Format compliance"""
-
-
 # ============================================================================
 # DECOMPOSE CONTENT REGISTRY
 # ============================================================================
@@ -406,10 +370,6 @@ DECOMPOSE_CONTENT: dict[str, dict] = {
             3: PLAN_DESIGN_STEP_3_ENUMERATION,
             5: PLAN_DESIGN_STEP_5_GENERATE,
         },
-        "grouping_config": {
-            "component_examples": PLAN_DESIGN_COMPONENT_EXAMPLES,
-            "concern_examples": PLAN_DESIGN_CONCERN_EXAMPLES,
-        },
         "scope_provider": no_scope,
     },
     "impl-code": {
@@ -418,10 +378,6 @@ DECOMPOSE_CONTENT: dict[str, dict] = {
             2: IMPL_CODE_STEP_2_CONCERNS,
             3: IMPL_CODE_STEP_3_ENUMERATION,
             5: IMPL_CODE_STEP_5_GENERATE,
-        },
-        "grouping_config": {
-            "component_examples": IMPL_CODE_COMPONENT_EXAMPLES,
-            "concern_examples": IMPL_CODE_CONCERN_EXAMPLES,
         },
         "scope_provider": render_code_milestone_scope,
     },
@@ -432,17 +388,13 @@ DECOMPOSE_CONTENT: dict[str, dict] = {
             3: IMPL_DOCS_STEP_3_ENUMERATION,
             5: IMPL_DOCS_STEP_5_GENERATE,
         },
-        "grouping_config": {
-            "component_examples": IMPL_DOCS_COMPONENT_EXAMPLES,
-            "concern_examples": IMPL_DOCS_CONCERN_EXAMPLES,
-        },
         "scope_provider": no_scope,
     },
 }
 
 
 def get_decompose_content(phase: str) -> dict:
-    """Phase-specific decompose prompts + grouping examples.
+    """Phase-specific decompose prompts and scope provider.
 
     Raises ValueError on an unknown phase.
     """
@@ -654,9 +606,9 @@ class ImplCodeVerify(VerifyBase):
                 lambda c: "god function" in c or "nesting" in c,
                 [
                     "STRUCTURAL CHECK:",
-                    "  - No functions >50 lines",
                     "  - No nesting >3 levels",
-                    "  Count lines and nesting depth for flagged functions.",
+                    "  - No function mixes abstraction levels or unrelated responsibilities",
+                    "  Count nesting depth for flagged functions; length alone is a reason to look, not a finding.",
                     "",
                 ],
             ),
@@ -850,8 +802,9 @@ class ImplDocsVerify(VerifyBase):
                 lambda c: "ik" in c and "proximity" in c,
                 [
                     "IK PROXIMITY CHECK:",
-                    "  Each Invisible Knowledge item must be documented",
-                    "  in README.md in the SAME directory as affected code.",
+                    "  Each Invisible Knowledge item is at the location documentation.md Tier 5 selects:",
+                    "  a comment at the statement, function or module it applies to, or README.md in the",
+                    "  same directory when it spans files or cannot be localized.",
                     "  - FAIL if the docs write IK into a separate doc/ directory",
                     "  - FAIL if IK references external wiki without local summary",
                     "  - PASS a pointer to a repository file that holds the knowledge,",
@@ -863,9 +816,10 @@ class ImplDocsVerify(VerifyBase):
                 lambda c: "readme" in c and "created" in c,
                 [
                     "README.MD CREATION CHECK:",
-                    "  If invisible_knowledge has content:",
-                    "  - README.md should exist in relevant directories",
-                    "  - README.md should contain IK items",
+                    "  If invisible_knowledge has items that span files or cannot be localized:",
+                    "  - README.md exists in the directory those items describe",
+                    "  - README.md holds those items, or points at a repository file that holds them",
+                    "    (unless this plan's docs wrote that file into a separate doc/ directory)",
                     "",
                 ],
             ),

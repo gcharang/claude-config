@@ -187,7 +187,7 @@ def test_executor_verify_escalation_accept_is_uv_pinned(tmp_path) -> None:
 
     red = [("suite", "fail", "1 failed"), ("lint", "pass", "ok"), ("type", "pass", "ok")]
     write_verify(tmp_path, red, iteration=QR_ITERATION_LIMIT)
-    out = executor.format_output(11, str(tmp_path), None, False, None, None)
+    out = executor.format_output(11, str(tmp_path), False, None, None)
     assert isinstance(out, str)
     assert (
         f"uv run --directory {_SKILLS_DIR_Q} python -m {executor.MODULE_PATH} --step 12" in out

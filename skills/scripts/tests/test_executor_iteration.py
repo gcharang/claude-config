@@ -1,10 +1,9 @@
-"""Regression tests for executor fix-mode iteration and empty QR-verify branch.
+"""Regression tests for executor fix-mode iteration and the QR-verify next step.
 
 Guards from the 2026-04-17 ultrareview:
 - bug_001: executor fix-mode banner must read iteration from qr-{phase}.json,
   not the (now-removed) --qr-iteration CLI flag.
-- bug_012: format_qr_verify's empty-items short-circuit must render a single
-  NEXT STEP (no pass/fail branching) when there are no agents to dispatch.
+- bug_012: format_qr_verify's NEXT STEP is the bare gate command, with or without agents to dispatch.
 """
 
 from __future__ import annotations
@@ -15,8 +14,10 @@ from pathlib import Path
 import pytest
 from conftest import write_qr  # pyright: ignore[reportMissingImports]
 
+from skills.lib.workflow.prompts.step import pin_cwd
 from skills.planner.orchestrator import executor
 from skills.planner.orchestrator.executor import format_output, format_qr_verify
+from skills.planner.shared.builders import shell_quote
 from skills.planner.shared.qr.types import LoopState, QRState
 
 
@@ -40,7 +41,7 @@ class TestFixModeIterationBanner:
             ],
         )
         out = format_output(
-            step=2, state_dir=str(tmp_path), qr_status=None, reconciliation_check=False
+            step=2, state_dir=str(tmp_path), reconciliation_check=False
         )
         assert "iteration=3" in out
         assert "iteration=1" not in out
@@ -63,7 +64,7 @@ class TestFixModeIterationBanner:
             ],
         )
         out = format_output(
-            step=6, state_dir=str(tmp_path), qr_status=None, reconciliation_check=False
+            step=6, state_dir=str(tmp_path), reconciliation_check=False
         )
         assert "iteration=4" in out
         assert "DOCUMENTATION FIX" in out
@@ -71,7 +72,7 @@ class TestFixModeIterationBanner:
     def test_no_fix_mode_when_state_file_absent(self, tmp_path: Path):
         """No qr-impl-code.json → first run, no fix banner."""
         out = format_output(
-            step=2, state_dir=str(tmp_path), qr_status=None, reconciliation_check=False
+            step=2, state_dir=str(tmp_path), reconciliation_check=False
         )
         assert "IMPLEMENTATION FIX" not in out
         assert "iteration=" not in out
@@ -93,7 +94,7 @@ class TestFixModeIterationBanner:
             ],
         )
         out = format_output(
-            step=2, state_dir=str(tmp_path), qr_status=None, reconciliation_check=False
+            step=2, state_dir=str(tmp_path), reconciliation_check=False
         )
         assert "IMPLEMENTATION FIX" not in out
 
@@ -119,10 +120,8 @@ class TestRemovedCliFlags:
             executor.main()
 
 
-class TestEmptyQrVerifyRouting:
-    """When all items are below blocking severity, format_qr_verify must
-    collapse to a single NEXT STEP (no pass/fail branching prompt).
-    """
+class TestQrVerifyNextStep:
+    """format_qr_verify's NEXT STEP is the bare gate command."""
 
     def test_empty_items_uses_single_next_step(self, tmp_path: Path):
         # iteration=5 → blocking={MUST}, so COULD items are filtered out.
@@ -144,14 +143,13 @@ class TestEmptyQrVerifyRouting:
         qr = QRState(iteration=5, state=LoopState.INITIAL)
         out = format_qr_verify(step=4, phase="impl-code", state_dir=str(tmp_path), qr=qr)
 
-        assert "NEXT STEP:" in out
-        assert "NEXT STEP (MANDATORY -- execute exactly one)" not in out
-        assert "Count PASS vs FAIL" not in out
-        assert "ALL agents returned PASS" not in out
-        assert "--qr-status pass" in out
+        gate_cmd = pin_cwd(
+            f"uv run python -m {executor.MODULE_PATH} --step 5 --state-dir {shell_quote(str(tmp_path))}"
+        )
+        assert f"Command: {gate_cmd}\n" in out
+        assert "Verify QR group:" not in out
 
-    def test_non_empty_items_keeps_branching(self, tmp_path: Path):
-        """Sanity check: when items remain, branching prompt is still used."""
+    def test_non_empty_items_next_step_is_gate_command(self, tmp_path: Path):
         write_qr(
             tmp_path,
             "impl-code",
@@ -169,8 +167,11 @@ class TestEmptyQrVerifyRouting:
         qr = QRState(iteration=1, state=LoopState.INITIAL)
         out = format_qr_verify(step=4, phase="impl-code", state_dir=str(tmp_path), qr=qr)
 
-        assert "NEXT STEP (MANDATORY -- execute exactly one)" in out
-        assert "Count PASS vs FAIL" in out
+        gate_cmd = pin_cwd(
+            f"uv run python -m {executor.MODULE_PATH} --step 5 --state-dir {shell_quote(str(tmp_path))}"
+        )
+        assert f"Command: {gate_cmd}\n" in out
+        assert "Verify QR group:" in out
 
 
 class TestReconciliationRigor:
@@ -180,7 +181,7 @@ class TestReconciliationRigor:
 
     def test_reconciliation_block_carries_per_criterion_rigor(self, tmp_path: Path):
         out = format_output(
-            step=1, state_dir=str(tmp_path), qr_status=None, reconciliation_check=True
+            step=1, state_dir=str(tmp_path), reconciliation_check=True
         )
         assert "RECONCILIATION CHECK REQUESTED" in out
         assert "validate REQUIREMENTS, not code presence" in out  # the key distinction
@@ -190,7 +191,7 @@ class TestReconciliationRigor:
 
     def test_reconciliation_absent_when_not_requested(self, tmp_path: Path):
         out = format_output(
-            step=1, state_dir=str(tmp_path), qr_status=None, reconciliation_check=False
+            step=1, state_dir=str(tmp_path), reconciliation_check=False
         )
         assert "RECONCILIATION CHECK REQUESTED" not in out
 

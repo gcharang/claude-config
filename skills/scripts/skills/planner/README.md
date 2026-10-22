@@ -13,7 +13,7 @@ Python scripts emit workflow prompts and routing. The LLM operates BETWEEN scrip
 3. LLM records outcomes through CLI commands (e.g., a QR item's PASS/FAIL)
 4. LLM invokes next script based on outcome
 
-Sub-agents make the judgments: each verifier records every item's verdict in `qr-{phase}.json` through the verify runner's `--result`. Python routes the gate from that severity-aware item state (`shared/gates.py::build_gate_output`); the orchestrator's `--qr-status` tally of the verifiers' one-word replies can veto a pass when no FAIL was recorded, never cause one.
+Sub-agents make the judgments: each verifier records every item's verdict in `qr-{phase}.json` through the verify runner's `--result`. Python routes the gate from that severity-aware item state (`shared/gates.py::build_gate_output`).
 
 ## State Files
 
@@ -173,7 +173,7 @@ quality_reviewer/
   exec_qr_fix.py               QR fix runner (--phase ...)
   qr_verify_base.py            VerifyBase ABC + verify_main
   prompts/content.py           Per-phase decompose prompts + verifier classes
-  prompts/decompose.py         Shared 13-step decompose flow (dispatch_step)
+  prompts/decompose.py         Shared decompose flow (dispatch_step)
 
 shared/
   resources.py    Conventions, script paths, state dir validation + placement
@@ -190,14 +190,7 @@ cli/
 
 ## QR Gate Mechanics
 
-QR gates use LoopState enum: INITIAL -> RETRY -> COMPLETE
-
-```
-INITIAL -> PASS -> COMPLETE (terminal)
-INITIAL -> FAIL -> RETRY (iteration++)
-RETRY   -> FAIL -> RETRY (iteration++)
-RETRY   -> PASS -> COMPLETE (terminal)
-```
+QR steps carry a `LoopState` (`shared/qr/types.py`) that `resolve_qr_for_step` (`shared/qr/utils.py`) derives from qr-{phase}.json; the gate (`shared/gates.py::build_gate_output`) routes from the same file.
 
 Blocking severity by iteration:
 

@@ -22,11 +22,10 @@ from skills.planner.shared.gates import GateResult
 # --- Planner is 6 steps, terminal at step 6 ---------------------------------
 def test_planner_has_six_steps():
     from skills.planner.orchestrator.planner import STEPS
-    from skills.planner.shared.constants import PLANNER_GATE_STEPS, PLANNER_TOTAL_STEPS
+    from skills.planner.shared.constants import PLANNER_TOTAL_STEPS
 
     assert set(STEPS) == {1, 2, 3, 4, 5, 6}
     assert PLANNER_TOTAL_STEPS == 6
-    assert PLANNER_GATE_STEPS == frozenset({6})
 
 
 def test_step6_is_terminal_plan_approved_with_valid_plan(tmp_path):
@@ -52,11 +51,29 @@ def test_step6_is_terminal_plan_approved_with_valid_plan(tmp_path):
         )
     )
     write_qr(tmp_path, "plan-design", [])
-    result = format_output(6, "pass", str(tmp_path))
+    result = format_output(6, str(tmp_path))
     assert isinstance(result, GateResult)
     assert result.terminal_pass is True
     assert "PLAN APPROVED" in result.output
     assert "--step 7" not in result.output  # no plan-code phase to route to
+
+
+def test_step5_next_is_the_gate_command(tmp_path):
+    from skills.lib.workflow.prompts.step import pin_cwd
+    from skills.planner.orchestrator import planner as planner_orch
+    from skills.planner.shared.builders import shell_quote
+
+    write_qr(
+        tmp_path,
+        "plan-design",
+        [{"id": "qa-001", "scope": "*", "check": "c", "status": "TODO", "severity": "MUST"}],
+    )
+    out = planner_orch.format_output(5, str(tmp_path))
+    assert isinstance(out, str)
+    gate_cmd = pin_cwd(
+        f"uv run python -m {planner_orch.MODULE_PATH} --step 6 --state-dir {shell_quote(str(tmp_path))}"
+    )
+    assert f"Command: {gate_cmd}\n" in out
 
 
 def test_step6_missing_plan_fails_closed(tmp_path):
@@ -75,8 +92,6 @@ def test_step6_missing_plan_fails_closed(tmp_path):
             "skills.planner.orchestrator.planner",
             "--step",
             "6",
-            "--qr-status",
-            "pass",
             "--state-dir",
             str(tmp_path),
         ],
@@ -137,7 +152,7 @@ def test_cli_drops_diff_and_doc_commands():
 def test_executor_step2_dispatches_code_intent_not_diffs(tmp_path):
     from skills.planner.orchestrator import executor
 
-    out = executor.format_output(2, str(tmp_path), None, False)
+    out = executor.format_output(2, str(tmp_path), False)
     assert "Code Intent" in out
     assert "code_changes" not in out
     assert "implementation source" not in out.lower()  # no diff-application framing
@@ -674,7 +689,6 @@ def test_impl_code_decompose_injects_scope_into_steps_1_and_3(tmp_path):
             "impl-code",
             "m",
             content["phase_prompts"],
-            content["grouping_config"],
             state_dir=str(tmp_path),
             scope_provider=content["scope_provider"],
         )
@@ -1018,15 +1032,17 @@ def test_iteration_limit_escalation_emits_runnable_accept_command(tmp_path):
     from skills.planner.orchestrator.planner import format_output
 
     _write_ceiling_qr(tmp_path)
-    result = format_output(6, "fail", str(tmp_path))
+    result = format_output(6, str(tmp_path))
     assert isinstance(result, GateResult)
     out = result.output
     # The escalation must carry a runnable, cwd-pinned --accept-findings command (a
     # prose-only Accept saves nothing), and not finalize on its own.
-    from skills.lib.workflow.prompts.step import _SKILLS_DIR_Q
+    from skills.lib.workflow.prompts.step import pin_cwd
+    from skills.planner.orchestrator.planner import MODULE_PATH
+    from skills.planner.shared.builders import shell_quote
 
-    assert "--accept-findings" in out
-    assert f"uv run --directory {_SKILLS_DIR_Q} python -m" in out
+    accept_cmd = pin_cwd(f"uv run python -m {MODULE_PATH} --step 6 --accept-findings")
+    assert accept_cmd + f" --state-dir {shell_quote(str(tmp_path))}" in out
     assert result.terminal_pass is False
 
 
@@ -1034,7 +1050,7 @@ def test_accept_findings_yields_terminal_pass_at_ceiling(tmp_path):
     from skills.planner.orchestrator.planner import format_output
 
     _write_ceiling_qr(tmp_path)
-    result = format_output(6, "pass", str(tmp_path), accept_findings=True)
+    result = format_output(6, str(tmp_path), accept_findings=True)
     assert isinstance(result, GateResult)
     assert result.terminal_pass is True  # disk write covered by test_main_terminal_pass_saves_to_docs_plans
     assert "PLAN APPROVED" in result.output
@@ -1141,7 +1157,7 @@ def test_main_terminal_pass_saves_to_docs_plans(tmp_path, monkeypatch, capsys):
     write_qr(state, "plan-design", [])
     _record_project_root(state, repo)
     monkeypatch.setattr(sys, "argv",
-        ["planner.py", "--step", "6", "--qr-status", "pass", "--state-dir", str(state)])
+        ["planner.py", "--step", "6", "--state-dir", str(state)])
     planner_orch.main()
     out = capsys.readouterr().out
     assert "PLAN APPROVED" in out and "Plan rendered to:" in out and "Plan saved to:" in out
@@ -1821,7 +1837,7 @@ def test_plan_gate_blocks_qr_pass_on_incomplete_plan(tmp_path):
     plan = _plan_with_waves([("M-001", ["a.py"], False)], [])  # code milestone, no waves
     (tmp_path / "plan.json").write_text(plan.model_dump_json())
     write_qr(tmp_path, "plan-design", [])
-    result = format_output(6, "pass", str(tmp_path))
+    result = format_output(6, str(tmp_path))
     assert isinstance(result, GateResult)
     assert result.terminal_pass is False
     assert "not assigned to any wave" in result.output
@@ -1836,7 +1852,7 @@ def test_plan_gate_terminal_pass_on_complete_plan(tmp_path):
     plan = _plan_with_waves([("M-001", ["a.py"], False)], [("W-001", ["M-001"])])
     (tmp_path / "plan.json").write_text(plan.model_dump_json())
     write_qr(tmp_path, "plan-design", [])
-    result = format_output(6, "pass", str(tmp_path))
+    result = format_output(6, str(tmp_path))
     assert isinstance(result, GateResult)
     assert result.terminal_pass is True
     assert "PLAN APPROVED" in result.output
@@ -2091,7 +2107,7 @@ def test_executor_step1_transcribes_waves_no_diagram_parse(tmp_path):
     # hand-parsing an ASCII dependency diagram (audit §2 leak 1).
     from skills.planner.orchestrator import executor
 
-    out = executor.format_output(1, str(tmp_path), None, False)
+    out = executor.format_output(1, str(tmp_path), False)
     assert "Milestone Dependencies" not in out
     assert "same depth" not in out
     assert "## Execution Waves" in out
@@ -2106,7 +2122,7 @@ def test_executor_step1_forbids_planning_context_and_diagram_transcription(tmp_p
     # first place.
     from skills.planner.orchestrator import executor
 
-    out = executor.format_output(1, str(tmp_path), None, False)
+    out = executor.format_output(1, str(tmp_path), False)
     assert "planning_context" in out
     assert "diagram_graphs" in out
     assert "Do NOT add" in out
@@ -2118,7 +2134,7 @@ def test_executor_step1_states_decisions_carveout_positively(tmp_path):
     # Decision entries a code_intent.decision_refs actually references.
     from skills.planner.orchestrator import executor
 
-    out = executor.format_output(1, str(tmp_path), None, False)
+    out = executor.format_output(1, str(tmp_path), False)
     assert "decision_refs" in out
     assert "holding ONLY the Decision entries those refs point to" in out
 
@@ -2129,7 +2145,7 @@ def test_executor_step1_warns_against_verbatim_source_copy(tmp_path):
     # The step-1 prompt must name the reduced-subset contract and forbid verbatim copy.
     from skills.planner.orchestrator import executor
 
-    out = executor.format_output(1, str(tmp_path), None, False)
+    out = executor.format_output(1, str(tmp_path), False)
     assert "REDUCED SUBSET" in out
     assert "verbatim" in out
 

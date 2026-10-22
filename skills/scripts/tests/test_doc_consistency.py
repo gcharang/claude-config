@@ -35,22 +35,5 @@ class TestAstClaudeMdNodeTypes:
         assert "All specialized nodes (HeaderNode, ActionsNode" not in claude_md
 
 
-class TestQrReadmeStepCountWording:
-    """quality_reviewer/README.md must describe the dynamic step formula."""
-
-    _README = "skills/planner/quality_reviewer/README.md"
-
-    def test_drops_5_step_claim(self):
-        assert "5-step verify workflow" not in _read(self._README)
-
-    def test_mentions_dynamic_formula(self):
-        text = _read(self._README)
-        # Accept either the formula "2 + 2*N" or the word "dynamic" as the
-        # load-bearing signal that the claim has been corrected.
-        assert ("2 + 2*N" in text) or ("dynamic" in text.lower()), (
-            "QR README must describe the step count as dynamic (formula 2 + 2*N)"
-        )
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

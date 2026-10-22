@@ -32,7 +32,7 @@ RED = [("suite", "fail", "9 passed, 1 failed"), ("lint", "pass", "All checks pas
 
 def _fmt(step: int, state_dir) -> str:
     """Render an executor step via the public dispatch (qr/plan unused for 10/11/12)."""
-    return ex.format_output(step, str(state_dir), None, False, None, None)
+    return ex.format_output(step, str(state_dir), False, None, None)
 
 
 def _record(state_dir, suite="pass", lint="pass", typ="pass", suite_summary=None) -> subprocess.CompletedProcess:

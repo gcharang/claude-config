@@ -2893,7 +2893,7 @@ def test_rendering_planner_step_1_does_not_touch_the_project(repo, tmp_path):
     original = "node_modules/\n"
     (repo / ".gitignore").write_text(original, encoding="utf-8")
 
-    rendered = planner_orch.format_output(1, None, str(tmp_path))
+    rendered = planner_orch.format_output(1, str(tmp_path))
 
     assert (repo / ".gitignore").read_text(encoding="utf-8") == original
     assert not (repo / AGENT_STATE_DIRNAME).exists()
@@ -2963,7 +2963,7 @@ def test_steps_after_the_first_reject_an_unusable_state_dir(
     monkeypatch.setattr(
         sys,
         "argv",
-        [orchestrator, "--step", "2", "--state-dir", str(target), "--qr-status", "pass"],
+        [orchestrator, "--step", "2", "--state-dir", str(target)],
     )
 
     with pytest.raises(SystemExit) as excinfo:
@@ -2988,9 +2988,7 @@ def test_steps_after_the_first_refuse_to_run_without_a_state_dir(
     """
     module = f"skills.planner.orchestrator.{orchestrator}"
     main = __import__(module, fromlist=["main"]).main
-    monkeypatch.setattr(
-        sys, "argv", [orchestrator, "--step", str(step), "--state-dir", "", "--qr-status", "pass"]
-    )
+    monkeypatch.setattr(sys, "argv", [orchestrator, "--step", str(step), "--state-dir", ""])
 
     with pytest.raises(SystemExit) as excinfo:
         main()

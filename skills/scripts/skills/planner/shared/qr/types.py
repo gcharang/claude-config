@@ -9,17 +9,6 @@ from enum import Enum
 from skills.lib.workflow.types import AgentRole
 
 
-class QRStatus(Enum):
-    """Quality Review result status."""
-
-    PASS = "pass"
-    FAIL = "fail"
-
-    def __bool__(self) -> bool:
-        """Allow if qr_status: checks (PASS is truthy, FAIL is falsy for gating)."""
-        return self == QRStatus.PASS
-
-
 class QAItemStatus(Enum):
     """QA checklist item status."""
 
@@ -47,38 +36,26 @@ class QAItem:
 
 
 class LoopState(Enum):
-    """Explicit state machine for QR iteration loops.
+    """Whether a QR step runs first-time (INITIAL) or in fix mode (RETRY).
 
-    QRState tracks loop progression through three phases: INITIAL (first review),
-    RETRY (fixing issues from previous iteration), COMPLETE (passed review).
-
-    Enum makes state transitions explicit (qr.transition(status)) and enables
-    property-based testing of invariants (INITIAL.iteration == 1, RETRY implies
-    previous failure).
+    resolve_qr_for_step (shared/qr/utils.py) derives it from qr-{phase}.json.
     """
 
     INITIAL = "initial"
     RETRY = "retry"
-    COMPLETE = "complete"
 
 
 @dataclass
 class QRState:
-    """Quality Review loop state machine.
-
-    Tracks progression through QR gates using explicit state enum. The state
-    machine has three phases: INITIAL (first review attempt), RETRY (fixing
-    issues from previous iteration), and COMPLETE (passed review).
+    """QR context for one orchestrator step (built by resolve_qr_for_step).
 
     Attributes:
         iteration: Current loop count (increments on each retry)
-        state: Current phase in the review cycle
-        status: QR result (PASS/FAIL) from most recent review
+        state: First-time or fix-mode run
     """
 
     iteration: int = 1
     state: LoopState = LoopState.INITIAL
-    status: QRStatus | None = None
 
     @property
     def failed(self) -> bool:
@@ -88,26 +65,6 @@ class QRState:
         Provides compatibility bridge during migration.
         """
         return self.state == LoopState.RETRY
-
-    @property
-    def passed(self) -> bool:
-        """Check if QR passed."""
-        return self.status == QRStatus.PASS
-
-    def transition(self, status: QRStatus) -> None:
-        """Transition state based on QR result.
-
-        State machine transitions:
-        - PASS -> COMPLETE (terminal state)
-        - FAIL -> RETRY (increments iteration counter)
-
-        Iteration counter tracks retry depth for severity threshold decisions.
-        """
-        if status == QRStatus.PASS:
-            self.state = LoopState.COMPLETE
-        else:
-            self.state = LoopState.RETRY
-            self.iteration += 1
 
 
 @dataclass

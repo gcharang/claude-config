@@ -26,7 +26,6 @@ QA_ITEM_DEFAULTS = {
     "version": 1,
     "finding": None,
     "parent_id": None,
-    "group_id": None,
     "severity": "SHOULD",  # Default for backwards compat with existing qr-{phase}.json files
 }
 
@@ -587,7 +586,6 @@ if True:
         version: int = 1
         finding: str | None = None
         parent_id: str | None = None
-        group_id: str | None = None
         severity: Literal["MUST", "SHOULD", "COULD"] = "SHOULD"
 
         @field_validator("severity", mode="before")
@@ -614,8 +612,8 @@ if True:
             line at column 0 of a PLAINTEXT agent prompt.  id reaches the parallel
             QR-verify dispatch (build_qr_verify_dispatch -> item_ids / qr_item_flags),
             where a forged '--- Agent N ---' line hijacks the verify fan-out; scope
-            reaches the single-agent decompose/fix item listings (e.g. decompose's
-            '{id} [scope={scope}]'), where it forges a fake item row.  id is also a
+            reaches the single-agent decompose/fix item listings (e.g. the fixer's
+            'Scope: {scope}' line), where it forges a fake item row.  id is also a
             lookup key (find_item / --qr-item), so it must be rejected, not silently
             rewritten.  check and finding are free-text fields neutralized at every
             sink (qr/utils._fix_field_safe and format_qr_item_for_verification);

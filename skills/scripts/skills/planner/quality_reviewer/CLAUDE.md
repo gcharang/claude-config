@@ -17,4 +17,4 @@ Quality Review modules with QA state tracking integration. One phase-parameteriz
 
 | Directory  | What                                                                            | When to read                                  |
 | ---------- | ------------------------------------------------------------------------------- | --------------------------------------------- |
-| `prompts/` | `decompose.py` (shared 13-step flow), `content.py` (per-phase decompose prompts + verifier classes), `fix.py` (shared 3-step fix flow + per-phase `FIX_CONTENT`) | Modifying QR prompt wording, item formatting  |
+| `prompts/` | `decompose.py` (shared decompose flow), `content.py` (per-phase decompose prompts + verifier classes), `fix.py` (shared fix flow + per-phase `FIX_CONTENT`) | Modifying QR prompt wording, item formatting  |

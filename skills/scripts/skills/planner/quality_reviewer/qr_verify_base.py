@@ -274,7 +274,6 @@ class VerifyBase(ABC):
                 "",
                 "UNDERSTAND the checks you need to perform.",
                 "Note the scope: '*' means macro check, 'file:path:lines' means specific location.",
-                "Severity indicates blocking behavior: MUST blocks all iterations, SHOULD blocks 1-3, COULD blocks 1-2.",
             ],
             "next": f"uv run python -m {module_path} --step 2{phase_arg}{state_dir_arg} {item_flags}",
         }
@@ -396,17 +395,23 @@ class VerifyBase(ABC):
     def _step_summary(
         self, state_dir: str, module_path: str, item_ids: list[str], total_steps: int
     ) -> dict:
-        """SUMMARY step: Count results, output single word PASS or FAIL."""
+        """SUMMARY step: print the PASS/FAIL word computed from the recorded verdicts."""
+        qr_state = self._load_validated_qr_state(state_dir)
+        statuses = [
+            (get_qr_item(qr_state, item_id) or {}).get("status") if qr_state else None
+            for item_id in item_ids
+        ]
+        n_pass, n_fail = statuses.count("PASS"), statuses.count("FAIL")
+        n_todo = len(item_ids) - n_pass - n_fail
+        word = "PASS" if n_pass == len(item_ids) else "FAIL"
         return {
             "title": f"QR Verify Step {total_steps}/{total_steps}: Summary ({self.PHASE})",
             "actions": [
-                f"VERIFICATION COMPLETE: {len(item_ids)} items processed",
+                f"VERIFICATION COMPLETE: {len(item_ids)} items ({n_pass} PASS, {n_fail} FAIL, {n_todo} unrecorded)",
                 "",
-                "FINAL OUTPUT: your entire response after the CLI commands is exactly one",
-                "word -- PASS if every item passed, FAIL if any item failed. No headers,",
-                "no 'VERDICT:' prefix, no explanation: the orchestrator tallies these words",
-                "mechanically, and each finding already lives in its item's --finding flag.",
-                "This replaces the free-form Output Format in your agent definition.",
+                f"FINAL OUTPUT: your entire response after the CLI commands is exactly: {word}",
+                "No headers, no 'VERDICT:' prefix, no explanation; each finding already lives in its",
+                "item's --finding flag. This replaces the free-form Output Format in your agent definition.",
             ],
             "next": "",
         }

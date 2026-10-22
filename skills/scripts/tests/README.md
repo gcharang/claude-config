@@ -62,7 +62,7 @@ Gain: Clear, maintainable code
 
 ### Domain Types in types.py
 
-Domain types (BoundedInt, ChoiceSet, Constant) live in workflow/types.py alongside Arg, QRStatus, Confidence. This maintains cohesion - domain types are type system extensions. Alternative would create import fragmentation.
+Domain types (BoundedInt, ChoiceSet, Constant) live in workflow/types.py alongside Arg, Confidence. This maintains cohesion - domain types are type system extensions. Alternative would create import fragmentation.
 
 ### Iteration Bound Hardcoded to 5
 

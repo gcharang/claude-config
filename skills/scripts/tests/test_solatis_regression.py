@@ -201,7 +201,7 @@ def test_issue_23_step6_pass_is_terminal(tmp_path):
         json.dumps({"phase": "plan-design", "iteration": 1, "items": []})
     )
 
-    result = format_output(step=6, qr_status="pass", state_dir=str(tmp_path))
+    result = format_output(step=6, state_dir=str(tmp_path))
     output = result.output if isinstance(result, GateResult) else result
     assert "PLAN APPROVED" in output
     assert "--step 7" not in output
@@ -212,6 +212,6 @@ def test_issue_23_executor_skips_doc_only_in_impl_code(tmp_path):
     """Doc-only milestones are skipped in impl-code; exec-docs authors their docs."""
     from skills.planner.orchestrator import executor
 
-    out = executor.format_output(2, str(tmp_path), None, False)
+    out = executor.format_output(2, str(tmp_path), False)
     assert "is_documentation_only" in out
     assert "documentation phase" in out.lower()

@@ -3,8 +3,8 @@
 Both the live CLI (qr.py, ``__main__``) and the batch-RPC library
 (qr_commands.py, ``QRContext``) run the same lock -> read -> mutate ->
 atomic-write cycle over qr-{phase}.json. This module holds the pieces that were
-byte-identical across them -- the status frozensets, the group-id predicate, and
-the path-based RMW helpers -- so the two entry points cannot drift. Each caller
+byte-identical across them -- the status frozensets and the path-based RMW
+helpers -- so the two entry points cannot drift. Each caller
 keeps its own failure mode (qr.py's error_exit vs qr_commands' raise) and derives
 the qr_path from its own state handle (state_dir+phase vs QRContext.qr_path()),
 which is why the helpers take a Path rather than either caller's state object.
@@ -27,18 +27,6 @@ TERMINAL_STATUSES = frozenset({"PASS"})
 REQUIRES_FINDING = frozenset({"FAIL"})
 # Statuses that forbid a finding
 FORBIDS_FINDING = frozenset({"PASS"})
-
-# Group-id prefixes assign-group accepts besides the bare "umbrella".
-_GROUP_ID_PREFIXES = ("parent-", "component-", "concern-", "affinity-")
-
-
-def is_valid_group_id(group_id: str) -> bool:
-    """True when group_id is the bare 'umbrella' or carries a known prefix.
-
-    Pure predicate so each caller keeps its own failure mode (qr.py error_exit,
-    qr_commands raise) and its own human-facing message listing the prefixes.
-    """
-    return group_id == "umbrella" or group_id.startswith(_GROUP_ID_PREFIXES)
 
 
 def load_qr_state_under_lock(qr_path: Path) -> dict:
@@ -109,20 +97,6 @@ def update_item_in_state(qr_state: dict, item_id: str, status: str,
         del item["finding"]
     if severity:
         item["severity"] = severity
-    qr_state["items"][idx] = item
-    return item
-
-
-def assign_group_in_state(qr_state: dict, item_id: str, group_id: str) -> dict:
-    """Apply a group assignment in place; return the item. No version bump (metadata).
-
-    group_id validity is checked by each caller before the file-exists check.
-    """
-    idx, item = find_item(qr_state, item_id)
-    if idx < 0:
-        raise ValueError(f"Item {item_id} not found in qr-{qr_state.get('phase', '')}.json")
-    assert item is not None
-    item["group_id"] = group_id
     qr_state["items"][idx] = item
     return item
 

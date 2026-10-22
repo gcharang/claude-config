@@ -11,9 +11,8 @@ from skills.planner.shared.builders import (
     shell_quote,
 )
 from skills.planner.shared.qr.constants import QR_ITERATION_LIMIT
-from skills.planner.shared.qr.types import AgentRole, QRState, QRStatus
+from skills.planner.shared.qr.types import AgentRole, QRState
 from skills.planner.shared.qr.utils import (
-    _blocking_items_from_state,
     by_blocking_severity,
     by_status,
     get_qr_iteration_from_state,
@@ -71,31 +70,6 @@ def _unresolved_blocking_findings_from_state(qr_state: dict | None, iteration: i
         if item.get("finding"):
             lines.append(f"        finding: {_fix_field_safe(item['finding'])}")
     return lines
-
-
-def _has_recorded_failure_from_state(qr_state: dict | None) -> bool:
-    """True when qr_state records at least one FAIL item (any severity).
-
-    Distinguishes a *de-escalated* pass (FAIL items exist but none blocking at the
-    current iteration -- the legitimate case that upgrades a severity-blind
-    --qr-status fail to a pass) from an *absent* verdict (no FAIL recorded at all:
-    a verifier returned FAIL without persisting its item, or items remain TODO).
-    Only the former may upgrade an explicit fail to a pass. Takes the pre-loaded
-    qr_state dict build_gate_output already read.
-    """
-    if not qr_state:
-        return False
-    return bool(query_items(qr_state, by_status("FAIL")))
-
-
-def _has_blocking_todo_from_state(qr_state: dict | None) -> bool:
-    """True when qr_state still has an unverified item that blocks now.
-
-    Delegates to _blocking_items_from_state with status="TODO", so the
-    iteration-default and severity logic lives in one place. Takes the pre-loaded qr_state dict
-    build_gate_output already read.
-    """
-    return bool(_blocking_items_from_state(qr_state, "TODO"))
 
 
 def _render_iteration_limit_banner(
@@ -160,6 +134,13 @@ def _build_iteration_limit_escalation(
         "",
     ]
     detail_lines.extend(findings or ["  (see qr state; no per-item findings recorded)"])
+    unverified = (
+        [str(it.get("id", "?")) for it in query_items(qr_state, by_status("TODO"))]
+        if qr_state
+        else []
+    )
+    if unverified:
+        detail_lines.extend(["", f"not verified: {', '.join(unverified)}"])
 
     if pass_step is not None:
         accept_cmd = pin_cwd(f"uv run python -m {module_path} --step {pass_step}")
@@ -170,10 +151,9 @@ def _build_iteration_limit_escalation(
         # Terminal gate (planner, pass_step=None): "Accept" must FINALIZE the plan,
         # not just print prose. Re-invoke THIS gate step with --accept-findings so
         # build_gate_output forces a terminal pass and planner.main() renders plan.md
-        # + saves it to docs/plans/. --qr-status pass is REQUIRED -- the planner
-        # gate-step guard sys.exit(0)s before rendering when it is absent.
+        # + saves it to docs/plans/.
         accept_cmd = pin_cwd(
-            f"uv run python -m {module_path} --step {step} --qr-status pass --accept-findings"
+            f"uv run python -m {module_path} --step {step} --accept-findings"
         )
         if state_dir:
             accept_cmd += f" --state-dir {shell_quote(state_dir)}"
@@ -261,69 +241,42 @@ def build_gate_output(
     Gates route to either:
     - pass_step: QR passed, proceed to next workflow phase
     - work_step: QR failed, loop back to fix issues
+    - verify step (step - 1): an item is still TODO and no blocking FAIL is recorded
     - user escalation: QR still failing at the iteration ceiling
 
     accept_findings is the user's explicit ceiling override (INTENT.md: user
     authority is absolute): treat QR as passed despite unresolved findings, so a
     terminal gate (pass_step=None) finalizes the plan instead of re-escalating.
     """
-    # Severity-aware on-disk state is the primary source of truth. The
-    # agent-supplied qr.status (--qr-status) is a severity-blind PASS/FAIL
-    # tally; past the de-escalation threshold it disagrees with the work step
-    # and router (which read the same severity-aware blocking-FAIL state), so routing
-    # on it would make the gate dispatch a fixer while the work step runs first-time
-    # EXECUTE with no fix context.
-    # qr_state is loaded ONCE per gate by the calling frame and threaded in, then
-    # reused by the _from_state predicates below, so the file is read once per gate.
-    # _UNSET means a direct caller (e.g. tests) skipped the pre-load, so we self-load
-    # here to preserve standalone usability.
+    # qr_state is loaded ONCE per gate by the calling frame and threaded in, so the
+    # file is read once per gate. _UNSET means a direct caller (e.g. tests) skipped
+    # the pre-load, so we self-load here to preserve standalone usability.
     resolved_state: dict | None = None
     has_blocking_fail = False  # raw blocking-FAIL verdict; reused by fail_step below
     if state_dir and phase:
         if qr_state is _UNSET:
             resolved_state = load_qr_state(state_dir, phase)
-        elif qr_state is None:
-            resolved_state = None
-        else:
+        elif qr_state is not None:
             resolved_state = qr_state  # type: ignore[assignment]
-        if resolved_state is None:
-            # Missing/corrupt qr-{phase}.json at gate time. Normal flow never reaches
-            # here -- the verify step routes back to decompose on a missing file -- so
-            # this is a manual deletion between verify and gate. Fail CLOSED: a gate
-            # (especially the terminal one, pass_step=None) must never finalize a plan
-            # whose QR cannot be confirmed. iteration = qr.iteration (1 in the missing-file
-            # case) routes to work_step, which re-runs decompose and re-creates the file.
-            passed = False
-            iteration = qr.iteration
-        else:
-            has_blocking_fail = has_qr_failures_from_state(resolved_state)
-            passed = not has_blocking_fail
-            iteration = get_qr_iteration_from_state(resolved_state)
-            # has_qr_failures_from_state reads False in two distinct situations: failures have
-            # de-escalated below the blocking threshold (a real pass), OR nothing is
-            # recorded yet -- a verifier returned FAIL without persisting its item, or
-            # items are still TODO. An explicit --qr-status fail must not be silently
-            # upgraded to a pass in the second case: with no recorded FAIL there is no
-            # de-escalation to justify the upgrade, so the aggregator's failure stands.
-            if (
-                passed
-                and qr.status == QRStatus.FAIL
-                and not _has_recorded_failure_from_state(resolved_state)
-            ):
-                passed = False
-            # A blocking item still at TODO is unverified blocking work, not a pass --
-            # has_qr_failures_from_state counts only blocking FAIL, so it misses a blocking MUST whose
-            # verifier returned FAIL/crashed before persisting. status-blind so it closes
-            # both the --qr-status fail de-escalation veto above and the --qr-status pass
-            # LLM tally. With no recorded blocking FAIL to fix, the fail routes to the
-            # verify step (see the next_cmd selection below), which re-dispatches the
-            # still-TODO item, so a transient verifier crash self-heals next pass; the loop is
-            # un-ceilinged (iteration advances only on a recorded blocking FAIL).
-            if passed and _has_blocking_todo_from_state(resolved_state):
-                passed = False
-    else:
-        passed = qr.passed
+    if resolved_state is None:
+        # No state_dir/phase, or a missing/corrupt qr-{phase}.json at gate time.
+        # Normal flow never reaches here -- the verify step routes back to decompose
+        # on a missing file -- so this is a manual deletion between verify and gate.
+        # Fail CLOSED: a gate (especially the terminal one, pass_step=None) must never
+        # finalize a plan whose QR cannot be confirmed. iteration = qr.iteration (1 in
+        # the missing-file case) routes to work_step, which re-runs decompose and
+        # re-creates the file.
+        passed = False
         iteration = qr.iteration
+    else:
+        has_blocking_fail = has_qr_failures_from_state(resolved_state)
+        iteration = get_qr_iteration_from_state(resolved_state)
+        # An item still TODO after verify is unverified work at any severity. With no
+        # blocking FAIL to fix, the fail routes to the verify step (next_cmd selection
+        # below), which re-dispatches every TODO item. A TODO-only round advances the
+        # iteration like a FAIL round (prepare_verify_items), so the ceiling bounds the
+        # gate -> verify -> gate loop.
+        passed = not has_blocking_fail and not query_items(resolved_state, by_status("TODO"))
 
     # --accept-findings only applies at the ceiling (the override just below is
     # gated on iteration >= QR_ITERATION_LIMIT). Passed earlier -- while the gate
@@ -428,10 +381,10 @@ def build_gate_output(
             next_cmd += f" --state-dir {shell_quote(state_dir)}"
     else:
         # A recorded blocking FAIL has a finding to fix -> work step (fix mode, which
-        # the router and fix_mode derivation expect). A TODO-veto or status-tally
-        # mismatch (no recorded blocking FAIL) has nothing concrete to fix -> re-verify,
-        # which re-dispatches the still-TODO item so a transient verifier crash
-        # self-heals. verify_step is always gate_step - 1 (work -> decompose -> verify -> gate).
+        # the router and fix_mode derivation expect). A TODO item with no recorded blocking
+        # FAIL has nothing concrete to fix -> re-verify, which re-dispatches it so a transient
+        # verifier crash self-heals. verify_step is always gate_step - 1 (work -> decompose ->
+        # verify -> gate).
         # When the file is missing (resolved_state is None), route to work_step so
         # decompose re-creates the file.
         fail_step = work_step if resolved_state is None or has_blocking_fail else step - 1

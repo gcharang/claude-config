@@ -6,7 +6,7 @@ Quality Review performs validation with severity-based blocking thresholds. Two 
 
 ## Modules
 
-- `qr_decompose.py` — decompose runner; looks up per-phase prompts from `prompts.content.DECOMPOSE_CONTENT` and drives the shared 13-step `prompts.decompose.dispatch_step`.
+- `qr_decompose.py` — decompose runner; looks up per-phase prompts from `prompts.content.DECOMPOSE_CONTENT` and drives the shared `prompts.decompose.dispatch_step`.
 - `qr_verify.py` — verify runner; selects the phase's `VerifyBase` subclass from `prompts.content.VERIFIERS` and routes through `verify_main`.
 - `prompts/content.py` — per-phase decompose prompts (e.g. `PLAN_DESIGN_STEP_1_ABSORB`) + the `PlanDesignVerify` / `ImplCodeVerify` / `ImplDocsVerify` classes, registered in `DECOMPOSE_CONTENT` / `VERIFIERS`.
 
@@ -28,25 +28,19 @@ QR gates now integrate with QA state tracking for structured verification. QA de
 
 **Minimal State Files**: Store ONLY authoritative data -- item statuses (TODO/PASS/FAIL). Sub-agents compute status overview on-demand when THEY need it. No derived values stored.
 
-**Dumb Main Agent**: Main agent dispatches and routes. It needs ONE bit: PASS or FAIL. The LLM reads responses naturally and follows instructions. No parsing logic required in main agent.
+**Dumb Main Agent**: Main agent dispatches agents and runs the next step command each script prints. It reads no verdict: the gate script routes from qr-{phase}.json. No parsing logic required in main agent.
 
 **Just-In-Time Prompting**: Executor sub-agent (fixer) invokes script and sees prompts about what failed. Main agent never sees these details. Details are injected only when needed, only to the agent that needs them.
 
 ### Why Main Agent Doesn't Parse
 
-The main agent needs no parsing logic because the reply it routes on is one bare word: each
-verify agent returns `PASS` or `FAIL`, and the main agent tallies those to pick the gate's
-`--qr-status`. The detail behind a FAIL lives in qr-{phase}.json, written by the verify
-runner's `--result/--finding` flags and read by the script, never lifted out of the response
-text. A fix agent returns a bare `PASS` when done, which routes the orchestrator back into a
-fresh QR pass rather than into a status tally; decompose also returns a bare `PASS`, and its
-items reach the orchestrator through qr-{phase}.json (see Response Formats below).
+The main agent needs no parsing logic because nothing it routes on comes from a reply: each verify agent records its per-item verdicts and findings in qr-{phase}.json through the verify runner's `--result/--finding` flags, and the gate script reads that file. The bare words the verify, fix and decompose agents end with are not read for routing (see Response Formats below).
 
 This eliminates an entire class of bugs: parsing errors, schema mismatches, JSON escaping issues.
 
 ### Why Status Overview is Sub-Agent Only
 
-The executor needs to see "5 items: 3 PASS, 2 FAIL" to decide what to fix. The main agent doesn't. The main agent only needs to know: did verification pass or fail?
+The executor needs to see "5 items: 3 PASS, 2 FAIL" to decide what to fix. The main agent doesn't. The main agent needs neither: the gate script reads the item states.
 
 Status overview is computed on-demand by the executor when it runs. It's not stored in qr-{phase}.json because it's derived data. Storing it would violate the minimal state principle and create consistency risks (what if counts don't match items?).
 
@@ -54,7 +48,7 @@ Status overview is computed on-demand by the executor when it runs. It's not sto
 
 **DECOMPOSE Mode**: writes `qr-{phase}.json` (every item `status: TODO`) through `prompts/decompose.py`; its final response is `PASS`. The orchestrator reads the file, not the response.
 
-**VERIFY Mode**: the agent's entire final response is one bare word.
+**VERIFY Mode**: the agent's entire final response is the one word its SUMMARY step prints from the verdicts it recorded.
 
 ```
 PASS
@@ -68,7 +62,7 @@ FAIL
 
 Per-item verdicts and findings reach qr-{phase}.json through the runner's
 `--result PASS|FAIL --finding <text>` flag, never through the returned text; the
-orchestrator tallies the single word to pick `--qr-status pass|fail`.
+gate routes from that file, not from the word.
 
 **FIX Mode**: `exec_qr_fix.py --phase <phase>` (`prompts/fix.py`) runs inside the work phase's own agent (architect, developer, or technical writer): load the blocking FAIL items, apply targeted fixes, validate. Its final response is a bare `PASS`.
 
@@ -149,15 +143,4 @@ Severity thresholds vary by iteration depth to prevent infinite retry loops:
 
 ## LoopState Tracking
 
-QR gates use LoopState enum to track iteration progression:
-
-- **INITIAL**: First review attempt
-- **RETRY**: Fixing issues from previous iteration
-- **COMPLETE**: Passed review
-
-State transitions:
-
-```
-INITIAL -> (QRStatus.PASS) -> COMPLETE [terminal]
-INITIAL -> (QRStatus.FAIL) -> RETRY -> (iteration++) -> RETRY -> ...
-```
+QR steps carry a `LoopState` (`shared/qr/types.py`) that `resolve_qr_for_step` (`shared/qr/utils.py`) derives from qr-{phase}.json; the gate routes from the same file (`shared/gates.py`).

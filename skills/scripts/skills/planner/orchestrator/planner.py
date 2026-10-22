@@ -36,7 +36,6 @@ from skills.planner.shared.constraints import (
     ORCHESTRATOR_CONSTRAINT_EXTENDED,
 )
 from skills.planner.shared.gates import GateResult, build_gate_output
-from skills.planner.shared.qr.cli import add_qr_args
 from skills.planner.shared.qr.types import LoopState
 from skills.planner.shared.qr.utils import prepare_verify_items, qr_file_exists
 from skills.planner.shared.resources import (
@@ -372,7 +371,7 @@ def qr_decompose_step(title, phase, script, model=None):
 
 
 def qr_verify_step(title, phase):
-    """Parallel QR verification with group-aware dispatch.
+    """Parallel QR verification dispatch.
 
     Reads qr-{phase}.json and generates expanded dispatch.
     Decompose agent outputs item data. Orchestrator transforms this data
@@ -393,14 +392,9 @@ def qr_verify_step(title, phase):
         items, _ = prepare_verify_items(state_dir, phase, qr, qr_state=ctx["qr_state"])
         if items is None:
             return {"error": f"qr-{phase}.json not found or malformed in {state_dir}"}
+        next_cmd = f"uv run python -m {MODULE_PATH} --step {step + 1} --state-dir {shell_quote(state_dir)}"
         if not items:
-            next_step = step + 1
-            return {
-                "title": title,
-                "actions": ["All items already verified. Proceeding with pass."],
-                "if_pass": f"uv run python -m {MODULE_PATH} --step {next_step} --state-dir {shell_quote(state_dir)} --qr-status pass",
-                "if_fail": f"uv run python -m {MODULE_PATH} --step {next_step} --state-dir {shell_quote(state_dir)} --qr-status pass",
-            }
+            return {"title": title, "actions": ["All items already verified."], "next": next_cmd}
 
         config = get_phase_config(phase)
         verify_script = config["verify_script"]
@@ -409,25 +403,18 @@ def qr_verify_step(title, phase):
             verify_script, phase, state_dir, items, ORCHESTRATOR_CONSTRAINT_EXTENDED
         )
 
-        next_step = step + 1
-        base_cmd = f"uv run python -m {MODULE_PATH} --step {next_step} --state-dir {shell_quote(state_dir)}"
-
-        return {
-            "title": title,
-            "actions": action_children,
-            "if_pass": f"{base_cmd} --qr-status pass",
-            "if_fail": f"{base_cmd} --qr-status fail",
-        }
+        return {"title": title, "actions": action_children, "next": next_cmd}
 
     handler.phase = phase
     return handler
 
 
 def qr_route_step(title, phase, work_step, pass_step, pass_message, fix_target=None):
-    """Route based on aggregated QR results.
+    """Route on the item states recorded in qr-{phase}.json.
 
-    PASS: delete qr file, approve the plan (pass_step=None -> terminal pass)
-    FAIL: loop to work_step (fix mode detected via qr-{phase}.json inspection)
+    PASS: approve the plan (pass_step=None -> terminal pass); the file stays
+    Blocking FAIL: loop to work_step (fix mode detected via qr-{phase}.json inspection)
+    TODO (no blocking FAIL): back to the verify step
     """
 
     def handler(ctx):
@@ -544,7 +531,6 @@ STEPS = {
 
 def get_step_guidance(
     step: int,
-    qr_status: str | None,
     state_dir: str,
     accept_findings: bool = False,
     plan=None,
@@ -568,7 +554,7 @@ def get_step_guidance(
     # Phase stored as handler attribute by step factory.
     # None for non-QR steps (1, 2).
     phase = getattr(handler, "phase", None)
-    qr_state, qr = resolve_qr_for_step(qr_states, state_dir, phase, qr_status)
+    qr_state, qr = resolve_qr_for_step(qr_states, state_dir, phase)
 
     ctx = {
         "step": step,
@@ -584,7 +570,6 @@ def get_step_guidance(
 
 def format_output(
     step: int,
-    qr_status: str | None,
     state_dir: str,
     accept_findings: bool = False,
     plan=None,
@@ -592,7 +577,7 @@ def format_output(
 ) -> str | GateResult:
     """Format output for display."""
     guidance = get_step_guidance(
-        step, qr_status, state_dir=state_dir, accept_findings=accept_findings, plan=plan, qr_states=qr_states
+        step, state_dir=state_dir, accept_findings=accept_findings, plan=plan, qr_states=qr_states
     )
 
     if isinstance(guidance, GateResult):
@@ -605,12 +590,7 @@ def format_output(
     body = "\n".join(str(action) for action in guidance["actions"])
     title = guidance["title"]
 
-    if_pass = guidance.get("if_pass")
-    if_fail = guidance.get("if_fail")
     next_cmd = guidance.get("next", "")
-
-    if if_pass and if_fail:
-        return format_step(body, title=title, if_pass=if_pass, if_fail=if_fail)
     return format_step(body, next_cmd, title=title)
 
 
@@ -629,7 +609,6 @@ def main():
         help="State directory path. Step 1 creates one when omitted and resumes the "
         "supplied one when given; required for every later step.",
     )
-    add_qr_args(parser)
     parser.add_argument(
         "--accept-findings",
         action="store_true",
@@ -638,8 +617,6 @@ def main():
     )
 
     args = parser.parse_args()
-
-    from skills.planner.shared.constants import PLANNER_GATE_STEPS, PLANNER_TOTAL_STEPS
 
     if args.step < 1:
         sys.exit("Error: step must be >= 1")
@@ -679,18 +656,8 @@ def main():
         if plan is None:
             sys.exit(f"Error: plan.json not found in {state_dir} (required for step {args.step})")
 
-    # Route steps require --qr-status; provide helpful output if missing
-    if args.step in PLANNER_GATE_STEPS and not args.qr_status:
-        gate_names = {6: "plan-design-qr-route"}
-        print(f"PLANNER - Step {args.step}/{PLANNER_TOTAL_STEPS}: {gate_names[args.step]}")
-        print()
-        print("This is a route step. Re-invoke with --qr-status pass or --qr-status fail")
-        print("based on the aggregated QR output from the previous step.")
-        sys.exit(0)
-
     result = format_output(
         args.step,
-        args.qr_status,
         state_dir=state_dir,
         accept_findings=args.accept_findings,
         plan=plan,

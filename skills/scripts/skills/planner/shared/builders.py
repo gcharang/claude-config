@@ -5,11 +5,10 @@ Constants for static text, functions for parameterized output.
 
 import shlex
 
-# The QR-verify AGGREGATE-step forbidden items. The plan-state lines restate the
+# Forbidden items for the QR-verify dispatch step. The plan-state lines restate the
 # orchestrator's standing Read/Edit/Write prohibition, so they are behavior-safe in
 # every phase.
 QR_VERIFY_FORBIDDEN = (
-    "Interpreting results beyond PASS/FAIL tallying",
     "Claiming 'diminishing returns' or 'comprehensive enough'",
     "Reading plan.json or any state files",
     "Writing, rendering, or summarizing the plan",
@@ -48,7 +47,7 @@ def format_gate_result(passed: bool) -> str:
 def build_qr_verify_dispatch(
     verify_script: str, phase: str, state_dir: str, items: list[dict], constraint: str
 ) -> list[str]:
-    """Build the full QR-verify action block: the verify fan-out and the aggregation prose.
+    """Build the full QR-verify action block: the verify fan-out and the routing note.
 
     Returns the action lines, with the caller's `constraint` passed in.
     """
@@ -102,22 +101,15 @@ def build_qr_verify_dispatch(
         command=template_cmd,
         instruction=f"Verify {len(balanced)} groups ({len(items)} items) in parallel.",
     )
-    group_count = len(balanced)
     return [
         constraint,
-        "",
-        "=== PHASE 1: DISPATCH (delegate to sub-agents) ===",
         "",
         f"VERIFY: {len(items)} items",
         "",
         dispatch_text,
         "",
-        "=== PHASE 2: AGGREGATE (your action after all agents return) ===",
-        "",
-        f"After ALL {group_count} agents return, tally results mechanically:",
-        "  ALL agents returned PASS  ->  invoke next step with --qr-status pass",
-        "  ANY agent returned FAIL   ->  invoke next step with --qr-status fail",
-        "  A reply that is neither word counts as FAIL (fail closed; do not re-read it).",
+        f"The next step routes on the verdicts the agents record in qr-{phase}.json, not on",
+        "their replies.",
         "",
         format_forbidden(*QR_VERIFY_FORBIDDEN),
     ]

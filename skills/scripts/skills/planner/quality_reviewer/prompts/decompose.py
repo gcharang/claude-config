@@ -25,71 +25,9 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
-from skills.lib.workflow.prompts import pin_cwd
 from skills.planner.shared.builders import shell_quote
-from skills.planner.shared.qr.utils import load_qr_state, load_validated_qr_state
+from skills.planner.shared.qr.utils import load_validated_qr_state
 from skills.planner.shared.resources import render_phase_context
-
-
-def _reinvoke_cmd(module_path: str, step: int, phase: str, state_dir: str) -> str:
-    return f"uv run python -m {module_path} --step {step} --phase {phase} --state-dir {shell_quote(state_dir)}"
-
-# =============================================================================
-# UTILITIES (mechanical operations)
-# =============================================================================
-
-
-def render_item_list(items: list[dict], label: str = "ungrouped_items") -> str:
-    """Render QR item list for LLM parsing.
-
-    WHY 80-char truncation: Check descriptions can be verbose. Truncation
-    preserves readability without obscuring item identity.
-    """
-    if not items:
-        return f"{label}: 0 items"
-    from skills.planner.shared.qr.utils import _fix_field_safe
-
-    lines = [f"{label}: {len(items)} items"]
-    for i in items:
-        scope = i.get("scope", "*")
-        check = _fix_field_safe(i.get("check", ""))[:80]
-        lines.append(f"  {i['id']} [scope={scope}]: {check}")
-    return "\n".join(lines)
-
-
-def load_ungrouped_todo_items(state_dir: str, phase: str) -> list[dict]:
-    """Load items with status='TODO' and no group_id assigned.
-
-    WHY filter: Grouping operates only on unassigned TODO items.
-    Completed or already-grouped items retain their state.
-
-    Also runs QRFile/QRItem validation so a verify-authored control-char-injected
-    check/finding loaded by the decompose subprocess fails closed here.
-    """
-    qr_state = load_validated_qr_state(state_dir, phase)
-    if not qr_state:
-        return []
-    return [
-        i
-        for i in qr_state.get("items", [])
-        if i.get("group_id") is None and i.get("status") == "TODO"
-    ]
-
-
-def format_assign_cmd(state_dir: str, phase: str, prefix: str) -> str:
-    """Format CLI command template for group assignment.
-
-    WHY CLI: Group assignments use the qr CLI tool for state mutation.
-
-    pin_cwd: this command is meant to be copy-run by the agent, and a bare
-    `uv run python -m skills...` fails from a drifted cwd.
-    """
-    cmd = pin_cwd(
-        f"uv run python -m skills.planner.cli.qr --state-dir {shell_quote(state_dir)} --qr-phase {phase} "
-        f"assign-group <item_id> --group-id {prefix}<name>"
-    )
-    return f"OUTPUT:\n  {cmd}"
-
 
 # =============================================================================
 # SHARED PROMPTS (truly identical across the phases)
@@ -172,7 +110,7 @@ WRITE qr-{phase}.json to STATE_DIR:
 
 Item count: whatever the content requires. No fixed caps.
 
-After writing, proceed to grouping phase."""
+After writing, run the next step to validate the file."""
 
 
 # =============================================================================
@@ -226,14 +164,13 @@ def dispatch_step(
     phase: str,
     module_path: str,
     phase_prompts: dict[int, str],
-    grouping_config: dict,
     state_dir: str = "",
     scope_provider: Callable[[str, str], str] = no_scope,
 ) -> dict:
     """Route step to appropriate handler.
 
     WHY this function: The phases share one owner for the routing control flow. The
-    caller supplies phase-specific content (phase_prompts, grouping_config); this
+    caller supplies phase-specific content (phase_prompts); this
     function handles the common routing logic.
 
     Args:
@@ -242,7 +179,6 @@ def dispatch_step(
         module_path: Module path for next step command
         phase_prompts: Dict mapping step numbers to phase-specific prompt strings
                       Required keys: 1, 2, 3, 5
-        grouping_config: Dict with component_examples and concern_examples strings
         state_dir: State directory path
 
     Returns:
@@ -379,62 +315,42 @@ def dispatch_step(
             "next": next_cmd(9),
         }
 
-    # Steps 9-13: Grouping (delegated to grouping functions)
+    # Step 9: validate the written file (terminal)
     elif step == 9:
-        return step_9_structural_grouping(state_dir, phase, module_path)
-    elif step == 10:
-        return step_10_component_grouping(
-            state_dir, phase, module_path, grouping_config["component_examples"]
-        )
-    elif step == 11:
-        return step_11_concern_grouping(
-            state_dir, phase, module_path, grouping_config["concern_examples"]
-        )
-    elif step == 12:
-        return step_12_affinity_grouping(state_dir, phase, module_path)
-    elif step == 13:
-        return step_13_final_validation(state_dir, phase, module_path)
+        return step_9_validate(state_dir, phase)
 
     return {"error": f"Unknown step {step}"}
 
 
 # =============================================================================
-# GROUPING STEP BUILDERS (steps 9-13)
+# STEP 9: TERMINAL VALIDATION
 # =============================================================================
 
 
-def step_9_structural_grouping(state_dir: str, phase: str, module_path: str) -> dict:
-    """Step 9: Automatic structural grouping (deterministic rules).
-
-    Applies deterministic rules without LLM judgment:
-    1. Parent-child: Items with parent_id inherit parent's group
-    2. Umbrella batching: scope='*' items get group_id='umbrella'
-
-    WHY deterministic: These groupings follow mechanical rules, no interpretation needed.
-    """
-    qr_state = load_qr_state(state_dir, phase)
-    items = qr_state.get("items", []) if qr_state else []
-
-    todo_items = [i for i in items if i.get("status") == "TODO"]
+def step_9_validate(state_dir: str, phase: str) -> dict:
+    """Step 9 (terminal): check the written file and its parent links."""
+    title = f"QR Decomposition Step 9: Validate ({phase})"
+    qr_state = load_validated_qr_state(state_dir, phase)
+    if qr_state is None:
+        return {
+            "title": title,
+            "actions": [
+                f"BLOCKING ERROR: qr-{phase}.json is missing or fails schema validation.",
+                "",
+                "Return to Step 8, rewrite the file, then re-run this step's command.",
+            ],
+            "next": "",
+        }
+    items = qr_state.get("items", [])
     item_ids = {i["id"] for i in items}
-
-    # Identify parent-child relationships
-    children = [i for i in todo_items if i.get("parent_id")]
-    orphans = [i for i in children if i.get("parent_id") not in item_ids]
-    valid_children = [i for i in children if i.get("parent_id") in item_ids]
-    parents = {
-        i["id"]: i for i in todo_items if any(c.get("parent_id") == i["id"] for c in valid_children)
-    }
-    umbrellas = [
-        i
-        for i in todo_items
-        if i.get("scope") == "*" and not i.get("parent_id") and not i.get("group_id")
+    orphans = [
+        i for i in items
+        if i.get("status") == "TODO" and i.get("parent_id") and i.get("parent_id") not in item_ids
     ]
-
     # Orphans block workflow - data corruption must not propagate
     if orphans:
         return {
-            "title": f"QR Decomposition Step 9: Structural Grouping ({phase})",
+            "title": title,
             "actions": [
                 "BLOCKING ERROR: Orphan items detected",
                 "",
@@ -448,195 +364,12 @@ def step_9_structural_grouping(state_dir: str, phase: str, module_path: str) -> 
             ],
             "next": "",  # Terminal error
         }
-
     return {
-        "title": f"QR Decomposition Step 9: Structural Grouping ({phase})",
+        "title": title,
         "actions": [
-            "AUTOMATIC GROUPING (deterministic rules, TODO items only):",
+            f"qr-{phase}.json passes schema validation and every parent_id names an existing item.",
             "",
-            f"Found {len(parents)} parent items with children",
-            f"Found {len(valid_children)} child items with valid parent_id",
-            f"Found {len(umbrellas)} umbrella items (scope='*')",
-            "",
-            "1. PARENT-CHILD RESOLUTION:",
-            "   For each item with valid parent_id:",
-            "   - Set parent.group_id = parent-{parent.id} (anchor the group)",
-            "   - Set child.group_id = parent-{parent.id} (join parent's group)",
-            "",
-            "2. UMBRELLA BATCHING:",
-            "   For items with scope='*' and no parent_id:",
-            "   - Set group_id = 'umbrella'",
-            "",
-            format_assign_cmd(state_dir, phase, ""),
+            "Your complete response must be exactly: PASS",
         ],
-        "next": _reinvoke_cmd(module_path, 10, phase, state_dir),
-    }
-
-
-def step_10_component_grouping(
-    state_dir: str, phase: str, module_path: str, component_examples: str
-) -> dict:
-    """Step 10: Component-based grouping.
-
-    Groups items verifying different aspects of the same structural element.
-
-    WHY component_examples parameter: Examples are DISPLAY HINTS for the LLM,
-    not algorithm inputs. They help the LLM understand what constitutes a
-    "component" for this specific phase without affecting grouping behavior.
-    """
-    ungrouped = load_ungrouped_todo_items(state_dir, phase)
-    item_list_xml = render_item_list(ungrouped, "ungrouped_items")
-
-    return {
-        "title": f"QR Decomposition Step 10: Component Grouping ({phase})",
-        "actions": [
-            "GROUP BY STRUCTURAL COMPONENTS",
-            "",
-            "A 'component' is a discrete structural element:",
-            component_examples,
-            "",
-            item_list_xml,
-            "",
-            "TASK:",
-            "1. Identify components that multiple items verify aspects of",
-            "2. Create group_id with 'component-' prefix (e.g., 'component-milestone-m001')",
-            "3. Only group if items GENUINELY share structural element",
-            "4. Items not clearly belonging: SKIP for later phases",
-            "",
-            "PRIORITY: If item could be component OR concern, prefer component.",
-            "",
-            "Group items only when they concern the same structural element and verifying them",
-            "together shares context; leave an item ungrouped when that is unclear.",
-            "",
-            format_assign_cmd(state_dir, phase, "component-"),
-            "",
-            f"If no component groups: # No component groups. {len(ungrouped)} items to Phase 2.",
-        ],
-        "next": _reinvoke_cmd(module_path, 11, phase, state_dir),
-    }
-
-
-def step_11_concern_grouping(
-    state_dir: str, phase: str, module_path: str, concern_examples: str
-) -> dict:
-    """Step 11: Concern-based grouping.
-
-    Groups items verifying the same quality dimension across different elements.
-
-    WHY concern_examples parameter: Examples are DISPLAY HINTS for the LLM,
-    not algorithm inputs. They help the LLM understand what constitutes a
-    "concern" for this specific phase without affecting grouping behavior.
-    """
-    ungrouped = load_ungrouped_todo_items(state_dir, phase)
-    item_list_xml = render_item_list(ungrouped, "ungrouped_items")
-
-    return {
-        "title": f"QR Decomposition Step 11: Concern Grouping ({phase})",
-        "actions": [
-            "GROUP BY QUALITY CONCERNS",
-            "",
-            "A 'concern' is a cross-cutting quality dimension:",
-            concern_examples,
-            "",
-            item_list_xml,
-            "",
-            "TASK:",
-            "1. Identify concerns that span multiple elements",
-            "2. Create group_id with 'concern-' prefix (e.g., 'concern-error-handling')",
-            "3. Only group if items verify SAME quality dimension",
-            "4. Items not clearly sharing concern: SKIP for affinity phase",
-            "",
-            "Group items only when they check the same kind of quality and one verifier would",
-            "reuse context across them.",
-            "",
-            format_assign_cmd(state_dir, phase, "concern-"),
-        ],
-        "next": _reinvoke_cmd(module_path, 12, phase, state_dir),
-    }
-
-
-def step_12_affinity_grouping(state_dir: str, phase: str, module_path: str) -> dict:
-    """Step 12: Affinity grouping for remaining items.
-
-    Groups items by semantic similarity when they don't fit component/concern patterns.
-    """
-    ungrouped = load_ungrouped_todo_items(state_dir, phase)
-    item_list_xml = render_item_list(ungrouped, "ungrouped_items")
-
-    return {
-        "title": f"QR Decomposition Step 12: Affinity Grouping ({phase})",
-        "actions": [
-            "GROUP BY SEMANTIC AFFINITY",
-            "",
-            "For items that don't fit component/concern patterns:",
-            "  - Similar verification complexity",
-            "  - Related subject matter",
-            "  - Shared verification context",
-            "",
-            item_list_xml,
-            "",
-            "TASK:",
-            "1. Identify natural clusters by semantic similarity",
-            "2. Create group_id with 'affinity-' prefix (e.g., 'affinity-validation-checks')",
-            "3. Avoid large catch-all groups",
-            "4. Singletons are acceptable for truly independent items",
-            "",
-            format_assign_cmd(state_dir, phase, "affinity-"),
-            "",
-            "Remaining ungrouped items become singletons.",
-        ],
-        "next": _reinvoke_cmd(module_path, 13, phase, state_dir),
-    }
-
-
-def step_13_final_validation(state_dir: str, phase: str, module_path: str) -> dict:
-    """Step 13: Final validation of groupings.
-
-    Validates grouping quality and outputs summary for parent agent visibility.
-    """
-    qr_state = load_qr_state(state_dir, phase)
-    items = qr_state.get("items", []) if qr_state else []
-
-    groups = {}
-    singletons = []
-    for item in items:
-        gid = item.get("group_id")
-        if gid:
-            groups.setdefault(gid, []).append(item["id"])
-        else:
-            singletons.append(item["id"])
-
-    group_summary = (
-        "\n".join([f"  {gid}: {len(ids)} items" for gid, ids in sorted(groups.items())])
-        if groups
-        else "  (no groups)"
-    )
-
-    return {
-        "title": f"QR Decomposition Step 13: Final Validation ({phase})",
-        "actions": [
-            "FINAL GROUPING VALIDATION",
-            "",
-            f"SUMMARY: {len(groups)} groups, {len(singletons)} singletons",
-            "",
-            "Groups:",
-            group_summary,
-            "",
-            f"Singletons: {len(singletons)} items",
-            "",
-            "VALIDATION:",
-            "[ ] All group_ids follow namespace convention:",
-            "    - 'umbrella' for scope='*' items",
-            "    - 'parent-{id}' for parent-child groups",
-            "    - 'component-*' for Step 10 groups",
-            "    - 'concern-*' for Step 11 groups",
-            "    - 'affinity-*' for Step 12 groups",
-            "[ ] Large groups (>10 items) reviewed for forced grouping",
-            "[ ] Singletons are genuinely independent",
-            "[ ] Parent-child items share same parent-{id} group",
-            "[ ] No orphan items (parent_id referencing missing parent)",
-            "",
-            "AFTER VALIDATION, output: PASS",
-        ],
-        "next": "",  # Terminal step
+        "next": "",
     }

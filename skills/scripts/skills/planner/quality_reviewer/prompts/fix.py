@@ -22,9 +22,11 @@ from skills.planner.shared.builders import shell_quote
 from skills.planner.shared.constraints import format_state_banner
 from skills.planner.shared.qr.phases import get_phase_config
 from skills.planner.shared.qr.utils import (
+    FIX_RAN_SIG,
     format_failed_items_for_fix,
     get_qr_iteration_from_state,
     load_qr_state,
+    mark_iteration_sig,
 )
 from skills.planner.shared.resources import (
     get_context_path,
@@ -56,7 +58,7 @@ IMPL_CODE_APPLY: list[str] = [
     "  - Use Edit tool on source files",
     "",
     "Structural issues:",
-    "  - Extract functions if >50 lines",
+    "  - Extract a function when it mixes unrelated responsibilities or abstraction levels",
     "  - Remove duplicate logic",
     "  - Add missing error handling",
     "",
@@ -69,19 +71,16 @@ IMPL_CODE_VALIDATE: list[str] = [
     "Run tests:",
     "  pytest / tsc / go test -race",
     "",
-    "SELF-CHECK each fixed item:",
-    "  For each FAIL item you addressed:",
-    "    - Does the fix address the specific finding?",
-    "    - Does the fix pass tests?",
-    "    - Does the fix introduce new issues?",
-    "",
-    "If tests fail or self-check fails:",
+    "If tests fail:",
     "  - Apply additional fixes",
     "  - Re-run tests",
     "",
     "If all tests pass:",
     "  Your complete response must be exactly: PASS",
     "  Do not add summaries, explanations, or any other text.",
+    "",
+    "If the tests cannot run, or keep failing and you cannot fix them, your complete",
+    "response is one line naming the command and its failure, not PASS.",
 ]
 
 
@@ -102,15 +101,16 @@ def _impl_docs_apply(state_dir: str) -> list[str]:
         "  - Shorten overview to one sentence",
         "",
         "IK proximity failures:",
-        "  - Move knowledge to README.md in SAME directory as code",
-        "  - Add inline comments at enforcement points",
+        "  - Move each item to its Tier 5 location: a comment where it applies at one point,",
+        "    README.md in the same directory when it spans files or cannot be localized",
         "  - Drop any pointer to the old location of knowledge you moved",
         "",
         "Temporal contamination:",
         "  - Rewrite comments to remove change-relative language",
         "",
         "Missing README.md:",
-        "  - Create README.md with IK content",
+        "  - Create README.md with the IK items that span files or cannot be localized,",
+        "    or a pointer to a repository file that holds them",
         "  - Follow self-contained principle",
         "",
         "TEMPORAL REFERENCE:",
@@ -123,17 +123,16 @@ def _impl_docs_apply(state_dir: str) -> list[str]:
 IMPL_DOCS_VALIDATE: list[str] = [
     "VALIDATE your fixes before returning to orchestrator.",
     "",
-    "SELF-CHECK each fixed item:",
-    "  For each FAIL item you addressed:",
-    "    - Does the fix address the specific finding?",
-    "    - CLAUDE.md: Is it now tabular format?",
-    "    - IK: Is it now adjacent to relevant code?",
-    "    - Comments: Are they free of temporal contamination?",
+    "Each item you fixed now meets its check:",
+    "  - CLAUDE.md: tabular index format",
+    "  - IK: at the location Tier 5 selects (a comment where it applies at one point;",
+    "    README.md beside the code when it spans files or cannot be localized); a pointer",
+    "    there to a repository file that holds the knowledge counts",
+    "  - Comments: free of change-relative language",
     "",
-    "If self-check fails:",
-    "  - Apply additional fixes",
+    "If an item does not meet its check: apply additional fixes.",
     "",
-    "If all checks pass:",
+    "If all items meet their checks:",
     "  Your complete response must be exactly: PASS",
     "  Do not add summaries, explanations, or any other text.",
 ]
@@ -218,8 +217,8 @@ def _plan_design_validate(state_dir: str) -> list[str]:
         "Run structural validation:",
         f"  {pin_cwd(f'uv run python -m skills.planner.cli.plan --state-dir {shell_quote(state_dir)} validate --phase plan-design')}",
         "",
-        "Each decision_log entry you added or changed carries a multi-step reasoning chain",
-        "(premise -> implication -> conclusion), not a single assertion.",
+        "Each decision_log entry you added or changed has a `reasoning` that holds the rationale",
+        "as premise -> implication -> conclusion, not a bare assertion.",
         "",
         "If validation fails:",
         "  - Apply additional fixes",
@@ -342,6 +341,8 @@ def fix_dispatch_step(
         qr_state = load_qr_state(state_dir, phase)
         qr_iteration = get_qr_iteration_from_state(qr_state)
         failed_items_block = format_failed_items_for_fix(qr_state) if qr_state else ""
+        if failed_items_block:
+            mark_iteration_sig(state_dir, phase, FIX_RAN_SIG)
 
         actions: list[str] = []
         if content["banner_label"]:

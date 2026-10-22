@@ -592,7 +592,7 @@ The single QR-able phase (plan-design) follows a 4-step block pattern:
 - Work step (1 sub-agent): Execute or fix based on state detection. Sub-agent validates written state before returning.
 - QR decompose (1 sub-agent): Create verification items. Sub-agent validates qr-{phase}.json before returning.
 - QR verify (N sub-agents): Parallel item verification via batched dispatch.
-- QR route (orchestrator): Aggregate results, loop or proceed.
+- QR route (orchestrator script): Route from the item states in qr-{phase}.json: loop, re-verify, or proceed.
 
 ```
 Step 1: plan-init
@@ -630,8 +630,9 @@ Step 5: plan-design-qr-verify
 
 Step 6: plan-design-qr-route
   Action: Orchestrator script determines routing from qr-plan-design.json
-  Route: All PASS -> delete qr file, PLAN APPROVED (terminal)
-         Any FAIL -> loop to Step 3 (router will dispatch to qr_fix)
+  Route: No blocking FAIL, no TODO -> PLAN APPROVED (terminal)
+         Any blocking FAIL          -> loop to Step 3 (router will dispatch to qr_fix)
+         Any TODO, no blocking FAIL -> Step 5 (re-verify the TODO items)
 ```
 
 ### Execution Workflow (orchestrator/executor.py)
@@ -665,8 +666,9 @@ Step 4: impl-code-qr-verify
   Next: Step 5
 
 Step 5: impl-code-qr-route
-  Route: All PASS -> delete qr file, proceed to Step 6
-         Any FAIL -> loop to Step 2
+  Route: No blocking FAIL, no TODO -> proceed to Step 6
+         Any blocking FAIL          -> loop to Step 2
+         Any TODO, no blocking FAIL -> Step 4 (re-verify the TODO items)
 
 Step 6: impl-docs-work
   Agent: technical-writer (exec-docs)
@@ -690,8 +692,9 @@ Step 8: impl-docs-qr-verify
   Next: Step 9
 
 Step 9: impl-docs-qr-route
-  Route: All PASS -> delete qr file, proceed to Step 10
-         Any FAIL -> loop to Step 6
+  Route: No blocking FAIL, no TODO -> proceed to Step 10
+         Any blocking FAIL          -> loop to Step 6
+         Any TODO, no blocking FAIL -> Step 8 (re-verify the TODO items)
 
 Step 10: final-verify
   Action: Run the full test suite + lint + type-check against the final code AND
@@ -745,7 +748,7 @@ skills/planner/
     qr_verify_base.py           -- shared verification base + verify_main
     exec_qr_fix.py              -- unified post-QR fix runner (--phase {plan-design|impl-code|impl-docs})
     prompts/content.py          -- per-phase decompose prompts + verifier classes
-    prompts/decompose.py        -- shared 13-step decompose flow
+    prompts/decompose.py        -- shared decompose flow
     prompts/fix.py              -- shared 3-step fix flow + per-phase fix content
   shared/
     schema.py         -- Pydantic v2 schemas (context, plan, qr), validation
@@ -778,12 +781,6 @@ All scripts accept a common set of arguments. QR-related state is file-based, no
 
 `--phase` makes the verify runner phase-parameterized. Repeated `--qr-item` flags assign a batch of related items to one agent (parallel dispatch = one batch per agent); there is no comma-joined `--qr-items` flag.
 
-**Gate step arguments:**
-
-| Argument      | Required | Description                                          |
-| ------------- | -------- | ---------------------------------------------------- |
-| `--qr-status` | Yes      | Aggregated verdict from verify agents: "pass"/"fail" |
-
 **Explicitly forbidden arguments:**
 
 | Argument         | Why forbidden                                      |
@@ -803,7 +800,7 @@ The orchestrator never passes failure paths or iteration counts. Routers and fix
 
 Note: The orchestrator Python script (planner.py, executor.py) may read state files internally for reliable orchestration -- e.g., `load_qr_state()` to determine which QR items remain for dispatch. This is implementation machinery invisible to the LLM. The invariant applies to the LLM agent, not the Python code that generates prompts.
 
-**Orchestrator is a dumb dispatcher**. The orchestrator routes based on status flags (pass/fail) and step numbers. It never makes quality judgments ("the plan looks comprehensive"), never decides to "proceed anyway" when protocol requires iteration, and never skips steps based on subjective assessment. If a sub-agent returns invalid output or the workflow requires iteration, the orchestrator follows the protocol mechanically.
+**Orchestrator is a dumb dispatcher**. The orchestrator runs the next-step command each script prints; the scripts route from the state files. It never makes quality judgments ("the plan looks comprehensive"), never decides to "proceed anyway" when protocol requires iteration, and never skips steps based on subjective assessment. If a sub-agent returns invalid output or the workflow requires iteration, the orchestrator follows the protocol mechanically.
 
 **Sub-agent self-validation**. Every sub-agent that writes to state files (plan.json, qr-{phase}.json) must validate the written file before returning to orchestrator. The final step of any state-mutating workflow:
 
@@ -824,7 +821,7 @@ This applies to both execute and fix workflows. After the architect writes plan.
 
 **State detection over flags**. Work scripts detect their mode from state file presence, not from CLI flags. If qr-{phase}.json exists and has FAIL items, the router dispatches to the fix workflow. Orchestrator dispatches to the same step number regardless of mode.
 
-**No distributed QR state**. All QR state lives in qr-{phase}.json. CLI flags for QR fail path (--qr-fail) and iteration count (--qr-iteration) MUST NOT exist. The decompose step reads/increments iteration from file; routers compute qr file path from state_dir + phase. Only --qr-status (orchestrator's aggregated verdict) and --qr-item (verify agent's assigned item) are valid QR-related CLI args.
+**No distributed QR state**. All QR state lives in qr-{phase}.json. CLI flags for QR fail path (--qr-fail) and iteration count (--qr-iteration) MUST NOT exist. The decompose step reads/increments iteration from file; routers compute qr file path from state_dir + phase.
 
 **Adaptive item generation**. Decomposition creates as many items as the content requires. No fixed counts or caps. Steps 1-8 of the decompose workflow terminate naturally when structural enumeration is exhausted and coverage is validated. Item count varies by plan complexity.
 
@@ -832,7 +829,7 @@ This applies to both execute and fix workflows. After the architect writes plan.
 
 **Blast-radius claims verified against gating primitives**. When a plan claims that certain code paths or actors are unaffected ("all production writers are safe", "only affects X"), the claim must be anchored to the actual gating function and its allowlist/guard logic — not assumed. A claim about what passes through a gate is unverifiable without quoting the gate. QR verify must treat unverified blast-radius claims as MUST-severity findings.
 
-**QR verify dispatch**. The decompose workflow writes qr-{phase}.json with a `group_id` on each item. The orchestrator script reads that file and builds the verify fan-out itself (`build_qr_verify_dispatch` in `shared/builders.py`, rendered by `template_dispatch` from `skills.lib.workflow.prompts`), re-binning items into balanced groups with `group_id` as an affinity hint and passing each agent its items as repeated `--qr-item` flags.
+**QR verify dispatch**. The decompose workflow writes qr-{phase}.json. The orchestrator script reads that file and builds the verify fan-out itself (`build_qr_verify_dispatch` in `shared/builders.py`, rendered by `template_dispatch` from `skills.lib.workflow.prompts`), re-binning items into balanced groups (`shared/qr/utils.py::balance_verify_groups`) and passing each agent its items as repeated `--qr-item` flags.
 
 **QR file lifecycle**. qr-{phase}.json is created by decompose step, updated by verify agents, deleted by route step on PASS. The file's existence signals "QR in progress"; its absence signals "no QR done yet" or "QR passed and cleaned up".
 
@@ -848,7 +845,7 @@ Each QR block consists of 4 orchestrator steps:
 uv run --directory '<SKILLS_DIR>' python -m skills.planner.quality_reviewer.qr_decompose --step 1 --phase <phase> --state-dir {state_dir}
 ```
 
-Sub-agent explores the artifact being reviewed using the 13-step decompose workflow, generates verification items adaptively (quantity determined by content, not preset bounds), writes qr-{phase}.json with all items status: TODO, then assigns each item a `group_id` for dispatch.
+Sub-agent explores the artifact being reviewed using the decompose workflow, generates verification items adaptively (quantity determined by content, not preset bounds), and writes qr-{phase}.json with all items status: TODO.
 
 ### Decomposition Workflow
 
@@ -889,8 +886,8 @@ Use Step 3 enumeration as checklist. For each element: at least one covering ite
 **Step 8: Finalize and Write**
 Write qr-{phase}.json with final items. Item count is whatever emerged from the process -- no targets, no caps. Content determines quantity.
 
-**Steps 9-13: Grouping and Final Validation**
-Assign each item a `group_id` (structural, component, concern and affinity grouping), then validate the grouping. The orchestrator re-bins items for verify dispatch using these groups as affinity hints.
+**Step 9: Validate**
+Check that qr-{phase}.json passes schema validation and that every `parent_id` names an existing item; either failure halts the decompose with a BLOCKING ERROR. A clean file ends the decompose. The orchestrator re-bins the items for verify dispatch (`shared/qr/utils.py::balance_verify_groups`).
 
 ### Adaptive Item Generation
 
@@ -910,19 +907,13 @@ More items with overlap is preferred over fewer items with gaps.
 uv run --directory '<SKILLS_DIR>' python -m skills.planner.quality_reviewer.qr_verify --step 1 --phase <phase> --state-dir {state_dir} --qr-item qa-001 --qr-item qa-002
 ```
 
-Each sub-agent receives a batch of semantically related items to verify. Items are grouped by the decompose step (e.g., by component, by concern, or parent-child relationships). The agent reads the qr file, verifies each assigned item, and updates status to PASS or FAIL with finding.
+Each sub-agent receives a batch of items to verify (`shared/qr/utils.py::balance_verify_groups` forms the batches). The agent reads the qr file, verifies each assigned item, and updates status to PASS or FAIL with finding.
 
-**Output contract**: a verify agent's entire final response is one bare word -- `PASS` if
-every item it was assigned passed, `FAIL` if any failed. Per-item findings are recorded in
-qr-{phase}.json through the script's `--result PASS|FAIL --finding <text>` flag, not in the
-returned text.
-
-The orchestrator tallies these words mechanically (see `build_qr_verify_dispatch`): all PASS
--> `--qr-status pass`, any FAIL -> `--qr-status fail`. Malformed output is treated as FAIL.
+**Output contract**: a verify agent's entire final response is the one word its SUMMARY step prints from the verdicts it recorded. Per-item findings are recorded in qr-{phase}.json through the script's `--result PASS|FAIL --finding <text>` flag, not in the returned text. The route step reads that file, not the word.
 
 **Route step (orchestrator only):**
 
-The orchestrator script (not the LLM) reads qr-{phase}.json after all verify agents complete and checks the loaded state for remaining blocking failures:
+The orchestrator script (not the LLM) reads qr-{phase}.json after all verify agents complete and checks the loaded state for remaining blocking failures and for items still TODO:
 
 ```python
 def has_qr_failures_from_state(qr_state: dict) -> bool:
@@ -933,6 +924,7 @@ The script determines the routing and generates the appropriate prompt for the L
 
 If no failures: delete qr file, proceed to next block.
 If failures exist: loop back to work step. The work step's router will detect qr-{phase}.json with FAIL items and dispatch to the fix workflow.
+If an item is still TODO and no blocking FAIL exists: route back to the verify step, which re-dispatches every TODO item.
 
 **Fix workflow (via router):**
 

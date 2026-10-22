@@ -4,17 +4,10 @@ Workflow types and formatters live in skills.lib.workflow.
 This module contains planner-specific resource utilities.
 
 QR Gate Pattern for Verification Loops:
-  Every QR step is followed by a GATE step that:
-  1. Takes --qr-status=pass|fail as input
-  2. Outputs the EXACT next command to invoke
-  3. Leaves no room for interpretation
+  Every QR verify step is followed by a GATE step that routes from qr-{phase}.json
+  and outputs the EXACT next command to invoke, leaving no room for interpretation.
 
   Work steps detect fix mode via qr-{phase}.json file state inspection.
-
-This pattern is applied consistently across:
-  - planner.py (steps 5-12: sequential QR with gates)
-  - executor.py (step 4-5: holistic QR with gate)
-  - wave-executor.py (steps 2-3: batch QR with gate)
 """
 
 # Re-export from resources
