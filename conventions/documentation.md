@@ -17,9 +17,10 @@ the directory's subdirectories and its entry-point files -- WHAT each is and
 WHEN to read it -- never every file. All explanatory content (architecture,
 decisions, invariants) belongs in README.md.
 
-**README.md = invisible knowledge**: README.md files capture knowledge a reader
-cannot get from the source code. A directory that holds such knowledge gets a
-README.md.
+**README.md = invisible knowledge**: README.md files capture the knowledge a
+reader cannot get from the source code that the placement hierarchy (Tier 5:
+Invisible Knowledge Placement) assigns to README.md. A directory that holds such
+knowledge gets a README.md.
 
 ## CLAUDE.md Format Specification
 
@@ -154,7 +155,8 @@ selective by design, and a file without a row is not drift.
 ### Creation Criteria (Invisible Knowledge Test)
 
 Create README.md when the directory holds invisible knowledge -- knowledge a
-reader cannot get from the code:
+reader cannot get from the code -- that Tier 5 (Invisible Knowledge Placement)
+assigns to README.md:
 
 - Planning decisions (from Decision Log during implementation)
 - Business context (why the product works this way)
@@ -361,17 +363,18 @@ why it exists as a separate unit.
 ```python
 """Rate limiting using sliding window counters.
 
-Provides per-client rate limiting for the API gateway. Sliding window
-chosen over fixed window to prevent burst-at-boundary attacks (DL-007).
-Token bucket rejected: memory overhead per client unacceptable at
-projected scale (>100k concurrent clients).
+Provides per-client rate limiting for the API gateway. The sliding window
+blocks the burst-at-boundary attacks a fixed window allows (DL-007). A token
+bucket would exceed the per-client memory budget at projected scale (>100k
+concurrent clients).
 """
 ```
 
 ### Tier 5: Invisible Knowledge Placement
 
 Invisible knowledge is knowledge not visible from reading the code: business
-context, architectural rationale, tradeoffs, constraints, rejected alternatives.
+context, architectural rationale, tradeoffs, constraints, accepted risks,
+rejected alternatives.
 
 **Placement hierarchy** (closest viable location wins):
 
@@ -387,6 +390,9 @@ What is NOT acceptable: invisible knowledge captured only in planning artifacts
 (decision logs, plan documents, conversation history) that are not carried
 forward into the codebase. Every decision, constraint, and tradeoff must land
 in code or README.md.
+
+State an accepted risk as the constraint that holds now, not as a TODO
+(conventions/temporal.md, "Does it describe intent rather than behavior?").
 
 ### Priority Order
 

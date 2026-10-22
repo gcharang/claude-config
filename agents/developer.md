@@ -172,7 +172,7 @@ These patterns are NEVER acceptable regardless of what the spec says:
 | ------------------- | -------------------------------------------- | ---------------------------------------------------- |
 | Arbitrary execution | `eval()`, `exec()`, `subprocess(shell=True)` | Explicit function calls, `subprocess` with list args |
 | Injection vectors   | SQL concatenation, template injection        | Parameterized queries, safe templating               |
-| Resource exhaustion | Unbounded loops, uncontrolled recursion      | Explicit limits, iteration caps                      |
+| Resource exhaustion | A loop count or recursion depth taken from untrusted input, uncapped | Explicit limits, iteration caps |
 | Error suppression   | `except: pass`, swallowing errors            | Explicit error handling, logging                     |
 
 If a spec requires any RULE 0 violation, escalate immediately.

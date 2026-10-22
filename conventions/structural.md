@@ -33,8 +33,9 @@ Severity: SHOULD
 </default-conventions>
 
 <default-conventions domain="god-function">
-**God Function**: >50 lines OR multiple abstraction levels OR >3 nesting levels
+**God Function**: multiple unrelated responsibilities OR multiple abstraction levels OR >3 nesting levels
 Severity: SHOULD
+Treatment: More than 50 lines is a reason to check a function for these, not a finding on its own.
 Exception: Inherently sequential algorithms or state machines
 </default-conventions>
 

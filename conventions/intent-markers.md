@@ -16,7 +16,7 @@ Markers suppress QR checks for intentional code patterns.
 | ---------- | -------------------------------- | ---------------------------------------------------- |
 | `:PERF:`   | Performance-critical intentional | `:PERF: unchecked bounds; loop invariant i<len`      |
 | `:UNSAFE:` | Safety-critical intentional      | `:UNSAFE: raw pointer; caller ensures lifetime`      |
-| `:SCHEMA:` | Data contract divergence         | `:SCHEMA: field unused; migration pending, rollback` |
+| `:SCHEMA:` | Data contract divergence         | `:SCHEMA: field unused; v1 clients send it`          |
 
 ## Validation
 

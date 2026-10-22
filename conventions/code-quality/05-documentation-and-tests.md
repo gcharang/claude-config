@@ -183,4 +183,4 @@ Intentional divergence documented with :SCHEMA: marker. Fields used only in spec
 Flag when field name in code has 0 matches in corresponding schema file, or schema field has 0 references in codebase.
 </threshold>
 
-Intent marker: Use `:SCHEMA:` to suppress for intentional divergence (e.g., `:SCHEMA: field 'legacy_id' unused; migration pending`).
+Intent marker: Use `:SCHEMA:` to suppress for intentional divergence (e.g., `:SCHEMA: field 'legacy_id' unused; v1 clients send it`).

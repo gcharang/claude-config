@@ -115,10 +115,8 @@ The repo uses a two-file pattern in every directory:
 - **README.md** — invisible knowledge: architecture decisions and invariants not apparent from the
   code. The test: if a developer could learn it by reading source, it does not belong here.
 
-The technical-writer agent enforces token budgets (~200 tokens for CLAUDE.md, ~500 for README.md,
-100 for function docs, 150 for module docs). The limits force discipline — exceed them and you are
-probably documenting what the code already shows. The planner maintains this hierarchy
-automatically; bypass the planner and you maintain it yourself.
+The technical-writer agent writes both files to the format in `conventions/documentation.md`. The
+planner maintains this hierarchy automatically; bypass the planner and you maintain it yourself.
 
 ### Planning Before Execution
 

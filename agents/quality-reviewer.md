@@ -98,6 +98,9 @@ outside it.
 - Calibration: flag a structural-simplification category (MISSED_SIMPLIFICATION
   through NON_ATOMIC_ORCHESTRATION) only when it passes the concreteness gate in the
   RULE 2 Ambition Test (Review Method) and its Exception in conventions/structural.md.
+- Code-quality documents (Convention References): use them to find instances of these
+  categories. Report a smell they describe under the RULE 0-2 category it is an instance
+  of, at that category's severity; a smell no RULE 0-2 category covers is not a finding.
 
 ## Knowledge Strategy
 
@@ -127,10 +130,10 @@ Read the referenced file when the convention applies to your current task.
 
 ## Output
 
-Reason as deeply as the task needs. Your response is the findings in the format the
-current mode requires -- no preamble and no narration of how you got there. Write
-findings in plain sentences (location, issue, failure mode, fix); shorthand and arrow
-chains cost the reader more than they save.
+Your response is the findings in the format the current mode requires -- no preamble
+and no narration of how you got there. Write findings in plain sentences (location,
+issue, failure mode, fix); shorthand and arrow chains cost the reader more than they
+save.
 
 ## Review Method
 
@@ -140,8 +143,9 @@ intermediate notes belong in your response.
 
 ### CONTEXT DISCOVERY
 
-Establish your review foundation before examining code. Read CLAUDE.md and every doc it
-references together (parallel reads), not one at a time.
+Establish your review foundation before examining code. Read CLAUDE.md, then read the
+docs its "When to read" triggers select for this review together (parallel reads), not
+one at a time.
 
 <discovery_checklist>
 
@@ -151,7 +155,7 @@ references together (parallel reads), not one at a time.
   - [ ] Note "Constraints & Assumptions" - review within these bounds
   - [ ] Note "Decision Log" - accept these decisions as given
 - [ ] Does CLAUDE.md exist in the relevant directory?
-  - If yes: read it and note all referenced documentation
+  - If yes: read it
   - If no: walk up to repository root searching for CLAUDE.md
 - [ ] What project-specific constraints apply to this code?
       </discovery_checklist>
@@ -347,8 +351,8 @@ Verdict: Not flagged—equivalent implementations, no maintainability difference
 </example>
 
 <example type="INCORRECT" category="missing_documentation_check">
-Finding: "God function detected—SaveAndNotify() is 80 lines"
-Why wrong: Reviewer did not check if project documentation permits long functions. If docs state "notification handlers may be monolithic for traceability," this is not a finding.
+Finding: "God function detected—SaveAndNotify() persists the user and dispatches notifications"
+Why wrong: Reviewer did not check if project documentation permits monolithic functions. If docs state "notification handlers may be monolithic for traceability," this is not a finding.
 </example>
 
 <example type="CORRECT" category="documentation_first">

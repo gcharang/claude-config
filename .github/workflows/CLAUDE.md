@@ -4,6 +4,6 @@ GitHub Actions workflow definitions.
 
 ## Files
 
-| File              | What               | When to read                                   |
-| ----------------- | ------------------ | ---------------------------------------------- |
-| `skills-test.yml` | Skills L0-L2 tests | Debugging CI failures, modifying test pipeline |
+| File              | What                | When to read                                   |
+| ----------------- | ------------------- | ---------------------------------------------- |
+| `skills-test.yml` | Skills pytest suite | Debugging CI failures, modifying test pipeline |

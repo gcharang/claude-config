@@ -64,8 +64,8 @@ Maintainability debt. Compounds but detectable later.
 
 | Category                    | Detection                                    |
 | --------------------------- | -------------------------------------------- |
-| GOD_OBJECT                  | >15 methods OR >10 deps OR mixed concerns    |
-| GOD_FUNCTION                | >50 lines OR mixed abstraction OR >3 nesting |
+| GOD_OBJECT                  | structural.md, God Object                    |
+| GOD_FUNCTION                | structural.md, God Function                  |
 | DUPLICATE_LOGIC             | Copy-pasted blocks, parallel functions       |
 | INCONSISTENT_ERROR_HANDLING | Mixed exceptions/codes in same module        |
 | CONVENTION_VIOLATION        | Violates documented project convention       |
@@ -114,15 +114,8 @@ Auto-fixable, minimal impact.
 
 ## IK Proximity Rule
 
-Invisible knowledge must be at BEST location: "as close as possible to where
-relevant, but not more"
-
-| Knowledge Type | Best Location                           |
-| -------------- | --------------------------------------- |
-| Accepted risks | :TODO: comment at flagged code location |
-| Architecture   | README.md in SAME directory             |
-| Tradeoffs      | Code comment where decision shows       |
-| Invariants     | Code comment at enforcement point       |
+The best location for invisible knowledge is the one the placement hierarchy in
+conventions/documentation.md (Tier 5: Invisible Knowledge Placement) selects.
 
 Wrong location = IK_TRANSFER_FAILURE (MUST). Knowledge that a repository file
 held before the change is at its best location when the best location points

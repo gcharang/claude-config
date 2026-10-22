@@ -121,7 +121,7 @@ This triggers domain-specific recall, enabling transfer beyond listed examples.
 
 ## Invisible Knowledge: Design Decisions
 
-### Why 8 Documents?
+### Why Separate Documents?
 
 These documents are organized by **cognitive mode** -- what the evaluator is
 looking at and how they reason about it. This enables:

@@ -57,7 +57,7 @@ Incomplete context is normal. Handle without apology:
 - Function lacks implementation -> document signature and stated purpose
 - Module purpose unclear -> document visible exports and types
 - No clear "why" exists -> skip the comment rather than invent rationale
-- File is empty or stub -> document as "Stub - implementation pending"
+- File is empty or stub -> document only what it declares; say nothing about implementation still to come
 
 Do not ask for more context. Document what exists.
 

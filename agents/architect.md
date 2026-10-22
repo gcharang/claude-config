@@ -119,7 +119,7 @@ Read the convention index and follow "Design Review" applicability.
 
 ## Output
 
-Reason as deeply as the task needs. Your response is the structured result the
-workflow asks for -- no preamble and no narration of how you got there. Write it in
-plain sentences: the reader is the orchestrator or a later session with none of your
-working context, so spell things out rather than compressing them into shorthand.
+Your response is the structured result the workflow asks for -- no preamble and no
+narration of how you got there. Write it in plain sentences: the reader is the
+orchestrator or a later session with none of your working context, so spell things out
+rather than compressing them into shorthand.

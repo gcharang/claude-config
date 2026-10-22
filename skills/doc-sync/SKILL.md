@@ -56,19 +56,12 @@ For each directory in scope, record:
 
 For each directory, check for drift and misplaced content:
 
-```
-<audit_check dir="[path]">
-CLAUDE.md exists: [YES/NO]
-Has table-based index: [YES/NO]
-Subdirectories and entry-point files: [list]
-Missing from index: [list]
-Stale in index (path deleted): [list]
-Triggers are task-oriented: [YES/NO/PARTIAL]
-Contains misplaced content: [YES/NO] (architecture/design docs that belong in README.md)
-README.md exists: [YES/NO]
-README.md warranted: [YES/NO] (invisible knowledge present?)
-</audit_check>
-```
+- Missing from index: subdirectories and entry-point files with no row
+- Stale in index: rows that name a deleted path
+- Triggers: task-oriented, or vague or descriptive (see Anti-Patterns)
+- Misplaced content: architecture or design prose that belongs in README.md
+- README.md: whether one exists, and whether the directory meets the README.md
+  Creation Criteria in conventions/documentation.md
 
 ### Phase 3: Content Migration
 
@@ -96,12 +89,12 @@ For each directory needing work:
 4. Write "When to read" column: action-oriented triggers
 5. If README.md exists, include it in the Files table
 
-**Creating README.md (when invisible knowledge exists):**
+**Creating README.md:**
 
-1. Verify invisible knowledge exists (semantic trigger, not structural)
+1. Confirm the directory meets the README.md Creation Criteria in conventions/documentation.md (a semantic trigger, not a structural one)
 2. Document architecture, design decisions, invariants, tradeoffs
 3. Apply the content test: remove anything visible from code
-4. Keep as concise as possible while capturing all invisible knowledge
+4. Keep as concise as possible while capturing all of that knowledge
 5. Must be self-contained (conventions/documentation.md)
 
 ### Phase 5: Verification
@@ -114,7 +107,7 @@ After all updates complete, verify:
 4. No misplaced content in CLAUDE.md (explanatory prose moved to README.md)
 5. README.md files are indexed in their parent CLAUDE.md
 6. CLAUDE.md contains only: one-sentence overview + tabular index + operational sections
-7. README.md exists wherever invisible knowledge was identified
+7. README.md exists in every directory that meets the README.md Creation Criteria
 8. README.md files are self-contained (outside sources summarized, repository files pointed at)
 
 ## Output Format
@@ -133,11 +126,11 @@ After all updates complete, verify:
 
 ### Verification
 - Directories audited: [count]
-- CLAUDE.md coverage: [count]/[total] (100%)
+- CLAUDE.md coverage: [count]/[total]
 - CLAUDE.md format: [count] pure index / [count] needed migration
 - Drift detected: [count] entries fixed
 - Content migrations: [count] (prose moved to README.md)
-- README.md files: [count] (wherever invisible knowledge exists)
+- README.md files: [count]
 - Self-contained: [YES/NO] (outside sources summarized, repository files pointed at)
 ```
 
