@@ -306,7 +306,9 @@ result = poll_endpoint(url, interval=30)
 counter.fetch_add(1, Ordering::Relaxed)
 ```
 
-When a decision log entry exists, reference it: `# DL-003: Polling over webhooks`
+When a plan's decision log holds the reason, write the reason itself:
+`# Polling: the provider drops webhook deliveries under load`. Do not cite the
+log's id (`DL-003`): the log is not committed, so no later reader can resolve it.
 
 ### Tier 2: Function-Level Explanation Blocks
 
@@ -364,7 +366,7 @@ why it exists as a separate unit.
 """Rate limiting using sliding window counters.
 
 Provides per-client rate limiting for the API gateway. The sliding window
-blocks the burst-at-boundary attacks a fixed window allows (DL-007). A token
+blocks the burst-at-boundary attacks a fixed window allows. A token
 bucket would exceed the per-client memory budget at projected scale (>100k
 concurrent clients).
 """

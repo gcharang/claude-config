@@ -69,9 +69,10 @@ code. The developer adds no comments, so you are the sole author:
 - **Inline comments & docstrings**: write them directly into the source files (Edit tool).
   Module comment, per-function/class docstrings, and inline WHY comments for non-obvious
   code.
-- **Source the WHY, never invent**: take rationale from the plan's Decision Log (DL-XXX)
-  and Invisible Knowledge; reference decisions by id. If no real "why" exists, skip the
-  comment (see Core Behavior).
+- **Source the WHY, never invent**: take rationale from the plan's Decision Log and
+  Invisible Knowledge and write the reason itself into the comment; never cite a decision
+  id, since the log is not committed. If no real "why" exists, skip the comment (see Core
+  Behavior).
 - **CLAUDE.md / README.md**: tabular index + code-adjacent invisible knowledge, per
   conventions/documentation.md.
 - **Hygiene**: timeless present tense (conventions/temporal.md) -- no change-relative

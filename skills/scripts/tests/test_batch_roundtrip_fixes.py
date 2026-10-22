@@ -199,7 +199,7 @@ def test_set_intent_update_under_doc_only_rejected_rpc(tmp_path: Path):
 
 
 def test_set_intent_update_under_doc_only_rejected_cli(tmp_path: Path, monkeypatch, capsys):
-    """CLI mirror (DL-004): set-intent --id UPDATE under a doc-only milestone exits 1 with a
+    """CLI mirror: set-intent --id UPDATE under a doc-only milestone exits 1 with a
     validation_error and leaves the intent intact."""
     monkeypatch.setenv("PLAN_AGENT_ROLE", "architect")  # set-intent is architect-gated
     ctx = _wedge_doc_only_with_intent(tmp_path)

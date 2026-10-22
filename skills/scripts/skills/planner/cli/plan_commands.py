@@ -338,9 +338,9 @@ def set_intent(
     silent-wrong-parent footgun that existed when the arg was required.
 
     This function is one of two surfaces for set-intent; SetIntentCommand (plan.py)
-    is the argparse mirror and must stay semantically equivalent (DL-004).
+    is the argparse mirror and must stay semantically equivalent.
     milestone's default of None makes dispatch.extract_params treat it as optional
-    with no dispatch change required (DL-001).
+    with no dispatch change required.
     """
     schema = _get_schema()
     plan = ctx.load_plan()
@@ -367,7 +367,7 @@ def set_intent(
         # Doc-only milestones carry no code_intents (exclusive relationship -- see
         # Plan.validate_completeness). Guard UPDATE the same way CREATE is guarded so
         # an externally-written plan.json can't wedge an intent under a doc-only
-        # milestone via this path (DL-004 defense-in-depth; the CREATE path's
+        # milestone via this path (defense in depth; the CREATE path's
         # rejection and apply_documentation_only_toggle's intent-clear are the
         # primary gates).
         if ms.is_documentation_only:

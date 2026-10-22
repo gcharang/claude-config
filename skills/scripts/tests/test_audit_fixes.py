@@ -2246,7 +2246,7 @@ class TestSetIntentMilestoneOptionalOnUpdate:
     def test_cli_create_bad_milestone_reported_before_bad_decision_ref(
         self, tmp_path: Path, monkeypatch, capsys
     ):
-        # CLI mirror (DL-004) of the create-branch milestone-before-decision_refs order.
+        # CLI mirror of the create-branch milestone-before-decision_refs order.
         monkeypatch.setenv("PLAN_AGENT_ROLE", "architect")
         plan_cli.cli(["--state-dir", str(tmp_path), "init", "--task", "t"])
         capsys.readouterr()  # drain prior output
@@ -2276,7 +2276,7 @@ class TestSetIntentMilestoneOptionalOnUpdate:
     def test_cli_update_bad_id_reported_before_bad_decision_ref(
         self, tmp_path: Path, monkeypatch, capsys
     ):
-        # CLI mirror (DL-004) of the update-branch id-before-decision_refs order.
+        # CLI mirror of the update-branch id-before-decision_refs order.
         monkeypatch.setenv("PLAN_AGENT_ROLE", "architect")
         plan_cli.cli(["--state-dir", str(tmp_path), "init", "--task", "t"])
         plan_cli.cli(["--state-dir", str(tmp_path), "set-milestone", "--name", "Code", "--files", "a.py"])
@@ -2303,7 +2303,7 @@ class TestSetIntentMilestoneOptionalOnUpdate:
         assert "not found" not in str(exc.value)
 
     def test_batch_update_omits_milestone_create_without_rolls_back(self, tmp_path: Path):
-        # DL-001 end-to-end through the batch/RPC dispatch path: extract_params derives
+        # End to end through the batch/RPC dispatch path: extract_params derives
         # milestone as optional from its None default, so a batch UPDATE omits it and
         # succeeds, while a batch CREATE without it fails cleanly (the mechanism that
         # makes the whole change matter for batch mode).
@@ -2338,7 +2338,7 @@ class TestSetIntentMilestoneOptionalOnUpdate:
         assert ci["behavior"] == "new"  # persisted, not just reported "updated"
 
 
-# --- DL-004: both set-intent surfaces must reach the same accept/reject decision ---
+# --- Both set-intent surfaces must reach the same accept/reject decision ---
 def _equiv_seed_codes(ctx) -> None:
     plan_commands.set_milestone(ctx, name="Code", files="a.py")  # M-001
     plan_commands.set_milestone(ctx, name="More", files="b.py")  # M-002
@@ -2459,7 +2459,7 @@ def _run_setintent_cli(state_dir: Path, capsys, seed, op: dict) -> tuple[str, st
 
 
 class TestSetIntentTwoSurfaceEquivalence:
-    """DL-004 guard: set_intent (RPC) and SetIntentCommand (argparse) are two
+    """Equivalence guard: set_intent (RPC) and SetIntentCommand (argparse) are two
     hand-maintained implementations of one contract -- intentionally NOT unified.
     This drives both through one input matrix and asserts they reach the SAME
     accept/reject decision (not the same message: they differ by design --
@@ -2480,7 +2480,7 @@ class TestSetIntentTwoSurfaceEquivalence:
         rpc_outcome, rpc_msg = _run_setintent_rpc(rpc_dir, seed, op)
         cli_outcome, cli_out = _run_setintent_cli(cli_dir, capsys, seed, op)
 
-        # Core DL-004 assertion: identical accept/reject decision on both surfaces.
+        # Core assertion: identical accept/reject decision on both surfaces.
         assert rpc_outcome == cli_outcome == outcome, (
             f"surface divergence: rpc={rpc_outcome!r} cli={cli_outcome!r} expected={outcome!r}"
         )
@@ -3663,7 +3663,7 @@ class TestVerifyStateHelpers:
         reset_qr_for_reverify(str(tmp_path))  # must not raise
 
 
-# --- Escalation SSOT (DL-010) -----------------------------------------------
+# --- Escalation SSOT ---------------------------------------------------------
 
 def test_both_escalation_builders_render_shared_banner(tmp_path):
     """The QR gate and the verify gate escalation share the skeleton lines:
@@ -3709,7 +3709,7 @@ def test_both_escalation_builders_render_shared_banner(tmp_path):
     assert "FINAL VERIFICATION REACHED" not in qr_out
 
 
-# --- Guidance ordering (DL-012) ---------------------------------------------
+# --- Guidance ordering -------------------------------------------------------
 
 def test_impl_docs_stale_check_routes_to_stale_guidance_before_temporal():
     """When a STALE_COMMENTS check text mentions 'temporal' as a contrast, it

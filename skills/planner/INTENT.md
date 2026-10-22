@@ -455,7 +455,7 @@ Documentation that lives in source files. Written by exec-docs against the actua
 | -------------- | ----------------------------------------- | ----------- | ------------------------------------------------------ |
 | Module comment | File-level: what's in here                | Top of file | `# auth.py -- Token validation and session management` |
 | Docstring      | Function-level: what it does, when to use | On function | `def validate(token): """Validate JWT..."""`           |
-| Inline comment | Logic explanation: algorithms, decisions  | Above code  | `# xxhash for speed; collisions acceptable (DL-003)`   |
+| Inline comment | Logic explanation: algorithms, decisions  | Above code  | `# xxhash for speed; a collision only costs a miss`     |
 
 The developer adds no comments. exec-docs authors all documentation after code is implemented and reviewed.
 

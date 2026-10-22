@@ -416,8 +416,8 @@ class SetIntentCommand(Command):
     parent milestone, so the parent is inferred.  If --milestone is passed on
     update it must match the intent's real parent, otherwise error_exit is called.
 
-    This class and set_intent must stay semantically equivalent (DL-004); any
-    logic change to one surface requires the same change to the other.
+    This class and set_intent must stay semantically equivalent; any logic change
+    to one surface requires the same change to the other.
     """
 
     name = "set-intent"
@@ -468,7 +468,7 @@ class SetIntentCommand(Command):
 
             # Doc-only milestones carry no code_intents (exclusive relationship -- see
             # Plan.validate_completeness). Guard UPDATE the same way CREATE is guarded
-            # (DL-004 defense-in-depth; the CREATE path and toggle are the primary gates).
+            # (defense in depth; the CREATE path and toggle are the primary gates).
             if ms.is_documentation_only:
                 error_exit(
                     f"milestone {ms.id} is documentation-only; clear it with "
