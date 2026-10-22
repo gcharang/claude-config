@@ -37,7 +37,12 @@ from skills.planner.shared.constraints import (
 )
 from skills.planner.shared.gates import GateResult, build_gate_output
 from skills.planner.shared.qr.types import LoopState
-from skills.planner.shared.qr.utils import load_qr_state, prepare_verify_items, qr_file_exists
+from skills.planner.shared.qr.utils import (
+    has_qr_failures_from_state,
+    load_qr_state,
+    prepare_verify_items,
+    qr_file_exists,
+)
 from skills.planner.shared.resources import (
     ensure_project_root_recorded,
     get_mode_script_path,
@@ -225,14 +230,16 @@ def _begin_run(supplied: str | None) -> str:
 def _clear_settled_plan_qr(state_dir: str) -> None:
     """Delete a reused state dir's qr-plan-design.json unless it still holds open work.
 
-    A file with no TODO or FAIL item is a previous run's settled verdict: kept, it makes
-    decompose skip and verify pass a resumed architect's changes with no review. A file
-    with open items is the work being resumed.
+    A file with no TODO item and no blocking FAIL (the gate's own test) is a previous
+    run's settled verdict: kept, it makes decompose skip and verify pass a resumed
+    architect's changes with no review. A file with open items is the work being resumed.
     """
     qr_state = load_qr_state(state_dir, "plan-design")
     if not qr_state:
         return
-    if any(item.get("status") in ("TODO", "FAIL") for item in qr_state.get("items", [])):
+    if has_qr_failures_from_state(qr_state) or any(
+        item.get("status", "TODO") == "TODO" for item in qr_state.get("items", [])
+    ):
         return
     try:
         (Path(state_dir) / "qr-plan-design.json").unlink(missing_ok=True)

@@ -8,6 +8,7 @@ Guards from the 2026-04-17 ultrareview:
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from skills.lib.workflow.prompts.step import pin_cwd
 from skills.planner.orchestrator import executor
 from skills.planner.orchestrator.executor import format_output, format_qr_verify
 from skills.planner.shared.builders import shell_quote
+from skills.planner.shared.qr.constants import QR_ITERATION_LIMIT
 from skills.planner.shared.qr.types import LoopState, QRState
 
 
@@ -97,6 +99,33 @@ class TestFixModeIterationBanner:
             step=2, state_dir=str(tmp_path), reconciliation_check=False
         )
         assert "IMPLEMENTATION FIX" not in out
+
+
+class TestImplCodeFixRoundsReachTheCeiling:
+    def test_unrecorded_reverify_rounds_advance_iteration(self, tmp_path: Path):
+        # A blocking FAIL that no verifier re-records keeps its (id, version), so only
+        # the fix round itself can move the iteration toward the ceiling.
+        write_qr(
+            tmp_path,
+            "impl-code",
+            iteration=1,
+            items=[
+                {
+                    "id": "impl-001",
+                    "check": "x",
+                    "status": "FAIL",
+                    "severity": "MUST",
+                    "scope": "*",
+                    "finding": "broken",
+                },
+            ],
+        )
+        for _ in range(QR_ITERATION_LIMIT + 1):
+            format_output(step=2, state_dir=str(tmp_path), reconciliation_check=False)
+            format_output(step=4, state_dir=str(tmp_path), reconciliation_check=False)
+            if json.loads((tmp_path / "qr-impl-code.json").read_text())["iteration"] >= QR_ITERATION_LIMIT:
+                break
+        assert json.loads((tmp_path / "qr-impl-code.json").read_text())["iteration"] == QR_ITERATION_LIMIT
 
 
 class TestRemovedCliFlags:

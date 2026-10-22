@@ -41,9 +41,11 @@ from skills.planner.shared.qr.constants import QR_ITERATION_LIMIT
 from skills.planner.shared.qr.phases import get_phase_config
 from skills.planner.shared.qr.types import LoopState, QRState
 from skills.planner.shared.qr.utils import (
+    FIX_RAN_SIG,
     format_failed_items_for_fix,
     load_qr_state,
     load_validated_qr_state,
+    mark_iteration_sig,
     prepare_verify_items,
     resolve_qr_for_step,
 )
@@ -180,6 +182,8 @@ def format_step_2(qr: QRState, state_dir: str) -> str:
         title = "Implementation - Fix Mode"
         qr_state = load_qr_state(state_dir, "impl-code")
         failed_block = format_failed_items_for_fix(qr_state) if qr_state else ""
+        if failed_block:
+            mark_iteration_sig(state_dir, "impl-code", FIX_RAN_SIG)
         actions = [
             format_state_banner("IMPLEMENTATION FIX", qr.iteration, "fix"),
             "",

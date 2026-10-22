@@ -349,6 +349,23 @@ def test_step1_init_clears_stale_verify(tmp_path, monkeypatch):
     assert not (tmp_path / "verify.json").exists()
 
 
+def test_planner_step1_clears_plan_qr_without_blocking_work(tmp_path):
+    # A FAIL below the blocking threshold is settled (the gate passes it), so the file
+    # must not survive into a resumed run; a blocking FAIL is the work being resumed.
+    from conftest import write_qr
+
+    from skills.planner.orchestrator.planner import _clear_settled_plan_qr
+
+    path = tmp_path / "qr-plan-design.json"
+    item = {"id": "q1", "scope": "*", "check": "c", "status": "FAIL", "severity": "SHOULD", "finding": "f"}
+    write_qr(tmp_path, "plan-design", [item], iteration=QR_ITERATION_LIMIT)
+    _clear_settled_plan_qr(str(tmp_path))
+    assert not path.exists()
+    write_qr(tmp_path, "plan-design", [{**item, "severity": "MUST"}], iteration=QR_ITERATION_LIMIT)
+    _clear_settled_plan_qr(str(tmp_path))
+    assert path.exists()
+
+
 def test_step1_init_clears_stale_qr_state(tmp_path, monkeypatch):
     # A reused dir's all-PASS QR files would skip decompose and pass this run unreviewed.
     (tmp_path / "qr-impl-code.json").write_text('{"phase":"impl-code","items":[]}')
