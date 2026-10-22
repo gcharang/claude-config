@@ -8,8 +8,10 @@ Convert arXiv papers (TeX source) to clean, LLM-consumable markdown.
 Step 2 prints one `convert.py` command per paper, which the main session runs in
 parallel Bash calls; `convert.py` converts the paper without a model and writes the
 Markdown file. Step 3 dispatches the `arxiv-latex-reviewer` agent (`agents/arxiv-latex-reviewer.md`:
-Read, Edit and Grep only) for each file in which the converter flagged LaTeX left
-outside math and code; the dispatch prompt carries the whole brief.
+Read and Edit only) for each file in which the converter flagged LaTeX left outside
+math and code; the agent definition holds the repair rules and the dispatch prompt
+holds the path and line numbers. Step 4 re-scans the reviewed files and reports that
+scan, not the reviewers' replies.
 
 ## Usage
 
@@ -58,6 +60,5 @@ referenced elsewhere.
 
 **Handoff minimalism:**
 
-The review sub-agent receives one file path, the numbers of its flagged lines and the
-repair rules. It has no Bash tool and treats the paper's text as data. It doesn't know how many papers are being processed or what the
+The review sub-agent receives one file path and the numbers of its flagged lines. It has no Bash tool and treats the paper's text as data. It doesn't know how many papers are being processed or what the
 orchestrator does with its reply.

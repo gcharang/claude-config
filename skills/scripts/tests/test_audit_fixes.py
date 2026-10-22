@@ -942,6 +942,8 @@ class TestCwdPinnedCommands:
     def test_arxiv_review_dispatches_the_narrow_agent_without_an_invoke_command(
         self, tmp_path: Path
     ):
+        import shlex
+
         from skills.arxiv_to_md import main
 
         flagged = [tmp_path / "a b.md", tmp_path / "it's.md"]
@@ -949,13 +951,31 @@ class TestCwdPinnedCommands:
         flagged[0].write_text("# T\n\nText \\textsc{X}\n")
         flagged[1].write_text("\\vspace{2mm}\n\nok\n\\label{y}\n")
         clean.write_text("# T\n\nno latex\n")
-        out = main.build_review_body([str(f) for f in (*flagged, clean)])
+        out = main.format_output(3, [], None, [str(f) for f in (*flagged, clean)], [])
         assert "subagent_type: arxiv-latex-reviewer" in out
         assert out.count("--- Prompt ") == 2
-        assert f"File: {flagged[0]}\nFlagged line numbers: 3\n" in out
-        assert f"File: {flagged[1]}\nFlagged line numbers: 1, 4\n" in out
+        assert f"File: {flagged[0]}\nFlagged line numbers (in the file before any edit): 3\n" in out
+        assert f"File: {flagged[1]}\nFlagged line numbers (in the file before any edit): 1, 4\n" in out
         assert str(clean) not in out
-        assert "Command: " not in out and "sub_agent" not in out
+        assert "sub_agent" not in out
+        next_command = next(line for line in out.splitlines() if "--step 4" in line)
+        assert next_command.endswith(
+            "--step 4"
+            f" --reviewed {shlex.quote(str(flagged[0]))}"
+            f" --reviewed {shlex.quote(str(flagged[1]))}"
+        )
+
+    def test_arxiv_summary_reports_the_rescan_of_reviewed_files(self, tmp_path: Path):
+        from skills.arxiv_to_md import main
+
+        still = tmp_path / "still.md"
+        fixed = tmp_path / "fixed.md"
+        still.write_text("# T\n\nok\n\\textsc{X}\n")
+        fixed.write_text("# T\n\nok\n")
+        out = main.format_output(4, [], None, [], [str(still), str(fixed)])
+        assert f"{still}: lines still flagged: 4" in out
+        assert f"{fixed}: lines still flagged: none" in out
+        assert "--reviewed" not in out
 
 
 def _tex_tar_gz(path: Path, members: dict[str, bytes], links: dict[str, str] | None = None) -> Path:
