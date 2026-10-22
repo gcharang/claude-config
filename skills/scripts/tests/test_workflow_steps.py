@@ -170,6 +170,25 @@ def test_arxiv_step_routes_to_its_next_step(monkeypatch, capsys, argv, targets):
     assert _next_steps(out, arxiv_main.MODULE_PATH) == targets
 
 
+def test_arxiv_steps_2_and_3_render_braces_in_paths(monkeypatch, capsys, tmp_path):
+    paper = tmp_path / "{Foo} {bar}.md"
+    paper.write_text("# T\n\n\\textsc{Foo}\n")
+    out = _render(
+        monkeypatch,
+        capsys,
+        arxiv_main,
+        "--step",
+        "2",
+        "--paper",
+        "2503.05179",
+        "--out-dir",
+        "/abs/{x}",
+    )
+    assert "/abs/{x}" in out
+    out = _render(monkeypatch, capsys, arxiv_main, "--step", "3", "--review", str(paper))
+    assert f"File: {paper}" in out
+
+
 def test_arxiv_step_2_renders_one_exact_command_per_paper(monkeypatch, capsys):
     dest = "/abs/d/2024-01-02 It's a Title.md"
     out = _render(

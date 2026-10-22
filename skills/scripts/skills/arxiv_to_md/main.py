@@ -29,10 +29,10 @@ from skills.lib.workflow.prompts import format_step, parallel_constraint, pin_cw
 
 # ============================================================================
 
-DEST_PATH_QUOTING = (
-    "In a shell command, the destination path goes in single quotes because it contains\n"
-    "spaces. Write each ' in it as '\\'' (Let's -> Let'\\''s) so an apostrophe in a title\n"
-    "does not end the quoted string early."
+PATH_QUOTING = (
+    "In a shell command, put each path you fill in between single quotes, since a path\n"
+    "can contain spaces. Write each ' in it as '\\'' (Let's -> Let'\\''s) so an\n"
+    "apostrophe in a title does not end the quoted string early."
 )
 
 # ============================================================================
@@ -73,9 +73,11 @@ DISCOVER_INSTRUCTIONS = (
     "\n"
     "PARSE USER INPUT:\n"
     "If user provides input directly, parse for arXiv IDs:\n"
-    "  - Format: YYMM.NNNNN (e.g., 2503.05179)\n"
-    "  - Or full URL: https://arxiv.org/abs/YYMM.NNNNN\n"
+    "  - Format: YYMM.NNNN or YYMM.NNNNN (e.g., 2503.05179), or old-style archive/YYMMNNN\n"
+    "    (e.g., hep-th/9901001); keep a version suffix such as v2\n"
+    "  - Or a URL: https://arxiv.org/abs/<id> or https://arxiv.org/pdf/<id>\n"
     "  - May be multiple IDs (comma-separated, space-separated, or multiple URLs)\n"
+    "Pass each as the bare ID, without an 'arXiv:' prefix or a .pdf suffix.\n"
 )
 
 MODE2_DISCOVERY_INSTRUCTIONS = (
@@ -84,18 +86,13 @@ MODE2_DISCOVERY_INSTRUCTIONS = (
     "\n"
     "MODE 2 DISCOVERY (PDF folder sync):\n"
     "\n"
-    "Resolve each arXiv ID with WebSearch on the paper title from the PDF's filename;\n"
-    "the filename carries the title, so the PDFs themselves are not opened.\n"
-    "\n"
-    "Most PDFs already have a converted .md, so check the destination before\n"
-    "dispatching: a PDF with a matching .md is skipped.\n"
-    "\n"
     "FILE NAMING CONVENTION:\n"
     "  PDFs:     YYYY-MM-DD <title>.pdf\n"
     "  Markdown: YYYY-MM-DD <title>.md\n"
     "  Example:  2025-01-08 Pruning the Unsurprising.pdf\n"
     "\n"
-    "1. SCAN DESTINATION FOLDER for existing markdown FIRST:\n"
+    "1. SCAN DESTINATION FOLDER for existing markdown FIRST, since most PDFs already\n"
+    "   have a converted .md:\n"
     "   - List all *.md files in destination folder\n"
     "\n"
     "2. SCAN SOURCE FOLDER for PDFs:\n"
@@ -105,11 +102,18 @@ MODE2_DISCOVERY_INSTRUCTIONS = (
     "3. For EACH PDF, check if matching .md exists:\n"
     "   Matching logic: same YYYY-MM-DD prefix + similar title\n"
     "   - '2025-01-08 Pruning the Unsurprising.pdf' matches '2025-01-08 Pruning the Unsurprising.md'\n"
-    "   If match exists -> SKIP this PDF (do not dispatch)\n"
+    "   If match exists -> SKIP this PDF (leave it out of $PAPERS)\n"
     "\n"
     "4. RESOLVE ARXIV IDs from unmatched PDFs:\n"
-    "   - Extract paper title from PDF filename (after YYYY-MM-DD prefix)\n"
+    "   - Extract paper title from PDF filename (after YYYY-MM-DD prefix); the filename\n"
+    "     carries the title, so the PDFs themselves are not opened\n"
     "   - Use WebSearch to find arXiv ID for that paper title\n"
+    "   - Take an ID only when that arXiv paper's title begins with the filename's title,\n"
+    "     apart from case and punctuation (a filename may drop the subtitle): a search\n"
+    "     hit with a similar title is often another paper, which the converter would\n"
+    "     then write under this PDF's name\n"
+    "   - No such paper, or more than one: leave the PDF out of $PAPERS and list it\n"
+    "     under Failed in the summary as 'no arXiv ID found'\n"
     "\n"
     "5. DETERMINE DESTINATION FILENAMES:\n"
     "   For each unmatched PDF with resolved arXiv ID:\n"
@@ -127,12 +131,13 @@ NEXT_STEP_ARGS_INSTRUCTIONS = (
     "convert, and $OUT_DIR by the absolute path of the directory MODE 1 writes to (the\n"
     "current working directory unless the user named another). Change nothing else.\n"
     "  MODE 1: --paper <arxiv_id>\n"
-    "  MODE 2: --paper '<arxiv_id>::<dest_file>', and delete ' --out-dir $OUT_DIR'\n"
+    "  MODE 2: --paper '<arxiv_id>::<dest_file>', and delete \" --out-dir '$OUT_DIR'\"\n"
     "The converter runs from the scripts directory, so $OUT_DIR and every <dest_file> are\n"
-    "absolute paths.\n" + DEST_PATH_QUOTING + "\n"
+    "absolute paths.\n" + PATH_QUOTING + "\n"
     "\n"
-    "When no paper is left to convert (every PDF already has its .md), skip the NEXT STEP\n"
-    "and tell the user which PDFs were skipped.\n"
+    "When no paper is left to convert (every PDF already has its .md or has no arXiv\n"
+    "ID), skip the NEXT STEP and tell the user which PDFs were skipped and which had no\n"
+    "arXiv ID.\n"
 )
 
 # --- STEP 2: CONVERT ---------------------------------------------------------
@@ -148,13 +153,16 @@ CONVERT_RESULT_INSTRUCTIONS = (
     "  - A RESIDUAL: line after FILE: says LaTeX remains outside math and code in that\n"
     "    file; the file goes to review in the next step.\n"
     "  - A FAIL: that lists several main .tex candidates: run that paper's command again\n"
-    "    with --main-tex '<candidate>' added, choosing the candidate that is the paper's\n"
-    "    main file.\n"
+    "    with --main-tex '<candidate>' added, choosing by name the candidate that is the\n"
+    "    paper itself rather than a supplement, appendix or response letter. When the\n"
+    "    names do not show which one that is, report the FAIL in the summary instead.\n"
+    "  - A FAIL: destination exists: the paper already has its .md; the summary counts\n"
+    "    it as skipped, not failed.\n"
     "  - Any other FAIL: report it in the summary.\n"
     "\n"
     "Run the NEXT STEP command with $REVIEW replaced by one --review '<FILE path>' per file\n"
     "that printed a RESIDUAL: line; with none, delete $REVIEW. Change nothing else.\n"
-    + DEST_PATH_QUOTING
+    + PATH_QUOTING
 )
 
 # --- STEP 3: REVIEW ----------------------------------------------------------
@@ -201,7 +209,10 @@ SUMMARY_INSTRUCTIONS = (
     "\n"
     "Failed:\n"
     "  [FAIL] 2024-12-15 Some Paper -> no TeX source (PDF-only submission)\n"
+    "  [FAIL] 2024-11-02 Another Paper -> no arXiv ID found\n"
     "```\n"
+    "Name each paper by its file name without the extension, or by its arXiv ID when no\n"
+    "command output or PDF gives its file name.\n"
     "Under a converted file, list the lines the re-scan below still flags."
 )
 
@@ -282,7 +293,7 @@ def build_next_command(step: int, reviewed: list[str] | None = None) -> str | No
     for path in reviewed or []:
         step_4 += f" --reviewed {shlex.quote(path)}"
     next_cmds = {
-        1: f"uv run python -m {MODULE_PATH} --step 2 --out-dir $OUT_DIR $PAPERS",
+        1: f"uv run python -m {MODULE_PATH} --step 2 --out-dir '$OUT_DIR' $PAPERS",
         2: f"uv run python -m {MODULE_PATH} --step 3 $REVIEW",
         3: step_4,
     }
