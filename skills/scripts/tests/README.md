@@ -55,7 +55,7 @@ Gain: Complete coverage of valid input space
 
 ### Hardcoded vs Introspected Mode-Gating
 
-Chose hardcoding for mode-gated steps (currently only deepthink has quick mode that skips steps 6-11). Introspecting handler bytecode to detect mode-gating would add complexity not justified for a single workflow.
+Chose hardcoding for mode-gated steps (deepthink's quick mode, in `test_generation.py::get_mode_gated_steps`). Introspecting handler bytecode to detect mode-gating would add complexity not justified for a single workflow.
 
 Cost: Manual update if more workflows add mode-gating
 Gain: Clear, maintainable code

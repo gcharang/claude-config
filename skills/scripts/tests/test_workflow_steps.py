@@ -12,7 +12,7 @@ from conftest import EXCLUDED, run_skill_invocation  # pyright: ignore[reportMis
 from test_generation import generate_inputs  # pyright: ignore[reportMissingImports]
 
 from skills.codebase_analysis import analyze as codebase_analysis
-from skills.deepthink import think
+from skills.deepthink import subagent, think
 from skills.incoherence import incoherence
 from skills.lib.workflow import discover_workflows
 from skills.problem_analysis import analyze as problem_analysis
@@ -89,20 +89,20 @@ def _next_steps(output: str, module_path: str, flag: str = "--step") -> list[int
     "argv,target",
     [
         pytest.param(["--step", "5", "--mode", "full"], 6, id="planning-full"),
-        pytest.param(["--step", "5", "--mode", "quick"], 12, id="planning-quick"),
+        pytest.param(["--step", "5", "--mode", "quick"], 10, id="planning-quick"),
         pytest.param(
-            ["--step", "13", "--iteration", "1", "--confidence", "certain"],
-            13,
+            ["--step", "11", "--iteration", "1", "--confidence", "certain"],
+            11,
             id="refinement-first-iteration-loops",
         ),
         pytest.param(
-            ["--step", "13", "--iteration", "2", "--confidence", "high"],
-            14,
+            ["--step", "11", "--iteration", "2", "--confidence", "high"],
+            12,
             id="refinement-high-exits",
         ),
         pytest.param(
-            ["--step", "13", "--iteration", str(think.MAX_ITERATIONS), "--confidence", "low"],
-            14,
+            ["--step", "11", "--iteration", str(think.MAX_ITERATIONS), "--confidence", "low"],
+            12,
             id="refinement-cap-exits",
         ),
     ],
@@ -110,6 +110,40 @@ def _next_steps(output: str, module_path: str, flag: str = "--step") -> list[int
 def test_deepthink_step_prints_one_command_for_its_next_step(monkeypatch, capsys, argv, target):
     out = _render(monkeypatch, capsys, think, *argv)
     assert _next_steps(out, think.MODULE_PATH) == [target]
+
+
+_DEEPTHINK_FLAGS = ["--confidence", "high", "--iteration", "2"]
+
+
+@pytest.mark.parametrize(
+    "module,extra,visited",
+    [
+        pytest.param(
+            think,
+            ["--mode", "full", *_DEEPTHINK_FLAGS],
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+            id="think-full",
+        ),
+        pytest.param(
+            think,
+            ["--mode", "quick", *_DEEPTHINK_FLAGS],
+            [1, 2, 3, 4, 5, 10, 11, 12],
+            id="think-quick",
+        ),
+        pytest.param(subagent, [], [1, 2, 3, 4, 5, 6, 7], id="subagent"),
+    ],
+)
+def test_deepthink_walk_from_step_1_visits_each_step_once_in_order(
+    monkeypatch, capsys, module, extra, visited
+):
+    steps = [1]
+    while len(steps) <= len(visited):
+        out = _render(monkeypatch, capsys, module, "--step", str(steps[-1]), *extra)
+        targets = _next_steps(out, module.MODULE_PATH)
+        if not targets:
+            break
+        steps.extend(targets)
+    assert steps == visited
 
 
 @pytest.mark.parametrize(

@@ -26,7 +26,7 @@ from skills.lib.workflow.types import BoundedInt, ChoiceSet, Confidence
 # Hardcoded iterating step indices per workflow
 # These were previously detected via Outcome.ITERATE in step.next
 ITERATING_STEPS = {
-    "deepthink": {13},  # iterative_refinement step
+    "deepthink": {11},  # iterative_refinement step
     "problem-analysis": {3},  # investigate step
     "codebase-analysis": {1, 2, 3, 4},  # all steps can iterate
 }
@@ -62,12 +62,10 @@ def get_iterating_step_indices(workflow: Workflow) -> set[int]:
 def get_mode_gated_steps(workflow: Workflow) -> dict[str, frozenset[int]]:
     """Return mapping of mode values to step indices (1-based) skipped in that mode.
 
-    Currently hardcoded for deepthink: quick mode skips steps 6-11.
     frozenset enables set membership tests in tight loop (generate_inputs).
-    Only deepthink workflow has mode-gated steps (quick mode skips steps 6-11).
     """
     if workflow.name == "deepthink":
-        return {"quick": frozenset(range(6, 12))}
+        return {"quick": frozenset(range(6, 10))}
     return {}
 
 

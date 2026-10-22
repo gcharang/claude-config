@@ -10,7 +10,6 @@ Seven-step workflow:
 
 Research grounding:
   - Chain-of-Verification (Dhuliawala et al., 2023)
-  - Self-Consistency (Wang et al., 2023)
 """
 
 import argparse
@@ -61,14 +60,13 @@ CLASSIFY_VERIFIABILITY_INSTRUCTIONS = (
     "\n"
     "Edge case: prefer [V] over [J] over [C]\n"
     "\n"
-    "FORMAT: C1 [V]: <claim> | A1 [J]: <assumption>\n"
-    "COUNT: State how many [V] items need verification."
+    "FORMAT: C1 [V]: <claim> | A1 [J]: <assumption>"
 )
 
 # --- STEP 3: GENERATE_QUESTIONS ---------------------------------------------
 
 GENERATE_QUESTIONS_INSTRUCTIONS = (
-    "For each [V] item, generate 1-3 verification questions:\n"
+    "For each [V] item, generate verification questions:\n"
     "\n"
     "CRITERIA:\n"
     "  - Specific and independently answerable\n"

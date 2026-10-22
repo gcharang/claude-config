@@ -2,23 +2,7 @@
 """
 DeepThink Skill - Structured reasoning for open-ended analytical questions.
 
-Fourteen-step workflow (1-14):
-  1. Context Clarification  - Remove bias from input (S2A)
-  2. Abstraction            - Domain, first principles, key concepts
-  3. Characterization       - Question type, answer structure, mode determination
-  4. Analogical Recall      - Direct/cross-domain analogies, anti-patterns
-  5. Planning               - Sub-questions, success criteria
-  6. Sub-Agent Design       - Generate sub-agent task definitions (Full only)
-  7. Design Critique        - Coverage, overlap, appropriateness (Full only)
-  8. Design Revision        - Revise based on critique (Full only)
-  9. Dispatch               - Launch sub-agents in parallel (Full only)
-  10. Quality Gate          - Filter low-quality outputs (Full only)
-  11. Aggregation           - Agreement/disagreement maps (Full only)
-  12. Initial Synthesis     - First-pass integration
-  13. Iterative Refinement  - Verification loop until confident
-  14. Formatting & Output   - Format and present final answer
-
-Two modes: Full (all steps) and Quick (skips 6-11).
+STATIC_STEPS, DYNAMIC_STEPS and build_next_command below define the steps and their routing.
 """
 
 import argparse
@@ -69,8 +53,6 @@ CONTEXT_CLARIFICATION_INSTRUCTIONS = (
     "  If context is SUFFICIENT, proceed directly to Part A.\n"
     "\n"
     "Extract objective, relevant content from the user's question.\n"
-    "\n"
-    "Read the question again before proceeding.\n"
     "\n"
     "Separate it from framing, opinion, or irrelevant information.\n"
     "\n"
@@ -197,7 +179,7 @@ CHARACTERIZATION_INSTRUCTIONS = (
     "PART C - EVALUATION CRITERIA:\n"
     "  How should we judge whether an answer is good?\n"
     "  What distinguishes excellent from mediocre?\n"
-    "  List 3-5 specific criteria.\n"
+    "  List specific criteria.\n"
     "\n"
     "PART D - MODE DETERMINATION:\n"
     "  Should this use FULL mode (with sub-agents) or QUICK mode (direct synthesis)?\n"
@@ -404,8 +386,13 @@ SUBAGENT_DESIGN_INSTRUCTIONS = (
     "  4. ASSIGNED SUB-QUESTIONS: Which sub-questions to address\n"
     "  5. UNIQUE VALUE: Why this will produce insights others won't\n"
     "\n"
+    "Before finalizing, check that every sub-question from Step 5 has an owner and\n"
+    "that no two sub-agents duplicate a task.\n"
+    "\n"
     "OUTPUT FORMAT:\n"
     "```\n"
+    "FINAL SUB-AGENT DEFINITIONS:\n"
+    "\n"
     "SUB-AGENT 1:\n"
     "- Name: [name]\n"
     "- Strategy: [strategy]\n"
@@ -421,89 +408,7 @@ SUBAGENT_DESIGN_INSTRUCTIONS = (
     "```"
 )
 
-# --- STEP 7: DESIGN_CRITIQUE ------------------------------------------------
-
-DESIGN_CRITIQUE_INSTRUCTIONS = (
-    "Critically evaluate the sub-agent design from Step 6.\n"
-    "\n"
-    "PART A - COVERAGE:\n"
-    "  Do sub-agents collectively cover all sub-questions from Step 5?\n"
-    "  Are there important angles NO sub-agent will address?\n"
-    "  List any gaps.\n"
-    "\n"
-    "PART B - OVERLAP:\n"
-    "  Do any sub-agents duplicate work unnecessarily?\n"
-    "  Is there productive tension vs wasteful redundancy?\n"
-    "  List any problematic overlaps.\n"
-    "\n"
-    "PART C - APPROPRIATENESS:\n"
-    "  Is division strategy well-suited to this question?\n"
-    "  Would a different strategy yield better insights?\n"
-    "  Are task descriptions clear enough to execute?\n"
-    "\n"
-    "PART D - BALANCE:\n"
-    "  Are some sub-agents given much harder tasks than others?\n"
-    "  Is there risk one sub-agent will dominate synthesis?\n"
-    "\n"
-    "PART E - SPECIFIC ISSUES:\n"
-    "  List specific problems with individual sub-agent definitions.\n"
-    "  For each issue, be specific about what's wrong.\n"
-    "\n"
-    "Be genuinely critical. Goal is to improve, not approve.\n"
-    "\n"
-    "OUTPUT FORMAT:\n"
-    "```\n"
-    "COVERAGE:\n"
-    "- Gaps: [list or 'none']\n"
-    "\n"
-    "OVERLAP:\n"
-    "- Issues: [list or 'none']\n"
-    "\n"
-    "APPROPRIATENESS:\n"
-    "- Assessment: [evaluation]\n"
-    "\n"
-    "BALANCE:\n"
-    "- Assessment: [evaluation]\n"
-    "\n"
-    "SPECIFIC ISSUES:\n"
-    "- [issue 1]\n"
-    "- [issue 2]\n"
-    "```"
-)
-
-# --- STEP 8: DESIGN_REVISION ------------------------------------------------
-
-DESIGN_REVISION_INSTRUCTIONS = (
-    "Revise sub-agent design based on critique from Step 7.\n"
-    "\n"
-    "For each issue identified, either:\n"
-    "  1. Revise the design to address it, OR\n"
-    "  2. Explain why the issue should not be addressed\n"
-    "\n"
-    "OUTPUT FORMAT:\n"
-    "```\n"
-    "REVISIONS MADE:\n"
-    "- [change]: [which critique point it addresses]\n"
-    "\n"
-    "ISSUES NOT ADDRESSED:\n"
-    "- [critique point]: [why not addressing]\n"
-    "\n"
-    "FINAL SUB-AGENT DEFINITIONS:\n"
-    "\n"
-    "SUB-AGENT 1:\n"
-    "- Name: [name]\n"
-    "- Strategy: [strategy]\n"
-    "- Task: [description]\n"
-    "- Sub-Questions: [list]\n"
-    "- Unique Value: [why this matters]\n"
-    "\n"
-    "[etc.]\n"
-    "```\n"
-    "\n"
-    "These definitions will be used to dispatch sub-agents in Step 9."
-)
-
-# --- STEP 9: DISPATCH -------------------------------------------------------
+# --- STEP 7: DISPATCH -------------------------------------------------------
 
 DISPATCH_CONTEXT = (
     "Each sub-agent receives:\n"
@@ -511,7 +416,7 @@ DISPATCH_CONTEXT = (
     "- DOMAIN and FIRST PRINCIPLES from Step 2\n"
     "- QUESTION TYPE and EVALUATION CRITERIA from Step 3\n"
     "- KEY ANALOGIES from Step 4\n"
-    "- Their specific task definition from Step 8\n"
+    "- Their specific task definition from Step 6\n"
     "\n"
     "AGENT PROMPT STRUCTURE (use for each agent's Task tool prompt):\n"
     "\n"
@@ -525,15 +430,15 @@ DISPATCH_CONTEXT = (
     "KEY ANALOGIES: [from Step 4]\n"
     "\n"
     "YOUR TASK:\n"
-    "- Name: [agent name from Step 8]\n"
-    "- Strategy: [strategy from Step 8]\n"
-    "- Task: [task description from Step 8]\n"
-    "- Sub-Questions: [assigned questions from Step 8]\n"
-    "- Unique Value: [unique value from Step 8]"
+    "- Name: [agent name from Step 6]\n"
+    "- Strategy: [strategy from Step 6]\n"
+    "- Task: [task description from Step 6]\n"
+    "- Sub-Questions: [assigned questions from Step 6]\n"
+    "- Unique Value: [unique value from Step 6]"
 )
 
 DISPATCH_INSTRUCTIONS = (
-    "Launch one sub-agent per entry in FINAL SUB-AGENT DEFINITIONS (Step 8); N is the\n"
+    "Launch one sub-agent per entry in FINAL SUB-AGENT DEFINITIONS (Step 6); N is the\n"
     "number of entries.\n"
     "\n" + task_tool_instruction("general-purpose", "sonnet") + "\n"
     "\n" + parallel_constraint("N") + "\n"
@@ -545,7 +450,7 @@ DISPATCH_INSTRUCTIONS = (
     "After all N agents return, continue with the next workflow step."
 )
 
-# --- STEP 10: QUALITY_GATE --------------------------------------------------
+# --- STEP 8: QUALITY_GATE ---------------------------------------------------
 
 QUALITY_GATE_INSTRUCTIONS = (
     "Review each sub-agent's output. Assess whether to include in aggregation.\n"
@@ -581,7 +486,7 @@ QUALITY_GATE_INSTRUCTIONS = (
     "```"
 )
 
-# --- STEP 11: AGGREGATION ---------------------------------------------------
+# --- STEP 9: AGGREGATION ----------------------------------------------------
 
 AGGREGATION_INSTRUCTIONS = (
     "Organize findings from all sub-agents that passed quality gate.\n"
@@ -643,7 +548,7 @@ AGGREGATION_INSTRUCTIONS = (
     "```"
 )
 
-# --- STEP 12: INITIAL_SYNTHESIS ---------------------------------------------
+# --- STEP 10: INITIAL_SYNTHESIS ---------------------------------------------
 
 SYNTHESIS_FULL_INSTRUCTIONS = (
     "Integrate aggregated findings into a coherent response.\n"
@@ -652,7 +557,7 @@ SYNTHESIS_FULL_INSTRUCTIONS = (
     "SYNTHESIS GUIDELINES:\n"
     "  1. Use evaluation criteria from Step 3 to guide integration\n"
     "  2. Resolve disagreements using synthesis criteria from Step 5\n"
-    "  3. Draw on intermediate insights from Step 11, not just conclusions\n"
+    "  3. Draw on intermediate insights from Step 9, not just conclusions\n"
     "  4. Acknowledge where genuine uncertainty remains\n"
     "  5. Do not artificially harmonize positions that genuinely conflict\n"
     "\n"
@@ -672,7 +577,7 @@ SYNTHESIS_FULL_INSTRUCTIONS = (
     "  For each major claim, cite the evidence source:\n"
     "  - From Step 2 (first principles)\n"
     "  - From Step 4 (analogies)\n"
-    "  - From Step 11 (sub-agent findings or intermediate insights)\n"
+    "  - From Step 9 (sub-agent findings or intermediate insights)\n"
     "  Claims without grounding: flag as UNGROUNDED.\n"
     "\n"
     "PART E - ACKNOWLEDGED LIMITATIONS:\n"
@@ -745,7 +650,7 @@ SYNTHESIS_QUICK_INSTRUCTIONS = (
     "```"
 )
 
-# --- STEP 13: ITERATIVE_REFINEMENT ------------------------------------------
+# --- STEP 11: ITERATIVE_REFINEMENT ------------------------------------------
 
 REFINEMENT_INSTRUCTIONS = (
     "ITERATION {iteration} OF {max_iter}\n"
@@ -753,12 +658,12 @@ REFINEMENT_INSTRUCTIONS = (
     "Critically evaluate the current synthesis.\n"
     "\n"
     "PART A - VERIFICATION QUESTION GENERATION:\n"
-    "  Generate 3-5 verification questions that would test correctness.\n"
+    "  Generate verification questions that would test correctness.\n"
     "  Use OPEN questions ('What is X?', 'Where does Y occur?'), not yes/no.\n"
     "  Yes/no questions bias toward agreement regardless of correctness.\n"
     "  Focus on:\n"
     "  - Claims marked LOW or MEDIUM confidence\n"
-    "  - Any UNGROUNDED claims from Step 12\n"
+    "  - Any UNGROUNDED claims from Step 10\n"
     "  - Potential blind spots\n"
     "  - Failure modes that could invalidate key proposals\n"
     "  - Edge cases the synthesis might not handle\n"
@@ -767,7 +672,7 @@ REFINEMENT_INSTRUCTIONS = (
     "  For each verification question, answer based ONLY on:\n"
     "  - First principles from Step 2\n"
     "  - Analogies from Step 4\n"
-    "  - Aggregated evidence from Step 11 (if Full mode)\n"
+    "  - Aggregated evidence from Step 9 (if Full mode)\n"
     "\n"
     "  Cite the source each answer rests on; an answer that restates the\n"
     "  synthesis's claim does not test it.\n"
@@ -775,7 +680,7 @@ REFINEMENT_INSTRUCTIONS = (
     "  EXPLORATION OPTION:\n"
     "  If a verification question cannot be answered with existing evidence:\n"
     "  - Use Read/Glob/Grep to find concrete evidence in the codebase\n"
-    "  - This is especially valuable for UNGROUNDED claims from Step 12\n"
+    "  - This is especially valuable for UNGROUNDED claims from Step 10\n"
     "  - Keep exploration bounded -- answer the specific question, then stop\n"
     "  - Update answer with exploration findings and cite sources\n"
     "\n"
@@ -836,7 +741,7 @@ REFINEMENT_INSTRUCTIONS = (
     "```"
 )
 
-# --- STEP 14: FORMATTING_OUTPUT ---------------------------------------------
+# --- STEP 12: FORMATTING_OUTPUT ---------------------------------------------
 
 FORMATTING_INSTRUCTIONS = (
     "Refinement complete. Confidence: {confidence}.\n"
@@ -881,7 +786,7 @@ def build_next_command(step: int, mode: str, confidence: str, iteration: int) ->
         return f"{base} --step 5 --mode {mode}"
     elif step == 5:
         if mode == "quick":
-            return f"{base} --step 12 --mode quick"
+            return f"{base} --step 10 --mode quick"
         return f"{base} --step 6 --mode full"
     elif step == 6:
         return f"{base} --step 7 --mode {mode}"
@@ -892,18 +797,14 @@ def build_next_command(step: int, mode: str, confidence: str, iteration: int) ->
     elif step == 9:
         return f"{base} --step 10 --mode {mode}"
     elif step == 10:
-        return f"{base} --step 11 --mode {mode}"
+        return f"{base} --step 11 --confidence <your_confidence> --iteration 1 --mode {mode}"
     elif step == 11:
-        return f"{base} --step 12 --mode {mode}"
-    elif step == 12:
-        return f"{base} --step 13 --confidence <your_confidence> --iteration 1 --mode {mode}"
-    elif step == 13:
         if _refinement_done(confidence, iteration):
-            return f"{base} --step 14 --confidence {confidence} --mode {mode}"
+            return f"{base} --step 12 --confidence {confidence} --mode {mode}"
         if iteration >= MAX_ITERATIONS:
-            return f"{base} --step 14 --confidence <your_confidence> --mode {mode}"
-        return f"{base} --step 13 --confidence <your_confidence> --iteration {iteration + 1} --mode {mode}"
-    elif step == 14:
+            return f"{base} --step 12 --confidence <your_confidence> --mode {mode}"
+        return f"{base} --step 11 --confidence <your_confidence> --iteration {iteration + 1} --mode {mode}"
+    elif step == 12:
         return None
 
     return None
@@ -921,22 +822,20 @@ STATIC_STEPS = {
     4: ("Analogical Recall", ANALOGICAL_RECALL_INSTRUCTIONS),
     5: ("Planning", PLANNING_INSTRUCTIONS),
     6: ("Sub-Agent Design", SUBAGENT_DESIGN_INSTRUCTIONS),
-    7: ("Design Critique", DESIGN_CRITIQUE_INSTRUCTIONS),
-    8: ("Design Revision", DESIGN_REVISION_INSTRUCTIONS),
-    9: ("Dispatch", DISPATCH_INSTRUCTIONS),
-    10: ("Quality Gate", QUALITY_GATE_INSTRUCTIONS),
-    11: ("Aggregation", AGGREGATION_INSTRUCTIONS),
+    7: ("Dispatch", DISPATCH_INSTRUCTIONS),
+    8: ("Quality Gate", QUALITY_GATE_INSTRUCTIONS),
+    9: ("Aggregation", AGGREGATION_INSTRUCTIONS),
 }
 
 
-def _format_step_12(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
-    """Step 12: Initial Synthesis - selects instructions based on mode."""
+def _format_step_10(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
+    """Initial Synthesis - selects instructions based on mode."""
     body = SYNTHESIS_FULL_INSTRUCTIONS if mode == "full" else SYNTHESIS_QUICK_INSTRUCTIONS
     return ("Initial Synthesis", body)
 
 
-def _format_step_13(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
-    """Step 13: Iterative Refinement - parameterized title and body.
+def _format_step_11(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
+    """Iterative Refinement - parameterized title and body.
 
     --confidence carries the previous iteration's verdict, so an exit-level verdict
     ends the loop here instead of running the refinement body once more.
@@ -951,8 +850,8 @@ def _format_step_13(mode: str, confidence: str, iteration: int) -> tuple[str, st
     return (title, body)
 
 
-def _format_step_14(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
-    """Step 14: Formatting & Output - parameterized with confidence guidance."""
+def _format_step_12(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
+    """Formatting & Output - parameterized with confidence guidance."""
     confidence_upper = confidence.upper()
     if confidence == "certain":
         guidance = "HIGH\n  Present with authority. Hedging language unnecessary."
@@ -965,9 +864,9 @@ def _format_step_14(mode: str, confidence: str, iteration: int) -> tuple[str, st
 # Dynamic steps: functions that compute (title, instructions) based on parameters
 # Functions must be defined BEFORE this dictionary (book pattern)
 DYNAMIC_STEPS = {
+    10: _format_step_10,
+    11: _format_step_11,
     12: _format_step_12,
-    13: _format_step_13,
-    14: _format_step_14,
 }
 
 
@@ -1003,7 +902,6 @@ def main():
     """Entry point for deepthink workflow."""
     parser = argparse.ArgumentParser(
         description="DeepThink - Structured reasoning for open-ended analytical questions",
-        epilog="Steps: 1-14 (Full mode) or 1-5,12-14 (Quick mode)",
     )
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument(
@@ -1011,13 +909,13 @@ def main():
         type=str,
         choices=["exploring", "low", "medium", "high", "certain"],
         default="exploring",
-        help="Confidence level (for Step 13)",
+        help="Confidence level",
     )
     parser.add_argument(
         "--iteration",
         type=int,
         default=1,
-        help="Current iteration within Step 13 (1-5)",
+        help="Current refinement iteration",
     )
     parser.add_argument(
         "--mode",
@@ -1028,8 +926,8 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.step < 1 or args.step > 14:
-        sys.exit("ERROR: --step must be 1-14")
+    if args.step < 1 or args.step > 12:
+        sys.exit("ERROR: --step must be 1-12")
 
     print(format_output(args.step, args.mode, args.confidence, args.iteration))
 

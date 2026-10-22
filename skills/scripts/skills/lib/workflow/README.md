@@ -224,7 +224,7 @@ Domain types separate from generation logic:
 
 **Exhaustive vs sampling**: Domains are small. Exhaustive enumeration catches edge combinations that sampling would miss. Sampling would save seconds and risk missed regressions.
 
-**Hardcoded mode-gating**: Only deepthink has a mode parameter (quick mode skips steps 6–11). Introspection machinery for the general case is not justified for a single consumer; `test_generation.py::get_mode_gated_steps` hardcodes the deepthink rule explicitly.
+**Hardcoded mode-gating**: Only deepthink has a mode parameter. Introspection machinery for the general case is not justified for a single consumer; `test_generation.py::get_mode_gated_steps` hardcodes the deepthink rule explicitly.
 
 **`_params` keyed by step_id (string), not step number**: `_step_order` supplies the authoritative index mapping for CLI invocation. Keying param specs by string id keeps them stable if steps are reordered.
 

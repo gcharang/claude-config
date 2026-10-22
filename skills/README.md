@@ -108,7 +108,7 @@ Within a step section, order constants by execution flow. Dispatch-related const
 
 Dispatch prompts combine static text with the dispatch building blocks in `skills.lib.workflow.prompts` (`task_tool_instruction`, `parallel_constraint`, `sub_agent_invoke`). Split them:
 
-**Static parts -> MESSAGE TEMPLATES** (constants). A dispatch with no runtime inputs is a constant even though it calls the building blocks: see `DISPATCH_INSTRUCTIONS` in `deepthink/think.py` (step 9) and `SURVEY_INSTRUCTIONS` in `codebase_analysis/analyze.py` (step 2).
+**Static parts -> MESSAGE TEMPLATES** (constants). A dispatch with no runtime inputs is a constant even though it calls the building blocks: see `DISPATCH_INSTRUCTIONS` in `deepthink/think.py` and `SURVEY_INSTRUCTIONS` in `codebase_analysis/analyze.py`.
 
 When the orchestrator decides the number of agents at runtime, as in both, write the count as `N`, pass `parallel_constraint("N")`, and say what N is. A placeholder list passed to `template_dispatch()` prints its own length as the agent count, which contradicts the real one.
 
@@ -229,7 +229,7 @@ All-static workflows use one `STATIC_STEPS` dict of (title, instructions) tuples
 STATIC_STEPS = {
     1: ("Context Grounding", CONTEXT_GROUNDING_INSTRUCTIONS),
     2: ("Analogical Generation", ANALOGICAL_GENERATION_INSTRUCTIONS),
-    3: ("Planning", PLANNING_INSTRUCTIONS),
+    3: ("Analysis", ANALYSIS_INSTRUCTIONS),
     # ...
 }
 
@@ -304,9 +304,9 @@ def _refinement_done(confidence: str, iteration: int) -> bool:
 
 def build_next_command(step: int, mode: str, confidence: str, iteration: int) -> str | None:
     # ...
-    elif step == 13:
+    elif step == 11:
         if _refinement_done(confidence, iteration):
-            return f"{base} --step 14 --confidence {confidence} --mode {mode}"
+            return f"{base} --step 12 --confidence {confidence} --mode {mode}"
         # ...
 
 
@@ -323,13 +323,13 @@ STATIC_STEPS = {
 
 
 # Dynamic formatter functions - defined BEFORE DYNAMIC_STEPS dict
-def _format_step_12(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
+def _format_step_10(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
     """Dynamic step whose body depends on a parameter."""
     body = SYNTHESIS_FULL_INSTRUCTIONS if mode == "full" else SYNTHESIS_QUICK_INSTRUCTIONS
     return ("Initial Synthesis", body)
 
 
-def _format_step_13(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
+def _format_step_11(mode: str, confidence: str, iteration: int) -> tuple[str, str]:
     """Dynamic step with parameterized title and body, and a completion body at loop exit."""
     if _refinement_done(confidence, iteration):
         return (
@@ -343,8 +343,8 @@ def _format_step_13(mode: str, confidence: str, iteration: int) -> tuple[str, st
 
 # Dynamic steps dict - references functions defined above
 DYNAMIC_STEPS = {
-    12: _format_step_12,
-    13: _format_step_13,
+    10: _format_step_10,
+    11: _format_step_11,
 }
 
 

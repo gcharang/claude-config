@@ -21,20 +21,10 @@ Do NOT use for:
 
 ## Workflow Phases
 
-Two modes: Full (14 steps) and Quick (8 steps, bypasses sub-agents).
-
-| Phase                 | Steps | Purpose                                  |
-| --------------------- | ----- | ---------------------------------------- |
-| Input Processing      | 1     | Remove bias from input (S2A)             |
-| Problem Understanding | 2-4   | Abstraction, characterization, analogies |
-| Planning              | 5     | Sub-questions, success criteria          |
-| Sub-Agent Design      | 6-8   | Design, critique, revise (Full only)     |
-| Divergent Exploration | 9-11  | Dispatch, gate, aggregate (Full only)    |
-| Convergent Synthesis  | 12    | Initial synthesis                        |
-| Iterative Refinement  | 13    | Verification loop until confident        |
-| Formatting & Output   | 14    | Format and present final answer          |
-
-Step 3 determines mode. Quick mode jumps from step 5 directly to step 12.
+Two modes: Full dispatches parallel sub-agents; Quick synthesizes directly. Step 3
+chooses the mode. `STATIC_STEPS` and `DYNAMIC_STEPS` in
+`../scripts/skills/deepthink/think.py` define the steps, and `build_next_command`
+routes between them.
 
 ## Invisible Knowledge
 
@@ -78,15 +68,9 @@ Multiple reasoning chains contain valuable intermediate steps even when final
 conclusions are wrong. Extracting evidence from ALL chains, not just majority,
 produces better synthesis than pure voting.
 
-### Why Self-Critique Before Dispatch
-
-Sub-agent design benefits from explicit critique. Coverage gaps, unnecessary
-overlap, and inappropriate divisions are caught before expensive parallel
-execution.
-
 ### Why Confidence Gates the Loop
 
-Step 13 asks for a confidence level with a written justification; the script
+The refinement step asks for a confidence level with a written justification; the script
 reads that level to decide between another iteration and formatting, and the
 iteration cap ends the loop when the level never reaches the exit.
 
@@ -102,7 +86,6 @@ between shallow analysis and indefinite loops.
 | ------------------------ | -------------------------------- | ---------------------------------------- |
 | Context Clarification    | S2A (Weston & Sukhbaatar, 2023)  | Regenerate input sans bias               |
 | Step-Back Abstraction    | Zheng et al., ICLR 2024          | Principles before specifics: +7-27%      |
-| Explicit Planning        | Plan-and-Solve (Wang, ACL 2023)  | Missing-step errors: 12% -> 3%           |
 | Self-Generated Exemplars | Analogical (Yasunaga, ICLR 2024) | Own analogies beat provided examples     |
 | Metacognitive Stages     | Wang & Zhao, NAACL 2024          | Five-stage evaluation: +26.9%            |
 | Anti-Pattern Generation  | Contrastive CoT (Chia, 2023)     | Knowing what NOT to do: +10-16pts        |
@@ -125,5 +108,5 @@ Final output adapts to question type (determined in Step 3):
 ## Implementation Notes
 
 Each step is rendered by `skills.lib.workflow.prompts.format_step`. Step 5's next
-command follows the MODE chosen in Step 3. Step 13 carries `--iteration`, which
+command follows the MODE chosen in Step 3. The refinement step carries `--iteration`, which
 the script increments up to `MAX_ITERATIONS`.

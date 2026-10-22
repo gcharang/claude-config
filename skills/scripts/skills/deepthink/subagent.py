@@ -2,15 +2,7 @@
 """
 DeepThink Sub-Agent Workflow - Perspective-specific analysis.
 
-Eight-step workflow:
-  1. Context Grounding   - Re-read context, step-back to principles
-  2. Analogical Generation - Self-generate relevant examples
-  3. Planning            - Explicit analysis plan before execution
-  4. Analysis            - Execute plan with evidence grounding
-  5. Self-Verification   - Factored verification of claims
-  6. Perspective Contrast - Steel-man opposing view
-  7. Failure Modes       - Actionable failure analysis
-  8. Output Synthesis    - Structured output for parent aggregation
+STATIC_STEPS and build_next_command below define the steps and their routing.
 """
 
 import argparse
@@ -23,7 +15,7 @@ from skills.lib.workflow.prompts import format_step
 # ============================================================================
 
 MODULE_PATH = "skills.deepthink.subagent"
-TOTAL_STEPS = 8
+TOTAL_STEPS = 7
 
 
 # ============================================================================
@@ -33,45 +25,13 @@ TOTAL_STEPS = 8
 # --- STEP 1: CONTEXT_GROUNDING -----------------------------------------------
 
 CONTEXT_GROUNDING_INSTRUCTIONS = (
-    "Before beginning analysis, ground yourself in the shared context.\n"
-    "\n"
-    "PART A - RE-READ SHARED CONTEXT:\n"
-    "  Read the shared context again. Restate each element:\n"
-    "  - CLARIFIED QUESTION: [restate in your own words]\n"
-    "  - DOMAIN: [from shared context]\n"
-    "  - FIRST PRINCIPLES: [list from shared context]\n"
-    "  - QUESTION TYPE: [from shared context]\n"
-    "  - EVALUATION CRITERIA: [from shared context]\n"
-    "  - KEY ANALOGIES: [from shared context]\n"
-    "\n"
-    "PART B - STEP BACK (perspective-specific):\n"
-    "  From YOUR assigned perspective, which 2-3 first principles\n"
-    "  are MOST relevant? Why do these matter more than others\n"
-    "  for your analytical lens?\n"
-    "\n"
-    "PART C - TASK UNDERSTANDING:\n"
-    "  Review your task definition:\n"
-    "  - Name: [from dispatch]\n"
-    "  - Strategy: [from dispatch]\n"
-    "  - Task: [from dispatch]\n"
-    "  - Sub-Questions: [from dispatch]\n"
-    "  - Unique Value: [from dispatch]\n"
-    "\n"
-    "  Restate your task in your own words.\n"
-    "  What unique contribution will you provide that others won't?\n"
+    "From YOUR assigned perspective, which first principles in the shared context\n"
+    "are MOST relevant? Why do these matter more than others for your analytical lens?\n"
     "\n"
     "OUTPUT FORMAT:\n"
     "```\n"
-    "RESTATED CONTEXT:\n"
-    "- Question: [your restatement]\n"
-    "- Domain: [domain]\n"
-    "- Key principles for MY perspective: [2-3 most relevant]\n"
-    "\n"
-    "MY TASK:\n"
-    "[restatement in own words]\n"
-    "\n"
-    "MY UNIQUE CONTRIBUTION:\n"
-    "[what I will provide that others likely won't]\n"
+    "KEY PRINCIPLES FOR MY PERSPECTIVE:\n"
+    "- [principle]: [why it matters for my lens]\n"
     "```"
 )
 
@@ -80,7 +40,7 @@ CONTEXT_GROUNDING_INSTRUCTIONS = (
 ANALOGICAL_GENERATION_INSTRUCTIONS = (
     "Before analyzing, recall relevant precedents from YOUR analytical lens.\n"
     "\n"
-    "Generate 2-3 examples of similar problems approached from your\n"
+    "Generate examples of similar problems approached from your\n"
     "perspective. These should be:\n"
     "  - Relevant to the current question\n"
     "  - Distinct from each other\n"
@@ -92,7 +52,7 @@ ANALOGICAL_GENERATION_INSTRUCTIONS = (
     "  - State what insight transfers to the current question\n"
     "\n"
     "If the shared context already contains highly relevant analogies,\n"
-    "you may reference those and add 1-2 perspective-specific ones.\n"
+    "you may reference those and add perspective-specific ones.\n"
     "\n"
     "OUTPUT FORMAT:\n"
     "```\n"
@@ -108,50 +68,10 @@ ANALOGICAL_GENERATION_INSTRUCTIONS = (
     "```"
 )
 
-# --- STEP 3: PLANNING --------------------------------------------------------
-
-PLANNING_INSTRUCTIONS = (
-    "Before analyzing, devise a plan for approaching this from your\n"
-    "perspective.\n"
-    "\n"
-    "PART A - APPROACH OUTLINE:\n"
-    "  What specific aspects will you examine?\n"
-    "  In what order should they be addressed?\n"
-    "  What intermediate conclusions do you need to reach?\n"
-    "\n"
-    "PART B - EVIDENCE SOURCES:\n"
-    "  What evidence will you draw on?\n"
-    "  - First principles from Step 1\n"
-    "  - Analogies from Step 2\n"
-    "  - Domain knowledge\n"
-    "  - Assigned sub-questions\n"
-    "\n"
-    "PART C - SUCCESS CRITERIA:\n"
-    "  What would a complete analysis from your perspective include?\n"
-    "  How will you know when you've done enough?\n"
-    "\n"
-    "OUTPUT FORMAT:\n"
-    "```\n"
-    "ANALYSIS PLAN:\n"
-    "1. [First aspect to examine]\n"
-    "2. [Second aspect]\n"
-    "3. [Third aspect]\n"
-    "...\n"
-    "\n"
-    "EVIDENCE I WILL USE:\n"
-    "- [source 1]\n"
-    "- [source 2]\n"
-    "\n"
-    "SUCCESS CRITERIA:\n"
-    "- [criterion 1]\n"
-    "- [criterion 2]\n"
-    "```"
-)
-
-# --- STEP 4: ANALYSIS --------------------------------------------------------
+# --- STEP 3: ANALYSIS --------------------------------------------------------
 
 ANALYSIS_INSTRUCTIONS = (
-    "Execute your analysis plan from Step 3.\n"
+    "Analyze the question from your perspective, covering your assigned sub-questions.\n"
     "\n"
     "EXPLORATION OPTION:\n"
     "  If your analysis requires concrete evidence not in the shared context:\n"
@@ -161,7 +81,6 @@ ANALYSIS_INSTRUCTIONS = (
     "  If shared context is sufficient, proceed without exploration.\n"
     "\n"
     "REQUIREMENTS:\n"
-    "  - Follow your plan systematically\n"
     "  - Ground each claim in evidence (cite source)\n"
     "  - Mark confidence on each major claim: HIGH / MEDIUM / LOW\n"
     "  - Address your assigned sub-questions explicitly\n"
@@ -182,10 +101,10 @@ ANALYSIS_INSTRUCTIONS = (
     "```\n"
     "ANALYSIS:\n"
     "\n"
-    "[Aspect 1 from plan]\n"
+    "[Aspect 1]\n"
     "[Your reasoning] (source) [CONFIDENCE]\n"
     "\n"
-    "[Aspect 2 from plan]\n"
+    "[Aspect 2]\n"
     "[Your reasoning] (source) [CONFIDENCE]\n"
     "\n"
     "...\n"
@@ -206,13 +125,13 @@ ANALYSIS_INSTRUCTIONS = (
     "```"
 )
 
-# --- STEP 5: SELF_VERIFICATION -----------------------------------------------
+# --- STEP 4: SELF_VERIFICATION -----------------------------------------------
 
 SELF_VERIFICATION_INSTRUCTIONS = (
     "Verify your analysis through independent questioning.\n"
     "\n"
     "PART A - VERIFICATION QUESTIONS:\n"
-    "  Generate 3-5 questions that would test your key claims.\n"
+    "  Generate questions that would test your key claims.\n"
     "\n"
     "  Use OPEN questions (What is...? Where does...? How would...?)\n"
     "  NOT yes/no questions.\n"
@@ -230,10 +149,10 @@ SELF_VERIFICATION_INSTRUCTIONS = (
     "  - Domain knowledge\n"
     "\n"
     "  Cite the source each answer rests on; an answer that restates your\n"
-    "  Step 4 analysis does not test it.\n"
+    "  Step 3 analysis does not test it.\n"
     "\n"
     "PART C - DISCREPANCY CHECK:\n"
-    "  Compare verification answers against your Step 4 analysis.\n"
+    "  Compare verification answers against your Step 3 analysis.\n"
     "  Where do they differ? List each discrepancy.\n"
     "  For significant discrepancies, note how to resolve.\n"
     "\n"
@@ -258,7 +177,7 @@ SELF_VERIFICATION_INSTRUCTIONS = (
     "```"
 )
 
-# --- STEP 6: PERSPECTIVE_CONTRAST --------------------------------------------
+# --- STEP 5: PERSPECTIVE_CONTRAST --------------------------------------------
 
 PERSPECTIVE_CONTRAST_INSTRUCTIONS = (
     "Before finalizing, consider the strongest opposing perspective.\n"
@@ -299,7 +218,7 @@ PERSPECTIVE_CONTRAST_INSTRUCTIONS = (
     "```"
 )
 
-# --- STEP 7: FAILURE_MODES ---------------------------------------------------
+# --- STEP 6: FAILURE_MODES ---------------------------------------------------
 
 FAILURE_MODES_INSTRUCTIONS = (
     "For each proposal from your analysis, provide actionable failure modes.\n"
@@ -340,7 +259,7 @@ FAILURE_MODES_INSTRUCTIONS = (
     "```"
 )
 
-# --- STEP 8: OUTPUT_SYNTHESIS ------------------------------------------------
+# --- STEP 7: OUTPUT_SYNTHESIS ------------------------------------------------
 
 OUTPUT_SYNTHESIS_INSTRUCTIONS = (
     "Synthesize your analysis into structured output for aggregation.\n"
@@ -354,7 +273,7 @@ OUTPUT_SYNTHESIS_INSTRUCTIONS = (
     "\n"
     "Confidence: [HIGH|MEDIUM|LOW]\n"
     "\n"
-    "[Your main conclusions from this perspective - 2-3 sentences]\n"
+    "[Your main conclusions from this perspective]\n"
     "\n"
     "## Proposals\n"
     "\n"
@@ -393,7 +312,7 @@ OUTPUT_SYNTHESIS_INSTRUCTIONS = (
     "\n"
     "## Opposing View\n"
     "\n"
-    "[Steel-manned counter-position from Step 6]\n"
+    "[Steel-manned counter-position from Step 5]\n"
     "[What would change your conclusion]\n"
     "```\n"
     "\n"
@@ -421,12 +340,11 @@ def build_next_command(step: int) -> str | None:
 STATIC_STEPS = {
     1: ("Context Grounding", CONTEXT_GROUNDING_INSTRUCTIONS),
     2: ("Analogical Generation", ANALOGICAL_GENERATION_INSTRUCTIONS),
-    3: ("Planning", PLANNING_INSTRUCTIONS),
-    4: ("Analysis", ANALYSIS_INSTRUCTIONS),
-    5: ("Self-Verification", SELF_VERIFICATION_INSTRUCTIONS),
-    6: ("Perspective Contrast", PERSPECTIVE_CONTRAST_INSTRUCTIONS),
-    7: ("Failure Modes", FAILURE_MODES_INSTRUCTIONS),
-    8: ("Output Synthesis", OUTPUT_SYNTHESIS_INSTRUCTIONS),
+    3: ("Analysis", ANALYSIS_INSTRUCTIONS),
+    4: ("Self-Verification", SELF_VERIFICATION_INSTRUCTIONS),
+    5: ("Perspective Contrast", PERSPECTIVE_CONTRAST_INSTRUCTIONS),
+    6: ("Failure Modes", FAILURE_MODES_INSTRUCTIONS),
+    7: ("Output Synthesis", OUTPUT_SYNTHESIS_INSTRUCTIONS),
 }
 
 
@@ -453,8 +371,6 @@ def format_output(step: int) -> str:
 def main():
     parser = argparse.ArgumentParser(
         description="DeepThink Sub-Agent - Perspective-specific analysis workflow",
-        epilog="Steps: 1-8 (grounding -> analogies -> planning -> analysis -> "
-        "verification -> contrast -> failure modes -> synthesis)",
     )
     parser.add_argument("--step", type=int, required=True)
     args = parser.parse_args()
