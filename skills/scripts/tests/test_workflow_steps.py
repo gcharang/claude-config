@@ -5,12 +5,14 @@ Uses domain types (BoundedInt, ChoiceSet, Constant) to generate Cartesian produc
 """
 
 import re
+import shlex
 import sys
 
 import pytest
 from conftest import EXCLUDED, run_skill_invocation  # pyright: ignore[reportMissingImports]
 from test_generation import generate_inputs  # pyright: ignore[reportMissingImports]
 
+from skills.arxiv_to_md import main as arxiv_main
 from skills.codebase_analysis import analyze as codebase_analysis
 from skills.deepthink import subagent, think
 from skills.incoherence import incoherence
@@ -144,6 +146,51 @@ def test_deepthink_walk_from_step_1_visits_each_step_once_in_order(
             break
         steps.extend(targets)
     assert steps == visited
+
+
+def test_arxiv_step_1_renders_no_conversion_command(monkeypatch, capsys):
+    out = _render(monkeypatch, capsys, arxiv_main, "--step", "1")
+    assert "--arxiv-id" not in out
+
+
+@pytest.mark.parametrize(
+    "argv,targets",
+    [
+        pytest.param(["--step", "1"], [2], id="discover"),
+        pytest.param(
+            ["--step", "2", "--paper", "2503.05179", "--out-dir", "/abs"], [3], id="convert"
+        ),
+        pytest.param(["--step", "3"], [4], id="review"),
+        pytest.param(["--step", "4"], [], id="summarize"),
+    ],
+)
+def test_arxiv_step_routes_to_its_next_step(monkeypatch, capsys, argv, targets):
+    out = _render(monkeypatch, capsys, arxiv_main, *argv)
+    assert _next_steps(out, arxiv_main.MODULE_PATH) == targets
+
+
+def test_arxiv_step_2_renders_one_exact_command_per_paper(monkeypatch, capsys):
+    dest = "/abs/d/2024-01-02 It's a Title.md"
+    out = _render(
+        monkeypatch,
+        capsys,
+        arxiv_main,
+        "--step",
+        "2",
+        "--out-dir",
+        "/abs/out",
+        "--paper",
+        "2503.05179",
+        "--paper",
+        f"2401.12345::{dest}",
+    )
+    tails = [
+        shlex.split(line)[-4:] for line in out.splitlines() if "skills.arxiv_to_md.convert" in line
+    ]
+    assert tails == [
+        ["--arxiv-id", "2503.05179", "--out-dir", "/abs/out"],
+        ["--arxiv-id", "2401.12345", "--dest-file", dest],
+    ]
 
 
 @pytest.mark.parametrize(

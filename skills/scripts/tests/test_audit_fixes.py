@@ -20,11 +20,15 @@ And the §3b "bugs surfaced only by the run logs":
 from __future__ import annotations
 
 import fcntl
+import gzip
 import io
 import json
 import math
+import shlex
+import shutil
 import subprocess
 import sys
+import tarfile
 import threading
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -932,16 +936,372 @@ class TestCwdPinnedCommands:
             assert f'cmd="uv run --directory {_SKILLS_DIR_Q} ' in line
             assert 'working-dir=".claude/skills/scripts"' not in line
 
-    def test_arxiv_templates_drop_relative_invoke_and_dispatch_is_pinned(self):
-        # Neither template carries a relative-form Start line; the pinned invoke comes
-        # from template_dispatch/sub_agent_invoke.
+    def test_arxiv_review_dispatch_is_pinned_and_exact(self, tmp_path: Path):
         from skills.arxiv_to_md import main
 
-        assert 'working-dir=".claude/skills/scripts"' not in main.MODE1_TEMPLATE
-        assert 'working-dir=".claude/skills/scripts"' not in main.MODE2_TEMPLATE
-        out = main.build_mode1_dispatch()
-        assert f"uv run --directory {_SKILLS_DIR_Q} python -m skills.arxiv_to_md.sub_agent" in out
+        files = [tmp_path / "a b.md", tmp_path / "it's.md"]
+        out = main.build_review_body([str(f) for f in files])
+        commands = [
+            line.removeprefix("Command: ")
+            for line in out.splitlines()
+            if line.startswith("Command: ") and "skills.arxiv_to_md.sub_agent" in line
+        ]
+        assert commands == [
+            f"uv run --directory {_SKILLS_DIR_Q} python -m skills.arxiv_to_md.sub_agent"
+            f" --file {shlex.quote(str(f))}"
+            for f in files
+        ]
         assert 'working-dir=".claude/skills/scripts"' not in out
+
+
+def _tex_tar_gz(path: Path, members: dict[str, bytes], links: dict[str, str] | None = None) -> Path:
+    with tarfile.open(path, "w:gz") as tar:
+        for name, data in members.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+        for name, target in (links or {}).items():
+            info = tarfile.TarInfo(name)
+            info.type = tarfile.SYMTYPE
+            info.linkname = target
+            tar.addfile(info)
+    return path
+
+
+ARTICLE = b"\\documentclass{article}\n\\begin{document}\nHello\n\\end{document}\n"
+
+
+class TestArxivConvert:
+    def test_build_filename_examples(self):
+        from skills.arxiv_to_md.convert import build_filename
+
+        title = "Pruning the Unsurprising: Efficient LLM Reasoning via First-Token Surprisal"
+        assert (
+            build_filename(title, "2026-01-08", "2601.00001")
+            == "2026-01-08 Pruning the Unsurprising - Efficient LLM Reasoning via First-Token Surprisal.md"
+        )
+        assert build_filename("What? Why; How:", "2025-01-01", "2501.00001") == (
+            "2025-01-01 What - Why - How -.md"
+        )
+        assert build_filename(None, None, "math/0211159") == "math_0211159.md"
+
+    @given(st.text())
+    def test_build_filename_stays_one_path_component(self, title: str):
+        from skills.arxiv_to_md.convert import build_filename
+
+        name = build_filename(title, "2025-01-01", "2501.00001")
+        assert "/" not in name and "\\" not in name
+        assert Path(name).name == name
+        assert name.endswith(".md")
+
+    def test_clean_markdown_drops_references_and_simplifies(self):
+        from skills.arxiv_to_md.convert import clean_markdown
+
+        md = (
+            "# Introduction\n\n"
+            "![A figure caption](fig/a.png){width=\"50%\"}\n\n"
+            "See [@a; @b] and [me@x.org].\n\n"
+            "::: thebibliography\nentry\n:::\n\n"
+            "# References {#references .unnumbered}\n\nref text\n\n"
+            "## Sub\n\nsub text\n\n"
+            "# Appendix\n\n"
+            "```\n[@x]\n# not a heading\n```\n"
+        )
+        assert clean_markdown(md) == (
+            "# Introduction\n\n"
+            "[IMAGE: A figure caption]\n\n"
+            "See [a; b] and [me@x.org].\n\n\n"
+            "# Appendix\n\n"
+            "```\n[@x]\n# not a heading\n```\n"
+        )
+
+    def test_residual_spans_flag_only_latex_outside_math_and_code(self):
+        from skills.arxiv_to_md.convert import find_residual_spans
+
+        md = (
+            "Intro $\\alpha$ and `\\code` here\n"
+            "Text \\textsc{Foo}\n"
+            "$$\\begin{aligned}\n"
+            "x &= 1\n"
+            "\\end{aligned}$$\n"
+            "Price \\$5 and \\*star\n"
+            "\\vspace{2mm}\n"
+            "```\n"
+            "\\alpha\n"
+            "```\n"
+            "    \\alpha\n"
+        )
+        assert [n for n, _ in find_residual_spans(md)] == [2, 7]
+
+    @pytest.mark.parametrize("kind", ["tar.gz", "gz", "pdf"])
+    def test_unpack_source_formats(self, tmp_path: Path, kind: str):
+        from skills.arxiv_to_md.convert import NoTexSource, find_main_tex, unpack_source
+
+        download = tmp_path / "download"
+        if kind == "tar.gz":
+            _tex_tar_gz(download, {"main.tex": ARTICLE, "sections/a.tex": b"x"})
+        elif kind == "gz":
+            download.write_bytes(gzip.compress(ARTICLE))
+        else:
+            download.write_bytes(b"%PDF-1.5\n")
+        src = tmp_path / "src"
+        unpack_source(download, src, "math_0211159.tex")
+        if kind == "pdf":
+            with pytest.raises(NoTexSource):
+                find_main_tex(src, "math/0211159", None)
+        else:
+            expected = "main.tex" if kind == "tar.gz" else "math_0211159.tex"
+            assert find_main_tex(src, "math/0211159", None) == src / expected
+
+    def test_older_version_supplies_the_source(self, tmp_path: Path, monkeypatch):
+        from skills.arxiv_to_md import convert
+
+        urls: list[str] = []
+        pandoc_inputs: list[Path] = []
+
+        def fake_fetch(url, dest, max_bytes, deadline=None):
+            urls.append(url)
+            if url.endswith("/2501.00001"):
+                dest.write_bytes(b"%PDF-1.5\n")
+                return "arXiv-2501.00001v2.pdf"
+            _tex_tar_gz(dest, {"main.tex": ARTICLE})
+            return "arXiv-2501.00001v1.tar.gz"
+
+        def fake_pandoc(tex, work, deadline=None):
+            pandoc_inputs.append(tex)
+            return "# T\n\ntext\n"
+
+        monkeypatch.setattr(convert, "fetch", fake_fetch)
+        monkeypatch.setattr(convert, "run_pandoc", fake_pandoc)
+        dest = tmp_path / "out.md"
+        convert.convert("2501.00001", None, dest, None)
+        assert urls == [
+            "https://arxiv.org/e-print/2501.00001",
+            "https://arxiv.org/e-print/2501.00001v1",
+        ]
+        assert "src-v1" in pandoc_inputs[0].parts
+        assert dest.read_text().startswith("# T")
+
+    def test_version_fallback_stops_after_two_older_versions(self, tmp_path: Path, monkeypatch):
+        from skills.arxiv_to_md import convert
+
+        urls: list[str] = []
+
+        def fake_fetch(url, dest, max_bytes, deadline=None):
+            urls.append(url)
+            dest.write_bytes(b"%PDF-1.5\n")
+            return "arXiv-2501.00001v5.pdf"
+
+        monkeypatch.setattr(convert, "fetch", fake_fetch)
+        with pytest.raises(convert.ConvertError, match="no TeX source"):
+            convert.convert("2501.00001", None, tmp_path / "out.md", None)
+        assert urls == [
+            "https://arxiv.org/e-print/2501.00001",
+            "https://arxiv.org/e-print/2501.00001v4",
+            "https://arxiv.org/e-print/2501.00001v3",
+        ]
+
+    def test_html_response_is_not_a_source_archive(self, tmp_path: Path, monkeypatch):
+        from skills.arxiv_to_md import convert
+
+        def fake_fetch(url, dest, max_bytes, deadline=None):
+            dest.write_bytes(b"<!DOCTYPE html><html>rate limited</html>")
+            return ""
+
+        monkeypatch.setattr(convert, "fetch", fake_fetch)
+        with pytest.raises(convert.ConvertError, match="HTML page"):
+            convert.convert("2501.00001", None, tmp_path / "out.md", None)
+
+    def test_unpack_refuses_traversal(self, tmp_path: Path):
+        from skills.arxiv_to_md.convert import ConvertError, unpack_source
+
+        download = _tex_tar_gz(tmp_path / "d.tar.gz", {"../escape.tex": ARTICLE})
+        with pytest.raises(ConvertError):
+            unpack_source(download, tmp_path / "src", "x.tex")
+        assert not (tmp_path / "escape.tex").exists()
+
+    def test_unpack_skips_link_members(self, tmp_path: Path):
+        from skills.arxiv_to_md.convert import unpack_source
+
+        download = _tex_tar_gz(
+            tmp_path / "d.tar.gz", {"main.tex": ARTICLE}, links={"link.tex": "/etc/hostname"}
+        )
+        unpack_source(download, tmp_path / "src", "x.tex")
+        assert (tmp_path / "src" / "main.tex").exists()
+        assert not (tmp_path / "src" / "link.tex").exists()
+        assert not (tmp_path / "src" / "link.tex").is_symlink()
+
+    @pytest.mark.parametrize("cap", ["MAX_MEMBERS", "MAX_UNPACKED_BYTES"])
+    def test_unpack_enforces_caps(self, tmp_path: Path, monkeypatch, cap: str):
+        from skills.arxiv_to_md import convert
+
+        if cap == "MAX_MEMBERS":
+            monkeypatch.setattr(convert, "MAX_MEMBERS", 2)
+            download = _tex_tar_gz(tmp_path / "d.tar.gz", {"a.tex": b"1", "b.tex": b"2", "c.tex": b"3"})
+        else:
+            monkeypatch.setattr(convert, "MAX_UNPACKED_BYTES", 1024)
+            download = tmp_path / "d.gz"
+            download.write_bytes(gzip.compress(b"a" * 4096))
+        with pytest.raises(convert.ConvertError):
+            convert.unpack_source(download, tmp_path / "src", "x.tex")
+
+    @pytest.mark.parametrize(
+        "files,expected",
+        [
+            pytest.param(
+                {"main.tex": b"\\documentclass{article}", "fig.tex": b"\\documentclass{standalone}"},
+                "main.tex",
+                id="standalone-figure-ignored",
+            ),
+            pytest.param({"old.tex": b"\\documentstyle[twoside]{article}"}, "old.tex", id="latex209"),
+            pytest.param(
+                {"main.tex": b"% \\documentclass{article}\n\\documentclass{article}", "x.tex": b"y"},
+                "main.tex",
+                id="only-the-document-file",
+            ),
+        ],
+    )
+    def test_find_main_tex_choice(self, tmp_path: Path, files, expected):
+        from skills.arxiv_to_md.convert import find_main_tex
+
+        for name, data in files.items():
+            (tmp_path / name).write_bytes(data)
+        assert find_main_tex(tmp_path, "2501.00001", None) == tmp_path / expected
+
+    def test_find_main_tex_ambiguity_names_candidates(self, tmp_path: Path):
+        from skills.arxiv_to_md.convert import ConvertError, find_main_tex
+
+        (tmp_path / "a.tex").write_bytes(b"\\documentclass{article}")
+        (tmp_path / "b.tex").write_bytes(b"\\documentclass{article}")
+        with pytest.raises(ConvertError, match=r"a\.tex.*b\.tex.*--main-tex"):
+            find_main_tex(tmp_path, "2501.00001", None)
+        assert find_main_tex(tmp_path, "2501.00001", "b.tex") == tmp_path / "b.tex"
+
+    @pytest.mark.parametrize("override", ["../outside.tex", "notes.tex"])
+    def test_main_tex_override_must_be_a_candidate(self, tmp_path: Path, override: str):
+        from skills.arxiv_to_md.convert import ConvertError, find_main_tex
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "a.tex").write_bytes(b"\\documentclass{article}")
+        (src / "b.tex").write_bytes(b"\\documentclass{article}")
+        (src / "notes.tex").write_bytes(b"no class")
+        (tmp_path / "outside.tex").write_bytes(b"\\documentclass{article}")
+        with pytest.raises(ConvertError):
+            find_main_tex(src, "2501.00001", override)
+
+    def test_preprocess_inlines_nothing_outside_the_source_tree(self, tmp_path: Path):
+        from skills.arxiv_to_md.tex_utils import preprocess_tex
+
+        root = tmp_path / "root"
+        root.mkdir()
+        (tmp_path / "outside.tex").write_text("OUTSIDE-MARKER-ONE")
+        (tmp_path / "outside2.tex").write_text("OUTSIDE-MARKER-TWO")
+        (root / "main.tex").write_text(
+            "\\input{../outside}\n\\input{" + str(tmp_path / "outside2") + "}\n"
+        )
+        out = Path(preprocess_tex(str(root / "main.tex"))).read_text()
+        assert "OUTSIDE-MARKER" not in out
+
+    def test_nested_input_resolves_against_the_main_directory(self, tmp_path: Path):
+        from skills.arxiv_to_md.tex_utils import preprocess_tex
+
+        (tmp_path / "sections").mkdir()
+        (tmp_path / "main.tex").write_text("\\input{sections/a}\n")
+        (tmp_path / "sections" / "a.tex").write_text("\\input{sections/b}\n")
+        (tmp_path / "sections" / "b.tex").write_text("NESTED-MARKER")
+        assert "NESTED-MARKER" in Path(preprocess_tex(str(tmp_path / "main.tex"))).read_text()
+
+    def test_bibliography_follows_the_main_file_name(self, tmp_path: Path):
+        from skills.arxiv_to_md.tex_utils import inline_bibliography
+
+        (tmp_path / "other.bbl").write_text("OTHER-BBL")
+        (tmp_path / "main.bbl").write_text("MAIN-BBL")
+        assert "MAIN-BBL" in inline_bibliography("\\bibliography{x}", tmp_path, "main")
+        (tmp_path / "main.bbl").unlink()
+        assert "OTHER-BBL" in inline_bibliography("\\bibliography{x}", tmp_path, "main")
+        (tmp_path / "third.bbl").write_text("THIRD-BBL")
+        assert inline_bibliography("\\bibliography{x}", tmp_path, "main") == "\\bibliography{x}"
+
+    def test_unclosed_abstracts_are_left_alone(self):
+        from skills.arxiv_to_md.tex_utils import extract_abstract
+
+        text = "\\begin{abstract}" * 20000
+        assert extract_abstract(text) == text
+        assert extract_abstract("\\begin{abstract}A\\end{abstract}") == "\\section*{Abstract}\nA"
+
+    def test_write_new_keeps_an_existing_destination(self, tmp_path: Path):
+        from skills.arxiv_to_md.convert import ConvertError, write_new
+
+        dest = tmp_path / "paper.md"
+        dest.write_text("old")
+        with pytest.raises(ConvertError, match="destination exists"):
+            write_new(dest, "new")
+        assert dest.read_text() == "old"
+        assert [p.name for p in tmp_path.iterdir()] == ["paper.md"]
+
+    def test_write_new_creates_the_file(self, tmp_path: Path):
+        from skills.arxiv_to_md.convert import write_new
+
+        write_new(tmp_path / "paper.md", "text")
+        assert [p.name for p in tmp_path.iterdir()] == ["paper.md"]
+        assert (tmp_path / "paper.md").read_text() == "text"
+
+    def test_main_rejects_a_malformed_id_before_any_network_access(
+        self, tmp_path: Path, monkeypatch, capsys
+    ):
+        import urllib.request
+
+        from skills.arxiv_to_md import convert
+
+        def no_network(*args, **kwargs):
+            raise AssertionError("network access")
+
+        monkeypatch.setattr(urllib.request, "urlopen", no_network)
+        monkeypatch.setattr(
+            sys, "argv", ["convert", "--arxiv-id", "../x", "--out-dir", str(tmp_path)]
+        )
+        with pytest.raises(SystemExit) as exc:
+            convert.main()
+        assert exc.value.code == 1
+        assert capsys.readouterr().out.startswith("FAIL:")
+
+    def test_main_reports_argument_errors_as_fail_lines(self, monkeypatch, capsys):
+        from skills.arxiv_to_md import convert
+
+        monkeypatch.setattr(sys, "argv", ["convert", "--arxiv-id", "2501.00001"])
+        with pytest.raises(SystemExit) as exc:
+            convert.main()
+        assert exc.value.code == 1
+        assert capsys.readouterr().out.startswith("FAIL:")
+
+    @pytest.mark.skipif(shutil.which("pandoc") is None, reason="pandoc not installed")
+    def test_pandoc_does_not_inline_local_files(self, tmp_path: Path):
+        from skills.arxiv_to_md.convert import ConvertError, run_pandoc
+
+        marker = tmp_path / "secret.txt"
+        marker.write_text("SECRET-MARKER")
+        work = tmp_path / "work"
+        work.mkdir()
+        tex = work / "main.tex"
+        tex.write_text(
+            "\\documentclass{article}\n\\begin{document}\n"
+            f"\\lstinputlisting{{{marker}}}\n\\end{{document}}\n"
+        )
+        try:
+            out = run_pandoc(tex, work)
+        except ConvertError as e:
+            pytest.skip(str(e))
+        assert "SECRET-MARKER" not in out
+
+    def test_sub_agent_prints_the_flagged_lines(self, tmp_path: Path, monkeypatch, capsys):
+        from skills.arxiv_to_md import sub_agent
+
+        paper = tmp_path / "paper.md"
+        paper.write_text("# T\n\nText \\textsc{X}\n")
+        monkeypatch.setattr(sys, "argv", ["sub_agent", "--file", str(paper)])
+        sub_agent.main()
+        assert "L3:" in capsys.readouterr().out
 
 
 class TestChecksSummaryHardening:

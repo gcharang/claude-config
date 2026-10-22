@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
-"""arxiv-to-md orchestrator: Parse input, dispatch sub-agents, rename outputs.
+"""arxiv-to-md orchestrator: discover papers, print their convert commands, dispatch reviews.
 
 Two invocation modes:
   MODE 1: Direct conversion (default)
     - User provides arXiv IDs directly or via discovery
-    - Orchestrator constructs filename from paper title + date
+    - The converter builds the filename from the paper's title and first-submission date
 
   MODE 2: PDF folder sync
     - User specifies source PDF folder + destination markdown folder
     - Orchestrator matches PDFs to existing .md files, identifies gaps
     - Destination filename derived from PDF filename
 
-3-step workflow:
-  1. Discover/Parse - Detect mode, find arXiv IDs, dispatch sub-agents
-  2. Wait          - Wait for all sub-agents to complete
-  3. Finalize      - Copy outputs to target location (filename construction varies by mode)
+The steps are build_next_command and format_output below.
 """
 
 import argparse
+import shlex
 import sys
+from pathlib import Path
 
-from skills.lib.workflow.prompts import format_step, template_dispatch
+from skills.arxiv_to_md.convert import ARXIV_ID_RE
+from skills.lib.workflow.prompts import format_step, pin_cwd, template_dispatch
 
 # ============================================================================
 # SHARED PROMPTS
+# ============================================================================
+
 # ============================================================================
 
 DEST_PATH_QUOTING = (
@@ -37,6 +39,7 @@ DEST_PATH_QUOTING = (
 # ============================================================================
 
 MODULE_PATH = "skills.arxiv_to_md.main"
+CONVERT_MODULE_PATH = "skills.arxiv_to_md.convert"
 SUBAGENT_MODULE_PATH = "skills.arxiv_to_md.sub_agent"
 
 
@@ -52,11 +55,11 @@ DISCOVER_INSTRUCTIONS = (
     "\n"
     "MODE 1 (default): Direct conversion\n"
     "  Trigger: User provides arXiv IDs directly, or asks to convert papers\n"
-    "  Filename: Orchestrator constructs from paper title + date\n"
+    "  Filename: the converter builds it from the paper's title and first-submission date\n"
     "\n"
     "MODE 2: PDF folder sync\n"
     "  Trigger: User specifies source PDF folder AND destination markdown folder\n"
-    "  Filename: Derived from PDF filename (orchestrator provides to sub-agent)\n"
+    "  Filename: derived from the PDF filename; the orchestrator passes it to the converter\n"
     "\n"
     "============================================================\n"
     "\n"
@@ -72,26 +75,6 @@ DISCOVER_INSTRUCTIONS = (
     "  - Format: YYMM.NNNNN (e.g., 2503.05179)\n"
     "  - Or full URL: https://arxiv.org/abs/YYMM.NNNNN\n"
     "  - May be multiple IDs (comma-separated, space-separated, or multiple URLs)\n"
-    "\n"
-    "MODE 1 DISPATCH:\n"
-)
-
-MODE1_TEMPLATE = (
-    "Convert this arXiv paper to markdown.\n"
-    "\n"
-    "arXiv ID: $ARXIV_ID\n"
-    "\n"
-    "<expected_output>\n"
-    "Sub-agent responds with ONLY:\n"
-    "\n"
-    "On success:\n"
-    "FILE: <path-to-markdown>\n"
-    "TITLE: <paper title>\n"
-    "DATE: <YYYY-MM-DD>\n"
-    "\n"
-    "On failure:\n"
-    "FAIL: <reason>\n"
-    "</expected_output>"
 )
 
 MODE2_DISCOVERY_INSTRUCTIONS = (
@@ -129,129 +112,73 @@ MODE2_DISCOVERY_INSTRUCTIONS = (
     "\n"
     "5. DETERMINE DESTINATION FILENAMES:\n"
     "   For each unmatched PDF with resolved arXiv ID:\n"
-    "   - dest_file = '<dest_folder>/<pdf_basename>.md'\n"
+    "   - dest_file = '<absolute dest_folder>/<pdf_basename>.md'\n"
     "   - Example: source/2025-01-08 Pruning the Unsurprising.pdf\n"
     "             -> dest/2025-01-08 Pruning the Unsurprising.md\n"
-    "\n"
-    "MODE 2 DISPATCH:\n"
 )
 
-MODE2_TEMPLATE = (
-    "Convert this arXiv paper to markdown.\n"
-    "\n"
-    "arXiv ID: $ARXIV_ID\n"
-    "Destination: $DEST_FILE\n"
-    "\n"
-    "<expected_output>\n"
-    "Sub-agent responds with ONLY:\n"
-    "\n"
-    "On success:\n"
-    "FILE: <path-to-markdown>\n"
-    "\n"
-    "On failure:\n"
-    "FAIL: <reason>\n"
-    "</expected_output>"
-)
-
-# --- STEP 2: WAIT ------------------------------------------------------------
-
-WAIT_INSTRUCTIONS = (
-    "WAIT for all sub-agents to complete.\n"
-    "\n"
-    "Collect results from each sub-agent:\n"
-    "\n"
-    "MODE 1 response format:\n"
-    "  - FILE: <path>   -> successful conversion\n"
-    "    TITLE: <title> -> paper title (for filename)\n"
-    "    DATE: <date>   -> submission date YYYY-MM-DD (for filename)\n"
-    "  - FAIL: <reason> -> conversion failed\n"
-    "\n"
-    "MODE 2 response format:\n"
-    "  - FILE: <path>   -> successful conversion (no TITLE/DATE)\n"
-    "    dest_file: already known from dispatch\n"
-    "  - FAIL: <reason> -> conversion failed\n"
-    "\n"
-    "Build results summary:\n"
-    "```\n"
-    "mode: 1 or 2\n"
-    "results:\n"
-    "  - arxiv_id: 2503.05179\n"
-    "    status: success\n"
-    "    temp_path: /tmp/arxiv_2503.05179/cleaned.md\n"
-    "    title: 'Pruning the Unsurprising'  # MODE 1 only\n"
-    "    date: 2025-03-08                   # MODE 1 only\n"
-    "    dest_file: /path/to/dest.md       # MODE 2 only\n"
-    "  - arxiv_id: 2401.12345\n"
-    "    status: failed\n"
-    "    reason: PDF-only submission\n"
-    "```"
-)
-
-# --- STEP 3: FINALIZE --------------------------------------------------------
-
-FINALIZE_INSTRUCTIONS = (
-    "For each SUCCESSFUL conversion:\n"
-    "\n" + DEST_PATH_QUOTING + "\n"
-    "\n"
-    "MODE 1 (dest_file NOT provided - construct filename from metadata):\n"
-    "\n"
-    "1. CONSTRUCT FILENAME from metadata:\n"
-    "\n"
-    "   Format: YYYY-MM-DD Title - Subtitle.md\n"
-    "\n"
-    "   Transformation steps:\n"
-    "   a) Start with DATE from sub-agent (already YYYY-MM-DD)\n"
-    "   b) Take TITLE from sub-agent\n"
-    "   c) Replace ? ; : with ' - ' (space-dash-space)\n"
-    "      'Foo: Bar Baz' -> 'Foo - Bar Baz'\n"
-    "      'What? Why; How:' -> 'What - Why - How -'\n"
-    '   d) Remove characters unsafe for filenames: / \\ < > | " *\n'
-    "   e) Collapse multiple spaces to single space\n"
-    "   f) Trim leading/trailing whitespace\n"
-    "   g) Concatenate: '<date> <title>.md'\n"
-    "\n"
-    "   Example:\n"
-    "     title: 'Pruning the Unsurprising: Efficient LLM Reasoning via First-Token Surprisal'\n"
-    "     date: 2026-01-08\n"
-    "     result: '2026-01-08 Pruning the Unsurprising - Efficient LLM Reasoning via First-Token Surprisal.md'\n"
-    "\n"
-    "   FALLBACK: If title/date missing, use <arxiv_id>.md\n"
-    "\n"
-    "2. Copy the cleaned.md to target:\n"
-    "   ```bash\n"
-    "   cp /tmp/arxiv_<id>/cleaned.md './<constructed_filename>'\n"
-    "   ```\n"
+NEXT_STEP_ARGS_INSTRUCTIONS = (
     "\n"
     "============================================================\n"
     "\n"
-    "MODE 2 (dest_file WAS provided - copy to pre-determined destination):\n"
+    "NEXT STEP ARGUMENTS:\n"
+    "Run the NEXT STEP command with $PAPERS replaced by one --paper argument per paper to\n"
+    "convert, and $OUT_DIR by the absolute path of the directory MODE 1 writes to (the\n"
+    "current working directory unless the user named another). Change nothing else.\n"
+    "  MODE 1: --paper <arxiv_id>\n"
+    "  MODE 2: --paper '<arxiv_id>::<dest_file>', and delete ' --out-dir $OUT_DIR'\n"
+    "The converter runs from the scripts directory, so $OUT_DIR and every <dest_file> are\n"
+    "absolute paths.\n" + DEST_PATH_QUOTING + "\n"
     "\n"
-    "1. Copy the cleaned.md to dest_file:\n"
-    "   ```bash\n"
-    "   cp /tmp/arxiv_<id>/cleaned.md '<dest_file>'\n"
-    "   ```\n"
+    "When no paper is left to convert (every PDF already has its .md), skip the NEXT STEP\n"
+    "and tell the user which PDFs were skipped.\n"
+)
+
+# --- STEP 2: CONVERT ---------------------------------------------------------
+
+CONVERT_INSTRUCTIONS = (
+    "Run each command below in its own Bash call, all in one message so they run in\n"
+    "parallel. Give each call a 600000 ms timeout: a large source archive or a long paper\n"
+    "takes minutes.\n"
+)
+
+CONVERT_RESULT_INSTRUCTIONS = (
+    "Each command prints FILE: with the path it wrote, or one FAIL: line.\n"
+    "  - A RESIDUAL: line after FILE: says LaTeX remains outside math and code in that\n"
+    "    file; the file goes to review in the next step.\n"
+    "  - A FAIL: that lists several main .tex candidates: run that paper's command again\n"
+    "    with --main-tex '<candidate>' added, choosing the candidate that is the paper's\n"
+    "    main file.\n"
+    "  - Any other FAIL: report it in the summary.\n"
     "\n"
-    "   The dest_file was determined in step 1 and passed to sub-agent.\n"
-    "   No filename construction needed.\n"
-    "\n"
-    "============================================================\n"
-    "\n"
-    "VERIFICATION (both modes):\n"
-    "  - Use Read tool to confirm file exists and has content\n"
-    "\n"
+    "Run the NEXT STEP command with $REVIEW replaced by one --review '<FILE path>' per file\n"
+    "that printed a RESIDUAL: line; with none, delete $REVIEW. Change nothing else.\n"
+    + DEST_PATH_QUOTING
+)
+
+# --- STEP 3: REVIEW ----------------------------------------------------------
+
+REVIEW_TEMPLATE = "Repair the LaTeX the arxiv-to-md converter left outside math and code in $FILE."
+
+NO_REVIEW_BODY = "No conversion printed a RESIDUAL: line, so no file needs review."
+
+# --- STEP 4: SUMMARIZE -------------------------------------------------------
+
+SUMMARY_INSTRUCTIONS = (
     "PRESENT FINAL SUMMARY to user:\n"
     "```\n"
-    "Processed M PDFs: N converted, K skipped (already exist), F failed\n"
+    "Processed M papers: N converted, K skipped (already exist), F failed\n"
     "\n"
     "Skipped (already exist):\n"
     "  2025-01-08 Pruning the Unsurprising -> already exists\n"
     "\n"
     "Converted:\n"
-    "  [OK] 2025-01-10 New Paper Title -> ./2025-01-10 New Paper Title.md\n"
+    "  [OK] 2025-01-10 New Paper Title -> /path/to/2025-01-10 New Paper Title.md\n"
     "\n"
     "Failed:\n"
-    "  [FAIL] 2024-12-15 Some Paper -> PDF-only submission (no TeX source)\n"
-    "```"
+    "  [FAIL] 2024-12-15 Some Paper -> no TeX source (PDF-only submission)\n"
+    "```\n"
+    "Under a converted file, list each LEFT: line its reviewer returned."
 )
 
 
@@ -260,50 +187,43 @@ FINALIZE_INSTRUCTIONS = (
 # ============================================================================
 
 
-def build_mode1_dispatch() -> str:
-    """Build MODE 1 dispatch instructions."""
+def build_convert_body(papers: list[tuple[str, str | None]], out_dir: str | None) -> str:
+    """Build step 2 body: one exact convert command per paper."""
+    commands = []
+    for arxiv_id, dest in papers:
+        if dest:
+            target = f"--dest-file {shlex.quote(dest)}"
+        else:
+            assert out_dir is not None
+            target = f"--out-dir {shlex.quote(out_dir)}"
+        command = (
+            f"uv run python -m {CONVERT_MODULE_PATH} --arxiv-id {shlex.quote(arxiv_id)} {target}"
+        )
+        commands.append("  " + pin_cwd(command))
+    return CONVERT_INSTRUCTIONS + "\n" + "\n".join(commands) + "\n\n" + CONVERT_RESULT_INSTRUCTIONS
+
+
+def build_review_body(files: list[str]) -> str:
+    """Build step 3 body: one review sub-agent per file that kept residual LaTeX."""
+    if not files:
+        return NO_REVIEW_BODY
     return template_dispatch(
         agent_type="general-purpose",
-        template=MODE1_TEMPLATE,
-        targets=[{"ARXIV_ID": "EXAMPLE"}],
-        command=f"uv run python -m {SUBAGENT_MODULE_PATH} --step 1 --arxiv-id $ARXIV_ID",
+        template=REVIEW_TEMPLATE,
+        targets=[{"FILE": shlex.quote(f)} for f in files],
+        command=f"uv run python -m {SUBAGENT_MODULE_PATH} --file $FILE",
         model="opus",
-        instruction="Launch one sub-agent per arXiv ID, replacing EXAMPLE with that paper's arXiv ID in both its task and its command; copy the rest of the invoke block verbatim.\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
-    )
-
-
-def build_mode2_dispatch() -> str:
-    """Build MODE 2 dispatch instructions."""
-    return template_dispatch(
-        agent_type="general-purpose",
-        template=MODE2_TEMPLATE,
-        targets=[{"ARXIV_ID": "EXAMPLE", "DEST_FILE": "EXAMPLE"}],
-        command=f"uv run python -m {SUBAGENT_MODULE_PATH} --step 1 --arxiv-id $ARXIV_ID --dest-file '$DEST_FILE'",
-        model="opus",
-        instruction="Launch one sub-agent per arXiv ID, replacing the two EXAMPLE values with that paper's arXiv ID and destination file in both its task and its command; copy the rest of the invoke block verbatim.\n"
-        + DEST_PATH_QUOTING
-        + "\nUse a SINGLE message with multiple Task tool calls.\n\nThese markdown files become the scientific basis for downstream work.\nCost of error amplifies: subpar markdown -> subpar knowledge.",
-    )
-
-
-def build_discover_body() -> str:
-    """Build step 1 body with both dispatch modes."""
-    return (
-        DISCOVER_INSTRUCTIONS
-        + build_mode1_dispatch()
-        + "\n"
-        + MODE2_DISCOVERY_INSTRUCTIONS
-        + build_mode2_dispatch()
     )
 
 
 def build_next_command(step: int) -> str | None:
     """Build invoke command for next step."""
-    next_step_map = {1: 2, 2: 3}
-    next_step = next_step_map.get(step)
-    if next_step is None:
-        return None
-    return f"uv run python -m {MODULE_PATH} --step {next_step}"
+    next_cmds = {
+        1: f"uv run python -m {MODULE_PATH} --step 2 --out-dir $OUT_DIR $PAPERS",
+        2: f"uv run python -m {MODULE_PATH} --step 3 $REVIEW",
+        3: f"uv run python -m {MODULE_PATH} --step 4",
+    }
+    return next_cmds.get(step)
 
 
 # ============================================================================
@@ -311,18 +231,11 @@ def build_next_command(step: int) -> str | None:
 # ============================================================================
 
 STATIC_STEPS = {
-    2: ("Wait for Completion", WAIT_INSTRUCTIONS),
-    3: ("Finalize", FINALIZE_INSTRUCTIONS),
-}
-
-
-def _format_step_1() -> tuple[str, str]:
-    """Step 1: Discover and Dispatch - dynamic body generation."""
-    return ("Discover and Dispatch", build_discover_body())
-
-
-DYNAMIC_STEPS = {
-    1: _format_step_1,
+    1: (
+        "Discover",
+        DISCOVER_INSTRUCTIONS + MODE2_DISCOVERY_INSTRUCTIONS + NEXT_STEP_ARGS_INSTRUCTIONS,
+    ),
+    4: ("Summarize", SUMMARY_INSTRUCTIONS),
 }
 
 
@@ -331,18 +244,34 @@ DYNAMIC_STEPS = {
 # ============================================================================
 
 
-def format_output(step: int) -> str:
+def format_output(
+    step: int,
+    papers: list[tuple[str, str | None]],
+    out_dir: str | None,
+    review: list[str],
+) -> str:
     """Format output for the given step."""
     if step in STATIC_STEPS:
         title, instructions = STATIC_STEPS[step]
-    elif step in DYNAMIC_STEPS:
-        formatter = DYNAMIC_STEPS[step]
-        title, instructions = formatter()
+    elif step == 2:
+        title, instructions = "Convert", build_convert_body(papers, out_dir)
+    elif step == 3:
+        title, instructions = "Review", build_review_body(review)
     else:
         return f"ERROR: Invalid step {step}"
 
     next_cmd = build_next_command(step)
     return format_step(instructions, next_cmd or "", title=f"ARXIV-TO-MD - {title}")
+
+
+def parse_paper(value: str) -> tuple[str, str | None]:
+    """Split '<arxiv_id>' or '<arxiv_id>::<absolute dest_file>'."""
+    arxiv_id, sep, dest = value.partition("::")
+    if not ARXIV_ID_RE.fullmatch(arxiv_id):
+        sys.exit(f"ERROR: invalid arXiv id in --paper: {arxiv_id!r}")
+    if sep and not Path(dest).is_absolute():
+        sys.exit(f"ERROR: --paper dest_file must be an absolute path, got {dest!r}")
+    return arxiv_id, (dest if sep else None)
 
 
 # ============================================================================
@@ -353,16 +282,43 @@ def format_output(step: int) -> str:
 def main():
     parser = argparse.ArgumentParser(
         description="arxiv-to-md orchestrator",
-        epilog="Steps: discover (1) -> wait (2) -> finalize (3)",
+        epilog="Steps: discover (1) -> convert (2) -> review (3) -> summarize (4)",
     )
-    parser.add_argument("--step", type=int, required=True, help="Current step (1-3)")
+    parser.add_argument("--step", type=int, required=True, help="Current step (1-4)")
+    parser.add_argument(
+        "--paper",
+        action="append",
+        default=[],
+        help="Step 2: <arxiv_id>, or '<arxiv_id>::<absolute dest_file>' in PDF folder sync",
+    )
+    parser.add_argument(
+        "--out-dir", help="Step 2: absolute directory for papers given without a dest_file"
+    )
+    parser.add_argument(
+        "--review",
+        action="append",
+        default=[],
+        help="Step 3: absolute path of a converted file that printed a RESIDUAL line",
+    )
     args = parser.parse_args()
 
-    if args.step < 1 or args.step > 3:
-        sys.exit(f"ERROR: --step must be 1-3, got {args.step}")
+    if args.step < 1 or args.step > 4:
+        sys.exit(f"ERROR: --step must be 1-4, got {args.step}")
 
-    output = format_output(args.step)
-    print(output)
+    papers = [parse_paper(value) for value in args.paper]
+    if args.step == 2:
+        if not papers:
+            sys.exit("ERROR: step 2 needs at least one --paper")
+        if any(dest is None for _, dest in papers) and not (
+            args.out_dir and Path(args.out_dir).is_absolute()
+        ):
+            sys.exit("ERROR: --out-dir must be an absolute path when a --paper has no dest_file")
+    if args.step == 3:
+        for path in args.review:
+            if not (Path(path).is_absolute() and Path(path).is_file()):
+                sys.exit(f"ERROR: --review must be an absolute path to a file, got {path!r}")
+
+    print(format_output(args.step, papers, args.out_dir, args.review))
 
 
 if __name__ == "__main__":

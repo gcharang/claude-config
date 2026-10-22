@@ -7,19 +7,30 @@ import re
 from pathlib import Path
 
 
-def expand_inputs(tex_content: str, base_dir: Path, seen: set | None = None) -> str:
+def expand_inputs(
+    tex_content: str,
+    base_dir: Path,
+    seen: set | None = None,
+    root: Path | None = None,
+) -> str:
     """Recursively expand \\input{} and \\include{} statements.
+
+    Every path resolves against base_dir, including paths inside included files, as
+    LaTeX resolves them against the compile directory.
 
     Args:
         tex_content: TeX source content
         base_dir: Directory to resolve relative paths from
         seen: Set of already-processed files (circular reference detection)
+        root: Directory every expanded file must resolve inside; defaults to base_dir
 
     Returns:
         TeX content with all inputs expanded inline
     """
     if seen is None:
         seen = set()
+    if root is None:
+        root = base_dir.resolve()
 
     def replace_input(match):
         filename = match.group(1).strip()
@@ -30,6 +41,9 @@ def expand_inputs(tex_content: str, base_dir: Path, seen: set | None = None) -> 
         filepath = base_dir / filename
         resolved = filepath.resolve()
 
+        if not resolved.is_relative_to(root):
+            return f"% [OUTSIDE SOURCE: {filename}]"
+
         if resolved in seen:
             return f"% [CIRCULAR REFERENCE: {filename}]"
         seen.add(resolved)
@@ -37,14 +51,13 @@ def expand_inputs(tex_content: str, base_dir: Path, seen: set | None = None) -> 
         if resolved.exists():
             try:
                 content = resolved.read_text(encoding="utf-8", errors="replace")
-                # Recursively expand from the included file's directory
-                return expand_inputs(content, resolved.parent, seen)
+                return expand_inputs(content, base_dir, seen, root)
             except Exception as e:
                 return f"% [READ ERROR: {filename}: {e}]"
         return f"% [MISSING FILE: {filename}]"
 
     # Match \input{file} and \include{file}, handling whitespace
-    pattern = r"\\(?:input|include)\s*\{([^}]+)\}"
+    pattern = r"\\(?:input|include)\s*\{([^}]{1,512})\}"
     return re.sub(pattern, replace_input, tex_content)
 
 
@@ -96,13 +109,19 @@ def extract_abstract(tex_content: str) -> str:
     Returns:
         Content with abstract converted to section
     """
-    pattern = r"\\begin\{abstract\}(.*?)\\end\{abstract\}"
-
-    def replace_abstract(m):
-        abstract_text = m.group(1).strip()
-        return f"\\section*{{Abstract}}\n{abstract_text}"
-
-    return re.sub(pattern, replace_abstract, tex_content, flags=re.DOTALL)
+    begin, end = r"\begin{abstract}", r"\end{abstract}"
+    parts = []
+    pos = 0
+    while (start := tex_content.find(begin, pos)) != -1:
+        body_start = start + len(begin)
+        stop = tex_content.find(end, body_start)
+        if stop == -1:
+            break
+        parts.append(tex_content[pos:start])
+        parts.append(f"\\section*{{Abstract}}\n{tex_content[body_start:stop].strip()}")
+        pos = stop + len(end)
+    parts.append(tex_content[pos:])
+    return "".join(parts)
 
 
 def convert_bold_headers(tex_content: str) -> str:
@@ -133,21 +152,21 @@ def convert_bold_headers(tex_content: str) -> str:
 
     # {\bf ...} style with \noindent
     tex_content = re.sub(
-        r"\\noindent\s*\{\\bf\s+([^}]+)\}",
+        r"\\noindent\s*\{\\bf\s+([^}\s][^}]{0,199})\}",
         lambda m: make_subsubsection(m, 1),
         tex_content,
     )
 
     # \textbf{...} style with \noindent
     tex_content = re.sub(
-        r"\\noindent\s*\\textbf\{([^}]+)\}",
+        r"\\noindent\s*\\textbf\{([^}]{1,200})\}",
         lambda m: make_subsubsection(m, 1),
         tex_content,
     )
 
     # Standalone {\bf ...} at line start (no \noindent)
     tex_content = re.sub(
-        r"^(\s*)\{\\bf\s+([^}]+)\}\s*$",
+        r"^([ \t]*)\{\\bf\s+([^}\s][^}]{0,199})\}[ \t]*$",
         lambda m: (
             m.group(0)
             if m.group(2).strip()[-1:] in ".,:;?!"
@@ -160,7 +179,7 @@ def convert_bold_headers(tex_content: str) -> str:
     return tex_content
 
 
-def inline_bibliography(tex_content: str, base_dir: Path) -> str:
+def inline_bibliography(tex_content: str, base_dir: Path, main_stem: str | None = None) -> str:
     """Inline .bbl bibliography file if available.
 
     Replaces \\bibliography{...} command with contents of compiled .bbl file.
@@ -169,17 +188,19 @@ def inline_bibliography(tex_content: str, base_dir: Path) -> str:
     Args:
         tex_content: TeX source content
         base_dir: Directory containing the .bbl file
+        main_stem: Basename of the main .tex file; selects <main_stem>.bbl
 
     Returns:
         Content with bibliography inlined (or unchanged if no .bbl found)
     """
-    # Find .bbl files in the directory
-    bbl_files = list(base_dir.glob("*.bbl"))
-    if not bbl_files:
+    bbl_files = sorted(base_dir.glob("*.bbl"))
+    named = [f for f in bbl_files if f.stem == main_stem]
+    if named:
+        bbl_path = named[0]
+    elif len(bbl_files) == 1:
+        bbl_path = bbl_files[0]
+    else:
         return tex_content
-
-    # Use the first .bbl file found
-    bbl_path = bbl_files[0]
     try:
         bbl_content = bbl_path.read_text(encoding="utf-8", errors="replace")
     except Exception:
@@ -200,7 +221,7 @@ def inline_bibliography(tex_content: str, base_dir: Path) -> str:
     return tex_content
 
 
-def preprocess_tex(main_tex_path: str) -> str:
+def preprocess_tex(main_tex_path: str, root: str | None = None) -> str:
     """Main preprocessing entry point.
 
     Reads main .tex file, expands inputs, normalizes encoding,
@@ -208,6 +229,7 @@ def preprocess_tex(main_tex_path: str) -> str:
 
     Args:
         main_tex_path: Path to main .tex file
+        root: Directory inputs must stay inside; defaults to the main file's directory
 
     Returns:
         Path to preprocessed.tex output file
@@ -219,10 +241,10 @@ def preprocess_tex(main_tex_path: str) -> str:
     content = path.read_text(encoding="utf-8", errors="replace")
 
     # Expand \input{} and \include{} recursively
-    expanded = expand_inputs(content, path.parent)
+    expanded = expand_inputs(content, path.parent, root=Path(root).resolve() if root else None)
 
     # Inline .bbl bibliography if available
-    with_bib = inline_bibliography(expanded, path.parent)
+    with_bib = inline_bibliography(expanded, path.parent, path.stem)
 
     # Convert abstract environment to section (pandoc strips it otherwise)
     with_abstract = extract_abstract(with_bib)

@@ -4,20 +4,11 @@ Convert arXiv papers (TeX source) to clean, LLM-consumable markdown.
 
 ## Architecture
 
-```
-main.py (orchestrator)          sub_agent.py (worker)
-=======================         =====================
-Step 1: Discover/Dispatch  ---> Step 1: Fetch
-Step 2: Wait                    Step 2: Preprocess
-Step 3: Finalize           <--- Step 3: Convert
-                                Step 4: Clean
-                                Step 5: Verify
-                                Step 6: Validate -> FILE: or FAIL:
-```
-
-The orchestrator ALWAYS dispatches to sub-agents, even for a single paper. This
-keeps the architecture uniform and allows parallel processing when multiple
-papers are requested.
+`main.py` prints the orchestrator's steps; its `build_next_command` is the step map.
+Step 2 prints one `convert.py` command per paper, which the main session runs in
+parallel Bash calls; `convert.py` converts the paper without a model and writes the
+Markdown file. Step 3 dispatches a review sub-agent, which runs `sub_agent.py`, for
+each file in which the converter flagged LaTeX left outside math and code.
 
 ## Usage
 
@@ -35,18 +26,27 @@ Convert these papers to markdown: 2503.05179, 2401.12345, 2312.09876
 
 ## Prerequisites
 
-- pandoc binary installed (`brew install pandoc` or equivalent)
+- pandoc 2.15 or later on PATH (`brew install pandoc` or equivalent); `convert.py` runs it with `--sandbox`
+- Python 3.11.4 or later, for tarfile's extraction filters
 
 ## Invisible Knowledge
 
-**Why always dispatch (even for single paper):**
+**Why a script converts and a model only reviews:**
 
-Previous design conditionally dispatched only for multiple papers. This created
-two code paths and made the orchestrator logic complex. Always dispatching:
+Every conversion step but two has one correct result for a given input. A model
+running them re-typed the whole paper through Write, and two verification steps
+existed to catch what the re-typing dropped. `convert.py` writes pandoc's output after
+deterministic cleaning, so nothing is re-typed. Judgment remains for LaTeX that pandoc
+left in the text, which the review sub-agent repairs, and for choosing the main file
+among several `\documentclass` files, which `convert.py` reports with the candidates'
+paths for the main session to pass back as `--main-tex`.
 
-1. Keeps orchestrator simple (no conditional branching)
-2. Ensures sub-agent is always tested
-3. Makes parallel processing automatic when scaling
+**Why the review is a sub-agent:**
+
+The Edit tool needs the file read first, and a converted paper runs to tens of
+thousands of tokens; a sub-agent keeps that reading out of the orchestrator's context.
+It runs on Opus; whether Sonnet suffices for a local rewrite of the flagged lines has
+not been measured.
 
 **Why step 1 discovers from folder metadata:**
 
@@ -57,10 +57,6 @@ referenced elsewhere.
 
 **Handoff minimalism:**
 
-Sub-agent receives the arXiv ID, plus the destination path in PDF-folder sync
-mode. It doesn't know:
-
-- How many papers are being processed
-- What the orchestrator will do with the output
-
-This keeps sub-agent focused and prevents coupling.
+The review sub-agent receives one file path; `sub_agent.py` prints its brief and the
+flagged lines. It doesn't know how many papers are being processed or what the
+orchestrator does with its reply.

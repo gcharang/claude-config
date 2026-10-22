@@ -1,28 +1,36 @@
 # arxiv_to_md Architecture
 
-## Import Resolution
+## Working Directory
 
-**Problem**: The sub-agent's preprocess step runs a Python heredoc that imports `skills.arxiv_to_md.tex_utils`. The sub-agent's Bash working directory is not the scripts project, so a bare interpreter cannot import the package, and every command rendered to the LLM must start with `uv run` (`tests/test_uv_run_invariant.py`).
+Every command the orchestrator prints runs under `uv run --directory <skills/scripts>`
+(`pin_cwd`), so `convert.py` and `sub_agent.py` start in the scripts project, not in the
+user's directory. They take absolute paths: `convert.py` rejects a relative `--out-dir`
+or `--dest-file`, and step 1 has the orchestrator write the user's directory as one.
 
-**Solution**: The heredoc runs under `pin_cwd("uv run python - <<'EOF'")`, which renders `uv run --directory <skills/scripts> python -`. uv changes into the scripts project before it runs the interpreter, so the import resolves from any working directory without a `sys.path` entry.
+## Untrusted Source
 
-**Rejected alternatives**:
-- A `sys.path` entry computed from `__file__` and injected into the heredoc: the bare `python3` call it needs fails the uv-run invariant
-- `os.getcwd()`: Sub-agent Bash tool cwd may differ from invoke working-dir, causing fragile runtime failures
+An e-print is whatever the authors uploaded. arXiv serves it as a gzipped tar, a single
+gzipped file, or a PDF when there is no TeX source (Content-Disposition
+`arXiv-<id>v<N>.tar.gz`, `.gz` or `.pdf`, checked 2026-10-22), so `convert.py` sniffs the
+bytes instead of assuming a tar.
 
-## Template System
-
-**STATIC_STEPS structure**: The `STATIC_STEPS` dictionary maps each step to a title and an instruction string printed verbatim as sub-agent workflow instructions. These strings are NOT executed by `sub_agent.py` itself - they're executed by a Claude sub-agent via the Bash tool.
-
-**F-string trap**: The preprocess heredoc contains `print(f'Preprocessed: {result}')`. This is literal Python code within the template string meant for the sub-agent to execute. If `PREPROCESS_INSTRUCTIONS` were an f-string, Python would attempt to evaluate `{result}` at module load time, causing a `NameError`.
-
-**Why string concatenation**: The `pin_cwd(...)` call is joined to the literal strings with `+` instead of being interpolated by an f-string, so the template's literal braces need no escaping.
-
-**Alternative rejected**: `str.format()` would require escaping all literal braces as `{{ }}` throughout the template, making the bash heredoc harder to maintain.
+- Decompression and extraction run under the size and member caps defined at the top of
+  `convert.py`, through tarfile's `data` filter (Python 3.11.4 or later); link members
+  are skipped, so nothing in the extracted tree points outside it.
+- `tex_utils.expand_inputs` inlines only files inside the extracted tree.
+- pandoc runs with `--sandbox` and a heap cap: without `--sandbox`, pandoc itself reads
+  the files that `\lstinputlisting`, `\input` and `\include` name, wherever they are.
+- One deadline covers a paper's downloads and subprocesses; a SIGTERM exits through the
+  cleanup below.
+- Work files live in a `tempfile.TemporaryDirectory` that is removed when the command
+  exits.
+- The destination is written to a temporary file beside it and published with
+  `os.link`, which refuses an existing name: an existing file is never replaced;
+  `convert.py` reports it instead.
+- `convert.py` prints no paper text to the main session: the written path, the date,
+  a residual-span count and fixed-wording failures. The paper's title enters only the
+  written file name, and file names of several-candidate main files are shell-quoted.
 
 ## Invariants
 
-- `STATIC_STEPS` strings are printed verbatim, not executed by sub_agent.py
-- The bash heredoc runs in a separate process via Claude Bash tool
-- `{result}` in the preprocess heredoc must remain a literal template placeholder, not evaluated at module load
-- Every rendered command starts with `uv run`
+- Every rendered command starts with `uv run` (`tests/test_uv_run_invariant.py`).

@@ -11,12 +11,9 @@ Convert arXiv papers to LLM-consumable markdown.
 
 Python code in `../scripts/skills/arxiv_to_md/`:
 
-| File           | What                              |
-| -------------- | --------------------------------- |
-| `main.py`      | Orchestrator (discover, dispatch) |
-| `sub_agent.py` | Worker (single paper conversion)  |
-| `tex_utils.py` | TeX preprocessing utilities       |
-
-## Prerequisites
-
-- pandoc binary installed
+| File           | What                                    |
+| -------------- | --------------------------------------- |
+| `main.py`      | Orchestrator steps                      |
+| `convert.py`   | Converter (one paper, no model)         |
+| `sub_agent.py` | Review sub-agent brief (residual LaTeX) |
+| `tex_utils.py` | TeX preprocessing utilities             |
