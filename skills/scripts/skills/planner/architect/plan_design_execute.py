@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""Plan design execution - first-time creation workflow.
-
-6-step workflow for architect sub-agent:
-  1. Task Analysis & Exploration Planning
-  2. Codebase Exploration (inline: Glob, Grep, Read)
-  3. Testing Strategy Discovery (may use question relay)
-  4. Approach Generation
-  5. Assumption Surfacing (may use question relay)
-  6. Milestone Definition & Plan Writing
+"""Plan design execution - first-time creation workflow for the architect sub-agent.
 
 This is the EXECUTE script for first-time plan creation.
 For QR fix mode, see quality_reviewer/exec_qr_fix.py (--phase plan-design).
@@ -26,12 +18,8 @@ from skills.planner.shared.resources import (
 )
 
 STEPS = {
-    1: "Task Analysis & Exploration Planning",
-    2: "Codebase Exploration",
-    3: "Testing Strategy Discovery",
-    4: "Approach Generation",
-    5: "Assumption Surfacing",
-    6: "Milestone Definition & Plan Writing",
+    1: "Analysis & Exploration",
+    2: "Milestone Definition & Plan Writing",
 }
 
 
@@ -42,7 +30,7 @@ def _render_method_catalog() -> list[str]:
     exact keys instead of inferring them from prose. Deliberately NOT the
     required/optional split: for the dual create/update commands the signature's
     required/optional split does not match create-vs-update requiredness, so showing it
-    would mislabel them (the CREATE vs UPDATE note in step 6 carries that distinction).
+    would mislabel them (the CREATE vs UPDATE note in the plan-writing step carries that distinction).
 
     Uses get_method_keys (dispatch.py). list_methods builds its own shape
     (required/optional split) from the same extract_params primitive — both
@@ -61,7 +49,7 @@ def _render_method_catalog() -> list[str]:
 
 
 def _render_batch_mode_preamble() -> list[str]:
-    """The BATCH-MODE contract lead-in shared by the architect step-6 prompt and the
+    """The BATCH-MODE contract lead-in shared by the architect's plan-writing prompt and the
     QR-fix plan-design apply prompt.
 
     Header + JSON-RPC shape + the auto-derived method catalog + the underscore-keys
@@ -131,15 +119,7 @@ def get_step_guidance(step: int, module_path: str | None = None, **kwargs) -> di
                 "",
                 SUB_AGENT_QUESTION_FORMAT,
                 "",
-                "TASK: Create implementation plan from user request.",
-                "",
-                "You will follow a 6-step workflow:",
-                "  1. Task Analysis & Exploration Planning (current)",
-                "  2. Codebase Exploration (inline: Glob, Grep, Read)",
-                "  3. Testing Strategy Discovery (may ask user)",
-                "  4. Approach Generation",
-                "  5. Assumption Surfacing (may ask user)",
-                "  6. Milestone Definition & Plan Writing",
+                "TASK: Create the implementation plan for the request above; step 2 records it in plan.json.",
                 "",
                 "If you need user input at any step, use <needs_user_input> XML.",
                 "Before yielding with <needs_user_input>, record every settled decision with",
@@ -147,135 +127,39 @@ def get_step_guidance(step: int, module_path: str | None = None, **kwargs) -> di
                 "with the answer. On re-invocation, read back what plan.json already holds:",
                 "decisions (list-decisions), milestones (list-milestones), each milestone's",
                 "intents (list-intents <milestone-id>) and, by reading plan.json itself, waves.",
-                "Build on them: update an existing entry by its id (CREATE vs UPDATE in step 6)",
+                "Build on them: update an existing entry by its id (CREATE vs UPDATE in step 2)",
                 "instead of creating it again. Run these plan CLI commands as:",
                 f"  {pin_cwd(f'uv run python -m skills.planner.cli.plan --state-dir {shell_quote(state_dir)} <command>')}",
-                "",
-                "STEP 1: TASK ANALYSIS",
-                "",
-                "Parse the user's task description. Identify:",
-                "  - What needs to change (files, modules, behavior)",
-                "  - What exploration is needed (patterns, constraints, existing code)",
-                "  - What directories/files are relevant",
-                "",
-                "Read project context files to understand structure:",
-                "  - Project root CLAUDE.md",
-                "  - Subdirectory CLAUDE.md files in relevant areas",
-                "  - All paths in context.json reference_docs field (if any)",
                 "",
                 "CONTEXT.JSON CONTRACT: READ-ONLY.",
                 "  - context.json is owned by the orchestrator",
                 "  - You MUST NOT write, modify, or append to context.json",
-                "  - Your outputs go to plan.json (step 6) -- never context.json",
+                "  - Your outputs go to plan.json -- never context.json",
                 "",
-                "DO NOT write any files yet. Gather understanding for step 2.",
-                "Record your analysis mentally for use in subsequent steps.",
+                "Before step 2, establish:",
+                "  - What changes (files, modules, behavior), using the project root and relevant",
+                "    subdirectory CLAUDE.md files and every path in context.json reference_docs.",
+                "  - Existing patterns, constraints and conventions (conventions/structural.md, temporal.md).",
+                "  - For every EXISTING function whose behavior you modify or remove: every test",
+                "    exercising it (by name, by its callers, by the changed behavior).",
+                "  - The testing strategy (user conversation, project CLAUDE.md / README.md,",
+                "    conventions/structural.md domain='testing-strategy'); ask when it is unclear.",
+                "  - 2-3 approaches, including minimal-change and idiomatic options, each with its",
+                "    advantage and disadvantage; for new tech or a migration, its canonical usage.",
+                "  - When the task involves new tech, policy defaults (lifecycle, capacity, failure",
+                "    handling) or several valid architectures: the assumptions needing confirmation",
+                "    (pattern preservation, migration strategy, idiomatic usage, abstraction boundary,",
+                "    policy defaults) -- ask before step 2.",
             ],
             "next": f"uv run python -m {MODULE_PATH} --step 2 --state-dir {shell_quote(state_dir)}",
         }
 
     elif step == 2:
-        state_dir = kwargs.get("state_dir", "")
-        state_dir_arg = f" --state-dir {shell_quote(state_dir)}" if state_dir else ""
+        plan_json_schema = _provider.get_resource("plan-json-schema.md")
         return {
             "title": STEPS[2],
             "actions": [
-                "STEP 2: CODEBASE EXPLORATION",
-                "",
-                "Use Glob, Grep, Read tools directly to discover:",
-                "  - Existing patterns and implementations",
-                "  - Constraints from code structure",
-                "  - Conventions to follow",
-                "",
-                "Read conventions/ files as needed:",
-                "  - structural.md (architectural patterns)",
-                "  - temporal.md (comment hygiene)",
-                "",
-                "For any EXISTING function whose behavior you will modify or remove, grep the",
-                "test suite NOW for every test exercising it (by name, by its callers, and by",
-                "the changed behavior) -- you list all coupled tests per milestone in step 6.",
-                "",
-                "Record discoveries for use in steps 4-6. Do NOT write files.",
-            ],
-            "next": f"uv run python -m {MODULE_PATH} --step 3{state_dir_arg}",
-        }
-
-    elif step == 3:
-        state_dir = kwargs.get("state_dir", "")
-        state_dir_arg = f" --state-dir {shell_quote(state_dir)}" if state_dir else ""
-        return {
-            "title": STEPS[3],
-            "actions": [
-                "STEP 3: TESTING STRATEGY DISCOVERY",
-                "",
-                "DISCOVER testing strategy from:",
-                "  - User conversation hints",
-                "  - Project CLAUDE.md / README.md",
-                "  - conventions/structural.md domain='testing-strategy'",
-                "",
-                "If testing approach is unclear, use <needs_user_input> to ask.",
-                "",
-                "Record confirmed strategy for use in step 6.",
-                "Decisions will be recorded via CLI in step 6.",
-            ],
-            "next": f"uv run python -m {MODULE_PATH} --step 4{state_dir_arg}",
-        }
-
-    elif step == 4:
-        state_dir = kwargs.get("state_dir", "")
-        state_dir_arg = f" --state-dir {shell_quote(state_dir)}" if state_dir else ""
-        return {
-            "title": STEPS[4],
-            "actions": [
-                "STEP 4: APPROACH GENERATION",
-                "",
-                "GENERATE 2-3 approach options:",
-                "  - Include 'minimal change' option",
-                "  - Include 'idiomatic/modern' option",
-                "  - Document advantage/disadvantage for each",
-                "",
-                "TARGET TECH RESEARCH (if new tech/migration):",
-                "  - What is canonical usage of target tech?",
-                "  - Does it have different abstractions?",
-                "",
-                "Use exploration findings from step 2 to ground tradeoffs.",
-                "Record approach analysis for step 6.",
-            ],
-            "next": f"uv run python -m {MODULE_PATH} --step 5{state_dir_arg}",
-        }
-
-    elif step == 5:
-        state_dir = kwargs.get("state_dir", "")
-        state_dir_arg = f" --state-dir {shell_quote(state_dir)}" if state_dir else ""
-        return {
-            "title": STEPS[5],
-            "actions": [
-                "STEP 5: ASSUMPTION SURFACING",
-                "",
-                "FAST PATH: Skip if task involves NONE of:",
-                "  - Migration to new tech",
-                "  - Policy defaults (lifecycle, capacity, failure handling)",
-                "  - Architectural decisions with multiple valid approaches",
-                "",
-                "FULL CHECK (if any apply):",
-                "  Audit each category:",
-                "    Pattern preservation, Migration strategy, Idiomatic usage,",
-                "    Abstraction boundary, Policy defaults",
-                "",
-                "  For each assumption needing confirmation:",
-                "    Use <needs_user_input> BEFORE proceeding",
-                "",
-                "Record assumptions and user answers for step 6.",
-            ],
-            "next": f"uv run python -m {MODULE_PATH} --step 6{state_dir_arg}",
-        }
-
-    elif step == 6:
-        plan_json_schema = _provider.get_resource("plan-json-schema.md")
-        return {
-            "title": STEPS[6],
-            "actions": [
-                "STEP 6: MILESTONE DEFINITION & PLAN WRITING (JSON-IR)",
+                "STEP 2: MILESTONE DEFINITION & PLAN WRITING (JSON-IR)",
                 "",
                 "JSON-IR ARCHITECTURE:",
                 "  plan.json is AUTHORITATIVE until TW translates to Markdown.",

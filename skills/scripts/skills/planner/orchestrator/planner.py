@@ -37,7 +37,7 @@ from skills.planner.shared.constraints import (
 )
 from skills.planner.shared.gates import GateResult, build_gate_output
 from skills.planner.shared.qr.types import LoopState
-from skills.planner.shared.qr.utils import prepare_verify_items, qr_file_exists
+from skills.planner.shared.qr.utils import load_qr_state, prepare_verify_items, qr_file_exists
 from skills.planner.shared.resources import (
     ensure_project_root_recorded,
     get_mode_script_path,
@@ -220,6 +220,24 @@ def _begin_run(supplied: str | None) -> str:
     # docs/plans save able to find the project.
     ensure_project_root_recorded(state_dir)
     return state_dir
+
+
+def _clear_settled_plan_qr(state_dir: str) -> None:
+    """Delete a reused state dir's qr-plan-design.json unless it still holds open work.
+
+    A file with no TODO or FAIL item is a previous run's settled verdict: kept, it makes
+    decompose skip and verify pass a resumed architect's changes with no review. A file
+    with open items is the work being resumed.
+    """
+    qr_state = load_qr_state(state_dir, "plan-design")
+    if not qr_state:
+        return
+    if any(item.get("status") in ("TODO", "FAIL") for item in qr_state.get("items", [])):
+        return
+    try:
+        (Path(state_dir) / "qr-plan-design.json").unlink(missing_ok=True)
+    except OSError as e:
+        print(f"Warning: could not clear stale plan-design QR state: {e}", file=sys.stderr)
 
 
 def _write_plan_skeleton(state_dir: str) -> None:
@@ -625,6 +643,7 @@ def main():
     state_dir = args.state_dir
     if args.step == 1:
         state_dir = _begin_run(state_dir)
+        _clear_settled_plan_qr(state_dir)
         _write_plan_skeleton(state_dir)
         print(f"STATE_DIR={state_dir}")
     else:

@@ -83,12 +83,14 @@ behavioral claims.
 ## Invisible Knowledge
 
 This section captures knowledge NOT deducible from reading the code alone.
-Technical Writer uses this to create README.md files **in the same directory as
-the affected code** during post-implementation.
+Technical Writer uses this during post-implementation: it creates README.md in the
+directory the knowledge describes for items that span files or cannot be localized, and
+puts each other item in a comment where it applies (documentation.md Tier 5).
 
 **Placement principle**: Invisible knowledge must be captured CLOSE to
-implementation. README.md files go in the package/directory containing the
-relevant code, not in a separate documentation directory.
+implementation: a comment at the code it applies to, or README.md in the
+package/directory containing the relevant code, not in a separate documentation
+directory.
 
 **Self-contained principle**: follow "Self-contained documentation" in
 <file working-dir=".claude" uri="conventions/documentation.md" />.
@@ -267,8 +269,8 @@ Documentation-only milestones (ALL files are .md, .rst, .txt, or CLAUDE.md):
 Documentation is NOT a milestone. After implementation, the **exec-docs phase** runs
 automatically: the Technical Writer authors all documentation against the real, committed
 code -- inline comments and docstrings (sourced from the Decision Log and Invisible
-Knowledge), a tabular `CLAUDE.md` index, and a code-adjacent `README.md` wherever the
-Invisible Knowledge section has content. You do not write a documentation milestone; keep
+Knowledge), a tabular `CLAUDE.md` index, and a code-adjacent `README.md` for Invisible
+Knowledge items that span files or cannot be localized. You do not write a documentation milestone; keep
 the Decision Log and Invisible Knowledge rich, since they are the TW's source material.
 Format spec: <file working-dir=".claude" uri="conventions/documentation.md" />
 

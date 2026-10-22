@@ -23,7 +23,7 @@ Agents write `context.json` and the initial `qr-{phase}.json` directly; every la
 | ----------------- | -------------- | ----------- | -------------- | ---------------------- |
 | `plan.json`       | Pydantic v2    | Step 1 init | CLI commands   | mutable                |
 | `context.json`    | Loose JSON     | Step 2      | LLM Write tool | frozen after step 2    |
-| `qr-{phase}.json` | QA item schema | QR dispatch | LLM during QR  | ephemeral per QR cycle |
+| `qr-{phase}.json` | QA item schema | QR dispatch | LLM during QR  | kept after PASS        |
 | `verify.json`     | Pydantic v2    | Step 10     | `cli/verify.py`| suite/lint/type record |
 | `project_root`    | Absolute path  | Step 1, every route | `ensure_project_root_recorded` | written when absent; content this planner provably did not write is replaced; anything else, including a marker naming another project, is kept |
 
@@ -159,10 +159,6 @@ architect/
   plan_design.py          Router: execute or QR fix (shared/routing.py)
   plan_design_execute.py  Plan creation (exploration, milestones, code_intents, diagram render)
 
-developer/
-  exec_implement.py          Router: execute or QR fix (shared/routing.py)
-  exec_implement_execute.py  Wave-aware implementation (just-in-time from code_intents)
-
 technical_writer/
   exec_docs.py          Router: execute or QR fix (shared/routing.py)
   exec_docs_execute.py  Post-implementation docs (inline comments, docstrings, CLAUDE.md, README)
@@ -210,7 +206,7 @@ Closures capture static config, handlers receive dynamic state:
 
 ```python
 def execute_dispatch_step(title, agent, script, ...):
-    def handler(ctx):  # Receives state_dir, qr, qr_fail
+    def handler(ctx):  # Receives state_dir, qr
         return {"title": ..., "actions": ..., "next": ...}
     return handler
 
@@ -248,5 +244,5 @@ mode from `qr-{phase}.json` state — no `--qr-fail` flag is threaded.
 1. Every skill entry point defines exactly ONE Workflow
 2. discover_workflows() finds all Workflows without import errors
 3. plan.json is self-contained for execution
-4. qr-{phase}.json files are ephemeral (exist only during QR cycle)
+4. qr-{phase}.json files persist through PASS; the executor deletes the code/doc files at step 1 and on final-verification failure
 5. QR iteration blocking: iter 1-2 all; iter 3 MUST/SHOULD; iter 4+ MUST only

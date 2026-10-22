@@ -10,7 +10,7 @@ runtime; the rest are read by whoever edits the planner's structure.
 `plan-json-schema.md` is the authoritative plan.json (JSON-IR) schema. The
 architect sub-agent loads it at runtime through
 `PlannerResourceProvider.get_resource()` (`shared/resources.py`) during its
-plan-writing step (`architect/plan_design_execute.py`, step 6) and injects it
+plan-writing step (`architect/plan_design_execute.py`) and injects it
 into the prompt, so the agent emits schema-conformant JSON without an embedded
 copy that could drift from the schema.
 

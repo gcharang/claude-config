@@ -20,7 +20,7 @@ All state mutation (except initial context capture) happens via Python scripts. 
 
 Step 1 of each orchestrator creates the state directory through `shared/resources.py::resolve_state_dir(kind)` when `--state-dir` is absent, and honours the supplied path when it is present (the resume path -- re-running step 1 against an existing dir must not replace the plan being resumed). Steps 2+ always require `--state-dir`, and both orchestrators check that it is still a usable directory before reading `plan.json` from it -- retention can remove a run dir between steps, and reporting that as "plan.json not found" invites a fix that recreates the directory without its project marker.
 
-The two orchestrators reset different things on a resume, deliberately: the executor clears `verify.json`, because a previous run's final verdict must never be inherited, while the planner clears nothing -- its `qr-<phase>.json` findings are the work being resumed. Neither clears `plan.json` in Python. The guarantee is not symmetric: the planner's skeleton write is guarded by `if not plan_path.exists()`, so a resumed plan survives structurally, whereas the executor's step 1 instructs the orchestrator to author `plan.json` fresh and therefore re-authors it by design. The resume promise is about the state DIRECTORY, not about every file in it.
+The two orchestrators reset different things on a resume, deliberately: the executor clears `verify.json`, `qr-impl-code.json` and `qr-impl-docs.json`, because a previous run's verdicts must never be inherited (an all-PASS QR file makes decompose skip and verify pass with nothing reviewed), while the planner clears `qr-plan-design.json` only when it holds no TODO or FAIL item -- open findings are the work being resumed. Neither clears `plan.json` in Python. The guarantee is not symmetric: the planner's skeleton write is guarded by `if not plan_path.exists()`, so a resumed plan survives structurally, whereas the executor's step 1 instructs the orchestrator to author `plan.json` fresh and therefore re-authors it by design. The resume promise is about the state DIRECTORY, not about every file in it.
 
 | Branch          | Path                                                                  | When                                                                                                                                             |
 | --------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -74,7 +74,7 @@ Both are stated once here because a new failure path otherwise gets added on the
 
 **What is gated, and what is not.** Machine state is created inside the user's tree only where git *proves* it ignored -- on the route that **mints** it. `resolve_state_dir` makes `.agent-state/`, checks the ignore status against the path actually minted (not a proxy), and takes the directory back again if that check fails. A supplied `--state-dir` is not gated: it is the caller naming a location outright, and `require_usable_state_dir` asks only whether it exists and is a directory, so pointing it at tracked territory writes there. Deliverables are created unconditionally in the recorded project -- `_save_plan_to_docs` mkdirs `docs/plans/` with no gate at all. The asymmetry is deliberate: `.agent-state/` is machine state that must never be committed, while an approved plan is output the user should be able to commit. A new write into the user's tree belongs on one side or the other, and which one follows from that question alone, not from where the code happens to sit.
 
-**What aborts, and what degrades.** Abort when the run cannot proceed; degrade when only an ancillary artifact is lost. Aborting: no state directory at all (`_temp_state_dir`), a step 2+ invocation carrying no `--state-dir` (`validate_state_dir_requirement`, in both orchestrators), a supplied `--state-dir` that is missing or is not a directory (`require_usable_state_dir`), an unwritable `plan.json` at step 1 (planner only -- the executor deliberately writes no skeleton). Degrading: every decline of the project-local branch (`_fallback`), an unwritable project marker (only `docs/plans/` is lost), a stale `verify.json` that will not unlink, a reaping pass that fails. The split is not "caller mistake aborts, environment degrades" -- the `plan.json` write failure is an environment failure that aborts, because without it there is no run.
+**What aborts, and what degrades.** Abort when the run cannot proceed; degrade when only an ancillary artifact is lost. Aborting: no state directory at all (`_temp_state_dir`), a step 2+ invocation carrying no `--state-dir` (`validate_state_dir_requirement`, in both orchestrators), a supplied `--state-dir` that is missing or is not a directory (`require_usable_state_dir`), an unwritable `plan.json` at step 1 (planner only -- the executor deliberately writes no skeleton). Degrading: every decline of the project-local branch (`_fallback`), an unwritable project marker (only `docs/plans/` is lost), a stale `verify.json` or QR file that will not unlink, a reaping pass that fails. The split is not "caller mistake aborts, environment degrades" -- the `plan.json` write failure is an environment failure that aborts, because without it there is no run.
 
 The **run** directory is `0o700` on both branches -- including inside the user's repository -- and so is the temp branch's `cc-<session>` parent. `mkdtemp` asks for that mode and the umask masks it, so `_mkdtemp_usable` and `_session_parent` re-assert it afterwards: a umask can only clear bits, so the re-assert cannot loosen anything, and without it a umask with owner bits set yields a directory the run itself cannot write into. The project-local ancestors -- `.agent-state/`, `_runs/`, `_runs/<kind>/` -- are not hardened: `mkdir` gets no mode, so they land at `0o777` masked by the process umask (measured `0o755` under `022`, `0o775` under `002`). The `0o700` floor exists for a predictable name in a shared `/tmp`, not for a directory inside a repository the user already owns.
 
@@ -195,7 +195,7 @@ Cross-reference validation: `Plan.validate_refs()` checks:
 
 ### qr-{phase}.json
 
-Ephemeral QR state. Created during QR decomposition. Deleted after phase passes. Three phases: plan-design, impl-code, impl-docs.
+Ephemeral QR state. Created during QR decomposition. Kept after the phase passes (see **QR file lifecycle** under Invariants). Three phases: plan-design, impl-code, impl-docs.
 
 ```json
 {
@@ -566,7 +566,6 @@ The developer writes no comments during implementation. exec-docs is the sole au
 | plan.json           | 3    | architect        | Add overview, milestones, code_intents (binding contract), decisions, diagram IR + ascii_render |
 | qr-plan-design.json | 4    | quality-reviewer | Create items with status: TODO                                                        |
 | qr-plan-design.json | 5    | quality-reviewer | Update individual item status to PASS/FAIL                                            |
-| qr-plan-design.json | 6    | orchestrator     | Delete file (all PASS) → PLAN APPROVED                                                |
 
 **Execution phase (source file mutations; plan.json not mutated):**
 
@@ -575,11 +574,9 @@ The developer writes no comments during implementation. exec-docs is the sole au
 | source files       | E2   | developer        | Implement code_intents JIT against current live files (no plan.json write)            |
 | qr-impl-code.json  | E3   | quality-reviewer | Create items with status: TODO                                                        |
 | qr-impl-code.json  | E4   | quality-reviewer | Update individual item status to PASS/FAIL                                            |
-| qr-impl-code.json  | E5   | orchestrator     | Delete file (all PASS)                                                                |
 | source files       | E6   | technical-writer | exec-docs authors inline comments, docstrings, CLAUDE.md, README.md directly in source |
 | qr-impl-docs.json  | E7   | quality-reviewer | Create items with status: TODO                                                        |
 | qr-impl-docs.json  | E8   | quality-reviewer | Update individual item status to PASS/FAIL                                            |
-| qr-impl-docs.json  | E9   | orchestrator     | Delete file (all PASS)                                                                |
 
 ## Workflows
 
@@ -644,10 +641,9 @@ Step 1: exec-init
   Action: Analyze plan, build wave dependency graph
 
 Step 2: impl-code-work
-  Agent: developer (up to 4 parallel per wave)
-  Script: developer/exec_implement.py (router)
-  Routing: If qr-impl-code.json has FAIL items -> quality_reviewer/exec_qr_fix.py --phase impl-code
-           Otherwise -> developer/exec_implement_execute.py
+  Agent: developer (one per milestone; a wave's milestones run in parallel)
+  Dispatch: the orchestrator dispatches the developers directly. If qr-impl-code.json has
+            blocking FAIL items, each prompt also carries the failed QR items for its milestone.
   Dispatch carries: files, acceptance_criteria, Code Intent (code_intents[]),
                     decision/IK context
   Output: code_intents implemented JIT against current live files (regenerated per wave)
@@ -735,10 +731,7 @@ skills/planner/
     executor.py      -- 12-step execution workflow
   architect/
     plan_design.py            -- router (detects state, dispatches)
-    plan_design_execute.py    -- first execution (6 steps)
-  developer/
-    exec_implement.py         -- router
-    exec_implement_execute.py -- implementation (4 steps)
+    plan_design_execute.py    -- first execution
   technical_writer/
     exec_docs.py              -- router
     exec_docs_execute.py      -- impl-docs (6 steps)
@@ -796,7 +789,7 @@ The orchestrator never passes failure paths or iteration counts. Routers and fix
 
 **Sub-agents cannot invoke AskUserQuestion**. Sub-agents that need user input yield with `<needs_user_input>` XML. Orchestrator relays question, then reinvokes sub-agent fresh with answer. Sub-agents cannot be resumed; they must be reinvoked with context restored from state files.
 
-**Orchestrator LLM never reads/writes state files**. The orchestrator LLM agent must not use Read(), Write(), or Edit() tools on state files (plan.json, context.json, qr-{phase}.json). Context flows through dispatch prompts. State files are sub-agent territory.
+**Orchestrator LLM writes only the state files its steps instruct**. The orchestrator LLM agent writes context.json (planner step 2) and plan.json (executor step 1) as those steps instruct, and uses no Read(), Write(), or Edit() on any other state file (planner plan.json, qr-{phase}.json, verify.json). Other context flows through dispatch prompts. Those state files are sub-agent territory.
 
 Note: The orchestrator Python script (planner.py, executor.py) may read state files internally for reliable orchestration -- e.g., `load_qr_state()` to determine which QR items remain for dispatch. This is implementation machinery invisible to the LLM. The invariant applies to the LLM agent, not the Python code that generates prompts.
 
@@ -831,7 +824,7 @@ This applies to both execute and fix workflows. After the architect writes plan.
 
 **QR verify dispatch**. The decompose workflow writes qr-{phase}.json. The orchestrator script reads that file and builds the verify fan-out itself (`build_qr_verify_dispatch` in `shared/builders.py`, rendered by `template_dispatch` from `skills.lib.workflow.prompts`), re-binning items into balanced groups (`shared/qr/utils.py::balance_verify_groups`) and passing each agent its items as repeated `--qr-item` flags.
 
-**QR file lifecycle**. qr-{phase}.json is created by decompose step, updated by verify agents, deleted by route step on PASS. The file's existence signals "QR in progress"; its absence signals "no QR done yet" or "QR passed and cleaned up".
+**QR file lifecycle**. qr-{phase}.json is created by the decompose step and updated during verification; the gate only reads it, so the file outlives a PASS. The executor deletes qr-impl-code.json and qr-impl-docs.json at step 1, with verify.json, and when final verification fails (`reset_qr_for_reverify`), so each run's code and doc QR review that run's work. The planner deletes qr-plan-design.json at step 1 only when it holds no TODO or FAIL item.
 
 **QR iteration limit**. Maximum 5 iterations (`QR_ITERATION_LIMIT`) per QR phase, enforced at the gate: once the limit is reached with blocking findings still open, the gate escalates to the user (accept-as-is or abort) instead of looping again. Blocking scope narrows by iteration via progressive de-escalation (iterations 1–2: MUST + SHOULD + COULD; iteration 3: MUST + SHOULD; iteration 4+: MUST only). MUST never de-escalates, which is exactly why the enforced ceiling exists — an unfixable MUST would otherwise loop forever.
 
@@ -922,8 +915,8 @@ def has_qr_failures_from_state(qr_state: dict) -> bool:
 
 The script determines the routing and generates the appropriate prompt for the LLM. The LLM sees only the routing decision, not the file contents.
 
-If no failures: delete qr file, proceed to next block.
-If failures exist: loop back to work step. The work step's router will detect qr-{phase}.json with FAIL items and dispatch to the fix workflow.
+If no failures: proceed to next block.
+If failures exist: loop back to work step. The work step detects qr-{phase}.json FAIL items and dispatches the fix.
 If an item is still TODO and no blocking FAIL exists: route back to the verify step, which re-dispatches every TODO item.
 
 **Fix workflow (via router):**

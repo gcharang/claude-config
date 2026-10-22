@@ -34,12 +34,15 @@ from skills.planner.shared.constants import (
 )
 from skills.planner.shared.constraints import (
     ORCHESTRATOR_CONSTRAINT,
+    format_state_banner,
 )
 from skills.planner.shared.gates import _render_iteration_limit_banner, build_gate_output
 from skills.planner.shared.qr.constants import QR_ITERATION_LIMIT
 from skills.planner.shared.qr.phases import get_phase_config
 from skills.planner.shared.qr.types import LoopState, QRState
 from skills.planner.shared.qr.utils import (
+    format_failed_items_for_fix,
+    load_qr_state,
     load_validated_qr_state,
     prepare_verify_items,
     resolve_qr_for_step,
@@ -80,7 +83,6 @@ def format_step_1(state_dir: str, reconciliation_check: bool) -> str:
         "",
         "ANALYZE plan:",
         "  - Read the milestones and the plan's '## Execution Waves' list",
-        "  - Set up TodoWrite tracking",
         "",
         "EXECUTION WAVES (transcribe, do NOT derive):",
         "  The approved plan declares execution waves under its '## Execution Waves'",
@@ -176,20 +178,34 @@ def format_step_2(qr: QRState, state_dir: str) -> str:
     """Wave-aware implementation dispatch."""
     if qr.state == LoopState.RETRY:
         title = "Implementation - Fix Mode"
-        mode_script = get_mode_script_path("developer/exec_implement.py")
-        invoke_cmd = f"uv run python -m {mode_script} --step 1 --state-dir {shell_quote(state_dir)}"
-        actions = build_fix_mode_dispatch(
-            banner_label="IMPLEMENTATION FIX",
-            iteration=qr.iteration,
-            fix_mode_line="FIX MODE: Code QR found issues.",
-            constraint=ORCHESTRATOR_CONSTRAINT,
-            agent_type="developer",
-            invoke_cmd=invoke_cmd,
-            follow_up=(
-                "Developer reads the QR findings and fixes them in the code.",
-                "After developer completes, re-run Code QR for fresh verification.",
-            ),
-        )
+        qr_state = load_qr_state(state_dir, "impl-code")
+        failed_block = format_failed_items_for_fix(qr_state) if qr_state else ""
+        actions = [
+            format_state_banner("IMPLEMENTATION FIX", qr.iteration, "fix"),
+            "",
+            "FIX MODE: Code QR found issues.",
+            "",
+            ORCHESTRATOR_CONSTRAINT,
+            "",
+            failed_block or "(failed QR items unavailable: qr-impl-code.json did not load)",
+            "",
+            "Dispatch developer agents to fix the failed items above against the CURRENT",
+            "code. Dispatch one developer per milestone that owns failed items, in",
+            "parallel when the milestones' files are disjoint.",
+            "",
+            "Each prompt must include:",
+            "  - Plan file: $PLAN_FILE",
+            "  - The milestone and its files, acceptance criteria and code_intents from plan.json",
+            "  - The failed QR items for that milestone, copied from above",
+            "",
+            "Wait for ALL agents to complete. The workflow then re-runs Code QR for fresh",
+            "verification.",
+            "",
+            "ERROR HANDLING (you NEVER fix code yourself):",
+            "  Clear problem + solution: Task(developer) immediately",
+            "  Difficult/unclear problem: Task(debugger) to diagnose first",
+            f"  Uncertain how to proceed: {ESCALATE_HANDLER} with options",
+        ]
     elif verify_has_failures(state_dir):
         # Reset code/doc QR so the post-verify fix gets a fresh review (the gate is
         # a pure renderer -- the reset side-effect lives here, in the step the gate
@@ -658,8 +674,8 @@ def main():
 
     # One block. The order is load-bearing: validation precedes recording, or an unusable
     # --state-dir draws a soft "not recording a project" line immediately before the real
-    # error. The stale-verify.json clear may sit between them because neither the
-    # validation nor the recording reads verify.json; consolidating the sequence with the
+    # error. The stale-state clear may sit between them because neither the
+    # validation nor the recording reads verify.json or the QR files; consolidating the sequence with the
     # planner's is in DEFERRED.md.
     #
     # No plan.json skeleton is pre-written on EITHER route. format_step_1 has the
@@ -682,10 +698,12 @@ def main():
         # plan.json into a directory that does not exist.
         # ORDER: validate before recording -- see planner.py::_begin_run.
         require_usable_state_dir(state_dir)
-        # Clear stale verify.json (reused state-dir path) so the current session's
-        # step 10/11 is the sole writer of the session's verdict.
+        # Clear a reused state dir's verdicts: verify.json, so this session's step 10/11
+        # is its sole writer, and the code/doc QR files, so steps 3 and 7 review this
+        # session's work instead of passing a previous run's all-PASS items unreviewed.
         try:
             verify_path(state_dir).unlink(missing_ok=True)
+            reset_qr_for_reverify(state_dir)
         except OSError as e:
             # missing_ok covers ENOENT only, so an unwritable or unsearchable supplied
             # --state-dir raised here. Degrade rather than abort: the same unwritable
@@ -698,7 +716,7 @@ def main():
             # previous session's failing checks, told not to re-implement milestones, on a
             # plan nothing has implemented -- and reset_qr_for_reverify drops the code and
             # docs QR state on the way.
-            print(f"Warning: could not clear stale verify.json: {e}", file=sys.stderr)
+            print(f"Warning: could not clear stale verify/QR state: {e}", file=sys.stderr)
         # Identity, not placement -- see planner.py's step 1. Runs for every route,
         # including a supplied --state-dir that never called resolve_state_dir.
         ensure_project_root_recorded(state_dir)

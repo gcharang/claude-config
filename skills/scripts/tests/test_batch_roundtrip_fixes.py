@@ -7,7 +7,7 @@ Two groups with independent numbering -- read the section headers, not bare numb
 - Fix 3: create-required / version errors are RPC-neutral (no --flag names)
 - Fix 4: batch JSON-decode errors carry a line/col + stdin hint (+ qr OSError parity)
 - Fix 5: inline batch args are rejected with a guiding message (stdin only)
-- Fix 1: step-6 prompt renders the exact RPC method catalog (underscore keys)
+- Fix 1: plan-writing prompt renders the exact RPC method catalog (underscore keys)
 
 "Review #N" sections cover the later max-effort review round (numbers are that review's
 finding numbers, NOT the "Fix N" scheme above):
@@ -282,7 +282,7 @@ def test_qr_cli_batch_inline_rejected(tmp_path: Path, capsys):
     assert "reads JSON from stdin" in capsys.readouterr().out
 
 
-# --- Fix 1: step-6 prompt renders the exact RPC method catalog --------------
+# --- Fix 1: plan-writing prompt renders the exact RPC method catalog --------
 
 
 def test_render_method_catalog_lists_exact_underscore_keys():
@@ -294,26 +294,14 @@ def test_render_method_catalog_lists_exact_underscore_keys():
         assert method in body
 
 
-def test_step6_prompt_surfaces_catalog_and_notes():
-    body = "\n".join(get_step_guidance(6)["actions"])
-    assert "RPC METHOD CATALOG" in body
-    assert "decision_refs" in body
-    assert "underscores" in body  # hyphen-vs-underscore guidance
-    assert "Unknown keys are rejected" in body
-    assert "CREATE vs UPDATE" in body
-    assert "version is rejected on create" in body
-    # P2-A: set-wave update still needs milestones; set-intent infers its parent from the id
-    assert "set-intent infers its parent milestone from" in body
-    assert "set-wave still needs milestones" in body
-    # P2-B: example is ordered (set-diagram before add-diagram-node)
-    assert body.index('"method": "set-diagram"') < body.index('"method": "add-diagram-node"')
-    # existing guards must still hold
-    assert "set-diagram-render" in body
-    assert "batch '[" not in body
+def test_plan_writing_prompt_embeds_method_catalog():
+    actions = get_step_guidance(2)["actions"]
+    assert set(_render_method_catalog()) <= set(actions)
+    assert not any("batch '[" in line for line in actions)
 
 
 def _extract_example_batch(actions: list[str]) -> list[dict]:
-    """Parse the JSON request array out of rendered step-6 guidance actions.
+    """Parse the JSON request array out of rendered plan-writing guidance actions.
 
     The example lives as literal lines between a standalone '[' and ']' (the only
     standalone brackets in the actions). Parsing the RENDERED example -- not a copy --
@@ -324,8 +312,8 @@ def _extract_example_batch(actions: list[str]) -> list[dict]:
     return json.loads("\n".join(actions[start : end + 1]))
 
 
-def test_step6_example_batch_is_self_contained(tmp_path: Path):
-    """The step-6 example batch must round-trip against a fresh skeleton.
+def test_plan_writing_example_batch_is_self_contained(tmp_path: Path):
+    """The plan-writing example batch must round-trip against a fresh skeleton.
 
     Parses the example out of the RENDERED guidance (not a hand-copied literal) and
     runs it through batch(), so a drifted example -- an intent referencing the wrong
@@ -333,7 +321,7 @@ def test_step6_example_batch_is_self_contained(tmp_path: Path):
     """
     ctx = _seed_plan(tmp_path)
     methods = discover_methods(pc)
-    requests = _extract_example_batch(get_step_guidance(6)["actions"])
+    requests = _extract_example_batch(get_step_guidance(2)["actions"])
     assert len(requests) == 8  # guards against the bracket-scan matching the wrong block
     results = batch(methods, requests, ctx)
     # Every op must succeed — no errors.

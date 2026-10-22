@@ -205,7 +205,7 @@ StepHandler: TypeAlias = Callable[..., dict | StepGuidance]
 Args:
     step: Current step number
     module_path: Module path for invocation
-    **kwargs: Additional context (qr_iteration, qr_fail, etc.)
+    **kwargs: Additional context
 
 Returns:
     Dict or StepGuidance with title, actions, next hint
@@ -267,11 +267,3 @@ class QuestionOption:
 
     label: str
     description: str
-
-
-@dataclass(frozen=True)
-class UserInputResponse:
-    """User's answer passed back to resumed sub-agent."""
-
-    question_id: str
-    selected: str

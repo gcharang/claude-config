@@ -160,16 +160,6 @@ def test_executor_step2_dispatches_code_intent_not_diffs(tmp_path):
     assert "is_documentation_only" in out
 
 
-def test_exec_implement_execute_implements_from_intent():
-    from skills.planner.developer.exec_implement_execute import get_step_guidance
-
-    for step in (1, 2):
-        body = "\n".join(get_step_guidance(step, state_dir="/tmp/x")["actions"])
-        assert "Code Intent" in body or "code_intents" in body
-        assert "code_changes" not in body
-        assert "implementation source" not in body.lower()  # no diff-application framing
-
-
 # --- exec-docs authors documentation (no transcription) ---------------------
 def test_exec_docs_authors_not_transcribes():
     from skills.planner.technical_writer.exec_docs_execute import STEPS, get_step_guidance
@@ -186,7 +176,7 @@ def test_exec_docs_authors_not_transcribes():
 def test_architect_renders_diagrams_at_plan_design():
     from skills.planner.architect.plan_design_execute import get_step_guidance
 
-    body = "\n".join(get_step_guidance(6)["actions"])
+    body = "\n".join(get_step_guidance(2)["actions"])
     assert "set-diagram-render" in body  # architect renders its own IR
 
 
@@ -1892,10 +1882,8 @@ def test_architect_router_silent_on_first_time_skeleton(tmp_path):
 def test_exec_routers_fail_closed_without_state_dir():
     # AL2: the work-phase routers fail closed without --state-dir instead of silently
     # routing to first-time EXECUTE.
-    from skills.planner.developer.exec_implement import get_step_guidance as impl_router
     from skills.planner.technical_writer.exec_docs import get_step_guidance as docs_router
 
-    assert impl_router(1) == {"error": "--state-dir required"}
     assert docs_router(1) == {"error": "--state-dir required"}
 
 
@@ -1907,18 +1895,18 @@ def test_build_route_dispatch_fix_mode_reuses_threaded_iteration(tmp_path):
 
     from skills.planner.shared.routing import build_route_dispatch
 
-    (tmp_path / "qr-impl-code.json").write_text(json.dumps({
-        "phase": "impl-code", "iteration": 2,
+    (tmp_path / "qr-impl-docs.json").write_text(json.dumps({
+        "phase": "impl-docs", "iteration": 2,
         "items": [{"id": "q1", "scope": "*", "check": "x", "status": "FAIL",
                    "finding": "boom", "severity": "MUST"}],
     }))
-    result = build_route_dispatch(str(tmp_path), "impl-code", "Exec Implement")
+    result = build_route_dispatch(str(tmp_path), "impl-docs", "Exec Docs")
     assert "Fix Mode" in result["title"]
     assert "iteration 2" in "\n".join(result["actions"])
     # The fix target is the shared phase-parameterized runner: the dispatched command
     # must carry --phase so it selects the right fix content.
     assert result["dispatch_to"] == "skills.planner.quality_reviewer.exec_qr_fix"
-    assert "--phase impl-code" in result["next"]
+    assert "--phase impl-docs" in result["next"]
 
 
 def test_detect_qr_state_fails_closed_on_malformed_file(tmp_path):
@@ -1930,15 +1918,15 @@ def test_detect_qr_state_fails_closed_on_malformed_file(tmp_path):
     from skills.planner.shared.routing import detect_qr_state, route_work_phase
 
     for body in (
-        {"phase": "impl-code", "iteration": 1, "items": [{"id": "q1", "status": ["FAIL"]}]},
-        {"phase": "impl-code", "iteration": 1, "items": [{"id": ["x"], "status": "FAIL"}]},
+        {"phase": "impl-docs", "iteration": 1, "items": [{"id": "q1", "status": ["FAIL"]}]},
+        {"phase": "impl-docs", "iteration": 1, "items": [{"id": ["x"], "status": "FAIL"}]},
     ):
-        (tmp_path / "qr-impl-code.json").write_text(json.dumps(body))
-        assert detect_qr_state(str(tmp_path), "impl-code") == (False, [], 1)
-        result = route_work_phase(str(tmp_path), "impl-code")
+        (tmp_path / "qr-impl-docs.json").write_text(json.dumps(body))
+        assert detect_qr_state(str(tmp_path), "impl-docs") == (False, [], 1)
+        result = route_work_phase(str(tmp_path), "impl-docs")
         assert result["has_failures"] is False
         assert result["failed_count"] == 0
-        assert result["target_module"] == "skills.planner.developer.exec_implement_execute"
+        assert result["target_module"] == "skills.planner.technical_writer.exec_docs_execute"
 
 
 class TestExecQrFixConsolidation:

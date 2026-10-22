@@ -2,13 +2,12 @@
 
 SW1: format_failed_items_for_fix is severity-aware (shows only the blocking FAILs
 the gate routes on, not de-escalated non-blocking FAILs).
-B1: the developer/TW execute scripts fail loud (ValueError) when state_dir is
+B1: the TW execute script fails loud (ValueError) when state_dir is
 missing at a step > 1, instead of silently emitting a command with no --state-dir.
 """
 
 import pytest
 
-from skills.planner.developer.exec_implement_execute import get_step_guidance as impl_execute
 from skills.planner.shared.qr.utils import format_failed_items_for_fix
 from skills.planner.technical_writer.exec_docs_execute import get_step_guidance as docs_execute
 
@@ -42,13 +41,13 @@ def test_fixer_prompt_lists_both_when_should_still_blocks():
     assert "q2" in block
 
 
-@pytest.mark.parametrize("guidance", [impl_execute, docs_execute])
+@pytest.mark.parametrize("guidance", [docs_execute])
 def test_execute_step_one_is_permissive_without_state_dir(guidance):
     # Step 1 creates the state dir; requiring it would be circular.
     assert guidance(1)["title"]
 
 
-@pytest.mark.parametrize("guidance", [impl_execute, docs_execute])
+@pytest.mark.parametrize("guidance", [docs_execute])
 def test_execute_step_after_one_requires_state_dir(guidance):
     with pytest.raises(ValueError, match=r"state-dir required for step 2"):
         guidance(2)

@@ -27,11 +27,12 @@ uv run --project "<scripts>" python -m skills.planner.orchestrator.planner --ste
 uv run --project "<scripts>" python -m skills.planner.orchestrator.executor --step 1
 ```
 
-**Run these with the shell sitting inside the project.** The Bash working directory
-persists between calls, so it may still be in a sibling repo or a vendored checkout from
-earlier work -- check it, and `cd` into the project first if it is not already there. Do
-not `cd` into the skills directory: `--project` already locates the scripts, and step 1
-needs the project's own working directory left intact.
+**Run these from inside the project.** Step 1 resolves the project from the git
+repository at or above the working directory, and Claude Code keeps that directory inside
+the project: a subagent's working directory resets before every call, and the main
+session's resets when it leaves the project. Do not `cd`, into the skills directory or
+anywhere else: `--project` already locates the scripts, and step 1 needs the project's
+own working directory left intact.
 
 `<scripts>` picks the install layout from that same project, so a project-local install wins when it exists. Write the path out rather than computing it in the command: Claude Code asks for approval outside bypass mode when a command argument contains a shell substitution. An environment-variable fallback cannot pick the layout either -- Claude Code does not populate `CLAUDE_PROJECT_DIR` for Bash-tool subprocesses, so unless the user exports it themselves the fallback selects the user-global install. That fails on a project-local-only install and silently runs the global scripts when both exist.
 

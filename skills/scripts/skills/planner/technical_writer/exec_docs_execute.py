@@ -157,8 +157,9 @@ def get_step_guidance(step: int, module_path: str | None = None, **kwargs) -> di
         return {
             "title": STEPS[4],
             "actions": [
-                "Create README.md when the directory holds invisible knowledge -- knowledge a",
-                "reader cannot get from the code:",
+                "Invisible knowledge is knowledge a reader cannot get from the code. Create",
+                "README.md for the items that span files or cannot be localized; put each other",
+                "item in a comment where it applies (documentation.md Tier 5). Kinds:",
                 "  - Planning decisions from Decision Log",
                 "  - Business context (why the product works this way)",
                 "  - Architectural rationale (why this structure)",

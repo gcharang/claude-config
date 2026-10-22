@@ -9,7 +9,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .prompts.step import format_step
-from .types import UserInputResponse
 
 
 def _compute_module_path(script_file: str) -> str:
@@ -32,27 +31,6 @@ def _compute_module_path(script_file: str) -> str:
             return ".".join(module_parts)
     # Fallback: just use filename
     return path.stem
-
-
-def add_standard_args(parser: argparse.ArgumentParser) -> None:
-    """Add standard workflow arguments."""
-    parser.add_argument("--step", type=int, required=True)
-    parser.add_argument("--qr-iteration", type=int, default=1)
-    parser.add_argument("--qr-fail", type=str, default=None)
-    parser.add_argument("--user-answer-id", type=str, help="Question ID that was answered")
-    parser.add_argument(
-        "--user-answer-value", type=str, help="User's selected option or custom text"
-    )
-
-
-def get_user_answer(args) -> UserInputResponse | None:
-    """Extract user answer from parsed args."""
-    if args.user_answer_id and args.user_answer_value:
-        return UserInputResponse(
-            question_id=args.user_answer_id,
-            selected=args.user_answer_value,
-        )
-    return None
 
 
 def render_step(guidance: dict) -> str:
@@ -80,7 +58,7 @@ def mode_main(
         script_file: Pass __file__ from the calling script
         get_step_guidance: Function that returns guidance dict for each step
         description: Script description for --help
-        extra_args: Additional arguments beyond standard QR args
+        extra_args: Additional arguments beyond --step
         pre_dispatch: Optional hook called immediately after parse_args().
             When it returns True, mode_main returns early, so a caller can
             handle its own flags before the --step requirement check.
@@ -89,8 +67,6 @@ def mode_main(
 
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--step", type=int, default=None)
-    parser.add_argument("--qr-iteration", type=int, default=1)
-    parser.add_argument("--qr-fail", type=str, default=None)
     for args, kwargs in extra_args or []:
         parser.add_argument(*args, **kwargs)
     parsed = parser.parse_args()

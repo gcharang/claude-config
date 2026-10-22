@@ -2,7 +2,7 @@
 
 Modules:
 - plan_design.py: Router that dispatches to execute or fix
-- plan_design_execute.py: First-time plan creation (6 steps)
+- plan_design_execute.py: First-time plan creation
 
 Post-QR fix is the shared quality_reviewer/exec_qr_fix.py runner (--phase plan-design).
 """

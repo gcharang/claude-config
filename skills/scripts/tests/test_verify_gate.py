@@ -347,3 +347,14 @@ def test_step1_init_clears_stale_verify(tmp_path, monkeypatch):
     monkeypatch.setattr("sys.argv", ["executor", "--step", "1", "--state-dir", str(tmp_path)])
     executor_main()
     assert not (tmp_path / "verify.json").exists()
+
+
+def test_step1_init_clears_stale_qr_state(tmp_path, monkeypatch):
+    # A reused dir's all-PASS QR files would skip decompose and pass this run unreviewed.
+    (tmp_path / "qr-impl-code.json").write_text('{"phase":"impl-code","items":[]}')
+    (tmp_path / "qr-impl-docs.json").write_text('{"phase":"impl-docs","items":[]}')
+    from skills.planner.orchestrator.executor import main as executor_main
+    monkeypatch.setattr("sys.argv", ["executor", "--step", "1", "--state-dir", str(tmp_path)])
+    executor_main()
+    assert not (tmp_path / "qr-impl-code.json").exists()
+    assert not (tmp_path / "qr-impl-docs.json").exists()

@@ -1231,10 +1231,10 @@ def get_mode_script_path(script_name: str) -> str:
     Mode scripts provide step-based workflows for sub-agents.
 
     Args:
-        script_name: Script path relative to planner/ (e.g., "developer/exec_implement.py")
+        script_name: Script path relative to planner/ (e.g., "technical_writer/exec_docs.py")
 
     Returns:
-        Module path for python3 -m (e.g., "skills.planner.developer.exec_implement")
+        Module path for -m (e.g., "skills.planner.technical_writer.exec_docs")
     """
     # Convert path to module: "quality_reviewer/qr_decompose.py" -> "quality_reviewer.qr_decompose"
     module = script_name.replace("/", ".").replace("-", "_").removesuffix(".py")

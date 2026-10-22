@@ -44,7 +44,7 @@ Input aliases (accepted, but the canonical names above are what is stored):
 
 ## Decision
 
-Architect populates. Multi-step reasoning required. CLI: `set-decision`.
+Architect populates. `reasoning` holds the decision's rationale as premise -> implication -> conclusion, not a bare assertion. CLI: `set-decision`.
 
 ```json
 {

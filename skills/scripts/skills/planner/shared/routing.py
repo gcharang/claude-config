@@ -1,7 +1,7 @@
 """Centralized routing logic for work phases.
 
 Definition locality: router pattern logic lives in ONE place.
-3 router scripts become thin wrappers that call route_work_phase().
+The router scripts are thin wrappers that call route_work_phase().
 
 This works by:
 1. WORK_PHASES registry defines all work phase routing
@@ -37,7 +37,7 @@ from .qr.utils import (
 #   qr_fix: Python module for post-QR fix workflow
 #   qr_phase: QR phase name for state detection
 
-# All three qr_fix targets are the one shared runner; --phase (== qr_phase) selects the
+# The qr_fix targets are the one shared runner; --phase (== qr_phase) selects the
 # per-phase fix content. The execute scripts stay per-phase (first-time creation differs
 # structurally). See quality_reviewer/exec_qr_fix.py + prompts/fix.py.
 WORK_PHASES: dict[str, dict] = {
@@ -45,11 +45,6 @@ WORK_PHASES: dict[str, dict] = {
         "execute": "skills.planner.architect.plan_design_execute",
         "qr_fix": "skills.planner.quality_reviewer.exec_qr_fix",
         "qr_phase": "plan-design",
-    },
-    "impl-code": {
-        "execute": "skills.planner.developer.exec_implement_execute",
-        "qr_fix": "skills.planner.quality_reviewer.exec_qr_fix",
-        "qr_phase": "impl-code",
     },
     "impl-docs": {
         "execute": "skills.planner.technical_writer.exec_docs_execute",
@@ -99,7 +94,7 @@ def route_work_phase(state_dir: str, phase_key: str) -> dict:
 
     Args:
         state_dir: Path to state directory
-        phase_key: Work phase key (e.g., "plan-design", "impl-code")
+        phase_key: Work phase key (e.g., "plan-design", "impl-docs")
 
     Returns:
         Dict with:
@@ -136,7 +131,7 @@ def build_route_dispatch(
 ) -> dict:
     """Build the work-phase router's fix/execute dispatch dict.
 
-    Single owner of the {title, actions, dispatch_to, next} shape the three thin
+    Single owner of the {title, actions, dispatch_to, next} shape the thin
     routers emit, AND of the missing-state_dir fail-closed policy. Calls
     route_work_phase once, shell-quotes state_dir in the next command, and reuses the
     iteration route_work_phase already loaded for the fix-mode message (no second read
@@ -144,7 +139,7 @@ def build_route_dispatch(
     lets a router override the default execute message (the architect surfaces
     completeness gaps); returning None falls back to the default.
     """
-    # Single owner of the missing-state_dir policy for all three thin routers: a
+    # Single owner of the missing-state_dir policy for all thin routers: a
     # router invoked without --state-dir cannot detect QR state, so fail closed here
     # (rather than each router hand-rolling its own guard and drifting on the answer).
     if not state_dir:
