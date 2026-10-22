@@ -6,6 +6,14 @@ Handles \input{} expansion and encoding normalization without external tools.
 import re
 from pathlib import Path
 
+MAX_TEX_FILE_BYTES = 20 * 2**20
+
+
+def read_tex_text(path: Path) -> str:
+    """Read at most MAX_TEX_FILE_BYTES of path as text."""
+    with path.open("rb") as f:
+        return f.read(MAX_TEX_FILE_BYTES).decode("utf-8", errors="replace")
+
 
 def expand_inputs(
     tex_content: str,
@@ -50,7 +58,7 @@ def expand_inputs(
 
         if resolved.exists():
             try:
-                content = resolved.read_text(encoding="utf-8", errors="replace")
+                content = read_tex_text(resolved)
                 return expand_inputs(content, base_dir, seen, root)
             except Exception as e:
                 return f"% [READ ERROR: {filename}: {e}]"
@@ -73,6 +81,14 @@ def normalize_encoding(content: str) -> str:
     return content.encode("utf-8", errors="replace").decode("utf-8")
 
 
+def _comment_start(line: str) -> int:
+    """Index of the first unescaped % in line, or -1."""
+    i = line.find("%")
+    while i > 0 and line[i - 1] == "\\":
+        i = line.find("%", i + 1)
+    return i
+
+
 def strip_comments(tex_content: str) -> str:
     """Remove TeX comments (lines starting with %).
 
@@ -86,15 +102,8 @@ def strip_comments(tex_content: str) -> str:
     """
     lines = []
     for line in tex_content.split("\n"):
-        # Find first unescaped % and truncate
-        result = []
-        i = 0
-        while i < len(line):
-            if line[i] == "%" and (i == 0 or line[i - 1] != "\\"):
-                break
-            result.append(line[i])
-            i += 1
-        lines.append("".join(result).rstrip())
+        i = _comment_start(line)
+        lines.append((line if i == -1 else line[:i]).rstrip())
     return "\n".join(lines)
 
 
@@ -202,21 +211,38 @@ def inline_bibliography(tex_content: str, base_dir: Path, main_stem: str | None 
     else:
         return tex_content
     try:
-        bbl_content = bbl_path.read_text(encoding="utf-8", errors="replace")
+        bbl_content = read_tex_text(bbl_path)
     except Exception:
         return tex_content
 
     # Replace \bibliography{...} with the .bbl contents
     # The .bbl file contains \begin{thebibliography}...\end{thebibliography}
-    pattern = r"\\bibliography\s*\{[^}]*\}"
+    # Only the first uncommented command receives the .bbl; later ones are dropped.
+    pattern = re.compile(r"\\bibliography\s*\{[^}]{0,1000}\}")
+    inlined = False
 
-    if re.search(pattern, tex_content):
-        # Use lambda to avoid backslash interpretation in replacement string
-        return re.sub(pattern, lambda _: bbl_content, tex_content)
+    def inline_first(_match: re.Match[str]) -> str:
+        nonlocal inlined
+        if inlined:
+            return ""
+        inlined = True
+        return bbl_content
+
+    lines = tex_content.split("\n")
+    for index, line in enumerate(lines):
+        comment = _comment_start(line)
+        code = line if comment == -1 else line[:comment]
+        replaced = pattern.sub(inline_first, code)
+        if replaced != code:
+            lines[index] = replaced + ("" if comment == -1 else line[comment:])
+    if inlined:
+        return "\n".join(lines)
 
     # If no \bibliography command but \end{document} exists, insert before it
-    if r"\end{document}" in tex_content and bbl_content.strip():
-        return tex_content.replace(r"\end{document}", f"\n{bbl_content}\n\\end{{document}}")
+    end = r"\end{document}"
+    if end in tex_content and bbl_content.strip():
+        head, _, tail = tex_content.rpartition(end)
+        return f"{head}\n{bbl_content}\n{end}{tail}"
 
     return tex_content
 
@@ -238,7 +264,7 @@ def preprocess_tex(main_tex_path: str, root: str | None = None) -> str:
     if not path.exists():
         raise FileNotFoundError(f"Main TeX file not found: {main_tex_path}")
 
-    content = path.read_text(encoding="utf-8", errors="replace")
+    content = read_tex_text(path)
 
     # Expand \input{} and \include{} recursively
     expanded = expand_inputs(content, path.parent, root=Path(root).resolve() if root else None)

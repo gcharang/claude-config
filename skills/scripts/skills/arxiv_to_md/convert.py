@@ -12,6 +12,7 @@ and exits 0. Otherwise it prints one FAIL: <reason> line and exits 1.
 """
 
 import argparse
+import errno
 import gzip
 import html.parser
 import os
@@ -31,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import NoReturn
 
-from skills.arxiv_to_md.tex_utils import preprocess_tex, strip_comments
+from skills.arxiv_to_md.tex_utils import preprocess_tex, read_tex_text, strip_comments
 
 MIB = 2**20
 MAX_DOWNLOAD_BYTES = 100 * MIB
@@ -47,13 +48,14 @@ MAX_OLDER_VERSIONS = 2
 MAX_LISTED_CANDIDATES = 20
 ARXIV_ID_RE = re.compile(r"(?:\d{4}\.\d{4,5}|[a-z]+(?:-[a-z]+)*(?:\.[A-Z]{2})?/\d{7})(?:v\d+)?")
 
+_SAFE_CANDIDATE_RE = re.compile(r"[A-Za-z0-9._/-]+")
+_NO_HARD_LINKS = frozenset({errno.EPERM, errno.ENOTSUP, errno.ENOSYS, errno.EXDEV})
 _PREFERRED_MAIN_NAMES = ("main.tex", "paper.tex", "ms.tex")
-_DOCUMENT_COMMAND_RE = re.compile(r"\\document(?:class|style)(?![A-Za-z])")
 _DOCUMENT_CLASS_RE = re.compile(
     r"\\document(?:class|style)\s*(?:\[[^\]]{0,500}\]\s*)?\{([^}]{0,100})\}"
 )
 _TITLE_BREAKS = re.compile(r"[?;:]")
-_UNSAFE = re.compile(r'[/\\<>|"*\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+_WHITESPACE = re.compile(r"\s+")
 _DROPPED_SECTIONS = frozenset(
     {
         "references",
@@ -174,6 +176,8 @@ def _member_filter(member: tarfile.TarInfo, dest_path: str) -> tarfile.TarInfo |
     # keeps every later containment check a plain resolved-prefix check.
     if member.issym() or member.islnk():
         return None
+    if member.issparse():
+        raise ConvertError("source archive has a sparse member")
     return tarfile.data_filter(member, dest_path)
 
 
@@ -182,8 +186,18 @@ def _extract_tar(tar_path: Path, src_dir: Path) -> None:
         raise ConvertError("safe tar extraction needs Python 3.11.4 or later")
     try:
         with tarfile.open(tar_path, "r:") as tar:
-            if len(tar.getmembers()) > MAX_MEMBERS:
-                raise ConvertError(f"source archive has more than {MAX_MEMBERS} members")
+            total = 0
+            for count, member in enumerate(tar, 1):
+                if count > MAX_MEMBERS:
+                    raise ConvertError(f"source archive has more than {MAX_MEMBERS} members")
+                if member.issparse():
+                    raise ConvertError("source archive has a sparse member")
+                if member.isreg():
+                    total += member.size
+                if total > MAX_UNPACKED_BYTES:
+                    raise ConvertError(
+                        f"source archive exceeds {MAX_UNPACKED_BYTES // MIB} MiB unpacked"
+                    )
             tar.extractall(src_dir, filter=_member_filter)
     except tarfile.FilterError as e:
         raise ConvertError(f"unsafe archive member ({type(e).__name__})") from e
@@ -217,14 +231,8 @@ def _flat(arxiv_id: str) -> str:
 
 
 def _document_class(text: str) -> str | None:
-    for m in _DOCUMENT_COMMAND_RE.finditer(text):
-        line_start = text.rfind("\n", 0, m.start()) + 1
-        if text[line_start : m.start()].strip():
-            continue
-        found = _DOCUMENT_CLASS_RE.match(text, m.start())
-        if found:
-            return found.group(1).strip()
-    return None
+    found = _DOCUMENT_CLASS_RE.search(text)
+    return found.group(1).strip() if found else None
 
 
 def find_main_tex(src_dir: Path, arxiv_id: str, override: str | None) -> Path:
@@ -233,7 +241,7 @@ def find_main_tex(src_dir: Path, arxiv_id: str, override: str | None) -> Path:
     for tex in sorted(src_dir.rglob("*.tex")):
         if not tex.is_file():
             continue
-        text = strip_comments(tex.read_text(encoding="utf-8", errors="replace"))
+        text = strip_comments(read_tex_text(tex))
         doc_class = _document_class(text)
         if doc_class is not None and doc_class != "standalone":
             candidates.append(tex)
@@ -243,7 +251,11 @@ def find_main_tex(src_dir: Path, arxiv_id: str, override: str | None) -> Path:
     root = src_dir.resolve()
     if override is not None:
         chosen = (src_dir / override).resolve()
-        if not chosen.is_relative_to(root) or chosen not in {c.resolve() for c in candidates}:
+        if (
+            not _SAFE_CANDIDATE_RE.fullmatch(override)
+            or not chosen.is_relative_to(root)
+            or chosen not in {c.resolve() for c in candidates}
+        ):
             raise ConvertError("--main-tex does not name a main-file candidate of the archive")
         return chosen
     if len(candidates) == 1:
@@ -254,7 +266,13 @@ def find_main_tex(src_dir: Path, arxiv_id: str, override: str | None) -> Path:
     if len(top_level) == 1:
         return top_level[0]
 
-    names = [shlex.quote(str(c.relative_to(src_dir))) for c in candidates]
+    names = [
+        rel for c in candidates if _SAFE_CANDIDATE_RE.fullmatch(rel := str(c.relative_to(src_dir)))
+    ]
+    if not names:
+        raise ConvertError(
+            "several main .tex candidates, all with names outside the set [A-Za-z0-9._/-]"
+        )
     shown = " ".join(names[:MAX_LISTED_CANDIDATES])
     if len(names) > MAX_LISTED_CANDIDATES:
         shown += f" (and {len(names) - MAX_LISTED_CANDIDATES} more)"
@@ -427,7 +445,8 @@ def find_residual_spans(md: str) -> list[tuple[int, str]]:
 
 
 def build_filename(title: str | None, date: str | None, arxiv_id: str) -> str:
-    name = " ".join(_UNSAFE.sub("", _TITLE_BREAKS.sub(" - ", title or "")).split())
+    spaced = _WHITESPACE.sub(" ", _TITLE_BREAKS.sub(" - ", title or ""))
+    name = " ".join("".join(ch for ch in spaced if ch.isalnum() or ch in " .,-_").split())
     if not name or not date:
         return _flat(arxiv_id) + ".md"
     return f"{date} {name}.md"
@@ -444,13 +463,33 @@ def write_new(path: Path, text: str) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
         temp.chmod(0o644)
-        os.link(temp, path)
+        try:
+            os.link(temp, path)
+        except FileExistsError:
+            raise
+        except OSError as e:
+            if e.errno not in _NO_HARD_LINKS:
+                raise
+            _write_exclusive(path, text)
     except FileExistsError as e:
         raise ConvertError(f"destination exists: {shlex.quote(str(path))}") from e
     except OSError as e:
         raise ConvertError(f"cannot write {shlex.quote(str(path))}: {e}") from e
     finally:
         temp.unlink(missing_ok=True)
+
+
+def _write_exclusive(path: Path, text: str) -> None:
+    """Exclusive-create write for filesystems that refuse hard links."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
 
 
 def _ensure_absent(path: Path) -> None:
@@ -490,7 +529,7 @@ def convert(
             main = find_main_tex(src, arxiv_id, main_tex)
             root = src
         except NoTexSource:
-            found = _older_version(arxiv_id, served_name, work, tex_name, deadline)
+            found = _older_version(arxiv_id, served_name, work, tex_name, deadline, main_tex)
             if found is None:
                 raise
             main, root = found
@@ -506,7 +545,12 @@ def convert(
 
 
 def _older_version(
-    arxiv_id: str, served_name: str, work: Path, tex_name: str, deadline: float
+    arxiv_id: str,
+    served_name: str,
+    work: Path,
+    tex_name: str,
+    deadline: float,
+    main_tex: str | None,
 ) -> tuple[Path, Path] | None:
     latest = re.search(r"v(\d+)\.[a-z.]+$", served_name)
     if re.search(r"v\d+$", arxiv_id) or latest is None or int(latest.group(1)) <= 1:
@@ -517,7 +561,7 @@ def _older_version(
         src = work / f"src-v{version}"
         unpack_source(download, src, tex_name)
         try:
-            return find_main_tex(src, arxiv_id, None), src
+            return find_main_tex(src, arxiv_id, main_tex), src
         except NoTexSource:
             continue
     raise ConvertError("no TeX source in any version (PDF-only submission)")

@@ -19,11 +19,13 @@ And the §3b "bugs surfaced only by the run logs":
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import gzip
 import io
 import json
 import math
+import os
 import shlex
 import shutil
 import subprocess
@@ -1133,6 +1135,66 @@ class TestArxivConvert:
         assert not (tmp_path / "src" / "link.tex").exists()
         assert not (tmp_path / "src" / "link.tex").is_symlink()
 
+    def test_unpack_refuses_sparse_members(self, tmp_path: Path):
+        from skills.arxiv_to_md.convert import ConvertError, _member_filter
+
+        member = tarfile.TarInfo("big.tex")
+        member.size = 10
+        member.sparse = [(0, 10)]  # pyright: ignore[reportAttributeAccessIssue]
+        assert member.issparse()
+        with pytest.raises(ConvertError):
+            _member_filter(member, str(tmp_path))
+
+    def test_unpack_caps_the_sum_of_member_sizes(self, tmp_path: Path, monkeypatch):
+        from skills.arxiv_to_md import convert
+
+        monkeypatch.setattr(convert, "MAX_UNPACKED_BYTES", 1024)
+        download = tmp_path / "d.tar"
+        with tarfile.open(download, "w:") as tar:
+            for name in ("a.tex", "b.tex"):
+                info = tarfile.TarInfo(name)
+                info.size = 600
+                tar.addfile(info, io.BytesIO(b"x" * 600))
+        with pytest.raises(convert.ConvertError):
+            convert.unpack_source(download, tmp_path / "src", "x.tex")
+        assert not (tmp_path / "src" / "a.tex").exists()
+
+    def test_tex_reads_are_capped(self, tmp_path: Path, monkeypatch):
+        from skills.arxiv_to_md import convert, tex_utils
+
+        monkeypatch.setattr(tex_utils, "MAX_TEX_FILE_BYTES", 100, raising=False)
+        (tmp_path / "main.tex").write_text("\\input{big}\n")
+        (tmp_path / "big.tex").write_text("x" * 1000 + "TAIL-MARKER")
+        out = Path(tex_utils.preprocess_tex(str(tmp_path / "main.tex"))).read_text()
+        assert "TAIL-MARKER" not in out
+        (tmp_path / "late.tex").write_text(" " * 1000 + "\\documentclass{article}")
+        (tmp_path / "main.tex").unlink()
+        (tmp_path / "big.tex").unlink()
+        with pytest.raises(convert.NoTexSource):
+            convert.find_main_tex(tmp_path, "2501.00001", None)
+
+    def test_candidate_names_outside_the_allowlist_are_not_offered(self, tmp_path: Path):
+        from skills.arxiv_to_md.convert import ConvertError, find_main_tex
+
+        for name in ("x.tex", "y.tex", "bad'name.tex", "sp ace.tex"):
+            (tmp_path / name).write_bytes(b"\\documentclass{article}")
+        with pytest.raises(ConvertError) as exc:
+            find_main_tex(tmp_path, "2501.00001", None)
+        message = str(exc.value)
+        assert "x.tex" in message and "y.tex" in message
+        assert "bad" not in message and "sp ace" not in message
+
+    def test_no_candidate_inside_the_allowlist_is_a_fail(self, tmp_path: Path):
+        from skills.arxiv_to_md.convert import ConvertError, find_main_tex
+
+        for name in ("a b.tex", "c'd.tex"):
+            (tmp_path / name).write_bytes(b"\\documentclass{article}")
+        with pytest.raises(ConvertError, match="outside") as exc:
+            find_main_tex(tmp_path, "2501.00001", None)
+        assert "c'd" not in str(exc.value)
+        with pytest.raises(ConvertError):
+            find_main_tex(tmp_path, "2501.00001", "a b.tex")
+
     @pytest.mark.parametrize("cap", ["MAX_MEMBERS", "MAX_UNPACKED_BYTES"])
     def test_unpack_enforces_caps(self, tmp_path: Path, monkeypatch, cap: str):
         from skills.arxiv_to_md import convert
@@ -1231,6 +1293,85 @@ class TestArxivConvert:
         text = "\\begin{abstract}" * 20000
         assert extract_abstract(text) == text
         assert extract_abstract("\\begin{abstract}A\\end{abstract}") == "\\section*{Abstract}\nA"
+
+    def test_bibliography_replaces_only_the_first_uncommented_command(self, tmp_path: Path):
+        from skills.arxiv_to_md.tex_utils import inline_bibliography
+
+        (tmp_path / "main.bbl").write_text("BBL-BODY")
+        tex = "%\\bibliography{old}\n\\bibliography{a}\ntext \\bibliography{b}\n"
+        out = inline_bibliography(tex, tmp_path, "main")
+        assert out.count("BBL-BODY") == 1
+        assert out.startswith("%\\bibliography{old}\nBBL-BODY\n")
+
+    def test_strip_comments_keeps_escaped_percent(self):
+        from skills.arxiv_to_md.tex_utils import strip_comments
+
+        assert strip_comments("a 50\\% b % note\n% all\nc") == "a 50\\% b\n\nc"
+
+    def test_document_class_scan_handles_many_matches_on_one_line(self, tmp_path: Path):
+        from skills.arxiv_to_md.convert import find_main_tex
+
+        (tmp_path / "main.tex").write_text("\\documentclass " * 5000 + "\\documentclass{article}\n")
+        assert find_main_tex(tmp_path, "2501.00001", None) == tmp_path / "main.tex"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param("\ufeff\\documentclass{article}\n", id="bom"),
+            pytest.param("\\usepackage{x} \\documentclass{article}\n", id="after-a-command"),
+        ],
+    )
+    def test_document_class_is_found_wherever_it_sits(self, tmp_path: Path, text: str):
+        from skills.arxiv_to_md.convert import find_main_tex
+
+        (tmp_path / "main.tex").write_text(text, encoding="utf-8")
+        assert find_main_tex(tmp_path, "2501.00001", None) == tmp_path / "main.tex"
+
+    def test_main_tex_override_applies_to_the_older_version(self, tmp_path: Path, monkeypatch):
+        from skills.arxiv_to_md import convert
+
+        pandoc_inputs: list[str] = []
+
+        def fake_fetch(url, dest, max_bytes, deadline=None):
+            if url.endswith("/2501.00001"):
+                dest.write_bytes(b"%PDF-1.5\n")
+                return "arXiv-2501.00001v2.pdf"
+            _tex_tar_gz(dest, {"a.tex": ARTICLE, "b.tex": ARTICLE})
+            return "arXiv-2501.00001v1.tar.gz"
+
+        def fake_pandoc(tex, work, deadline=None):
+            pandoc_inputs.append(tex.read_text())
+            return "# T\n"
+
+        monkeypatch.setattr(convert, "fetch", fake_fetch)
+        monkeypatch.setattr(convert, "run_pandoc", fake_pandoc)
+        convert.convert("2501.00001", None, tmp_path / "out.md", "b.tex")
+        assert pandoc_inputs
+
+    @pytest.mark.parametrize("errno_value", [errno.EPERM, errno.ENOTSUP, errno.EXDEV])
+    def test_write_new_works_where_hard_links_are_refused(
+        self, tmp_path: Path, monkeypatch, errno_value: int
+    ):
+        from skills.arxiv_to_md.convert import ConvertError, write_new
+
+        def refuse(*args, **kwargs):
+            raise OSError(errno_value, "link refused")
+
+        monkeypatch.setattr(os, "link", refuse)
+        write_new(tmp_path / "paper.md", "text")
+        assert (tmp_path / "paper.md").read_text() == "text"
+        assert [p.name for p in tmp_path.iterdir()] == ["paper.md"]
+        with pytest.raises(ConvertError, match="destination exists"):
+            write_new(tmp_path / "paper.md", "other")
+        assert (tmp_path / "paper.md").read_text() == "text"
+
+    def test_build_filename_keeps_only_letters_digits_and_plain_punctuation(self):
+        from skills.arxiv_to_md.convert import build_filename
+
+        assert (
+            build_filename("It's $x$ (a) `b` & c\nd: Über_1.5, ok", "2025-01-01", "2501.00001")
+            == "2025-01-01 Its x a b c d - Über_1.5, ok.md"
+        )
 
     def test_write_new_keeps_an_existing_destination(self, tmp_path: Path):
         from skills.arxiv_to_md.convert import ConvertError, write_new

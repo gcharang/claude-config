@@ -25,11 +25,13 @@ bytes instead of assuming a tar.
 - Work files live in a `tempfile.TemporaryDirectory` that is removed when the command
   exits.
 - The destination is written to a temporary file beside it and published with
-  `os.link`, which refuses an existing name: an existing file is never replaced;
+  `os.link`, which refuses an existing name; on filesystems without hard links the
+  write is an exclusive create instead. An existing file is never replaced;
   `convert.py` reports it instead.
 - `convert.py` prints no paper text to the main session: the written path, the date,
   a residual-span count and fixed-wording failures. The paper's title enters only the
-  written file name, and file names of several-candidate main files are shell-quoted.
+  written file name, reduced to letters, digits, spaces and `.,-_`; main-file
+  candidates are offered only when their names fit `[A-Za-z0-9._/-]`.
 
 ## Invariants
 
