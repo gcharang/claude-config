@@ -17,16 +17,8 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from skills.lib.workflow.ast.dispatch import (
-    RosterDispatchNode,
-    SubagentDispatchNode,
-    TemplateDispatchNode,
-)
-from skills.lib.workflow.ast.dispatch_renderer import (
-    render_roster_dispatch,
-    render_subagent_dispatch,
-    render_template_dispatch,
-)
+from skills.lib.workflow.ast.dispatch import TemplateDispatchNode
+from skills.lib.workflow.ast.dispatch_renderer import render_template_dispatch
 from skills.lib.workflow.ast.nodes import ElementNode, InvokeAfterNode, StepHeaderNode, TextNode
 from skills.lib.workflow.ast.renderer import XMLRenderer, render_invoke_after, render_step_header
 from skills.lib.workflow.prompts.step import SKILLS_DIR, format_step
@@ -123,12 +115,6 @@ class TestSkillsDirShellQuoting:
 
     _EXPECTED = shlex.quote(str(SKILLS_DIR))
 
-    def test_format_step_branching_quotes_skills_dir(self):
-        out = format_step("body", if_pass="uv run cmd-a", if_fail="uv run cmd-b")
-        # Both branches reference the quoted path.
-        assert f"uv run --directory {self._EXPECTED} cmd-a" in out
-        assert f"uv run --directory {self._EXPECTED} cmd-b" in out
-
     def test_format_step_next_cmd_quotes_skills_dir(self):
         out = format_step("body", next_cmd="uv run python -m skills.x --step 2")
         assert f"uv run --directory {self._EXPECTED} python -m skills.x --step 2" in out
@@ -200,25 +186,13 @@ class TestDispatchRendererEscaping:
     agent=/cmd= attrs via raw f-strings, so a quote/&/< in agent_type or a shell
     command (reachable via `refactor --scope`) malformed the dispatch. The invoke
     cmd is quoteattr-escaped (so `&&` -> `&amp;&amp;` and round-trips back to `&&`
-    on decode). Prose bodies (prompt/task) are NOT
+    on decode). Prose bodies (prompt) are NOT
     escaped -- they intentionally carry literal <invoke> markup the sub-agent runs.
     """
 
     _HOSTILE_AGENT = 'gp"<x>&'
     _HOSTILE_ARGS = 'x --flag "q" && y'
     _HOSTILE_CMD = "uv run " + _HOSTILE_ARGS
-
-    def test_subagent_dispatch_attrs_well_formed(self):
-        node = SubagentDispatchNode(
-            agent_type=self._HOSTILE_AGENT, command=self._HOSTILE_CMD, prompt="plain prompt"
-        )
-        root = ET.fromstring(render_subagent_dispatch(node))  # raises if malformed
-        assert root.get("agent") == self._HOSTILE_AGENT
-        invoke = root.find(".//invoke")
-        assert invoke is not None
-        cmd = invoke.get("cmd", "")
-        assert cmd.startswith("uv run --directory ")  # pin_cwd applied
-        assert cmd.endswith(self._HOSTILE_ARGS)  # quotes + && survive XML decoding
 
     def test_template_dispatch_attrs_well_formed(self):
         # Hostile chars live in the agent_type/command attrs; the prose template
@@ -236,30 +210,18 @@ class TestDispatchRendererEscaping:
         assert invoke is not None
         assert invoke.get("cmd", "").endswith(self._HOSTILE_ARGS)
 
-    def test_roster_dispatch_attrs_well_formed(self):
-        node = RosterDispatchNode(
-            agent_type=self._HOSTILE_AGENT,
-            agents=("plain task",),
-            command=self._HOSTILE_CMD,
-            shared_context="ctx",
-        )
-        root = ET.fromstring(render_roster_dispatch(node))
-        assert root.get("agent") == self._HOSTILE_AGENT
-        invoke = root.find(".//invoke")
-        assert invoke is not None
-        assert invoke.get("cmd", "").endswith(self._HOSTILE_ARGS)
-
     def test_prose_markup_is_preserved_not_escaped(self):
         # The prompt body intentionally carries literal <invoke> markup the
         # sub-agent reads and runs (refactor's "Start: <invoke .../>"). Escaping
         # it would corrupt the instruction, so prose must stay raw.
-        node = SubagentDispatchNode(
+        node = TemplateDispatchNode(
             agent_type="general-purpose",
+            template='Start: <invoke cmd="do" /> use a & b',
+            targets=({},),
             command="uv run x --step 1",
-            prompt='Start: <invoke cmd="do" /> use a & b',
         )
-        out = render_subagent_dispatch(node)
-        prose = out.split("<directive")[0]  # everything before the structured invoke
+        out = render_template_dispatch(node)
+        prose = out.split("</prompt>")[0]  # everything before the structured invoke
         assert 'Start: <invoke cmd="do" />' in prose  # literal markup preserved
         assert "use a & b" in prose  # prose '&' left literal, not &amp;
 

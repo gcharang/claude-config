@@ -400,6 +400,10 @@ with retrieval-augmented generation by aligning retrieved exemplars to native st
 information flow saliency between question, prompt, and rationale rather than using
 a single task-level prompt for all problems.
 
+**Model applicability**: The saliency scores are computed from the model's attention
+weights and their gradients, which the Claude Messages API does not return, so this
+technique does not apply to a Claude target model.
+
 **The process:**
 ```
 Given: A pool of candidate prompts (e.g., "Let's think step by step",

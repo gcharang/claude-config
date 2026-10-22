@@ -3,10 +3,9 @@
 Explicit, composable abstractions over stringly-typed dicts and parameter groups.
 """
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Protocol, TypeAlias
+from typing import Protocol
 
 
 class ResourceProvider(Protocol):
@@ -67,108 +66,6 @@ class Confidence(Enum):
     CERTAIN = "certain"
 
 
-# =============================================================================
-# Code Quality Document Types
-# =============================================================================
-
-
-class Phase(Enum):
-    """Workflow phases that consume code quality documents.
-
-    Each phase evaluates code from a different perspective:
-    - DESIGN_REVIEW: Evaluating Code Intent before code exists
-    - DIFF_REVIEW: Evaluating proposed code changes
-    - CODEBASE_REVIEW: Evaluating implemented code post-implementation
-    - REFACTOR_DESIGN: Evaluating architecture/intent quality of existing code
-    - REFACTOR_CODE: Evaluating implementation quality of existing code
-    """
-
-    DESIGN_REVIEW = "design_review"
-    DIFF_REVIEW = "diff_review"
-    CODEBASE_REVIEW = "codebase_review"
-    REFACTOR_DESIGN = "refactor_design"
-    REFACTOR_CODE = "refactor_code"
-
-
-class Mode(Enum):
-    """Evaluation mode for code quality checks.
-
-    - DESIGN: Evaluate architecture, boundaries, responsibilities, intent
-    - CODE: Evaluate implementation, patterns, idioms, structure
-    """
-
-    DESIGN = "design"
-    CODE = "code"
-
-
-PHASE_TO_MODE: dict[Phase, Mode] = {
-    Phase.DESIGN_REVIEW: Mode.DESIGN,
-    Phase.DIFF_REVIEW: Mode.CODE,
-    Phase.CODEBASE_REVIEW: Mode.CODE,
-    Phase.REFACTOR_DESIGN: Mode.DESIGN,
-    Phase.REFACTOR_CODE: Mode.CODE,
-}
-"""Derive evaluation mode from workflow phase.
-
-Design Review and Refactor Design use design mode (architecture/intent focus).
-All other phases use code mode (implementation focus).
-"""
-
-
-@dataclass
-class LinearRouting:
-    """Linear routing - proceed to step+1."""
-
-    pass
-
-
-@dataclass
-class BranchRouting:
-    """Conditional routing based on QR result."""
-
-    if_pass: int
-    if_fail: int
-
-
-@dataclass
-class TerminalRouting:
-    """Terminal routing - no continuation."""
-
-    pass
-
-
-Routing = LinearRouting | BranchRouting | TerminalRouting
-
-
-# =============================================================================
-# Command Routing (for invoke_after)
-# =============================================================================
-
-
-@dataclass
-class FlatCommand:
-    """Single command routing (non-branching steps)."""
-
-    command: str
-
-
-@dataclass
-class BranchCommand:
-    """Conditional routing based on QR result (branching steps)."""
-
-    if_pass: str
-    if_fail: str
-
-
-NextCommand = FlatCommand | BranchCommand | None
-"""Union type for step routing.
-
-- FlatCommand: Non-branching step, single next command
-- BranchCommand: QR step, branches on pass/fail
-- None: Terminal step, no invoke_after
-"""
-
-
 @dataclass
 class Dispatch:
     """Sub-agent dispatch configuration."""
@@ -177,39 +74,6 @@ class Dispatch:
     script: str
     context_vars: dict[str, str] = field(default_factory=dict)
     free_form: bool = False
-
-
-# =============================================================================
-# Step Handler Pattern
-# =============================================================================
-
-
-@dataclass
-class StepGuidance:
-    """Return type for step handlers.
-
-    Replaces dict returns with explicit structure.
-    """
-
-    title: str
-    actions: list[str]
-    next_hint: str = ""
-    # Additional fields can be added without breaking existing handlers
-
-
-# Type alias for step handler functions
-# Handlers receive step context and return guidance
-StepHandler: TypeAlias = Callable[..., dict | StepGuidance]
-"""Step handler function signature.
-
-Args:
-    step: Current step number
-    module_path: Module path for invocation
-    **kwargs: Additional context
-
-Returns:
-    Dict or StepGuidance with title, actions, next hint
-"""
 
 
 # =============================================================================

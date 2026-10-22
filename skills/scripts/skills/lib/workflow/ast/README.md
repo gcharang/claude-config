@@ -19,15 +19,13 @@ Skill step handlers  (26+ call sites)
 |                                           |
 |  Base:    TextNode | CodeNode | Element-  |
 |                                     Node  |
-|  Dispatch: SubagentDispatchNode |         |
-|            TemplateDispatchNode |         |
-|            RosterDispatchNode             |
+|  Dispatch: TemplateDispatchNode           |
 +-------------------------------------------+
        |
        v
 +------------------+     +--------------------+
-| XMLRenderer      |     | Dispatch renderers |
-| (generic XML)    |     | (one per node type)|
+| XMLRenderer      |     | Dispatch renderer  |
+| (generic XML)    |     | (template dispatch)|
 +------------------+     +--------------------+
        |                          |
        +------------+-------------+
@@ -56,7 +54,7 @@ renders attributes + children recursively
 "<step_header script='x' step='1'>Title</step_header>"
 ```
 
-Dispatch nodes use dedicated renderers (`render_subagent_dispatch`, `render_template_dispatch`, `render_roster_dispatch`) because their output includes richer structures than generic XML: PARALLEL EXECUTION constraints, SHARED CONTEXT sections, per-agent task blocks, and IMMEDIATELY-invoke directives.
+The dispatch node uses a dedicated renderer (`render_template_dispatch`) because its output is richer than generic XML: a parallel-execution constraint, model selection, and a prompt and invoke for each agent.
 
 ## Why This Structure
 
@@ -70,6 +68,8 @@ Dispatch nodes use dedicated renderers (`render_subagent_dispatch`, `render_temp
 ### Design Choices
 
 **Three base node types only**: `TextNode`, `CodeNode`, `ElementNode`. Earlier iterations had per-concept classes (HeaderNode, ActionsNode, CommandNode, RoutingNode, GuidanceNode, RawNode, TextOutputNode). Those collapsed into `ElementNode` once all skills used `W.el("tag_name", ...)` with free-form tags and attributes. Fewer classes means fewer places to update when conventions evolve; the tag is a string, not a type.
+
+**Specialized nodes**: the non-base node types in `nodes.py` carry structured attributes the generic `W.el()` builder cannot express cleanly, so each has its own `XMLRenderer` method.
 
 **Frozen dataclasses**: Immutability aligns with FP style, prevents accidental mutation, and enables safe sharing of nodes between renders and caching.
 
@@ -93,13 +93,7 @@ Dispatch nodes use dedicated renderers (`render_subagent_dispatch`, `render_temp
 
 ## Dispatch Node Semantics
 
-| Type                   | Pattern | Use case                                     |
-| ---------------------- | ------- | -------------------------------------------- |
-| `SubagentDispatchNode` | Single  | Sequential workflows (plan -> dev -> QR)     |
-| `TemplateDispatchNode` | SIMD    | Same template, N targets ($var substitution) |
-| `RosterDispatchNode`   | MIMD    | Shared context, unique prompts per agent     |
-
-`TemplateDispatchNode` expands `$var` placeholders per target at render time, so the sub-agent sees only final prompts — no runtime substitution. `RosterDispatchNode` takes a list of unique task strings and a single shared context block.
+`TemplateDispatchNode` applies one prompt template to N targets: the renderer expands `$var` placeholders per target at render time, so the sub-agent sees only final prompts — no runtime substitution.
 
 ## Tradeoffs
 

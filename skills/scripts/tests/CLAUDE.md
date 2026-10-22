@@ -2,10 +2,6 @@
 
 Test suite for skills workflow framework.
 
-## Rules
-
-All tests must live in `tests/` and run through pytest (via `uv run`). No test files elsewhere in the codebase.
-
 ## Files
 
 | File                          | What                                                                                             | When to read                                                                 |

@@ -1,6 +1,6 @@
 # scripts/
 
-Python package root for skill implementations. uv-managed; `pyproject.toml` declares the package editable-installable and pins dev deps (pytest, hypothesis, ruff, pyright).
+Python package root for skill implementations. uv-managed; `pyproject.toml` declares the package.
 
 ## Files
 

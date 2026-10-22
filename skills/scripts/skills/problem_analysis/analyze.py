@@ -81,7 +81,7 @@ GATE_INSTRUCTIONS = (
 # --- STEP 2: HYPOTHESIZE ----------------------------------------------------
 
 HYPOTHESIZE_INSTRUCTIONS = (
-    "GENERATE 2-4 DISTINCT HYPOTHESES:\n"
+    "GENERATE DISTINCT HYPOTHESES:\n"
     "  Each hypothesis must:\n"
     "  - Differ on mechanism or location (not just phrasing)\n"
     "  - Be framed as a CONDITION THAT EXISTS, not an absence\n"

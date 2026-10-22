@@ -888,6 +888,11 @@ Blind persona application can introduce confusion on simple tasks.
 **Mechanism:** Rank few-shot example orderings using entropy metrics on
 model-generated probing set to select performant permutations.
 
+**Model applicability**: LocalE needs the model's probability for each label, and
+Claude models return no token probabilities (the Messages API response has no
+log-probability field). For a Claude target model use GlobalE, which needs only the
+predicted labels.
+
 **Triggers:**
 
 - Few-shot in-context learning with 3-8 examples where order matters
@@ -900,23 +905,26 @@ model-generated probing set to select performant permutations.
 ```
 1. Generate all permutations of few-shot examples (n! for n examples)
 2. For each permutation, generate probing outputs on unlabeled questions
-3. Compute entropy of output distribution for each permutation
-4. Select permutation with lowest entropy (most consistent outputs)
+3. Score each permutation on the probing set:
+   GlobalE: entropy of the distribution of predicted labels across the set
+   LocalE: mean entropy of the label probabilities for each probing input
+4. Select the permutations with the highest score
 5. Use selected ordering for inference
 ```
 
-**Why this works:** Lower entropy indicates the model is more confident and
-consistent. Permutations that produce scattered, high-entropy outputs are likely
-confusing the model.
+**Why this works:** A low GlobalE means the ordering pushes most probing inputs to
+one label, the extremely unbalanced predictions a bad ordering produces; a low LocalE
+means the model is overconfident on every input. A high score marks an ordering that
+avoids both.
 
 **CORRECT:**
 ```
 Examples: A, B, C (3-shot)
 Permutations: ABC, ACB, BAC, BCA, CAB, CBA
 
-Test on probing set:
-  ABC → Entropy 0.3 (consistent predictions)
-  BAC → Entropy 0.8 (scattered predictions)
+Test on probing set (GlobalE):
+  ABC → 0.95 (predictions spread across the labels)
+  BAC → 0.20 (nearly every prediction is one label)
   ...
 
 Select ABC for deployment
@@ -1114,6 +1122,10 @@ Generic prompts aren't optimized for specific model-task combinations.
 
 **Mechanism:** Select few-shot examples that minimize predictive bias by
 maximizing entropy on content-free inputs.
+
+**Model applicability**: The entropy is computed from the model's probability for each
+label on the content-free input. Claude models return no token probabilities (the Messages API response has no log-probability field), so this technique does not apply to a Claude
+target model.
 
 **Triggers:**
 

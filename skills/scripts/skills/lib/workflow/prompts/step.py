@@ -26,55 +26,25 @@ def pin_cwd(command: str) -> str:
     return f"uv run --directory {_SKILLS_DIR_Q} {command[len(_UV_RUN) :]}"
 
 
-def format_step(
-    body: str, next_cmd: str = "", title: str = "", if_pass: str = "", if_fail: str = ""
-) -> str:
+def format_step(body: str, next_cmd: str = "", title: str = "") -> str:
     """Assemble complete workflow step: title + body + invoke directive.
 
     Args:
         body: Free-form prompt content (no wrapper needed)
         next_cmd: `uv run` command for next step (empty string signals completion)
         title: Optional title rendered as "TITLE\\n======\\n\\n" header
-        if_pass: Branching `uv run` command when QR gate passes
-        if_fail: Branching `uv run` command when QR gate fails
 
     Returns:
         Complete step output as plain text
 
     Raises:
-        ValueError: if exactly one of if_pass/if_fail is set, or if branching
-            (if_pass/if_fail) is mixed with next_cmd. Both combinations would
-            silently mis-render -- a lone if_pass falls through to "WORKFLOW
-            COMPLETE", and branch+next_cmd silently drops next_cmd. Fail loud
-            instead. Also raised, by pin_cwd, for a command that is not `uv run`.
+        ValueError: from pin_cwd, for a next_cmd that is not `uv run`.
     """
-    if bool(if_pass) != bool(if_fail):
-        raise ValueError(
-            "format_step: if_pass and if_fail must be provided together (branching requires both)"
-        )
-    if (if_pass or if_fail) and next_cmd:
-        raise ValueError(
-            "format_step: branching (if_pass/if_fail) and next_cmd are mutually exclusive"
-        )
-
     if title:
         header = f"{title}\n{'=' * len(title)}\n\n"
         body = header + body
 
-    if if_pass and if_fail:
-        # Branching invoke for QR gate routing: the LLM chooses based on
-        # aggregated QR outcome (all pass vs any fail).
-        invoke = (
-            f"NEXT STEP (MANDATORY -- execute exactly one):\n"
-            f"    Working directory: {SKILLS_DIR}\n"
-            f"    ALL agents returned PASS  ->  {pin_cwd(if_pass)}\n"
-            f"    ANY agent returned FAIL   ->  {pin_cwd(if_fail)}\n\n"
-            "This is a mechanical routing decision: do not re-assess the verdicts.\n"
-            "Count PASS vs FAIL, tell the user the tally in one line, then execute the matching command."
-        )
-        return f"{body}\n\n{invoke}"
-
-    elif next_cmd:
+    if next_cmd:
         # Working directory is explicit because CLI execution context varies; the
         # command itself carries it, so it runs from wherever the agent stands.
         invoke = (
@@ -85,5 +55,4 @@ def format_step(
         )
         return f"{body}\n\n{invoke}"
 
-    else:
-        return f"{body}\n\nWORKFLOW COMPLETE - Return the output from the step above. Do not summarize."
+    return f"{body}\n\nWORKFLOW COMPLETE - Return the output from the step above. Do not summarize."

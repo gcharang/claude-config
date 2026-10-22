@@ -53,10 +53,10 @@ CLI invocation
 format_output(step, ...)        # skill-owned
       |
       v
-print()                         # emits step body + <invoke_after>
+print()                         # emits step body + next-step command
       |
       v
-LLM reads output, follows <invoke_after> to invoke next step
+LLM reads output, runs the next-step command
 ```
 
 Discovery uses `importlib.import_module` + `pkgutil.walk_packages` to find `WORKFLOW` constants without executing module-level side effects. This pull-based approach eliminates import-time surprises and keeps testing isolated.
@@ -234,7 +234,7 @@ Sub-agents can request user clarification via the main agent. The protocol is pu
 
 ### Design Decisions
 
-**Reinvocation over resume**: When a sub-agent yields with questions, the orchestrator REINVOKES it fresh (new Task, no resume parameter) after getting user answers. Before yielding, the sub-agent records what it has settled through its workflow's own state commands; after reinvocation it starts again at step 1, reads that state back and builds on it. This was chosen over resume because:
+**Reinvocation over resume**: When a sub-agent yields with questions, the orchestrator REINVOKES it fresh (new Agent call, no resume parameter) after getting user answers. Before yielding, the sub-agent records what it has settled through its workflow's own state commands; after reinvocation it starts again at step 1, reads that state back and builds on it. This was chosen over resume because:
 
 - Resume semantics are unreliable (0-token / 0-tool-use failures observed in the field).
 - State file reading is explicit and auditable.

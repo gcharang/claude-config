@@ -12,7 +12,5 @@ Main workflow orchestrators: `planner` (plan creation with one QR block) and `ex
 
 ## Run
 
-Step 1 is anchored on `$CLAUDE_PROJECT_DIR`, then the caller's working directory: run it
-from inside the project and do not `cd` into the skills tree. The two entry-point commands live in
-`skills/planner/SKILL.md` -- one self-contained line each, form 2b in
-`skills/lib/workflow/prompts/README.md`. Duplicating them here is how the two drift.
+Entry-point commands: `skills/planner/SKILL.md`; why they keep the caller's working directory:
+`skills/lib/workflow/prompts/README.md` (form 2b).

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Phase-parameterized QR fix runner.
 
-One runner for all three QR phases (plan-design, impl-code, impl-docs); --phase
-selects which phase's fix content (prompts/fix.FIX_CONTENT) drives the shared
-3-step fix_dispatch_step. Replaces the three near-identical *_qr_fix.py files --
-the control flow and step-1 load already factor into prompts/fix, so this file
-only wires --phase to its content. The work-phase routers reach it via
+One runner for the QR phases that have a fix route (shared.routing.WORK_PHASES);
+--phase selects which phase's fix content (prompts/fix.FIX_CONTENT) drives the
+shared fix_dispatch_step. The control flow and step-1 load factor into
+prompts/fix, so this file only wires --phase to its content. The work-phase routers reach it via
 shared.routing.WORK_PHASES["*"]["qr_fix"].
 """
 

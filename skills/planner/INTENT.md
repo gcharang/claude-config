@@ -739,10 +739,10 @@ skills/planner/
     qr_decompose.py             -- decompose runner (--phase {plan-design|impl-code|impl-docs})
     qr_verify.py                -- single-item verify runner (--phase ...)
     qr_verify_base.py           -- shared verification base + verify_main
-    exec_qr_fix.py              -- unified post-QR fix runner (--phase {plan-design|impl-code|impl-docs})
+    exec_qr_fix.py              -- unified post-QR fix runner (--phase {plan-design|impl-docs})
     prompts/content.py          -- per-phase decompose prompts + verifier classes
     prompts/decompose.py        -- shared decompose flow
-    prompts/fix.py              -- shared 3-step fix flow + per-phase fix content
+    prompts/fix.py              -- shared fix flow + per-phase fix content
   shared/
     schema.py         -- Pydantic v2 schemas (context, plan, qr), validation
     resources.py      -- Path helpers, resource provider

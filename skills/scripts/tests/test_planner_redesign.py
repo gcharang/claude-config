@@ -1950,13 +1950,6 @@ class TestExecQrFixConsolidation:
             phase=phase, state_dir=str(tmp_path),
         )
 
-    def test_impl_code_step1_banner_iteration_and_phase(self, tmp_path):
-        g = self._guidance("impl-code", 1, tmp_path)
-        body = "\n".join(g["actions"])
-        assert "IMPLEMENTATION-FIX" in body
-        assert "QR Iteration 2" in body
-        assert "--phase impl-code" in g["next"]  # phase threaded into the next command
-
     def test_impl_docs_step2_injects_temporal(self, tmp_path):
         g = self._guidance("impl-docs", 2, tmp_path)
         assert g["title"] == "Apply Doc Fixes"
@@ -1974,6 +1967,12 @@ class TestExecQrFixConsolidation:
         body = "\n".join(g["actions"])
         assert "validate --phase plan-design" in body
         assert str(tmp_path) in body               # state_dir shell-quoted into the cmd
+
+    def test_phase_without_a_fix_route_rejected(self):
+        from skills.planner.quality_reviewer import exec_qr_fix
+
+        with pytest.raises(ValueError, match="no fix route"):
+            exec_qr_fix.get_step_guidance(1, "m", phase="impl-code", state_dir="/tmp/x")
 
     def test_unknown_phase_rejected(self):
         from skills.planner.quality_reviewer import exec_qr_fix

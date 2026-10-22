@@ -39,10 +39,10 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from skills.lib.workflow.ast.dispatch import SubagentDispatchNode
+from skills.lib.workflow.ast.dispatch import TemplateDispatchNode
 from skills.lib.workflow.ast.dispatch_renderer import (
     _expand_template_targets,
-    render_subagent_dispatch,
+    render_template_dispatch,
 )
 from skills.lib.workflow.prompts.step import _SKILLS_DIR_Q, pin_cwd
 from skills.lib.workflow.prompts.subagent import template_dispatch
@@ -877,12 +877,14 @@ class TestCwdPinnedCommands:
         with pytest.raises(ValueError, match="uv run"):
             pin_cwd("python -m skills.foo --step 1")
 
-    def test_ast_subagent_dispatch_uses_uv_directory(self):
-        node = SubagentDispatchNode(
+    def test_ast_template_dispatch_uses_uv_directory(self):
+        node = TemplateDispatchNode(
             agent_type="general-purpose",
+            template="Explore $name",
+            targets=({"name": "x"},),
             command="uv run python -m skills.x --step 1",
         )
-        out = render_subagent_dispatch(node)
+        out = render_template_dispatch(node)
         # Parse the XML and assert the *decoded* command carries the directory pin --
         # which also proves the dispatch fragment is well-formed.
         invoke = ET.fromstring(out).find(".//invoke")
@@ -2461,19 +2463,24 @@ class TestQrIterationIdempotency:
 
         # A blocking FAIL that no verifier re-records keeps its (id, version); each
         # fix render followed by a verify render must still advance toward the ceiling.
-        _write_qr(tmp_path, "impl-code", 1, [
+        (tmp_path / "context.json").write_text(
+            json.dumps({"task": "t", "reference_docs": [], "decisions": []})
+        )
+        _write_qr(tmp_path, "plan-design", 1, [
             {"id": "qa-001", "scope": "*", "check": "c", "status": "FAIL", "version": 1,
              "severity": "MUST", "finding": "f"},
         ])
         qr = QRState(state=LoopState.RETRY)
-        content = get_fix_content("impl-code")
+        content = get_fix_content("plan-design")
         for _ in range(QR_ITERATION_LIMIT + 1):
-            fix_dispatch_step(1, "impl-code", "m", content, str(tmp_path))
-            prepare_verify_items(str(tmp_path), "impl-code", qr)
-            if json.loads((tmp_path / "qr-impl-code.json").read_text())["iteration"] >= QR_ITERATION_LIMIT:
+            fix_dispatch_step(1, "plan-design", "m", content, str(tmp_path))
+            prepare_verify_items(str(tmp_path), "plan-design", qr)
+            if json.loads((tmp_path / "qr-plan-design.json").read_text())["iteration"] >= QR_ITERATION_LIMIT:
                 break
-        assert json.loads((tmp_path / "qr-impl-code.json").read_text())["iteration"] == QR_ITERATION_LIMIT
-        out = _gate(tmp_path, QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.RETRY)).output
+        assert json.loads((tmp_path / "qr-plan-design.json").read_text())["iteration"] == QR_ITERATION_LIMIT
+        out = _gate(
+            tmp_path, QRState(iteration=QR_ITERATION_LIMIT, state=LoopState.RETRY), phase="plan-design"
+        ).output
         assert "ITERATION LIMIT" in out
 
     def test_initial_state_never_increments(self, tmp_path: Path):

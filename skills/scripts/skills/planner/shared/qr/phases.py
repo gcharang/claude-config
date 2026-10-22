@@ -60,8 +60,10 @@ def validate_phase_registries() -> None:
 
     DECOMPOSE_CONTENT (decompose prompts) and VERIFIERS (verify classes) live in
     quality_reviewer/prompts/content.py, keyed by the same phase strings as
-    QR_PHASES but defined far away. A phase added here but missing its content/
-    verifier passes argparse (--phase choices come from QR_PHASES) and used to
+    QR_PHASES but defined far away. FIX_CONTENT covers the phases that have a fix
+    route (the qr_phase of each shared.routing.WORK_PHASES entry). A phase added
+    here but missing its content/verifier passes argparse (--phase choices come
+    from QR_PHASES) and used to
     crash only when content.py was first imported mid-dispatch. Running the check
     on this eager path (get_phase_config -- hit at orchestrator routing and
     sub-agent content lookup, before the sub-agent is dispatched) surfaces the
@@ -77,13 +79,18 @@ def validate_phase_registries() -> None:
         return
     from skills.planner.quality_reviewer.prompts.content import DECOMPOSE_CONTENT, VERIFIERS
     from skills.planner.quality_reviewer.prompts.fix import FIX_CONTENT
+    from skills.planner.shared.routing import WORK_PHASES
 
-    if not (set(DECOMPOSE_CONTENT) == set(VERIFIERS) == set(FIX_CONTENT) == set(QR_PHASES)):
+    fix_phases = {cfg["qr_phase"] for cfg in WORK_PHASES.values()}
+    if not (
+        set(DECOMPOSE_CONTENT) == set(VERIFIERS) == set(QR_PHASES)
+        and set(FIX_CONTENT) == fix_phases <= set(QR_PHASES)
+    ):
         raise RuntimeError(
             "QR phase registries out of sync: "
             f"DECOMPOSE_CONTENT={sorted(DECOMPOSE_CONTENT)}, "
-            f"VERIFIERS={sorted(VERIFIERS)}, FIX_CONTENT={sorted(FIX_CONTENT)}, "
-            f"QR_PHASES={sorted(QR_PHASES)}"
+            f"VERIFIERS={sorted(VERIFIERS)}, QR_PHASES={sorted(QR_PHASES)}, "
+            f"FIX_CONTENT={sorted(FIX_CONTENT)}, WORK_PHASES qr_phase={sorted(fix_phases)}"
         )
     for phase, cfg in QR_PHASES.items():
         if cfg.get("workflow") not in _VALID_WORKFLOWS:

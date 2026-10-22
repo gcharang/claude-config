@@ -13,7 +13,6 @@ import pytest
 from conftest import write_qr
 
 import validate_conventions as vc
-from skills.lib.workflow.prompts.step import format_step
 from skills.planner.orchestrator import executor as executor_orch
 from skills.planner.orchestrator import planner as planner_orch
 from skills.planner.quality_reviewer.prompts.content import (
@@ -59,27 +58,6 @@ class TestForbiddenListSSOT:
 
         assert block in planner_out
         assert block in executor_out
-
-
-# --- §4.4a: format_step validation guard -------------------------------------
-class TestFormatStepGuard:
-    def test_if_pass_without_if_fail_raises(self):
-        with pytest.raises(ValueError, match="provided together"):
-            format_step("body", if_pass="cmd")
-
-    def test_if_fail_without_if_pass_raises(self):
-        with pytest.raises(ValueError, match="provided together"):
-            format_step("body", if_fail="cmd")
-
-    def test_branching_with_next_cmd_raises(self):
-        with pytest.raises(ValueError, match="mutually exclusive"):
-            format_step("body", next_cmd="n", if_pass="p", if_fail="f")
-
-    def test_valid_combinations_do_not_raise(self):
-        # terminal (WORKFLOW COMPLETE), next_cmd, and branching are all valid
-        assert "WORKFLOW COMPLETE" in format_step("body")
-        assert "NEXT STEP" in format_step("body", next_cmd="uv run n")
-        assert "PASS" in format_step("body", if_pass="uv run p", if_fail="uv run f")
 
 
 # --- §4.4e: validate_conventions fails loud on non-literal args ---------------

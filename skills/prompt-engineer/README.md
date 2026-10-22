@@ -48,97 +48,14 @@ to optimize each.
 ## Example Output
 
 Each proposed change includes scope, problem, technique, before/after, and
-rationale. A single invocation may propose many changes:
+rationale. A single invocation may propose many changes. The change format the
+skill prints is in the plan step's output:
 
 ```
-  +==============================================================================+
-  |  CHANGE 1: Add STOP gate to Step 1 (Exploration)                             |
-  +==============================================================================+
-  |                                                                              |
-  |  SCOPE                                                                       |
-  |  -----                                                                       |
-  |  Prompt:      analyze.py step 1                                              |
-  |  Section:     Lines 41-49 (precondition check)                               |
-  |  Downstream:  All subsequent steps depend on exploration results             |
-  |                                                                              |
-  +------------------------------------------------------------------------------+
-  |                                                                              |
-  |  PROBLEM                                                                     |
-  |  -------                                                                     |
-  |  Issue:    Hedging language allows model to skip precondition                |
-  |                                                                              |
-  |  Evidence: "PRECONDITION: You should have already delegated..."              |
-  |            "If you have not, STOP and do that first"                         |
-  |                                                                              |
-  |  Runtime:  Model proceeds to "process exploration results" without having    |
-  |            any results, produces empty/fabricated structure analysis         |
-  |                                                                              |
-  +------------------------------------------------------------------------------+
-  |                                                                              |
-  |  TECHNIQUE                                                                   |
-  |  ---------                                                                   |
-  |  Apply:    STOP Escalation Pattern (single-turn ref)                         |
-  |                                                                              |
-  |  Trigger:  "For behaviors you need to interrupt, not just discourage"        |
-  |  Effect:   "Creates metacognitive checkpoint--the model must pause and       |
-  |             re-evaluate before proceeding"                                   |
-  |  Stacks:   Affirmative Directives                                            |
-  |                                                                              |
-  +------------------------------------------------------------------------------+
-  |                                                                              |
-  |  BEFORE                                                                      |
-  |  ------                                                                      |
-  |  +----------------------------------------------------------------------+    |
-  |  | "PRECONDITION: You should have already delegated to the Explore      |    |
-  |  |  sub-agent.",                                                        |    |
-  |  | "If you have not, STOP and do that first:",                          |    |
-  |  +----------------------------------------------------------------------+    |
-  |                                                                              |
-  |                                    |                                         |
-  |                                    v                                         |
-  |                                                                              |
-  |  AFTER                                                                       |
-  |  -----                                                                       |
-  |  +----------------------------------------------------------------------+    |
-  |  | "STOP. Before proceeding, verify you have Explore agent results.",   |    |
-  |  | "",                                                                  |    |
-  |  | "If your --thoughts do NOT contain Explore agent output, you MUST:", |    |
-  |  | "  1. Use Task tool with subagent_type='Explore'                     |    |
-  |  | "  2. Prompt: 'Explore this repository. Report directory structure,  |    |
-  |  | "     tech stack, entry points, main components, observed patterns.' |    |
-  |  | "  3. WAIT for results before invoking this step again               |    |
-  |  | "",                                                                  |    |
-  |  | "Only proceed below if you have concrete Explore output to process." |    |
-  |  +----------------------------------------------------------------------+    |
-  |                                                                              |
-  +------------------------------------------------------------------------------+
-  |                                                                              |
-  |  WHY THIS IMPROVES QUALITY                                                   |
-  |  -------------------------                                                   |
-  |  Transforms soft precondition into hard gate. Model must explicitly verify   |
-  |  it has Explore results before processing, preventing fabricated analysis.   |
-  |                                                                              |
-  +==============================================================================+
-
-  ... many more
-
-
-  ---
-  Compatibility check:
-  - STOP Escalation + Affirmative Directives: Compatible (STOP is for interrupting specific behaviors)
-  - History Accumulation + Completeness Checkpoint Tags: Synergistic (both enforce state tracking)
-  - Quote Extraction + Chain-of-Verification: Complementary (both prevent hallucination)
-  - Progressive depth + Pre-Work Context Analysis: Sequential (planning enables deeper execution)
-
-  Anti-patterns verified:
-  - No hedging spiral (replaced "should have" with "STOP. Verify...")
-  - No everything-is-critical (CRITICAL used only for state requirement)
-  - Affirmative directives used (changed negatives to positives)
-  - No implicit category trap (explicit checklists provided)
-
-  ---
-  Does this plan look reasonable? I'll apply these changes once you confirm.
+uv run --directory <scripts> python -m skills.prompt_engineer.optimize --step 4 --scope single-prompt
 ```
+
+`<scripts>` is the absolute path of the `skills/scripts` install.
 
 ## Caveat
 

@@ -5,16 +5,12 @@ Separate from ast/renderer.py because:
    Generic ElementNode rendering should never perform substitution.
 2. Expansion semantics: Dispatch rendering EXPANDS N nodes from 1 template.
    Generic rendering operates 1:1 (one node -> one output).
-3. Future separation: Dispatch nodes may gain additional rendering concerns
-   (model selection, parallel constraints) that don't belong in core AST.
+3. Dispatch-only concerns: model selection and the parallel-execution constraint
+   are rendered here and stay out of core AST.
 """
-from xml.sax.saxutils import escape, quoteattr
+from xml.sax.saxutils import quoteattr
 
-from skills.lib.workflow.ast.dispatch import (
-    RosterDispatchNode,
-    SubagentDispatchNode,
-    TemplateDispatchNode,
-)
+from skills.lib.workflow.ast.dispatch import TemplateDispatchNode
 from skills.lib.workflow.prompts.step import pin_cwd
 from skills.lib.workflow.prompts.subagent import expand_template_pairs, parallel_constraint
 
@@ -52,63 +48,16 @@ def _build_model_selection(model: str | None) -> str:
     if model is None:
         lines = [
             "  <model_selection>",
-            "    Use DEFAULT model (omit model parameter from Task tool).",
+            "    Use DEFAULT model (omit model parameter from Agent tool).",
             "    Do NOT carry forward model selections from previous steps.",
             "  </model_selection>",
         ]
         return "\n".join(lines)
     lines = [
         "  <model_selection>",
-        f"    Set model: {model} on every Task call.",
+        f"    Set model: {model} on every Agent tool call.",
         "  </model_selection>",
     ]
-    return "\n".join(lines)
-
-
-def render_subagent_dispatch(node: SubagentDispatchNode) -> str:
-    """Render single agent dispatch as XML.
-
-    Args:
-        node: SubagentDispatchNode with agent details
-
-    Returns:
-        XML string for single agent dispatch
-
-    Raises:
-        ValueError: If command is empty
-    """
-    agent_type = node.agent_type or "general-purpose"
-
-    if not node.command.strip():
-        raise ValueError(
-            "SubagentDispatchNode.command cannot be empty. "
-            "All agents must start with a prompt injection command (invoke)."
-        )
-
-    lines = [f'<subagent_dispatch agent={quoteattr(agent_type)} mode="script">']
-
-    # Always emit explicit model guidance to prevent LLM pattern-matching
-    # from prior steps. See _build_model_selection() docstring.
-    if node.model:
-        lines.append(f"  <model>{escape(node.model)}</model>")
-    else:
-        lines.append("  <model>DEFAULT (omit model parameter from Task tool)</model>")
-
-    if node.prompt:
-        lines.append("  <prompt>")
-        for line in node.prompt.split("\n"):
-            lines.append(f"    {line}" if line else "")
-        lines.append("  </prompt>")
-
-    # Wrap invoke in directive to signal immediate execution.
-    # pin_cwd so the invocation survives a drifted agent cwd (relative
-    # ".claude/skills/scripts" breaks from /tmp or a user-global install).
-    lines.append('  <directive action="IMMEDIATELY invoke">')
-    lines.append(f'    <invoke cmd={quoteattr(pin_cwd(node.command))} />')
-    lines.append("  </directive>")
-
-    lines.append("</subagent_dispatch>")
-
     return "\n".join(lines)
 
 
@@ -167,66 +116,4 @@ def render_template_dispatch(node: TemplateDispatchNode) -> str:
     return "\n".join(lines)
 
 
-def render_roster_dispatch(node: RosterDispatchNode) -> str:
-    """Render roster dispatch with MIMD pattern.
-
-    Each agent receives shared_context + unique prompt.
-    Command is fixed for all agents.
-
-    Args:
-        node: RosterDispatchNode with shared context and unique prompts
-
-    Returns:
-        XML string with parallel_dispatch structure
-
-    Raises:
-        ValueError: If node.agents is empty (cannot dispatch zero agents)
-    """
-    if not node.agents:
-        raise ValueError(
-            f"RosterDispatchNode.agents cannot be empty. Agent type: {node.agent_type}"
-        )
-
-    count = len(node.agents)
-
-    lines = [f'<parallel_dispatch agent={quoteattr(node.agent_type)} count="{count}">']
-
-    if node.instruction:
-        lines.append("  <instruction>")
-        lines.append(f"    {node.instruction}")
-        lines.append("  </instruction>")
-        lines.append("")
-
-    lines.append(_build_execution_constraint(count))
-    lines.append("")
-    lines.append(_build_model_selection(node.model))
-    lines.append("")
-
-    if node.shared_context:
-        lines.append("  <shared_context>")
-        for ctx_line in node.shared_context.split("\n"):
-            lines.append(f"    {ctx_line}" if ctx_line else "")
-        lines.append("  </shared_context>")
-        lines.append("")
-
-    lines.append("  <agents>")
-    for i, agent_prompt in enumerate(node.agents, 1):
-        lines.append(f'    <agent index="{i}">')
-        lines.append("      <task>")
-        for task_line in agent_prompt.split("\n"):
-            lines.append(f"        {task_line}" if task_line else "")
-        lines.append("      </task>")
-        lines.append(f'      <invoke cmd={quoteattr(pin_cwd(node.command))} />')
-        lines.append("    </agent>")
-    lines.append("  </agents>")
-
-    lines.append("</parallel_dispatch>")
-
-    return "\n".join(lines)
-
-
-__all__ = [
-    "render_roster_dispatch",
-    "render_subagent_dispatch",
-    "render_template_dispatch",
-]
+__all__ = ["render_template_dispatch"]

@@ -44,46 +44,6 @@ StepBody = list[str] | Callable[[str], list[str]]
 # PER-PHASE STEP-2 (APPLY) AND STEP-3 (VALIDATE) BODIES
 # ============================================================================
 
-IMPL_CODE_APPLY: list[str] = [
-    "APPLY targeted fixes to code.",
-    "",
-    "For each failed item, fix the identified issue:",
-    "",
-    "Acceptance criteria mismatch:",
-    "  - Re-read the acceptance criteria from plan",
-    "  - Modify code to match expected behavior",
-    "",
-    "Temporal contamination:",
-    "  - Rewrite comments to remove change-relative language",
-    "  - Use Edit tool on source files",
-    "",
-    "Structural issues:",
-    "  - Extract a function when it mixes unrelated responsibilities or abstraction levels",
-    "  - Remove duplicate logic",
-    "  - Add missing error handling",
-    "",
-    "CONSTRAINT: Fix ONLY the failing items. Don't refactor passing code.",
-]
-
-IMPL_CODE_VALIDATE: list[str] = [
-    "VALIDATE your fixes before returning to orchestrator.",
-    "",
-    "Run tests:",
-    "  pytest / tsc / go test -race",
-    "",
-    "If tests fail:",
-    "  - Apply additional fixes",
-    "  - Re-run tests",
-    "",
-    "If all tests pass:",
-    "  Your complete response must be exactly: PASS",
-    "  Do not add summaries, explanations, or any other text.",
-    "",
-    "If the tests cannot run, or keep failing and you cannot fix them, your complete",
-    "response is one line naming the command and its failure, not PASS.",
-]
-
-
 def _impl_docs_apply(state_dir: str) -> list[str]:
     """impl-docs apply body; injects the temporal-contamination convention at runtime.
 
@@ -234,8 +194,8 @@ def _plan_design_validate(state_dir: str) -> list[str]:
 # FIX CONTENT REGISTRY
 # ============================================================================
 
-# Per-phase content for the shared fix step machine. Keys must stay in sync with
-# QR_PHASES / DECOMPOSE_CONTENT / VERIFIERS (enforced by phases.validate_phase_registries).
+# Per-phase content for the shared fix step machine. Keys are the qr_phase of every
+# shared.routing.WORK_PHASES entry (enforced by phases.validate_phase_registries).
 FIX_CONTENT: dict[str, dict] = {
     "plan-design": {
         "apply_title": "Apply Targeted Fixes",
@@ -257,27 +217,6 @@ FIX_CONTENT: dict[str, dict] = {
         ],
         "apply": _plan_design_apply,
         "validate": _plan_design_validate,
-    },
-    "impl-code": {
-        "apply_title": "Apply Code Fixes",
-        "banner_label": "IMPLEMENTATION-FIX",
-        "intro": "Code QR found issues in implemented code.",
-        "change_target": "in the codebase",
-        "load_context": False,
-        "common_issues": [
-            "COMMON ISSUE TYPES:",
-            "  - Acceptance criteria mismatch",
-            "  - Temporal contamination in comments",
-            "  - Structural issues (god functions, duplicate logic)",
-            "  - Missing error handling",
-        ],
-        "context_preservation": [
-            "CONTEXT PRESERVATION:",
-            "  - Do NOT refactor unrelated code",
-            "  - Focus ONLY on addressing the specific failures",
-        ],
-        "apply": IMPL_CODE_APPLY,
-        "validate": IMPL_CODE_VALIDATE,
     },
     "impl-docs": {
         "apply_title": "Apply Doc Fixes",
@@ -304,8 +243,10 @@ FIX_CONTENT: dict[str, dict] = {
 
 
 def get_fix_content(phase: str) -> dict:
-    """Per-phase fix content. Raises ValueError on an unknown phase."""
+    """Per-phase fix content. Raises ValueError on an unknown phase or one with no fix route."""
     get_phase_config(phase)
+    if phase not in FIX_CONTENT:
+        raise ValueError(f"QR phase {phase!r} has no fix route; fix phases: {sorted(FIX_CONTENT)}")
     return FIX_CONTENT[phase]
 
 

@@ -395,6 +395,9 @@ Select task-representative "support examples" via a two-stage filter-then-search
 process. Unlike KATE (which retrieves test-specific examples), LENS finds
 examples that characterize the task itself and work across all test inputs.
 
+**Model applicability**: InfoScore needs a scoring model's probability for each label.
+Claude models return no token probabilities (the Messages API response has no log-probability field), so a Claude model cannot be the scoring model in Stage 1.
+
 **When to use:**
 
 - Need stable, reusable demonstrations across many test inputs
@@ -535,6 +538,7 @@ the task format and expected outputs.
 - LFG outlier filtering: Extremely high confidence often indicates task misunderstanding (e.g., generating text completion instead of summary); filter using IQR
 - Greedy decoding in Stage 2: Temperature=0 for final predictions
 - Claude models that reject non-default sampling parameters (see the Model applicability note in `../correctness/sampling.md`): omit temperature and top_p; Stage 1 samples at the defaults and Stage 2's greedy decoding is unavailable
+- CLS on a Claude model: the CLS score needs class probabilities, which Claude models do not return (the Messages API response has no log-probability field), so USP on a Claude model is limited to the SFG and LFG task types
 
 **Critical insight**: Average Stage 1 confidence predicts improvement magnitude.
 High average confidence means the model is already certain -- less room for

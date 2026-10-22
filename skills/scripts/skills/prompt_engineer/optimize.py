@@ -15,7 +15,6 @@ Scopes:
 
 Research grounding:
   - Self-Refine (Madaan 2023): Separate feedback from refinement
-  - CoVe (Dhuliawala 2023): Factored verification with OPEN questions
 """
 
 import argparse
@@ -61,18 +60,17 @@ TRIAGE_INSTRUCTIONS = (
 )
 
 REFINE_INSTRUCTIONS = (
-    "VERIFY each proposed technique (factored verification):\n"
+    "VERIFY each proposed technique against its sources:\n"
     "\n"
     "  For each technique you claimed APPLICABLE:\n"
-    "  1. Close your proposal. Answer from reference ONLY:\n"
-    "     Q: 'What is the EXACT trigger condition for [technique]?'\n"
-    "  2. Close the reference. Answer from target prompt ONLY:\n"
-    "     Q: 'What text appears at line [N]?'\n"
-    "  3. Compare: Does quoted text match quoted trigger?\n"
+    "  1. Find the trigger you quoted in the reference and check that it reads\n"
+    "     the same there.\n"
+    "  2. Re-read the target prompt (the file, or the draft for a new prompt) at\n"
+    "     the lines you quoted.\n"
+    "  3. Compare the text at those lines with the trigger.\n"
     "\n"
-    "  Cross-check: CLAIMED vs VERIFIED\n"
-    "    CONSISTENT -> keep\n"
-    "    INCONSISTENT -> revise or remove\n"
+    "  A quote not found in its source, or text that does not match the trigger\n"
+    "    -> revise or remove the change. Otherwise keep it.\n"
     "\n"
     "SPOT-CHECK dismissed techniques:\n"
     "  Pick 3 marked NOT APPLICABLE\n"
@@ -214,11 +212,16 @@ UNDERSTAND_SIMPLE_INSTRUCTIONS = (
 )
 
 TECHNIQUE_REVIEW = (
-    "SYSTEMATIC TECHNIQUE REVIEW:\n"
-    "  For each technique in the references read:\n"
-    "  1. QUOTE its trigger (its Triggers or When to use entry, or the Trigger Condition column)\n"
-    "  2. QUOTE text from the target prompt that matches (or state 'No match')\n"
-    "  3. Verdict: APPLICABLE (with both quotes) or NOT APPLICABLE"
+    "TECHNIQUE TABLE: one row for each technique in the references read, so the\n"
+    "selection covers every technique, not only the ones that come to mind first:\n"
+    "\n"
+    "| Technique | Source File | Applicable? | Evidence |\n"
+    "|-----------|-------------|-------------|----------|\n"
+    "\n"
+    "  APPLICABLE: quote its trigger (its Triggers or When to use entry, or the\n"
+    "    Trigger Condition column) and the text of the target prompt, or of the\n"
+    "    requirements for a new prompt, that matches it.\n"
+    "  NOT APPLICABLE: why the trigger does not match, in a few words."
 )
 
 TECHNIQUE_REVIEW_ECOSYSTEM = (
@@ -324,24 +327,6 @@ CATEGORY_SELECTION_INSTRUCTIONS = (
     "    - structure: [why it does not apply]"
 )
 
-TECHNIQUE_AUDIT_INSTRUCTIONS = (
-    "TECHNIQUE AUDIT TABLE (MANDATORY):\n"
-    "\n"
-    "For EVERY technique in EVERY injected reference file, create:\n"
-    "\n"
-    "| Technique | Source File | Trigger Condition | Applicable? | Evidence |\n"
-    "|-----------|-------------|-------------------|-------------|----------|\n"
-    "\n"
-    "Rules:\n"
-    "  - List ALL techniques from ALL injected files (no skipping)\n"
-    "  - Quote the trigger condition from the reference\n"
-    "  - If Applicable=YES: quote evidence from target prompt\n"
-    "  - If Applicable=NO: state why trigger doesn't match\n"
-    "\n"
-    "This ensures systematic evaluation, not salience-driven selection.\n"
-    "\n" + MODEL_FIT_RULE
-)
-
 
 # ============================================================================
 # CONFIGURATION
@@ -365,14 +350,14 @@ SCOPES = ("single-prompt", "ecosystem", "greenfield", "problem")
 
 SCOPE_TOTAL_STEPS = {
     "single-prompt": 7,
-    "ecosystem": 8,
+    "ecosystem": 7,
     "greenfield": 7,
     "problem": 7,
 }
 
 INJECTION_STEP = {
     "single-prompt": 4,
-    "ecosystem": 5,
+    "ecosystem": 4,
     "greenfield": 4,
     "problem": 4,
 }
@@ -627,7 +612,7 @@ UNDERSTAND_ECOSYSTEM_INSTRUCTIONS = (
     "CONTRASTIVE EXAMPLES:\n"
     "\n"
     "<example type='CORRECT'>\n"
-    "  SKILL.md: 'Invoke the script. The script IS the workflow.'\n"
+    "  SKILL.md: 'Invoke the script and follow its output.'\n"
     "  WHY: Main agent delegates completely. No internals exposed.\n"
     "</example>\n"
     "<example type='INCORRECT'>\n"
@@ -689,40 +674,43 @@ UNDERSTAND_GREENFIELD_INSTRUCTIONS = (
     "</correct>"
 )
 
-# --- STEP 4: PLAN / VERIFY / DESIGN / TARGET --------------------------------
+# --- STEP 4: PLAN / DESIGN / TARGET ------------------------------------------
 
 PLAN_SINGLE_INSTRUCTIONS = (
     "BLIND identification of opportunities (quote line evidence):\n"
     "  List as 'Lines X-Y: [issue]'\n"
     "\n" + TECHNIQUE_REVIEW + "\n"
-    "\n" + CHANGE_FORMAT + "\n"
-    "\n"
-    "Include TECHNIQUE DISPOSITION summary."
+    "\n" + CHANGE_FORMAT
 )
 
-VERIFY_UNDERSTANDING_INSTRUCTIONS = (
-    "TEST understanding with counterfactual questions (OPEN, not yes/no).\n"
+PLAN_ECOSYSTEM_INSTRUCTIONS = (
+    "FOR EACH PROMPT - identify opportunities:\n"
+    "  List as 'File:Lines X-Y: [issue]'\n"
     "\n"
-    "For EACH handoff (A -> B):\n"
-    "  Q: DESCRIBE what could be REMOVED from this handoff without breaking B.\n"
-    "  A: [list specific items currently included but not necessary]\n"
+    "FOR THE ECOSYSTEM - identify cross-prompt issues:\n"
+    "  Using your interaction table AND your <handoff_understanding>:\n"
+    "  - For each Shared Term: check consistency across listed prompts\n"
+    "  - For each Receives From/Sends To pair: check handoff clarity\n"
+    "  - For each handoff: is it MINIMAL?\n"
+    "    REJECT changes that add information the receiver doesn't need.\n"
+    "    REJECT changes that leak orchestrator internals.\n"
     "\n"
-    "  Q: EXPLAIN what would fail and HOW if we added orchestrator internals\n"
-    "     (workflow steps, state, other components) to this handoff.\n"
-    "  A: [describe mechanism: confusion, coupling, scope creep, etc.]\n"
-    "\n"
-    "For the ECOSYSTEM:\n"
-    "  Q: If component X were removed, WHICH components break and WHY?\n"
-    "  A: [trace dependencies based on your understanding]\n"
-    "\n"
-    "CONSISTENCY CHECK:\n"
-    "  Compare answers to <handoff_understanding>.\n"
-    "  Revise understanding if inconsistent."
+    "  HANDOFF MINIMALISM TEST for each proposed change:\n"
+    "    Ask: 'Would the receiver need to change if this internal changed?'\n"
+    "    NO -> creates coupling without benefit -> EXCLUDE\n"
+    "    YES -> necessary information -> INCLUDE\n"
+    "  - Conflicting instructions\n"
+    "  - Redundant specifications\n"
+    "  List as 'ECOSYSTEM: [issue across File1, File2]'\n"
+    "\n" + TECHNIQUE_REVIEW_ECOSYSTEM + "\n"
+    "\n" + CHANGE_FORMAT + "\n"
+    "Note which changes affect single file vs multiple."
 )
 
 DESIGN_GREENFIELD_INSTRUCTIONS = (
     "SELECT applicable techniques for the design:\n"
     "  Based on requirements, architecture, and EXECUTION CONTEXT from Step 2\n"
+    "\n" + TECHNIQUE_REVIEW + "\n"
     "\n"
     "SCAFFOLD based on execution context:\n"
     "\n"
@@ -784,40 +772,13 @@ DESIGN_GREENFIELD_INSTRUCTIONS = (
 
 TARGET_FIX_PROBLEM_INSTRUCTIONS = (
     "REVERSE LOOKUP - which techniques address this problem class?\n"
-    "  Review each reference's technique triggers for matches\n"
+    "\n" + TECHNIQUE_REVIEW + "\n"
     "\n"
-    "For each candidate technique:\n"
-    "  - QUOTE trigger condition\n"
-    "  - Explain how problem matches trigger\n"
+    "For each APPLICABLE technique:\n"
+    "  - Explain how the problem matches its trigger\n"
     "  - Propose specific change\n"
     "\n" + FIX_FORMAT + "\n"
     "  Expected effect: [how this fixes the problem]"
-)
-
-# --- STEP 5: REFINE / PLAN --------------------------------------------------
-
-PLAN_ECOSYSTEM_INSTRUCTIONS = (
-    "FOR EACH PROMPT - identify opportunities:\n"
-    "  List as 'File:Lines X-Y: [issue]'\n"
-    "\n"
-    "FOR THE ECOSYSTEM - identify cross-prompt issues:\n"
-    "  Using your interaction table AND your <handoff_understanding>:\n"
-    "  - For each Shared Term: check consistency across listed prompts\n"
-    "  - For each Receives From/Sends To pair: check handoff clarity\n"
-    "  - For each handoff: is it MINIMAL?\n"
-    "    REJECT changes that add information the receiver doesn't need.\n"
-    "    REJECT changes that leak orchestrator internals.\n"
-    "\n"
-    "  HANDOFF MINIMALISM TEST for each proposed change:\n"
-    "    Ask: 'Would the receiver need to change if this internal changed?'\n"
-    "    NO -> creates coupling without benefit -> EXCLUDE\n"
-    "    YES -> necessary information -> INCLUDE\n"
-    "  - Conflicting instructions\n"
-    "  - Redundant specifications\n"
-    "  List as 'ECOSYSTEM: [issue across File1, File2]'\n"
-    "\n" + TECHNIQUE_REVIEW_ECOSYSTEM + "\n"
-    "\n" + CHANGE_FORMAT + "\n"
-    "Note which changes affect single file vs multiple."
 )
 
 # --- STEP 7: EXECUTE / CREATE / APPLY / APPROVE -----------------------------
@@ -852,8 +813,6 @@ APPLY_FIX_PROBLEM_INSTRUCTIONS = (
     "  - Could it introduce new issues?\n"
     "\n" + CHANGE_PRESENTATION
 )
-
-# --- STEP 8: EXECUTE (ECOSYSTEM ONLY) ---------------------------------------
 
 EXECUTE_ECOSYSTEM_INSTRUCTIONS = (
     "Apply changes to each file.\n"
@@ -972,11 +931,10 @@ SCOPE_STEPS = {
         1: ("Triage", TRIAGE_INSTRUCTIONS),
         2: ("Assess", ASSESS_ECOSYSTEM_INSTRUCTIONS),
         3: ("Understand", UNDERSTAND_ECOSYSTEM_INSTRUCTIONS),
-        4: ("Verify Understanding", VERIFY_UNDERSTANDING_INSTRUCTIONS),
-        5: ("Plan", PLAN_ECOSYSTEM_INSTRUCTIONS),
-        6: ("Refine", REFINE_INSTRUCTIONS),
-        7: ("Approve", APPROVE_INSTRUCTIONS),
-        8: ("Execute", EXECUTE_ECOSYSTEM_INSTRUCTIONS),
+        4: ("Plan", PLAN_ECOSYSTEM_INSTRUCTIONS),
+        5: ("Refine", REFINE_INSTRUCTIONS),
+        6: ("Approve", APPROVE_INSTRUCTIONS),
+        7: ("Execute", EXECUTE_ECOSYSTEM_INSTRUCTIONS),
     },
     "greenfield": {
         1: ("Triage", TRIAGE_INSTRUCTIONS),
@@ -1032,7 +990,7 @@ def format_output(step: int, scope: str | None, categories: list[str] | None) ->
                 body = f"{body}\n\n{CATEGORY_SELECTION_INSTRUCTIONS}"
             elif step == inj_step:
                 if categories:
-                    # Injection step with files: embed references + technique audit
+                    # Injection step with files: embed references + model-fit rule
                     file_blocks = load_and_format_files(categories)
                     body = (
                         f"TECHNIQUE REFERENCES\n"
@@ -1040,7 +998,7 @@ def format_output(step: int, scope: str | None, categories: list[str] | None) ->
                         f"category selection:\n\n"
                         f"{file_blocks}\n\n"
                         f"{body}\n\n"
-                        f"{TECHNIQUE_AUDIT_INSTRUCTIONS}"
+                        f"{MODEL_FIT_RULE}"
                     )
                 else:
                     # Injection step without files: read guide fallback

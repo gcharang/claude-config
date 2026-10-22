@@ -15,10 +15,10 @@ import argparse
 import sys
 
 from skills.lib.workflow.prompts import (
+    agent_tool_instruction,
     format_step,
     parallel_constraint,
     sub_agent_invoke,
-    task_tool_instruction,
 )
 
 # ============================================================================
@@ -95,7 +95,7 @@ SURVEY_INSTRUCTIONS = (
     "Pick N focus areas from the SCOPE goals and the codebase layout: one for a focused\n"
     "scope in one codebase, one per repository for several repositories, otherwise 2-5\n"
     "split by system boundary (e.g. frontend, backend, data).\n\n"
-    f"{task_tool_instruction('general-purpose', 'haiku')}\n\n"
+    f"{agent_tool_instruction('general-purpose', 'haiku')}\n\n"
     f"{parallel_constraint('N')}\n\n"
     "Each agent's prompt: the SCOPE goals, its focus area in prose (the script refers to\n"
     "'your focus area'; it is not a CLI argument), and this block:\n\n"

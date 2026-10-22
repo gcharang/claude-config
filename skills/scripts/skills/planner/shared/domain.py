@@ -1,12 +1,9 @@
 """Domain types for the planner skill.
 
-Planner-specific types that extend the shared workflow types. NextCommand is
-imported from skills.lib.workflow.types as the type of GuidanceResult.next_command.
+Planner-specific value types.
 """
 
 from dataclasses import dataclass
-
-from skills.lib.workflow.types import NextCommand
 
 __all__ = [
     "GuidanceResult",
@@ -31,4 +28,4 @@ class GuidanceResult:
 
     title: str
     actions: list[str]
-    next_command: NextCommand = None
+    next_command: str | None = None

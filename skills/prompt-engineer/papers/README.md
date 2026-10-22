@@ -6,7 +6,7 @@ This directory contains prompt engineering papers organized by the problem they 
 
 The original organization (single-turn, multi-turn, subagent) had 27-66% cross-category overlap because execution topology is orthogonal to problem type. A decomposition technique solves complexity whether it runs in one turn or many.
 
-This problem-driven taxonomy reduces overlap to near-zero by classifying papers based on their primary intervention type from YAML metadata.
+This problem-driven taxonomy reduces overlap to near-zero by classifying papers by their primary intervention type.
 
 ## Categories
 

@@ -62,7 +62,7 @@ Gain: Clear, maintainable code
 
 ### Domain Types in types.py
 
-Domain types (BoundedInt, ChoiceSet, Constant) live in workflow/types.py alongside Arg, Confidence. This maintains cohesion - domain types are type system extensions. Alternative would create import fragmentation.
+Domain types (BoundedInt, ChoiceSet, Constant) live in workflow/types.py. This maintains cohesion - domain types are type system extensions. Alternative would create import fragmentation.
 
 ### Iteration Bound Hardcoded to 5
 
@@ -78,7 +78,7 @@ BoundedInt(1, 5) for iteration domain matches QR_ITERATION_LIMIT constant. Hardc
 
 ## Constraints
 
-- Python 3.10+ (dataclass, match statements)
 - pytest available
+- Test files live only in `tests/`: the documented commands pass the package root to pytest, which then collects a `test_*.py` file anywhere under it.
 - run_skill_invocation() in conftest.py handles subprocess execution
 - MAX_ITERATIONS = 5 standard across workflows

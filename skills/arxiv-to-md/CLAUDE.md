@@ -9,11 +9,4 @@ Convert arXiv papers to LLM-consumable markdown.
 | `SKILL.md`  | Skill invocation                  | Using this skill             |
 | `README.md` | Architecture, invisible knowledge | Understanding design choices |
 
-Python code in `../scripts/skills/arxiv_to_md/`:
-
-| File           | What                                    |
-| -------------- | --------------------------------------- |
-| `main.py`      | Orchestrator steps                      |
-| `convert.py`   | Converter (one paper, no model)         |
-| `sub_agent.py` | Review sub-agent brief (residual LaTeX) |
-| `tex_utils.py` | TeX preprocessing utilities             |
+Python code: `../scripts/skills/arxiv_to_md/` (indexed by its own CLAUDE.md).

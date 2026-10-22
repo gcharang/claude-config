@@ -22,23 +22,8 @@ What is your PRIMARY problem?
 
 ## Navigation Anti-patterns
 
-Avoid reading these directly:
-
-- `papers/**/*.md` - Source paper summaries, too granular for optimization workflow
-- `papers/**/*.yaml` - Paper metadata, not actionable guidance
-- `papers/**/*.pdf` - Original papers, not consumable
-
-The reference files here synthesize those papers into actionable techniques.
+Do not read `papers/**/*.md` directly: the source paper summaries are too granular for the optimization workflow, and the reference files here synthesize them into actionable techniques.
 
 ## Usage in Prompt Optimization Workflow
 
-The optimize.py script selects references based on diagnosed problem:
-
-1. **Triage** determines scope (single-prompt, ecosystem, greenfield, problem)
-2. **Assess/Diagnose** identifies the specific failure mode
-3. **Plan/Design** reads relevant references based on failure mode:
-   - Reasoning failures -> reasoning/\*.md
-   - Consistency failures -> correctness/\*.md
-   - Context issues -> context/\*.md
-   - Verbosity issues -> efficiency.md
-   - Format issues -> structure.md
+`skills/scripts/skills/prompt_engineer/optimize.py` has the model choose the categories (`CATEGORY_SELECTION_INSTRUCTIONS`) and embeds the chosen files in the next step (`CATEGORY_TO_FILE`, `format_output`).

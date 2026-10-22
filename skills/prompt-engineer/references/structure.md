@@ -214,6 +214,9 @@ feedback formats, and guardrails to prevent cascading errors.
 **Mechanism:** Estimate and correct model bias toward certain outputs by testing
 with content-free inputs (e.g., "N/A") and applying inverse calibration.
 
+**Model applicability**: Calibration rescales the model's probability for each label.
+Claude models return no token probabilities (the Messages API response has no log-probability field), so this technique does not apply to a Claude target model.
+
 **When to use:**
 
 - Few-shot classification with imbalanced examples

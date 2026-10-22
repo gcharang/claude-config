@@ -18,6 +18,7 @@ from skills.deepthink import subagent, think
 from skills.incoherence import incoherence
 from skills.lib.workflow import discover_workflows
 from skills.problem_analysis import analyze as problem_analysis
+from skills.prompt_engineer import optimize
 from skills.refactor import explore, refactor
 
 
@@ -303,3 +304,33 @@ def test_refactor_step_1_hands_the_scope_it_extracts_to_step_2(monkeypatch, caps
     commands = re.findall(rf"python -m {re.escape(refactor.MODULE_PATH)} --step 2 [^\"]*", out)
     assert commands
     assert all("--scope $SCOPE" in command for command in commands)
+
+
+@pytest.mark.parametrize("scope", optimize.SCOPES)
+def test_prompt_engineer_scope_walks_every_step_and_screens_the_references_it_embeds(
+    monkeypatch, capsys, scope
+):
+    command = re.compile(
+        rf"python -m {re.escape(optimize.MODULE_PATH)} --step (\d+) --scope {scope}"
+        r"(?: --categories (\S+))?"
+    )
+    step, argv = 2, ["--step", "2", "--scope", scope]
+    embedding_steps, table_steps = [], []
+    while True:
+        out = _render(monkeypatch, capsys, optimize, *argv)
+        if "File: references/structure.md" in out:
+            embedding_steps.append(step)
+        if optimize.TECHNIQUE_REVIEW in out:
+            table_steps.append(step)
+        found = command.findall(out)
+        if not found:
+            assert "WORKFLOW COMPLETE" in out
+            break
+        ((target, categories),) = found
+        assert int(target) == step + 1
+        step, argv = int(target), ["--step", target, "--scope", scope]
+        if categories:
+            chosen = "structure" if categories == "<SELECTED_CATEGORIES>" else categories
+            argv += ["--categories", chosen]
+    assert len(embedding_steps) == 1
+    assert table_steps == embedding_steps

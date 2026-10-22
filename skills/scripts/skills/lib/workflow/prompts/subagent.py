@@ -13,17 +13,15 @@ from skills.lib.workflow.prompts.step import pin_cwd
 # ============================================================================
 # Building block templates used by multiple dispatch patterns
 
-TASK_TOOL_INSTRUCTION = """\
-ACTION: Use the Task tool to spawn each agent.
+AGENT_TOOL_INSTRUCTION = """\
+ACTION: Use the Agent tool to spawn each agent.
 
-Task tool parameters:
+Agent tool parameters:
   - subagent_type: {agent_type}
   - model: {model_param}
   - prompt: Include the task and invoke command below
-  - run_in_background: NEVER set this. Always omit or set false.
-    Background agents return full session transcripts via TaskOutput,
-    flooding the orchestrator context window. Foreground agents return
-    only the agent's final text response."""
+
+Continue only after every agent you spawned has returned its final report."""
 
 SUB_AGENT_INVOKE = """\
 MANDATORY INVOKE BLOCK - Copy VERBATIM into the agent's prompt:
@@ -38,7 +36,7 @@ The subagent needs "FIRST ACTION REQUIRED" to know it must run the command."""
 
 PARALLEL_CONSTRAINT = """\
 PARALLEL EXECUTION:
-    Dispatch all {count} agents in one assistant message -- {count} Task tool calls
+    Dispatch all {count} agents in one assistant message -- {count} Agent tool calls
     issued together -- so they run concurrently. Do not wait for one agent to
     return before dispatching the next."""
 
@@ -53,7 +51,7 @@ SUBAGENT_TEMPLATE = """\
 DISPATCH SUB-AGENT
 ==================
 
-{task_tool_block}
+{agent_tool_block}
 
 TASK FOR THE SUB-AGENT:
 {task_section}
@@ -70,7 +68,7 @@ DISPATCH {count} PARALLEL AGENTS
 
 {parallel_block}
 
-For EACH agent below, use Task tool with:
+For EACH agent below, use the Agent tool with:
   - subagent_type: {agent_type}
   - model: {model_display}
   - prompt: Task description + MANDATORY INVOKE BLOCK (copy exactly as shown)
@@ -99,10 +97,10 @@ Task: {prompt}
 # --- Building block functions -----------------------------------------------
 
 
-def task_tool_instruction(agent_type: str, model: str | None) -> str:
-    """Tell main agent how to spawn sub-agent via Task tool."""
+def agent_tool_instruction(agent_type: str, model: str | None) -> str:
+    """Tell main agent how to spawn sub-agent via the Agent tool."""
     model_param = model if model else "omit (use default)"
-    return TASK_TOOL_INSTRUCTION.format(agent_type=agent_type, model_param=model_param)
+    return AGENT_TOOL_INSTRUCTION.format(agent_type=agent_type, model_param=model_param)
 
 
 def sub_agent_invoke(cmd: str) -> str:
@@ -132,7 +130,7 @@ def subagent_dispatch(
     """Generate prompt for single sub-agent dispatch.
 
     Args:
-        agent_type: Task tool subagent_type (e.g., "general-purpose", "Explore")
+        agent_type: Agent tool subagent_type (e.g., "general-purpose", "Explore")
         command: `uv run` command sub-agent must run after spawning
         prompt: Optional task description for sub-agent
         model: Optional model override ("haiku", "sonnet", "opus")
@@ -143,7 +141,7 @@ def subagent_dispatch(
     task_section = prompt if prompt else "(No additional task - agent follows invoke command)"
 
     return SUBAGENT_TEMPLATE.format(
-        task_tool_block=task_tool_instruction(agent_type, model),
+        agent_tool_block=agent_tool_instruction(agent_type, model),
         task_section=task_section,
         invoke_block=sub_agent_invoke(command),
     )
@@ -208,7 +206,7 @@ def template_dispatch(
     before the LLM sees the prompt (expansion happens here, not at runtime).
 
     Args:
-        agent_type: Task tool subagent_type for all agents
+        agent_type: Agent tool subagent_type for all agents
         template: Prompt template with $var placeholders
         targets: List of dicts, each providing variable bindings for one agent
         command: `uv run` command template with $var placeholders
@@ -249,11 +247,11 @@ def template_dispatch(
 
 
 __all__ = [
+    # Building blocks
+    "agent_tool_instruction",
     "parallel_constraint",
     "sub_agent_invoke",
     # Dispatch templates
     "subagent_dispatch",
-    # Building blocks
-    "task_tool_instruction",
     "template_dispatch",
 ]

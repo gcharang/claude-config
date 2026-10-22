@@ -206,8 +206,8 @@ def format_step_2(qr: QRState, state_dir: str) -> str:
             "verification.",
             "",
             "ERROR HANDLING (you NEVER fix code yourself):",
-            "  Clear problem + solution: Task(developer) immediately",
-            "  Difficult/unclear problem: Task(debugger) to diagnose first",
+            "  Clear problem + solution: spawn a developer agent immediately",
+            "  Difficult/unclear problem: spawn a debugger agent to diagnose first",
             f"  Uncertain how to proceed: {ESCALATE_HANDLER} with options",
         ]
     elif verify_has_failures(state_dir):
@@ -245,8 +245,8 @@ def format_step_2(qr: QRState, state_dir: str) -> str:
             "that introduces a new issue is caught.",
             "",
             "ERROR HANDLING (you NEVER fix code yourself):",
-            "  Clear problem + solution: Task(developer) immediately",
-            "  Difficult/unclear problem: Task(debugger) to diagnose first",
+            "  Clear problem + solution: spawn a developer agent immediately",
+            "  Difficult/unclear problem: spawn a debugger agent to diagnose first",
             f"  Uncertain how to proceed: {ESCALATE_HANDLER} with options",
         ]
     else:
@@ -256,7 +256,7 @@ def format_step_2(qr: QRState, state_dir: str) -> str:
             "",
             "WAVE-AWARE EXECUTION:",
             "  - Milestones within same wave: dispatch in PARALLEL",
-            "    (Multiple Task calls in single response)",
+            "    (Multiple Agent tool calls in single response)",
             "  - Waves execute SEQUENTIALLY",
             "    (Wait for wave N to complete before starting wave N+1)",
             "",
@@ -271,8 +271,8 @@ def format_step_2(qr: QRState, state_dir: str) -> str:
             "",
             "FOR EACH WAVE:",
             "  1. Dispatch developer agents for ALL milestones in wave:",
-            "     Task(developer): Milestone N",
-            "     Task(developer): Milestone M  (if parallel)",
+            "     Agent(developer): Milestone N",
+            "     Agent(developer): Milestone M  (if parallel)",
             "",
             "  2. Each prompt must include:",
             "     - Plan file: $PLAN_FILE",
@@ -298,8 +298,8 @@ def format_step_2(qr: QRState, state_dir: str) -> str:
             "After ALL waves complete, proceed to Code QR.",
             "",
             "ERROR HANDLING (you NEVER fix code yourself):",
-            "  Clear problem + solution: Task(developer) immediately",
-            "  Difficult/unclear problem: Task(debugger) to diagnose first",
+            "  Clear problem + solution: spawn a developer agent immediately",
+            "  Difficult/unclear problem: spawn a debugger agent to diagnose first",
             f"  Uncertain how to proceed: {ESCALATE_HANDLER} with options",
         ]
 

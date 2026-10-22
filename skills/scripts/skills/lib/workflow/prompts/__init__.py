@@ -10,16 +10,18 @@ from skills.lib.workflow.prompts.file import format_file_content
 # pin_cwd makes a prose `uv run` command cwd-independent
 from skills.lib.workflow.prompts.step import format_step, pin_cwd
 from skills.lib.workflow.prompts.subagent import (
+    # Building blocks
+    agent_tool_instruction,
     parallel_constraint,
     sub_agent_invoke,
     # Dispatch templates
     subagent_dispatch,
-    # Building blocks
-    task_tool_instruction,
     template_dispatch,
 )
 
 __all__ = [
+    # Building blocks
+    "agent_tool_instruction",
     # File content embedding
     "format_file_content",
     # Step assembly
@@ -29,7 +31,5 @@ __all__ = [
     "sub_agent_invoke",
     # Dispatch templates
     "subagent_dispatch",
-    # Building blocks
-    "task_tool_instruction",
     "template_dispatch",
 ]

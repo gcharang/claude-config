@@ -128,7 +128,7 @@ looking at and how they reason about it. This enables:
 
 1. **Focused agents**: the refactor skill gives each explore sub-agent one category: the lines from its `## N.` heading to the next heading. The primer and mode blocks are not part of that slice.
 
-2. **Whole-document review**: agents whose Convention References name `code-quality/CLAUDE.md` read whole documents, choosing them by its applicability table.
+2. **Whole-document review**: agents whose Convention References name `code-quality/CLAUDE.md` read whole documents, choosing them by the Applicability Matrix in this README.
 
 ### Why Split Categories?
 

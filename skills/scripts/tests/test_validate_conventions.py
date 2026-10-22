@@ -21,7 +21,6 @@ ROOT = Path("/repo/skills/scripts/skills")
 @pytest.mark.parametrize(
     "relpath, expected",
     [
-        ("planner/developer/exec_implement_execute.py", "developer"),
         ("planner/technical_writer/exec_docs_execute.py", "technical_writer"),
         ("planner/quality_reviewer/qr_decompose.py", "quality_reviewer"),
         ("planner/shared/qr/utils.py", "quality_reviewer"),

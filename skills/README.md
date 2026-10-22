@@ -106,7 +106,7 @@ Within a step section, order constants by execution flow. Dispatch-related const
 
 ### Dispatch Prompts: Templates vs Builders
 
-Dispatch prompts combine static text with the dispatch building blocks in `skills.lib.workflow.prompts` (`task_tool_instruction`, `parallel_constraint`, `sub_agent_invoke`). Split them:
+Dispatch prompts combine static text with the dispatch building blocks in `skills.lib.workflow.prompts` (`agent_tool_instruction`, `parallel_constraint`, `sub_agent_invoke`). Split them:
 
 **Static parts -> MESSAGE TEMPLATES** (constants). A dispatch with no runtime inputs is a constant even though it calls the building blocks: see `DISPATCH_INSTRUCTIONS` in `deepthink/think.py` and `SURVEY_INSTRUCTIONS` in `codebase_analysis/analyze.py`.
 
@@ -435,14 +435,14 @@ prompts/
 
 ### subagent.py
 
-Dispatch patterns for spawning sub-agents via the Task tool:
+Dispatch patterns for spawning sub-agents via the Agent tool:
 
 - `subagent_dispatch(agent_type, command, prompt="", model=None)` -- single sequential dispatch
 - `template_dispatch(agent_type, template, targets, command, ...)` -- parallel SIMD (same template, N targets with $var substitution)
 
 Building blocks (also exported):
 
-- `task_tool_instruction(agent_type, model)` -- how to use Task tool
+- `agent_tool_instruction(agent_type, model)` -- how to use the Agent tool
 - `sub_agent_invoke(cmd)` -- command the spawned agent runs
 - `parallel_constraint(count)` -- parallel dispatch instruction
 

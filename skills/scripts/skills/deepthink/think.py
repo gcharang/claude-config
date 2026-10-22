@@ -9,10 +9,10 @@ import argparse
 import sys
 
 from skills.lib.workflow.prompts import (
+    agent_tool_instruction,
     format_step,
     parallel_constraint,
     sub_agent_invoke,
-    task_tool_instruction,
 )
 
 # ============================================================================
@@ -418,7 +418,7 @@ DISPATCH_CONTEXT = (
     "- KEY ANALOGIES from Step 4\n"
     "- Their specific task definition from Step 6\n"
     "\n"
-    "AGENT PROMPT STRUCTURE (use for each agent's Task tool prompt):\n"
+    "AGENT PROMPT STRUCTURE (use for each agent's Agent tool prompt):\n"
     "\n"
     "Explore this question from the assigned perspective.\n"
     "\n"
@@ -440,7 +440,7 @@ DISPATCH_CONTEXT = (
 DISPATCH_INSTRUCTIONS = (
     "Launch one sub-agent per entry in FINAL SUB-AGENT DEFINITIONS (Step 6); N is the\n"
     "number of entries.\n"
-    "\n" + task_tool_instruction("general-purpose", "sonnet") + "\n"
+    "\n" + agent_tool_instruction("general-purpose", "sonnet") + "\n"
     "\n" + parallel_constraint("N") + "\n"
     "\n" + DISPATCH_CONTEXT + "\n"
     "\n"
