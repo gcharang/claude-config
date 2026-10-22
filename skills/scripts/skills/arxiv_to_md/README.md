@@ -3,8 +3,8 @@
 ## Working Directory
 
 Every command the orchestrator prints runs under `uv run --directory <skills/scripts>`
-(`pin_cwd`), so `convert.py` and `sub_agent.py` start in the scripts project, not in the
-user's directory. They take absolute paths: `convert.py` rejects a relative `--out-dir`
+(`pin_cwd`), so `convert.py` starts in the scripts project, not in the user's directory. It
+takes absolute paths: `convert.py` rejects a relative `--out-dir`
 or `--dest-file`, and step 1 has the orchestrator write the user's directory as one.
 
 ## Untrusted Source

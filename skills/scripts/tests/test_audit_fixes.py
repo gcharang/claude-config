@@ -26,7 +26,6 @@ import io
 import json
 import math
 import os
-import shlex
 import shutil
 import subprocess
 import sys
@@ -940,22 +939,23 @@ class TestCwdPinnedCommands:
             assert f'cmd="uv run --directory {_SKILLS_DIR_Q} ' in line
             assert 'working-dir=".claude/skills/scripts"' not in line
 
-    def test_arxiv_review_dispatch_is_pinned_and_exact(self, tmp_path: Path):
+    def test_arxiv_review_dispatches_the_narrow_agent_without_an_invoke_command(
+        self, tmp_path: Path
+    ):
         from skills.arxiv_to_md import main
 
-        files = [tmp_path / "a b.md", tmp_path / "it's.md"]
-        out = main.build_review_body([str(f) for f in files])
-        commands = [
-            line.removeprefix("Command: ")
-            for line in out.splitlines()
-            if line.startswith("Command: ") and "skills.arxiv_to_md.sub_agent" in line
-        ]
-        assert commands == [
-            f"uv run --directory {_SKILLS_DIR_Q} python -m skills.arxiv_to_md.sub_agent"
-            f" --file {shlex.quote(str(f))}"
-            for f in files
-        ]
-        assert 'working-dir=".claude/skills/scripts"' not in out
+        flagged = [tmp_path / "a b.md", tmp_path / "it's.md"]
+        clean = tmp_path / "clean.md"
+        flagged[0].write_text("# T\n\nText \\textsc{X}\n")
+        flagged[1].write_text("\\vspace{2mm}\n\nok\n\\label{y}\n")
+        clean.write_text("# T\n\nno latex\n")
+        out = main.build_review_body([str(f) for f in (*flagged, clean)])
+        assert "subagent_type: arxiv-latex-reviewer" in out
+        assert out.count("--- Prompt ") == 2
+        assert f"File: {flagged[0]}\nFlagged line numbers: 3\n" in out
+        assert f"File: {flagged[1]}\nFlagged line numbers: 1, 4\n" in out
+        assert str(clean) not in out
+        assert "Command: " not in out and "sub_agent" not in out
 
 
 def _tex_tar_gz(path: Path, members: dict[str, bytes], links: dict[str, str] | None = None) -> Path:
@@ -1436,15 +1436,6 @@ class TestArxivConvert:
         except ConvertError as e:
             pytest.skip(str(e))
         assert "SECRET-MARKER" not in out
-
-    def test_sub_agent_prints_the_flagged_lines(self, tmp_path: Path, monkeypatch, capsys):
-        from skills.arxiv_to_md import sub_agent
-
-        paper = tmp_path / "paper.md"
-        paper.write_text("# T\n\nText \\textsc{X}\n")
-        monkeypatch.setattr(sys, "argv", ["sub_agent", "--file", str(paper)])
-        sub_agent.main()
-        assert "L3:" in capsys.readouterr().out
 
 
 class TestChecksSummaryHardening:

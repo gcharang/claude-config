@@ -19,8 +19,9 @@ import shlex
 import sys
 from pathlib import Path
 
-from skills.arxiv_to_md.convert import ARXIV_ID_RE
-from skills.lib.workflow.prompts import format_step, pin_cwd, template_dispatch
+from skills.arxiv_to_md.convert import ARXIV_ID_RE, find_residual_spans
+from skills.lib.io import read_text_or_exit
+from skills.lib.workflow.prompts import format_step, parallel_constraint, pin_cwd
 
 # ============================================================================
 # SHARED PROMPTS
@@ -40,7 +41,7 @@ DEST_PATH_QUOTING = (
 
 MODULE_PATH = "skills.arxiv_to_md.main"
 CONVERT_MODULE_PATH = "skills.arxiv_to_md.convert"
-SUBAGENT_MODULE_PATH = "skills.arxiv_to_md.sub_agent"
+REVIEW_AGENT = "arxiv-latex-reviewer"
 
 
 # ============================================================================
@@ -158,7 +159,50 @@ CONVERT_RESULT_INSTRUCTIONS = (
 
 # --- STEP 3: REVIEW ----------------------------------------------------------
 
-REVIEW_TEMPLATE = "Repair the LaTeX the arxiv-to-md converter left outside math and code in $FILE."
+REVIEW_BRIEF = (
+    "The arxiv-to-md converter wrote this file from the paper's TeX source and flagged the\n"
+    "lines below, where LaTeX commands remain outside math and code. Later work reads this\n"
+    "file in place of the paper, so a repair that changes what the paper says is worse than\n"
+    "leaving the LaTeX in place.\n"
+    "\n"
+    "Read the file, then for each flagged line, edit the file:\n"
+    "  - A command with a Markdown form (emphasis, a link, a list, a table): rewrite it in\n"
+    "    Markdown and keep its text.\n"
+    "  - A command that only formats or labels (\\vspace, \\centering, \\label): delete it.\n"
+    "  - A LaTeX block with no Markdown form: put the whole block in a fenced code block\n"
+    "    whose opening fence is ```latex, on lines of its own.\n"
+    "Leave $...$ and $$...$$ math unchanged. Change nothing outside the flagged lines except\n"
+    "the fence lines around a block you fence.\n"
+    "\n"
+    "Reply with:\n"
+    "REVIEWED: <file path>\n"
+    "and one line per flagged line you left as LaTeX:\n"
+    "LEFT: <line number>: <reason>\n"
+    "Reply with the REVIEWED:/LEFT: lines only."
+)
+
+REVIEW_DISPATCH_TEMPLATE = (
+    "DISPATCH {count} PARALLEL REVIEW AGENTS\n"
+    "=======================================\n"
+    "\n"
+    "{parallel_block}\n"
+    "\n"
+    "For EACH prompt below, use the Agent tool with:\n"
+    "  - subagent_type: {agent}\n"
+    "  - prompt: the text between the markers, unchanged\n"
+    "\n"
+    "{prompts}\n"
+    "\n"
+    "After ALL {count} agents return, continue with the next workflow step."
+)
+
+REVIEW_PROMPT_TEMPLATE = (
+    "--- Prompt {index} ---\n"
+    "File: {path}\n"
+    "Flagged line numbers: {numbers}\n"
+    "\n" + REVIEW_BRIEF + "\n"
+    "--- End of prompt {index} ---"
+)
 
 NO_REVIEW_BODY = "No conversion printed a RESIDUAL: line, so no file needs review."
 
@@ -204,15 +248,28 @@ def build_convert_body(papers: list[tuple[str, str | None]], out_dir: str | None
 
 
 def build_review_body(files: list[str]) -> str:
-    """Build step 3 body: one review sub-agent per file that kept residual LaTeX."""
-    if not files:
+    """Build step 3 body: one reviewer prompt per file that still has flagged lines."""
+    flagged = []
+    for path in files:
+        text = read_text_or_exit(Path(path), "reading the converted paper")
+        spans = find_residual_spans(text)
+        if spans:
+            flagged.append((path, spans))
+    if not flagged:
         return NO_REVIEW_BODY
-    return template_dispatch(
-        agent_type="general-purpose",
-        template=REVIEW_TEMPLATE,
-        targets=[{"FILE": shlex.quote(f)} for f in files],
-        command=f"uv run python -m {SUBAGENT_MODULE_PATH} --file $FILE",
-        model="opus",
+    prompts = [
+        REVIEW_PROMPT_TEMPLATE.format(
+            index=index,
+            path=path,
+            numbers=", ".join(str(number) for number, _ in spans),
+        )
+        for index, (path, spans) in enumerate(flagged, 1)
+    ]
+    return REVIEW_DISPATCH_TEMPLATE.format(
+        count=len(prompts),
+        parallel_block=parallel_constraint(len(prompts)),
+        agent=REVIEW_AGENT,
+        prompts="\n\n".join(prompts),
     )
 
 

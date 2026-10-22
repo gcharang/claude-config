@@ -10,3 +10,5 @@ Convert arXiv papers to LLM-consumable markdown.
 | `README.md` | Architecture, invisible knowledge | Understanding design choices |
 
 Python code: `../scripts/skills/arxiv_to_md/` (indexed by its own CLAUDE.md).
+
+The review step dispatches the `arxiv-latex-reviewer` agent (`../../agents/arxiv-latex-reviewer.md`).
